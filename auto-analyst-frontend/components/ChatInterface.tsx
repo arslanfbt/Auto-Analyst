@@ -7,25 +7,32 @@ import ChatWindow from "./ChatWindow"
 import ChatInput from "./ChatInput"
 import Sidebar from "./Sidebar"
 
+// Main Chat Interface
 const ChatInterface: React.FC = () => {
   const [messages, setMessages] = useState<{ text: string; sender: "user" | "ai" }[]>([])
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
   const handleSendMessage = (message: string) => {
     setMessages([...messages, { text: message, sender: "user" }])
-    // TODO: Implement API call to get AI response
+    // Placeholder AI response
     setTimeout(() => {
-      setMessages((prevMessages) => [...prevMessages, { text: "This is a placeholder AI response.", sender: "ai" }])
+      setMessages((prevMessages) => [
+        ...prevMessages, 
+        { text: "Auto Analyst replies here...", sender: "ai" }
+      ])
     }, 1000)
   }
 
   return (
-    <div className="flex h-screen bg-gray-100">
+    <div className="flex h-screen bg-gray-900 text-white">
       <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
       <div className="flex-1 flex flex-col">
-        <header className="bg-white shadow-md p-4 flex justify-between items-center">
-          <h1 className="text-2xl font-bold text-gray-800">Auto-Analyst Chat</h1>
-          <button onClick={() => setSidebarOpen(true)} className="text-gray-600 hover:text-gray-800 focus:outline-none">
+        <header className="bg-gray-800/50 backdrop-blur-sm p-4 flex justify-between items-center">
+          <h1 className="text-2xl font-semibold text-gray-200">AutoAnalyst</h1>
+          <button 
+            onClick={() => setSidebarOpen(true)} 
+            className="text-gray-400 hover:text-white focus:outline-none"
+          >
             <svg
               className="w-6 h-6"
               fill="none"
@@ -58,4 +65,3 @@ const ChatInterface: React.FC = () => {
 }
 
 export default ChatInterface
-

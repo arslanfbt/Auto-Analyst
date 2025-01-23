@@ -1,163 +1,312 @@
-"use client"
-import React from "react"
-import { motion } from "framer-motion"
+"use client";
+import React, { useRef } from 'react';
+import { motion, useScroll, useTransform } from 'framer-motion';
 
-// Custom icon components to replace react-icons
-const RobotIcon = () => (
-  <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
+// Updated color scheme: Neutral, elegant tones with subtle accents
+const AIIcon = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" className="w-16 h-16">
+    <defs>
+      <linearGradient id="aiGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" stopColor="#6B7280" stopOpacity="0.8"/>
+        <stop offset="100%" stopColor="#374151" stopOpacity="1"/>
+      </linearGradient>
+    </defs>
+    <path 
+      d="M32 10c-4.4 0-8 3.6-8 8v4H16c-4.4 0-8 3.6-8 8v16c0 4.4 3.6 8 8 8h32c4.4 0 8-3.6 8-8V30c0-4.4-3.6-8-8-8h-8v-4c0-4.4-3.6-8-8-8zm0 4c2.2 0 4 1.8 4 4v4h-8v-4c0-2.2 1.8-4 4-4zm-12 16h24c2.2 0 4 1.8 4 4v12c0 2.2-1.8 4-4 4H20c-2.2 0-4-1.8-4-4V34c0-2.2 1.8-4 4-4z" 
+      fill="url(#aiGradient)"
+    />
+    <path 
+      d="M22 38a2 2 0 100-4 2 2 0 000 4zm20-2a2 2 0 11-4 0 2 2 0 014 0z" 
+      fill="#FFFFFF"
+    />
   </svg>
-)
+);
 
-const ChartIcon = () => (
-  <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+const InsightsIcon = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" className="w-16 h-16">
+    <defs>
+      <linearGradient id="insightsGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" stopColor="#4B5563" stopOpacity="0.8"/>
+        <stop offset="100%" stopColor="#1F2937" stopOpacity="1"/>
+      </linearGradient>
+    </defs>
+    <path 
+      d="M10 54h44V10H10v44zm4-4V38h12v12H14zm16 0V38h20v12H30zm-16-16V22h12v12H14zm16 0V22h20v12H30zm16-16V14h12v12H46z" 
+      fill="url(#insightsGradient)"
+    />
   </svg>
-)
+);
 
-const DatabaseIcon = () => (
-  <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4" />
+const DataIcon = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" className="w-16 h-16">
+    <defs>
+      <linearGradient id="dataGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" stopColor="#6366F1" stopOpacity="0.6"/>
+        <stop offset="100%" stopColor="#4338CA" stopOpacity="0.8"/>
+      </linearGradient>
+    </defs>
+    <path 
+      d="M32 10c-12.15 0-22 9.85-22 22s9.85 22 22 22 22-9.85 22-22S44.15 10 32 10zm0 36c-7.72 0-14-6.28-14-14s6.28-14 14-14 14 6.28 14 14-6.28 14-14 14z" 
+      fill="url(#dataGradient)"
+    />
+    <circle cx="32" cy="32" r="8" fill="#FFFFFF" opacity="0.7"/>
   </svg>
-)
+);
 
-const LaptopIcon = () => (
-  <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17c.75-2.25 2-3 4-3h6c2 0 3.25 1.75 4 3" />
-  </svg>
-)
+interface FeatureCardProps {
+  icon: React.ComponentType;
+  title: string;
+  description: string;
+}   
 
-const RocketIcon = () => (
-  <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
-  </svg>
-)
-
-const FeatureCard = ({ icon: Icon, title, description }) => (
-  <motion.div 
-    whileHover={{ scale: 1.05 }}
-    className="bg-white/10 p-6 rounded-xl border border-white/20 hover:border-blue-500 transition-all duration-300"
+const FeatureCard = ({ icon: Icon, title, description }: FeatureCardProps) => (
+  <motion.div
+    whileHover={{ 
+      scale: 1.05,
+      boxShadow: "0px 10px 20px rgba(0, 0, 0, 0.2)"
+    }}
+    className="bg-gray-800/30 backdrop-blur-sm p-6 rounded-2xl border border-gray-700/30 hover:border-gray-600 transition-all duration-300 transform"
   >
     <Icon />
-    <h3 className="text-xl font-semibold mb-2 mt-4">{title}</h3>
-    <p className="text-gray-300">{description}</p>
+    <h3 className="text-xl font-semibold mb-2 mt-4 text-gray-100">{title}</h3>
+    <p className="text-gray-400">{description}</p>
   </motion.div>
-)
+);
+
+const ParticleBackground = () => (
+  <div className="absolute inset-0 z-0 overflow-hidden">
+    {[...Array(100)].map((_, i) => (
+      <motion.div
+        key={i}
+        initial={{
+          x: Math.random() * window.innerWidth,
+          y: Math.random() * window.innerHeight,
+          opacity: 0
+        }}
+        animate={{
+          x: [
+            Math.random() * window.innerWidth, 
+            Math.random() * window.innerWidth,
+            Math.random() * window.innerWidth
+          ],
+          y: [
+            Math.random() * window.innerHeight,
+            Math.random() * window.innerHeight,
+            Math.random() * window.innerHeight
+          ],
+          opacity: [0.1, 0.3, 0.1]
+        }}
+        transition={{
+          duration: Math.random() * 15 + 10,
+          repeat: Infinity,
+          repeatType: "mirror"
+        }}
+        className="absolute w-1 h-1 bg-gray-500/20 rounded-full blur-sm"
+      />
+    ))}
+  </div>
+);
 
 const LandingPage = () => {
+  const ref = useRef(null);
+  const { scrollYProgress } = useScroll({
+    target: ref,
+    offset: ["start start", "end start"]
+  });
+
+  const backgroundY = useTransform(scrollYProgress, [0, 1], ["0%", "50%"]);
+  const textY = useTransform(scrollYProgress, [0, 1], ["0%", "150%"]);
+
   return (
-    <div className="min-h-screen bg-gradient-to-b from-blue-950 via-blue-900 to-black text-white overflow-hidden relative">
-      {/* Animated Background Particles */}
-      <div className="absolute inset-0 z-0 opacity-50">
-        {[...Array(50)].map((_, i) => (
-          <motion.div
-            key={i}
-            initial={{ 
-              x: typeof window !== 'undefined' ? Math.random() * window.innerWidth : 0, 
-              y: typeof window !== 'undefined' ? Math.random() * window.innerHeight : 0 
-            }}
-            animate={{ 
-              x: typeof window !== 'undefined' ? Math.random() * window.innerWidth : 0, 
-              y: typeof window !== 'undefined' ? Math.random() * window.innerHeight : 0,
-              opacity: [0.2, 0.5, 0.2]
-            }}
-            transition={{ 
-              duration: Math.random() * 10 + 5, 
-              repeat: Infinity, 
-              repeatType: "reverse" 
-            }}
-            className="absolute w-2 h-2 bg-white/30 rounded-full"
-          />
-        ))}
-      </div>
+    <div 
+      ref={ref}
+      className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black text-white overflow-hidden relative"
+    >
+      <ParticleBackground />
+      
+      <motion.div 
+        style={{ y: backgroundY }}
+        className="absolute inset-0 z-0 bg-gradient-to-br from-gray-900/50 via-gray-800/50 to-black/50"
+      />
 
       <div className="container mx-auto px-4 py-16 relative z-10">
-        <header className="text-center mb-16">
-          <motion.h1
-            initial={{ opacity: 0, y: -50 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8 }}
-            className="text-6xl font-extrabold mb-4 bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-blue-600"
-          >
-            Auto-Analyst
-          </motion.h1>
-          <motion.p
-            initial={{ opacity: 0, y: -30 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8, delay: 0.2 }}
-            className="text-xl mb-8 text-gray-300"
-          >
-            Transforming Data into Actionable Insights
-          </motion.p>
-        </header>
+        <motion.header 
+          initial={{ opacity: 0, y: -50 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 1, type: "spring", stiffness: 50 }}
+          style={{ y: textY }}
+          className="text-center mb-16"
+        >
+          <h1 className="text-7xl font-extrabold mb-4 bg-clip-text text-transparent bg-gradient-to-r from-gray-300 to-gray-500 drop-shadow-2xl">
+            AutoAnalyst
+          </h1>
+          <p className="text-2xl mb-8 text-gray-400 tracking-wide">
+            Intelligent Data Transformation & Predictive Insights
+          </p>
+        </motion.header>
 
-        <div className="grid md:grid-cols-2 gap-12 items-center">
+        <div className="grid md:grid-cols-2 gap-16 items-center">
           <motion.div
             initial={{ opacity: 0, x: -50 }}
             animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.8, delay: 0.4 }}
+            transition={{ duration: 1, delay: 0.4, type: "spring", stiffness: 50 }}
           >
-            <h2 className="text-3xl font-semibold mb-8 text-blue-300">
-              Unleash the Power of AI-Driven Analytics
+            <h2 className="text-4xl font-semibold mb-10 text-gray-200 leading-tight">
+              Revolutionize Your Data Strategy
             </h2>
-            <div className="grid md:grid-cols-2 gap-4 mb-8">
-              <FeatureCard 
-                icon={RobotIcon}
+            <div className="grid md:grid-cols-2 gap-6 mb-12">
+              <FeatureCard
+                icon={AIIcon}
                 title="AI-Powered"
                 description="Advanced machine learning algorithms"
               />
-              <FeatureCard 
-                icon={ChartIcon}
+              <FeatureCard
+                icon={InsightsIcon}
                 title="Smart Insights"
                 description="Predictive analytics and trends"
               />
-              <FeatureCard 
-                icon={DatabaseIcon}
+              <FeatureCard
+                icon={DataIcon}
                 title="Data Processing"
                 description="Seamless data integration"
               />
-              <FeatureCard 
-                icon={LaptopIcon}
-                title="Flexible"
-                description="Adaptable to your workflow"
+              <FeatureCard
+                icon={AIIcon}
+                title="Adaptive Learning"
+                description="Continuous improvement"
               />
             </div>
-            <button
-              onClick={() => {
-                // Replace with your navigation logic
-                window.location.href = "/chat"
-              }}
-              className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-8 rounded-full transition duration-300 ease-in-out flex items-center gap-2"
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={() => window.location.href = "/chat"}
+              className="bg-gradient-to-r from-gray-700 to-gray-800 hover:from-gray-600 hover:to-gray-700 text-white font-bold py-4 px-10 rounded-full transition duration-300 ease-in-out flex items-center gap-3 shadow-2xl"
             >
-              <RocketIcon /> Launch Auto-Analyst
-            </button>
+              <span>Launch Auto-Analyst</span>
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+              </svg>
+            </motion.button>
           </motion.div>
 
           <motion.div
             initial={{ opacity: 0, x: 50 }}
             animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.8, delay: 0.6 }}
+            transition={{ duration: 1, delay: 0.6, type: "spring", stiffness: 50 }}
             className="flex justify-center items-center"
           >
-            <motion.div
-              animate={{ 
-                rotate: [0, 10, -10, 0],
-                scale: [1, 1.05, 0.95, 1]
-              }}
-              transition={{ 
-                duration: 5, 
-                repeat: Infinity, 
-                repeatType: "reverse" 
-              }}
-              className="w-96 h-96 bg-blue-600/20 rounded-full flex justify-center items-center"
-            >
-              <div className="w-80 h-80 bg-blue-600/30 rounded-full animate-pulse"></div>
-            </motion.div>
+            <div className="relative w-[500px] h-[500px]">
+              {/* Glowing core */}
+              <motion.div
+                animate={{
+                  scale: [1, 1.05, 1],
+                  opacity: [0.4, 0.6, 0.4]
+                }}
+                transition={{
+                  duration: 6,
+                  repeat: Infinity,
+                  ease: "easeInOut"
+                }}
+                className="absolute inset-24 bg-gradient-radial from-gray-600/20 via-gray-800/10 to-transparent rounded-full backdrop-blur-sm"
+              />
+
+              {/* Orbital rings */}
+              {[...Array(3)].map((_, i) => (
+                <motion.div
+                  key={i}
+                  animate={{
+                    rotate: [0, 360]
+                  }}
+                  transition={{
+                    duration: 20 + i * 10,
+                    repeat: Infinity,
+                    ease: "linear"
+                  }}
+                  className={`absolute inset-0 rounded-full border border-gray-700/20`}
+                  style={{
+                    transform: `rotateX(${65 + i * 10}deg) rotateY(${i * 45}deg)`
+                  }}
+                />
+              ))}
+
+              {/* Floating light points */}
+              {[...Array(8)].map((_, i) => (
+                <motion.div
+                  key={i}
+                  animate={{
+                    scale: [1, 1.5, 1],
+                    opacity: [0.3, 0.6, 0.3],
+                  }}
+                  transition={{
+                    duration: 3,
+                    delay: i * 0.4,
+                    repeat: Infinity,
+                    repeatType: "reverse",
+                  }}
+                  className="absolute w-1.5 h-1.5 bg-gray-400/40 rounded-full blur-[2px]"
+                  style={{
+                    left: `${50 + Math.cos(i * (Math.PI / 4)) * 35}%`,
+                    top: `${50 + Math.sin(i * (Math.PI / 4)) * 35}%`,
+                  }}
+                />
+              ))}
+
+              {/* Rotating energy lines */}
+              <motion.div
+                animate={{
+                  rotate: [0, 360]
+                }}
+                transition={{
+                  duration: 30,
+                  repeat: Infinity,
+                  ease: "linear"
+                }}
+                className="absolute inset-10"
+              >
+                {[...Array(4)].map((_, i) => (
+                  <motion.div
+                    key={i}
+                    className="absolute w-full h-[1px] bg-gradient-to-r from-transparent via-gray-500/20 to-transparent"
+                    style={{
+                      transform: `rotate(${i * 45}deg)`,
+                      transformOrigin: 'center'
+                    }}
+                  />
+                ))}
+              </motion.div>
+
+              {/* Central core highlight */}
+              <motion.div
+                animate={{
+                  opacity: [0.4, 0.6, 0.4]
+                }}
+                transition={{
+                  duration: 4,
+                  repeat: Infinity,
+                  ease: "easeInOut"
+                }}
+                className="absolute inset-32 bg-gradient-to-br from-gray-500/10 via-gray-600/5 to-transparent rounded-full blur-md"
+              />
+
+              {/* Subtle pulse ring */}
+              <motion.div
+                animate={{
+                  scale: [1, 1.2, 1],
+                  opacity: [0.1, 0.3, 0.1]
+                }}
+                transition={{
+                  duration: 8,
+                  repeat: Infinity,
+                  ease: "easeInOut"
+                }}
+                className="absolute inset-16 border border-gray-500/10 rounded-full blur-sm"
+              />
+            </div>
           </motion.div>
         </div>
       </div>
     </div>
-  )
-}
+  );
+};
 
-export default LandingPage
+export default LandingPage;
