@@ -2,7 +2,7 @@
 
 import type React from "react"
 import { Suspense } from "react"
-import { Canvas } from "@react-three/fiber"
+// import { Canvas } from "@react-three/fiber"
 import { OrbitControls } from "@react-three/drei"
 import Link from "next/link"
 import { motion } from "framer-motion"
@@ -63,14 +63,14 @@ const LandingPage: React.FC = () => {
             transition={{ duration: 0.8, delay: 0.6 }}
             className="md:w-1/2 h-96"
           >
-            <Canvas>
+            {/* <Canvas>
               <Suspense fallback={null}>
                 <OrbitControls enableZoom={false} />
                 <ambientLight intensity={0.5} />
                 <directionalLight position={[-2, 5, 2]} intensity={1} />
-                {/* <AnimatedSphere /> */}
+                <AnimatedSphere />
               </Suspense>
-            </Canvas>
+            </Canvas> */}
           </motion.div>
         </div>
       </div>
