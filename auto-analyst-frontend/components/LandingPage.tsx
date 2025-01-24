@@ -52,7 +52,6 @@ const DataIcon = () => (
     <circle cx="32" cy="32" r="8" fill="#FFFFFF" opacity="0.7"/>
   </svg>
 );
-
 interface FeatureCardProps {
   icon: React.ComponentType;
   title: string;
