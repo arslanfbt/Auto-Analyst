@@ -1,5 +1,5 @@
 "use client";
-import React, { useRef } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 import { motion, useScroll, useTransform } from 'framer-motion';
 
 // Updated color scheme: Neutral, elegant tones with subtle accents
@@ -52,6 +52,7 @@ const DataIcon = () => (
     <circle cx="32" cy="32" r="8" fill="#FFFFFF" opacity="0.7"/>
   </svg>
 );
+
 interface FeatureCardProps {
   icon: React.ComponentType;
   title: string;
@@ -72,39 +73,54 @@ const FeatureCard = ({ icon: Icon, title, description }: FeatureCardProps) => (
   </motion.div>
 );
 
-const ParticleBackground = () => (
-  <div className="absolute inset-0 z-0 overflow-hidden">
-    {[...Array(100)].map((_, i) => (
-      <motion.div
-        key={i}
-        initial={{
-          x: Math.random() * window.innerWidth,
-          y: Math.random() * window.innerHeight,
-          opacity: 0
-        }}
-        animate={{
-          x: [
-            Math.random() * window.innerWidth, 
-            Math.random() * window.innerWidth,
-            Math.random() * window.innerWidth
-          ],
-          y: [
-            Math.random() * window.innerHeight,
-            Math.random() * window.innerHeight,
-            Math.random() * window.innerHeight
-          ],
-          opacity: [0.1, 0.3, 0.1]
-        }}
-        transition={{
-          duration: Math.random() * 15 + 10,
-          repeat: Infinity,
-          repeatType: "mirror"
-        }}
-        className="absolute w-1 h-1 bg-gray-500/20 rounded-full blur-sm"
-      />
-    ))}
-  </div>
-);
+const ParticleBackground = () => {
+  const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      setDimensions({
+        width: window.innerWidth,
+        height: window.innerHeight,
+      });
+    }
+  }, []);
+
+  return (
+    <div className="absolute inset-0 z-0 overflow-hidden">
+      {[...Array(100)].map((_, i) => (
+        <motion.div
+          key={i}
+          initial={{
+            x: Math.random() * dimensions.width,
+            y: Math.random() * dimensions.height,
+            opacity: 0,
+          }}
+          animate={{
+            x: [
+              Math.random() * dimensions.width, 
+              Math.random() * dimensions.width,
+              Math.random() * dimensions.width
+            ],
+            y: [
+              Math.random() * dimensions.height,
+              Math.random() * dimensions.height,
+              Math.random() * dimensions.height
+            ],
+            opacity: [0.1, 0.3, 0.1]
+          }}
+          transition={{
+            duration: Math.random() * 15 + 10,
+            repeat: Infinity,
+            repeatType: "mirror"
+          }}
+          className="absolute w-1 h-1 bg-gray-500/20 rounded-full blur-sm"
+        />
+      ))}
+    </div>
+  );
+};
+
+
 
 const LandingPage = () => {
   const ref = useRef(null);
@@ -214,92 +230,17 @@ const LandingPage = () => {
                 <motion.div
                   key={i}
                   animate={{
-                    rotate: [0, 360]
+                    rotate: [0, 360],
+                    opacity: [0.2, 0.6, 0.2]
                   }}
                   transition={{
-                    duration: 20 + i * 10,
+                    duration: (i + 1) * 4,
                     repeat: Infinity,
                     ease: "linear"
                   }}
-                  className={`absolute inset-0 rounded-full border border-gray-700/20`}
-                  style={{
-                    transform: `rotateX(${65 + i * 10}deg) rotateY(${i * 45}deg)`
-                  }}
+                  className={`absolute inset-${16 + i * 10} border border-gray-600/50 rounded-full`}
                 />
               ))}
-
-              {/* Floating light points */}
-              {[...Array(8)].map((_, i) => (
-                <motion.div
-                  key={i}
-                  animate={{
-                    scale: [1, 1.5, 1],
-                    opacity: [0.3, 0.6, 0.3],
-                  }}
-                  transition={{
-                    duration: 3,
-                    delay: i * 0.4,
-                    repeat: Infinity,
-                    repeatType: "reverse",
-                  }}
-                  className="absolute w-1.5 h-1.5 bg-gray-400/40 rounded-full blur-[2px]"
-                  style={{
-                    left: `${50 + Math.cos(i * (Math.PI / 4)) * 35}%`,
-                    top: `${50 + Math.sin(i * (Math.PI / 4)) * 35}%`,
-                  }}
-                />
-              ))}
-
-              {/* Rotating energy lines */}
-              <motion.div
-                animate={{
-                  rotate: [0, 360]
-                }}
-                transition={{
-                  duration: 30,
-                  repeat: Infinity,
-                  ease: "linear"
-                }}
-                className="absolute inset-10"
-              >
-                {[...Array(4)].map((_, i) => (
-                  <motion.div
-                    key={i}
-                    className="absolute w-full h-[1px] bg-gradient-to-r from-transparent via-gray-500/20 to-transparent"
-                    style={{
-                      transform: `rotate(${i * 45}deg)`,
-                      transformOrigin: 'center'
-                    }}
-                  />
-                ))}
-              </motion.div>
-
-              {/* Central core highlight */}
-              <motion.div
-                animate={{
-                  opacity: [0.4, 0.6, 0.4]
-                }}
-                transition={{
-                  duration: 4,
-                  repeat: Infinity,
-                  ease: "easeInOut"
-                }}
-                className="absolute inset-32 bg-gradient-to-br from-gray-500/10 via-gray-600/5 to-transparent rounded-full blur-md"
-              />
-
-              {/* Subtle pulse ring */}
-              <motion.div
-                animate={{
-                  scale: [1, 1.2, 1],
-                  opacity: [0.1, 0.3, 0.1]
-                }}
-                transition={{
-                  duration: 8,
-                  repeat: Infinity,
-                  ease: "easeInOut"
-                }}
-                className="absolute inset-16 border border-gray-500/10 rounded-full blur-sm"
-              />
             </div>
           </motion.div>
         </div>
