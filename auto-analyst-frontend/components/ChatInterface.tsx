@@ -6,11 +6,15 @@ import { motion } from "framer-motion"
 import Image from "next/image"
 import ChatWindow from "./ChatWindow"
 import ChatInput from "./ChatInput"
-import Sidebar from "./Sidebar"
+import ResponsiveLayout from "./ResponsiveLayout"
+import { Menu } from "lucide-react"
 
-const ChatInterface: React.FC = () => {
+interface ChatInterfaceProps {
+  setSidebarOpen?: (open: boolean) => void
+}
+
+const ChatInterface: React.FC<ChatInterfaceProps> = ({ setSidebarOpen }) => {
   const [messages, setMessages] = useState<{ text: string; sender: "user" | "ai" }[]>([])
-  const [sidebarOpen, setSidebarOpen] = useState(false)
 
   const handleSendMessage = (message: string) => {
     setMessages([...messages, { text: message, sender: "user" }])
@@ -21,11 +25,11 @@ const ChatInterface: React.FC = () => {
   }
 
   return (
+    <>
     <div className="flex h-screen bg-gradient-to-br from-gray-50 to-white text-gray-900">
-      <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
       <div className="flex-1 flex flex-col">
         <header className="bg-white/70 backdrop-blur-sm p-4 flex justify-between items-center border-b border-gray-200">
-          <div className="flex items-center space-x-3">
+          <div className="flex items-center space-x-3">|
             <Image
               src="https://4q2e4qu710mvgubg.public.blob.vercel-storage.com/auto-analyst-logo-R9wBx0kWOUA96KxwKBtl1onOHp6o02.png"
               alt="Auto-Analyst Logo"
@@ -34,7 +38,7 @@ const ChatInterface: React.FC = () => {
             />
           </div>
           <button
-            onClick={() => setSidebarOpen(true)}
+            onClick={() => setSidebarOpen && setSidebarOpen(true)}
             className="text-gray-500 hover:text-[#FF7F7F] focus:outline-none transition-colors"
           >
             <svg
@@ -63,8 +67,9 @@ const ChatInterface: React.FC = () => {
         >
           <ChatInput onSendMessage={handleSendMessage} />
         </motion.div>
+        </div>
       </div>
-    </div>
+    </>
   )
 }
 
