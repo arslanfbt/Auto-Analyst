@@ -1,35 +1,44 @@
-"use client"
+"use client";
 
-import type React from "react"
-import { useState } from "react"
-import { motion } from "framer-motion"
-import Image from "next/image"
-import ChatWindow from "./ChatWindow"
-import ChatInput from "./ChatInput"
-import ResponsiveLayout from "./ResponsiveLayout"
-import { Menu } from "lucide-react"
+import React, { useState } from "react";
+import { motion } from "framer-motion";
+import Image from "next/image";
+import ChatWindow from "./ChatWindow";
+import ChatInput from "./ChatInput";
+import Sidebar from "./Sidebar";
 
-interface ChatInterfaceProps {
-  setSidebarOpen?: (open: boolean) => void
-}
-
-const ChatInterface: React.FC<ChatInterfaceProps> = ({ setSidebarOpen }) => {
-  const [messages, setMessages] = useState<{ text: string; sender: "user" | "ai" }[]>([])
+const ChatInterface: React.FC = () => {
+  const [messages, setMessages] = useState<{ text: string; sender: "user" | "ai" }[]>([]);
+  const [isSidebarOpen, setSidebarOpen] = useState(false);
 
   const handleSendMessage = (message: string) => {
-    setMessages([...messages, { text: message, sender: "user" }])
+    setMessages([...messages, { text: message, sender: "user" }]);
     // Placeholder AI response
     setTimeout(() => {
-      setMessages((prevMessages) => [...prevMessages, { text: "Auto Analyst replies here...", sender: "ai" }])
-    }, 1000)
-  }
+      setMessages((prevMessages) => [
+        ...prevMessages,
+        { text: "Auto Analyst replies here...", sender: "ai" },
+      ]);
+    }, 500);
+  };
+
+  const toggleSidebar = () => {
+    setSidebarOpen((prev) => !prev); // Toggle sidebar state
+  };
 
   return (
-    <>
     <div className="flex h-screen bg-gradient-to-br from-gray-50 to-white text-gray-900">
-      <div className="flex-1 flex flex-col">
+      {/* Sidebar */}
+      <Sidebar isOpen={isSidebarOpen} onClose={() => setSidebarOpen(false)} />
+
+      {/* Main content area */}
+      <motion.div
+        animate={{ marginLeft: isSidebarOpen ? "16rem" : "0rem" }} // Shift content when sidebar is open
+        transition={{ type: "tween", duration: 0.3 }}
+        className="flex-1 flex flex-col"
+      >
         <header className="bg-white/70 backdrop-blur-sm p-4 flex justify-between items-center border-b border-gray-200">
-          <div className="flex items-center space-x-3">|
+          <div className="flex items-center space-x-3">
             <Image
               src="https://4q2e4qu710mvgubg.public.blob.vercel-storage.com/auto-analyst-logo-R9wBx0kWOUA96KxwKBtl1onOHp6o02.png"
               alt="Auto-Analyst Logo"
@@ -38,7 +47,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ setSidebarOpen }) => {
             />
           </div>
           <button
-            onClick={() => setSidebarOpen && setSidebarOpen(true)}
+            onClick={toggleSidebar} // Toggle sidebar on button click
             className="text-gray-500 hover:text-[#FF7F7F] focus:outline-none transition-colors"
           >
             <svg
@@ -67,11 +76,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ setSidebarOpen }) => {
         >
           <ChatInput onSendMessage={handleSendMessage} />
         </motion.div>
-        </div>
-      </div>
-    </>
-  )
-}
+      </motion.div>
+    </div>
+  );
+};
 
-export default ChatInterface
-
+export default ChatInterface;
