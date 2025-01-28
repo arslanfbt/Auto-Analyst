@@ -1,74 +1,68 @@
 "use client"
 
-import React, { useState } from "react";
-import { motion } from "framer-motion";
-import Image from "next/image";
-import ChatWindow from "./ChatWindow";
-import ChatInput from "./ChatInput";
-import Sidebar from "./Sidebar";
-import axios from "axios";
+import type React from "react"
+import { useState } from "react"
+import { motion } from "framer-motion"
+import Image from "next/image"
+import ChatWindow from "./ChatWindow"
+import ChatInput from "./ChatInput"
+import Sidebar from "./Sidebar"
+import axios from "axios"
 
 const ChatInterface: React.FC = () => {
-  const [messages, setMessages] = useState<{ text: string; sender: "user" | "ai" }[]>([]);
-  const [isSidebarOpen, setSidebarOpen] = useState(false);
-  const [selectedAgent, setSelectedAgent] = useState<string | null>(null);
+  const [messages, setMessages] = useState<{ text: string; sender: "user" | "ai" }[]>([])
+  const [isSidebarOpen, setSidebarOpen] = useState(false)
+  const [selectedAgent, setSelectedAgent] = useState<string | null>(null)
 
   const handleSendMessage = async (message: string) => {
-    setMessages([...messages, { text: message, sender: "user" }]);
+    setMessages([...messages, { text: message, sender: "user" }])
 
     try {
-      const endpoint = selectedAgent ? `http://localhost:8000/chat/${selectedAgent}` : `http://localhost:8000/chat`;
-      const response = await axios.post(endpoint, { query: message });
-      
-      const responseText = typeof response.data.response === 'string' 
-        ? response.data.response 
-        : JSON.stringify(response.data.response);
+      const endpoint = selectedAgent ? `http://localhost:8000/chat/${selectedAgent}` : `http://localhost:8000/chat`
+      const response = await axios.post(endpoint, { query: message })
 
-      setMessages((prevMessages) => [
-        ...prevMessages,
-        { text: responseText, sender: "ai" },
-      ]);
+      let formattedResponse = ""
+
+      if (typeof response.data.response === "string") {
+        formattedResponse = response.data.response
+      } else if (typeof response.data.response === "object") {
+        formattedResponse = "```json\n" + JSON.stringify(response.data.response, null, 2) + "\n```"
+      } else {
+        formattedResponse = String(response.data.response)
+      }
+
+      setMessages((prevMessages) => [...prevMessages, { text: formattedResponse, sender: "ai" }])
     } catch (error) {
       setMessages((prevMessages) => [
         ...prevMessages,
         { text: "Error: Unable to get a response from the server.", sender: "ai" },
-      ]);
+      ])
     }
-  };
+  }
 
   const handleFileUpload = async (file: File) => {
-    const formData = new FormData();
-    formData.append("file", file);
-    formData.append("styling_instructions", "Please analyze the data and provide a detailed report.");
+    const formData = new FormData()
+    formData.append("file", file)
+    formData.append("styling_instructions", "Please analyze the data and provide a detailed report.")
     try {
       const response = await axios.post("http://localhost:8000/upload_dataframe", formData, {
         headers: {
           "Content-Type": "multipart/form-data",
         },
-      });
-      setMessages((prevMessages) => [
-        ...prevMessages,
-        { text: response.data.message, sender: "ai" },
-      ]);
+      })
+      setMessages((prevMessages) => [...prevMessages, { text: response.data.message, sender: "ai" }])
     } catch (error) {
-      setMessages((prevMessages) => [
-        ...prevMessages,
-        { text: "Error: Unable to upload the file.", sender: "ai" },
-      ]);
+      setMessages((prevMessages) => [...prevMessages, { text: "Error: Unable to upload the file.", sender: "ai" }])
     }
-  };
-  
+  }
 
   const toggleSidebar = () => {
-    setSidebarOpen((prev) => !prev);
-  };
+    setSidebarOpen((prev) => !prev)
+  }
 
   return (
     <div className="flex h-screen bg-gradient-to-br from-gray-50 to-white text-gray-900">
-      <Sidebar
-        isOpen={isSidebarOpen}
-        onClose={() => setSidebarOpen(false)}
-      />
+      <Sidebar isOpen={isSidebarOpen} onClose={() => setSidebarOpen(false)} />
 
       <motion.div
         animate={{ marginLeft: isSidebarOpen ? "16rem" : "0rem" }}
@@ -95,12 +89,7 @@ const ChatInterface: React.FC = () => {
               viewBox="0 0 24 24"
               xmlns="http://www.w3.org/2000/svg"
             >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M4 6h16M4 12h16M4 18h16"
-              />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
             </svg>
           </button>
         </header>
@@ -121,7 +110,8 @@ const ChatInterface: React.FC = () => {
         </motion.div>
       </motion.div>
     </div>
-  );
-};
+  )
+}
 
-export default ChatInterface;
+export default ChatInterface
+
