@@ -39,7 +39,7 @@ const ChatInterface: React.FC = () => {
   const handleFileUpload = async (file: File) => {
     const formData = new FormData();
     formData.append("file", file);
-    // formData.append("styling_instructions", "Please analyze the data and provide a detailed report.");
+    formData.append("styling_instructions", "Please analyze the data and provide a detailed report.");
     try {
       const response = await axios.post("http://localhost:8000/upload_dataframe", formData, {
         headers: {
