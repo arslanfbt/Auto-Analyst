@@ -1,3 +1,5 @@
+"use client"
+
 import type React from "react"
 import { useEffect, useRef, useCallback, useState } from "react"
 import { motion } from "framer-motion"
@@ -5,56 +7,17 @@ import ReactMarkdown from "react-markdown"
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter"
 import { tomorrow } from "react-syntax-highlighter/dist/esm/styles/prism"
 import rehypeRaw from "rehype-raw"
+import remarkGfm from "remark-gfm"
 import { Code2, CodeIcon as CodeOff } from "lucide-react"
 import { Button } from "./ui/button"
 import CopyButton from "./ui/CopyButton"
 
-const cleanJsonString = (content: string) => {
-  return content
-    .replace(/^```json/, "")
-    .replace(/^```/, "")
-    .replace(/```$/, "")
+interface Message {
+  text: string
+  sender: "user" | "ai"
 }
 
-const formatMessageContent = (content: string, showCode: boolean) => {
-  try {
-    const cleanedContent = cleanJsonString(content)
-    const parsedContent = JSON.parse(cleanedContent)
-
-    return Object.entries(parsedContent)
-      .map(([key, value]) => formatValue(key, value, showCode))
-      .join("\n\n")
-  } catch (error) {
-    console.error("Error parsing JSON:", error)
-    return content
-  }
-}
-
-const formatValue = (key: string, value: any, showCode: boolean): string => {
-  if (typeof value === "object" && value !== null) {
-    key = key.replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase())
-    return `### ${key}\n\n${Object.entries(value)
-      .map(([subKey, subValue]) => formatSubValue(subKey, subValue, showCode))
-      .join("\n")}`
-  } else {
-    return `### ${key}\n\n${formatSubValue("", value, showCode)}`
-  }
-}
-
-const formatSubValue = (subKey: string, subValue: any, showCode: boolean): string => {
-  if (typeof subValue === "string") {
-    if (subValue.includes("```python")) {
-      return `${subKey ? `**${subKey}:**\n\n` : ""}${showCode ? subValue : "[Code hidden]"}`
-    }
-    if (subValue.startsWith("```")) {
-      return `${subKey ? `**${subKey}:**\n\n` : ""}\`\`\`\n${showCode ? subValue.replace(/```/g, "") : "[Code hidden]"}\n\`\`\``
-    }
-  }
-  const camelCaseSubKey = subKey.replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase())
-  return camelCaseSubKey ? `**${camelCaseSubKey}:** ${subValue}` : `${subValue}`
-}
-
-const ChatWindow: React.FC<{ messages: { text: string; sender: "user" | "ai" }[] }> = ({ messages }) => {
+const ChatWindow: React.FC<{ messages: Message[] }> = ({ messages }) => {
   const [showCode, setShowCode] = useState(true)
   const chatWindowRef = useRef<HTMLDivElement>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -66,6 +29,22 @@ const ChatWindow: React.FC<{ messages: { text: string; sender: "user" | "ai" }[]
   useEffect(() => {
     scrollToBottom()
   }, [scrollToBottom])
+
+  const processContent = (content: string) => {
+    try {
+      // Try to parse as JSON first
+      const parsed = JSON.parse(content)
+      if (parsed.response) {
+        return parsed.response
+      }
+      // If it's a JSON object but doesn't have a response field,
+      // stringify it nicely
+      return JSON.stringify(parsed, null, 2)
+    } catch (e) {
+      // If it's not JSON, return as is
+      return content
+    }
+  }
 
   return (
     <div className="flex flex-col h-full">
@@ -92,11 +71,6 @@ const ChatWindow: React.FC<{ messages: { text: string; sender: "user" | "ai" }[]
       <div
         ref={chatWindowRef}
         className="flex-1 px-4 md:px-8 lg:px-12 py-6 space-y-8 overflow-y-auto scrollbar-thin scrollbar-track-transparent scrollbar-thumb-gray-300"
-        style={{
-          scrollBehavior: "smooth",
-          WebkitOverflowScrolling: "touch",
-          scrollbarWidth: "thin",
-        }}
       >
         {messages.map((message, index) => (
           <motion.div
@@ -117,36 +91,39 @@ const ChatWindow: React.FC<{ messages: { text: string; sender: "user" | "ai" }[]
                 transition-shadow
                 duration-200
                 hover:shadow-lg
-                ${message.sender === "user" ? "bg-[#FF7F7F] text-white shadow-pink-200/50" : "bg-white text-gray-900 shadow-md shadow-gray-200/50"}
+                ${
+                  message.sender === "user"
+                    ? "bg-[#FF7F7F] text-white shadow-pink-200/50"
+                    : "bg-white text-gray-900 shadow-md shadow-gray-200/50"
+                }
               `}
             >
               <ReactMarkdown
+                remarkPlugins={[remarkGfm]}
                 rehypePlugins={[rehypeRaw]}
                 components={{
                   code({ node, inline, className, children, ...props }) {
                     const match = /language-(\w+)/.exec(className || "")
                     if (!showCode && !inline && match) {
-                      return null
+                      return <div className="text-sm text-gray-500">[Code hidden]</div>
                     }
                     return !inline && match ? (
-                      <div className="my-6 first:mt-2 last:mb-2">
-                        <div className="rounded-xl overflow-hidden shadow-sm transition-shadow duration-200 group-hover:shadow-md relative">
-                          <CopyButton text={String(children)} />
-                          <SyntaxHighlighter
-                            {...props}
-                            style={tomorrow}
-                            language={match[1]}
-                            PreTag="div"
-                            customStyle={{
-                              margin: 0,
-                              padding: "1.25rem",
-                              paddingTop: "2rem",
-                              background: "#1a1a1a",
-                            }}
-                          >
-                            {String(children).replace(/\n$/, "")}
-                          </SyntaxHighlighter>
-                        </div>
+                      <div className="my-4 relative rounded-lg overflow-hidden">
+                        <CopyButton text={String(children)} />
+                        <SyntaxHighlighter
+                          {...props}
+                          style={tomorrow}
+                          language={match[1]}
+                          PreTag="div"
+                          customStyle={{
+                            margin: 0,
+                            padding: "1.25rem",
+                            paddingTop: "2rem",
+                            background: "#1a1a1a",
+                          }}
+                        >
+                          {String(children).replace(/\n$/, "")}
+                        </SyntaxHighlighter>
                       </div>
                     ) : (
                       <code {...props} className={`${className} px-1.5 py-0.5 rounded-md bg-opacity-10 bg-black`}>
@@ -154,17 +131,13 @@ const ChatWindow: React.FC<{ messages: { text: string; sender: "user" | "ai" }[]
                       </code>
                     )
                   },
-                  h3: ({ children }) => <h3 className="text-lg font-semibold mt-8 first:mt-2 mb-3">{children}</h3>,
+                  h2: ({ children }) => <h2 className="text-xl font-semibold mt-6 mb-3 first:mt-0">{children}</h2>,
+                  h3: ({ children }) => <h3 className="text-lg font-semibold mt-4 mb-2">{children}</h3>,
                   p: ({ children }) => <p className="mb-4 last:mb-0 leading-relaxed">{children}</p>,
-                  ul: ({ children }) => <ul className="mb-4 last:mb-0 pl-4 space-y-2">{children}</ul>,
-                  li: ({ children }) => (
-                    <li className="relative pl-4 before:absolute before:left-0 before:top-3 before:w-1.5 before:h-1.5 before:rounded-full before:bg-current before:opacity-40">
-                      {children}
-                    </li>
-                  ),
+                  pre: ({ children }) => <pre className="my-4 overflow-auto rounded-lg">{children}</pre>,
                 }}
               >
-                {formatMessageContent(message.text, showCode)}
+                {processContent(message.text)}
               </ReactMarkdown>
             </div>
           </motion.div>

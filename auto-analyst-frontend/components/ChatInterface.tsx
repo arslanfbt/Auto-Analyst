@@ -1,6 +1,5 @@
 "use client"
 
-import type React from "react"
 import { useState } from "react"
 import { motion } from "framer-motion"
 import Image from "next/image"
@@ -15,27 +14,28 @@ const ChatInterface: React.FC = () => {
   const [selectedAgent, setSelectedAgent] = useState<string | null>(null)
 
   const handleSendMessage = async (message: string) => {
-    setMessages([...messages, { text: message, sender: "user" }])
+    // Add user message
+    setMessages((prev) => [...prev, { text: message, sender: "user" }])
 
     try {
       const endpoint = selectedAgent ? `http://localhost:8000/chat/${selectedAgent}` : `http://localhost:8000/chat`
       const response = await axios.post(endpoint, { query: message })
 
-      let formattedResponse = ""
-
-      if (typeof response.data.response === "string") {
-        formattedResponse = response.data.response
-      } else if (typeof response.data.response === "object") {
-        formattedResponse = "```json\n" + JSON.stringify(response.data.response, null, 2) + "\n```"
-      } else {
-        formattedResponse = String(response.data.response)
-      }
-
-      setMessages((prevMessages) => [...prevMessages, { text: formattedResponse, sender: "ai" }])
+      // Add AI response
+      setMessages((prev) => [
+        ...prev,
+        {
+          text: JSON.stringify(response.data, null, 2),
+          sender: "ai",
+        },
+      ])
     } catch (error) {
-      setMessages((prevMessages) => [
-        ...prevMessages,
-        { text: "Error: Unable to get a response from the server.", sender: "ai" },
+      setMessages((prev) => [
+        ...prev,
+        {
+          text: "Error: Unable to get a response from the server.",
+          sender: "ai",
+        },
       ])
     }
   }
@@ -44,20 +44,29 @@ const ChatInterface: React.FC = () => {
     const formData = new FormData()
     formData.append("file", file)
     formData.append("styling_instructions", "Please analyze the data and provide a detailed report.")
+
     try {
       const response = await axios.post("http://localhost:8000/upload_dataframe", formData, {
         headers: {
           "Content-Type": "multipart/form-data",
         },
       })
-      setMessages((prevMessages) => [...prevMessages, { text: response.data.message, sender: "ai" }])
+      setMessages((prev) => [
+        ...prev,
+        {
+          text: JSON.stringify(response.data, null, 2),
+          sender: "ai",
+        },
+      ])
     } catch (error) {
-      setMessages((prevMessages) => [...prevMessages, { text: "Error: Unable to upload the file.", sender: "ai" }])
+      setMessages((prev) => [
+        ...prev,
+        {
+          text: "Error: Unable to upload the file.",
+          sender: "ai",
+        },
+      ])
     }
-  }
-
-  const toggleSidebar = () => {
-    setSidebarOpen((prev) => !prev)
   }
 
   return (
@@ -79,7 +88,7 @@ const ChatInterface: React.FC = () => {
             />
           </div>
           <button
-            onClick={toggleSidebar}
+            onClick={() => setSidebarOpen((prev) => !prev)}
             className="text-gray-500 hover:text-[#FF7F7F] focus:outline-none transition-colors"
           >
             <svg
