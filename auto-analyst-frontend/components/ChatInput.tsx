@@ -31,29 +31,26 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, onFileUpload }) =>
   const clearSelectedFile = () => {
     setSelectedFile(null)
     if (fileInputRef.current) {
-      fileInputRef.current.value = ''
+      fileInputRef.current.value = ""
     }
   }
 
   return (
     <div className="bg-white border-t border-gray-200 p-4">
       {selectedFile && (
-        <div className="max-w-4xl mx-auto mb-2">
+        <div className="max-w-3xl mx-auto mb-2">
           <div className="flex items-center space-x-2 bg-blue-50 p-2 rounded-md">
             <span className="text-sm text-blue-600 truncate">{selectedFile.name}</span>
-            <button
-              onClick={clearSelectedFile}
-              className="text-blue-600 hover:text-blue-800"
-            >
+            <button onClick={clearSelectedFile} className="text-blue-600 hover:text-blue-800">
               <X className="w-4 h-4" />
             </button>
           </div>
         </div>
       )}
-      
-      <form onSubmit={handleSubmit} className="max-w-4xl mx-auto">
+
+      <form onSubmit={handleSubmit} className="max-w-3xl mx-auto">
         <div className="flex items-center space-x-2">
-          <div className="relative flex-1 flex items-center">
+          <div className="relative flex-1">
             <input
               type="text"
               value={message}
@@ -61,14 +58,8 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, onFileUpload }) =>
               placeholder="Type your message..."
               className="w-full bg-gray-100 text-gray-900 placeholder-gray-500 border-0 rounded-full py-3 pl-6 pr-12 focus:outline-none focus:ring-2 focus:ring-[#FF7F7F] focus:bg-white transition-colors"
             />
-            <div className="absolute right-3">
-              <input
-                type="file"
-                ref={fileInputRef}
-                onChange={handleFileSelect}
-                className="hidden"
-                id="file-upload"
-              />
+            <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+              <input type="file" ref={fileInputRef} onChange={handleFileSelect} className="hidden" id="file-upload" />
               <label
                 htmlFor="file-upload"
                 className="cursor-pointer p-2 rounded-full hover:bg-gray-200 transition-colors inline-flex items-center justify-center"
@@ -92,3 +83,4 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, onFileUpload }) =>
 }
 
 export default ChatInput
+

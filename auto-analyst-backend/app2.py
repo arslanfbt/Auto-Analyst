@@ -15,6 +15,7 @@ from retrievers import *
 from llama_index.core import Document
 from llama_index.embeddings.openai import OpenAIEmbedding
 from llama_index.core import VectorStoreIndex
+from format_response import format_response_to_markdown
 
 # Initialize FastAPI app
 app = FastAPI(title="AI Analytics API", version="1.0")
@@ -70,6 +71,7 @@ async def upload_dataframe(file: UploadFile = File(...), styling_instructions: s
         
         global retrievers
         retrievers = initialize_retrievers(styling_instructions, [str(df)])
+        print(df)
         return {"message": "Dataframe uploaded successfully"}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -90,6 +92,7 @@ async def chat_with_agent(agent_name: str, request: QueryRequest):
 @app.post("/chat", response_model=dict)
 async def chat_with_all(request: QueryRequest):
     response_text = ai_system(request.query)
+    response_text = format_response_to_markdown(response_text)
     return {
         "agent_name": "ai_system",
         "query": request.query,

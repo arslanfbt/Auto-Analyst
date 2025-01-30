@@ -233,7 +233,7 @@ class data_viz_agent(dspy.Signature):
     
     Make sure your output is as intended! DO NOT OUTPUT THE DATASET/STYLING INDEX 
     ONLY OUTPUT THE CODE AND COMMENTARY. ONLY USE ONE OF THESE 'K','M' or 1,000/1,000,000. NOT BOTH
-
+    ALWAYS RETURN fig.to_html(full_html=False)
     You may be give recent agent interactions as a hint! With the first being the latest
     DONT INCLUDE GOAL/DATASET/STYLING INDEX IN YOUR OUTPUT!
     You can add trendline into a scatter plot to show it changes,only if user mentions for it in the query!
