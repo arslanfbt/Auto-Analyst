@@ -1,53 +1,127 @@
-"use client";
+"use client"
 
-import React, { useState } from "react";
-import { motion } from "framer-motion";
-import Image from "next/image";
-import ChatWindow from "./ChatWindow";
-import ChatInput from "./ChatInput";
-import Sidebar from "./Sidebar";
+import type React from "react"
+import { useState } from "react"
+import { motion } from "framer-motion"
+import Image from "next/image"
+import ChatWindow from "./ChatWindow"
+import ChatInput from "./ChatInput"
+import Sidebar from "./Sidebar"
+import axios from "axios"
 
 const ChatInterface: React.FC = () => {
-  const [messages, setMessages] = useState<{ text: string; sender: "user" | "ai" }[]>([]);
-  const [isSidebarOpen, setSidebarOpen] = useState(false);
+  const [messages, setMessages] = useState<{ text: string; sender: "user" | "ai" }[]>([])
+  const [isSidebarOpen, setSidebarOpen] = useState(false)
+  const [selectedAgent, setSelectedAgent] = useState<string | null>(null)
 
-  const handleSendMessage = (message: string) => {
-    setMessages([...messages, { text: message, sender: "user" }]);
-    // Placeholder AI response
-    setTimeout(() => {
-      setMessages((prevMessages) => [
-        ...prevMessages,
-        { text: "Auto Analyst replies here...", sender: "ai" },
-      ]);
-    }, 500);
-  };
+  const handleSendMessage = async (message: string) => {
+    setMessages((prev) => [...prev, { text: message, sender: "user" }])
 
-  const toggleSidebar = () => {
-    setSidebarOpen((prev) => !prev); // Toggle sidebar state
-  };
+    try {
+      const endpoint = selectedAgent ? `http://localhost:8000/chat/${selectedAgent}` : `http://localhost:8000/chat`
+      const response = await axios.post(endpoint, { query: message })
+
+      console.log("Server response:", response.data)
+
+      let aiMessage = ""
+
+      if (typeof response.data === "string") {
+        // If the response is a string, use it directly
+        aiMessage = response.data
+      } else if (typeof response.data === "object") {
+        if (response.data.response) {
+          // If it's a response object, use the response property
+          aiMessage = response.data.response
+        } else if (response.data.plotly_data && response.data.plotly_layout) {
+          aiMessage = {
+            type: "plotly",
+            data: response.data.plotly_data,
+            layout: response.data.plotly_layout,
+          }
+        }
+         else {
+          // If it's some other object, stringify it
+          aiMessage = "```json\n" + JSON.stringify(response.data, null, 2) + "\n```"
+        }
+      } else {
+        // If it's neither a string nor an object, convert it to a string
+        aiMessage = String(response.data)
+      }
+
+      setMessages((prev) => [
+        ...prev,
+        {
+          text: aiMessage,
+          sender: "ai",
+        },
+      ])
+    } catch (error) {
+      console.error("Error in handleSendMessage:", error)
+      setMessages((prev) => [
+        ...prev,
+        {
+          text: `Error: ${error instanceof Error ? error.message : "Unknown error occurred"}`,
+          sender: "ai",
+        },
+      ])
+    }
+  }
+
+  const handleFileUpload = async (file: File) => {
+    const formData = new FormData()
+    formData.append("file", file)
+    formData.append("styling_instructions", "Please analyze the data and provide a detailed report.")
+
+    try {
+      const response = await axios.post("http://localhost:8000/upload_dataframe", formData, {
+        headers: {
+          "Content-Type": "multipart/form-data",
+        },
+      })
+      setMessages((prev) => [
+        ...prev,
+        {
+          text: "```json\n" + JSON.stringify(response.data, null, 2) + "\n```",
+          sender: "ai",
+        },
+      ])
+    } catch (error) {
+      console.error("Error in handleFileUpload:", error)
+      setMessages((prev) => [
+        ...prev,
+        {
+          text: `Error: ${error instanceof Error ? error.message : "Unknown error occurred during file upload"}`,
+          sender: "ai",
+        },
+      ])
+    }
+  }
 
   return (
     <div className="flex h-screen bg-gradient-to-br from-gray-50 to-white text-gray-900">
-      {/* Sidebar */}
       <Sidebar isOpen={isSidebarOpen} onClose={() => setSidebarOpen(false)} />
 
-      {/* Main content area */}
       <motion.div
-        animate={{ marginLeft: isSidebarOpen ? "16rem" : "0rem" }} // Shift content when sidebar is open
+        animate={{ marginLeft: isSidebarOpen ? "16rem" : "0rem" }}
         transition={{ type: "tween", duration: 0.3 }}
-        className="flex-1 flex flex-col"
+        className="flex-1 flex flex-col min-w-0" // Added min-w-0 to prevent flex item from overflowing
       >
         <header className="bg-white/70 backdrop-blur-sm p-4 flex justify-between items-center border-b border-gray-200">
-          <div className="flex items-center space-x-3">
-            <Image
-              src="https://4q2e4qu710mvgubg.public.blob.vercel-storage.com/auto-analyst-logo-R9wBx0kWOUA96KxwKBtl1onOHp6o02.png"
-              alt="Auto-Analyst Logo"
-              width={256}
-              height={256}
-            />
+          <div className="flex items-center">
+            <div className="w-32 h-8 relative">
+              {" "}
+              {/* Constrained image container */}
+              <Image
+                src="https://4q2e4qu710mvgubg.public.blob.vercel-storage.com/auto-analyst-logo-R9wBx0kWOUA96KxwKBtl1onOHp6o02.png"
+                alt="Auto-Analyst Logo"
+                fill
+                className="object-contain"
+                priority
+              />
+            </div>
           </div>
           <button
-            onClick={toggleSidebar} // Toggle sidebar on button click
+            onClick={() => setSidebarOpen((prev) => !prev)}
             className="text-gray-500 hover:text-[#FF7F7F] focus:outline-none transition-colors"
           >
             <svg
@@ -61,24 +135,14 @@ const ChatInterface: React.FC = () => {
             </svg>
           </button>
         </header>
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5 }}
-          className="flex-1 overflow-hidden"
-        >
+        <div className="flex-1 overflow-hidden">
           <ChatWindow messages={messages} />
-        </motion.div>
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, delay: 0.2 }}
-        >
-          <ChatInput onSendMessage={handleSendMessage} />
-        </motion.div>
+        </div>
+        <ChatInput onSendMessage={handleSendMessage} onFileUpload={handleFileUpload} />
       </motion.div>
     </div>
-  );
-};
+  )
+}
 
-export default ChatInterface;
+export default ChatInterface
+

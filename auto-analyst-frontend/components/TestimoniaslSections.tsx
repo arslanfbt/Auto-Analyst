@@ -1,6 +1,6 @@
 "use client"
 import { motion } from "framer-motion"
-import { testimonials } from "./constants"
+import { testimonials } from "./Constants"
 
 export default function TestimonialsSection() {
   return (
