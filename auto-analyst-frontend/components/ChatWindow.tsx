@@ -5,20 +5,32 @@ import { useEffect, useRef, useCallback, useState } from "react"
 import { motion } from "framer-motion"
 import ReactMarkdown from "react-markdown"
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter"
-import { tomorrow } from "react-syntax-highlighter/dist/esm/styles/prism"
+import { vscDarkPlus } from "react-syntax-highlighter/dist/esm/styles/prism"
 import rehypeRaw from "rehype-raw"
 import remarkGfm from "remark-gfm"
+
 import { Code2, CodeIcon as CodeOff } from "lucide-react"
 import { Button } from "./ui/button"
 import CopyButton from "./ui/CopyButton"
 import PlotlyChart from "./PlotlyChart"
 
 interface Message {
-  text: string
+  text: string | PlotlyMessage;
   sender: "user" | "ai"
 }
 
-const ChatWindow: React.FC<{ messages: Message[] }> = ({ messages }) => {
+interface PlotlyMessage {
+  type: "plotly";
+  data: any;
+  layout: any;
+}
+
+interface ChatWindowProps {
+  messages: Message[];
+}
+
+const ChatWindow: React.FC<ChatWindowProps> = ({ messages }) => {
+
   const [showCode, setShowCode] = useState(true)
   const chatWindowRef = useRef<HTMLDivElement>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -48,7 +60,7 @@ const ChatWindow: React.FC<{ messages: Message[] }> = ({ messages }) => {
       if (part.startsWith("```plotly") && part.endsWith("```")) {
         const plotlyContent = part.slice(9, -3).trim()
         return (
-          <div key={index} className="w-full my-2">
+          <div key={index} className="w-full my-4">
             {renderPlotly(plotlyContent)}
           </div>
         )
@@ -59,37 +71,33 @@ const ChatWindow: React.FC<{ messages: Message[] }> = ({ messages }) => {
             remarkPlugins={[remarkGfm]}
             rehypePlugins={[rehypeRaw]}
             components={{
-              code({ node, inline, className, children, ...props }) {
+              code({ node, className, children, ...props }) {
                 const match = /language-(\w+)/.exec(className || "")
-                if (!showCode && !inline && match) {
-                  return <div className="text-sm text-gray-500">[Code hidden]</div>
-                }
-                return !inline && match ? (
-                  <div className="relative rounded-lg bg-[#1a1a1a] overflow-hidden my-4">
+                const isInline = (props as { inline?: boolean })?.inline ?? false;
+                return !isInline && match ? (
+                  <div className="relative rounded-lg overflow-hidden my-4">
                     <CopyButton text={String(children)} />
-                    <div className="overflow-x-auto">
-                      <SyntaxHighlighter
-                        {...props}
-                        style={tomorrow}
-                        language={match[1]}
-                        PreTag="div"
-                        customStyle={{
-                          margin: 0,
-                          padding: "1.25rem",
-                          paddingTop: "2rem",
-                          background: "transparent",
-                        }}
-                      >
-                        {String(children).replace(/\n$/, "")}
-                      </SyntaxHighlighter>
-                    </div>
+
+                    <SyntaxHighlighter
+                      style={vscDarkPlus}
+                      language={match[1]}
+                      PreTag="div"
+                      // {...props}
+                      customStyle={{
+                        margin: 0,
+                        padding: "1.25rem",
+                        paddingTop: "2rem",
+                      }}
+                    >
+                      {String(children).replace(/\n$/, "")}
+                    </SyntaxHighlighter>
                   </div>
                 ) : (
-                  <code {...props} className={`${className} px-1.5 py-0.5 rounded-md bg-gray-100 text-gray-800`}>
+                  <code className={className} {...props}>
                     {children}
                   </code>
                 )
-              },
+              },          
               h1: ({ node, ...props }) => <h1 className="text-2xl font-bold mt-6 mb-4" {...props} />,
               h2: ({ node, ...props }) => <h2 className="text-xl font-semibold mt-5 mb-3" {...props} />,
               h3: ({ node, ...props }) => <h3 className="text-lg font-medium mt-4 mb-2" {...props} />,
@@ -164,22 +172,13 @@ const ChatWindow: React.FC<{ messages: Message[] }> = ({ messages }) => {
               className={`flex ${message.sender === "user" ? "justify-end" : "justify-start"} mb-8`}
             >
               <div
-                className={`
-                  relative
-                  max-w-[85%]
-                  rounded-2xl 
-                  p-6
-                  transition-shadow
-                  duration-200
-                  hover:shadow-lg
-                  ${
-                    message.sender === "user"
-                      ? "bg-[#FF7F7F] text-white shadow-pink-200/50"
-                      : "bg-white text-gray-900 shadow-md shadow-gray-200/50"
-                  }
-                `}
+                className={`relative max-w-[85%] rounded-2xl p-6 transition-shadow duration-200 hover:shadow-lg ${
+                  message.sender === "user"
+                    ? "bg-[#FF7F7F] text-white shadow-pink-200/50"
+                    : "bg-white text-gray-900 shadow-md shadow-gray-200/50"
+                }`}
               >
-                {renderContent(message.text)}
+                {renderContent(message.text.toString())}
               </div>
             </motion.div>
           ))}
@@ -191,4 +190,3 @@ const ChatWindow: React.FC<{ messages: Message[] }> = ({ messages }) => {
 }
 
 export default ChatWindow
-

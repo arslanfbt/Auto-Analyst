@@ -68,8 +68,15 @@ def execute_code(code_str):
         modified_code
     )
     
+    # remove plt.show()
+    modified_code = re.sub(
+        r'plt\.show\(\)',
+        '',
+        modified_code
+    )
 
     print(modified_code)
+
 
     with stdoutIO() as s:
         exec(modified_code, context)  # Execute the modified code
