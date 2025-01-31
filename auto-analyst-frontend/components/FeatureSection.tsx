@@ -1,6 +1,6 @@
 "use client"
 import { motion } from "framer-motion"
-import { features } from "./Constants"
+import { features } from "./FnT";
 
 export default function FeaturesSection() {
   return (

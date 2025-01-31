@@ -9,8 +9,19 @@ import ChatInput from "./ChatInput"
 import Sidebar from "./Sidebar"
 import axios from "axios"
 
+interface PlotlyMessage {
+  type: "plotly";
+  data: any;
+  layout: any;
+}
+
+interface Message {
+  text: string | PlotlyMessage;
+  sender: "user" | "ai";
+}
+
 const ChatInterface: React.FC = () => {
-  const [messages, setMessages] = useState<{ text: string; sender: "user" | "ai" }[]>([])
+  const [messages, setMessages] = useState<Message[]>([])
   const [isSidebarOpen, setSidebarOpen] = useState(false)
   const [selectedAgent, setSelectedAgent] = useState<string | null>(null)
 
@@ -23,7 +34,7 @@ const ChatInterface: React.FC = () => {
 
       console.log("Server response:", response.data)
 
-      let aiMessage = ""
+      let aiMessage: string | PlotlyMessage = "";
 
       if (typeof response.data === "string") {
         // If the response is a string, use it directly
@@ -51,7 +62,7 @@ const ChatInterface: React.FC = () => {
       setMessages((prev) => [
         ...prev,
         {
-          text: aiMessage,
+          text: typeof aiMessage === "string" ? aiMessage : JSON.stringify(aiMessage),
           sender: "ai",
         },
       ])
