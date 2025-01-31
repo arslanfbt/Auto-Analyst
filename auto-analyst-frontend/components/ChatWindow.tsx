@@ -48,7 +48,7 @@ const ChatWindow: React.FC<{ messages: Message[] }> = ({ messages }) => {
       if (part.startsWith("```plotly") && part.endsWith("```")) {
         const plotlyContent = part.slice(9, -3).trim()
         return (
-          <div key={index} className="w-full my-4">
+          <div key={index} className="w-full my-2">
             {renderPlotly(plotlyContent)}
           </div>
         )
@@ -191,5 +191,4 @@ const ChatWindow: React.FC<{ messages: Message[] }> = ({ messages }) => {
 }
 
 export default ChatWindow
-
 
