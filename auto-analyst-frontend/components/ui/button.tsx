@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils"
 
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   asChild?: boolean
-  variant?: "default" | "outline"
+  variant?: "default" | "outline" | "ghost"
   size?: "default" | "sm" | "lg"
 }
 
