@@ -1,30 +1,21 @@
-from fastapi import FastAPI, HTTPException, Depends, File, UploadFile
+from fastapi import FastAPI, HTTPException, File, UploadFile
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi_sqlalchemy import DBSessionMiddleware, db
-from dotenv import load_dotenv
-from sqlalchemy.orm import Session
 from pydantic import BaseModel
 import pandas as pd
 import os
-from sqlalchemy import create_engine
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey
-import dspy
 from typing import List
 import uvicorn
 
+from fastapi import Form, UploadFile
+import io
 # Import custom modules and models
 from agents import *
 from retrievers import *
-from db_models import Response, Query
 from llama_index.core import Document
 from llama_index.embeddings.openai import OpenAIEmbedding
 from llama_index.core import VectorStoreIndex
-
-# Load environment variables
-load_dotenv()
+from format_response import format_response_to_markdown
 
 # Initialize FastAPI app
 app = FastAPI(title="AI Analytics API", version="1.0")
@@ -37,9 +28,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.add_middleware(DBSessionMiddleware, db_url="sqlite:///response.db")
-
 # DSPy Configuration
+import dspy
 dspy.configure(lm=dspy.LM(model="gpt-4o-mini", api_key=os.getenv("OPENAI_API_KEY"), temperature=0, max_tokens=1000))
 
 # Helper function to initialize retrievers
@@ -72,86 +62,42 @@ class DataFrameRequest(BaseModel):
     styling_instructions: List[str]
     file: str
 
-@app.on_event("startup")
-async def startup():
-    # setup db
-    Base.metadata.create_all(bind=engine)
-
 @app.post("/upload_dataframe", response_model=dict)
-async def upload_dataframe(data: DataFrameRequest):
+async def upload_dataframe(file: UploadFile = File(...), styling_instructions: str = Form(...)):
     try:
-        df = pd.read_csv(data.file)
+        # Read the file content
+        contents = await file.read()
+        df = pd.read_csv(io.BytesIO(contents))  # Use io.BytesIO to read in-memory file content
+        
         global retrievers
-        retrievers = initialize_retrievers(data.styling_instructions, [str(df)])
+        retrievers = initialize_retrievers(styling_instructions, [str(df)])
+        print(df)
         return {"message": "Dataframe uploaded successfully"}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-@app.get("/queries", response_model=List[dict])
-async def get_queries():
-    with db():
-        queries = db.session.query(Query).order_by(Query.created_at.desc()).all()
-        return [query.to_dict() for query in queries]
-
-@app.get("/queries/{id}", response_model=dict)
-async def get_query(id: int):
-    with db():
-        query = db.session.query(Query).filter(Query.id == id).first()
-        if not query:
-            raise HTTPException(status_code=404, detail="Query not found")
-        return query.to_dict()
-
-@app.get("/responses", response_model=List[dict])
-async def get_responses():
-    with db():
-        responses = db.session.query(Response).order_by(Response.created_at.desc()).all()
-        return [response.to_dict() for response in responses]
-
-@app.get("/responses/query/{query_id}", response_model=List[dict])
-async def get_responses_by_query(query_id: int):
-    with db():
-        responses = db.session.query(Response).filter_by(query_id=query_id).all()
-        return [response.to_dict() for response in responses]
-
 @app.post("/chat/{agent_name}", response_model=dict)
 async def chat_with_agent(agent_name: str, request: QueryRequest):
-    with db():
-        if agent_name not in AVAILABLE_AGENTS:
-            raise HTTPException(status_code=404, detail="Agent not found")
-        
-        agent = AVAILABLE_AGENTS[agent_name]
-        query = Query(query=request.query)
-        db.session.add(query)
-        db.session.commit()
-        
-        response_text = agent(request.query)
-        response = Response(
-            query_id=query.id,
-            agent_name=agent_name,
-            query=request.query,
-            response=response_text,
-        )
-        db.session.add(response)
-        db.session.commit()
-        return response.to_dict()
+    if agent_name not in AVAILABLE_AGENTS:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    
+    agent = AVAILABLE_AGENTS[agent_name]
+    response_text = agent(request.query)
+    return {
+        "agent_name": agent_name,
+        "query": request.query,
+        "response": response_text,
+    }
 
 @app.post("/chat", response_model=dict)
 async def chat_with_all(request: QueryRequest):
-    with db():
-        query = Query(query=request.query)
-        db.session.add(query)
-        db.session.commit()
-        
-        response_text = ai_system(request.query)
-        response = Response(
-            query_id=query.id,
-            agent_name="ai_system",
-            query=request.query,
-            response=response_text,
-        )
-        db.session.add(response)
-        db.session.commit()
-        return response.to_dict()
+    response_text = ai_system(request.query)
+    response_text = format_response_to_markdown(response_text)
+    return {
+        "agent_name": "ai_system",
+        "query": request.query,
+        "response": response_text,
+    }
 
 @app.get("/health", response_model=dict)
 async def health():
