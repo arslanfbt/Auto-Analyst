@@ -25,8 +25,17 @@ jobs:
           sudo apt-get install git-lfs
           git lfs install
 
-      - name: Navigate to backend directory
-        run: cd auto-analyst-backend
+      - name: Clean up repository and remove unwanted files
+        run: |
+          git rm --cached -r .
+          git add .
+          git commit -m "Clean up repository"
+
+      - name: Apply .gitignore and ensure node_modules are not tracked
+        run: |
+          echo "node_modules/" >> .gitignore
+          git add .gitignore
+          git commit -m "Update .gitignore to exclude node_modules"
 
       - name: Track binary files with Git LFS (only in backend)
         run: |
@@ -34,6 +43,7 @@ jobs:
           git lfs track "*.exe"
           git lfs track "*.node"
           git add .gitattributes
+          git commit -m "Track binary files with Git LFS"
 
       - name: Push to Hugging Face hub
         env:
