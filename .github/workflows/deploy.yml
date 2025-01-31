@@ -1,3 +1,4 @@
+
 name: Sync to Hugging Face hub
 
 on:
@@ -9,28 +10,15 @@ jobs:
   sync-to-hub:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout backend directory
+      - name: Checkout the repository
         uses: actions/checkout@v2
         with:
           fetch-depth: 0
-          path: auto-analyst-backend
 
       - name: Set Git user identity
         run: |
           git config --global user.email "github-actions@users.noreply.github.com"
           git config --global user.name "GitHub Actions"
-
-      - name: Install Git LFS
-        run: |
-          curl -s https://packagecloud.io/install/repositories/github/git-lfs/script.deb.sh | sudo bash
-          sudo apt-get install git-lfs
-          git lfs install
-
-      - name: Track binary files with Git LFS (only in backend)
-        run: |
-          git lfs track "auto-analyst-backend/**.exe"
-          git lfs track "auto-analyst-backend/**.node"
-          git add auto-analyst-backend/.gitattributes
 
       - name: Push to Hugging Face hub
         env:
