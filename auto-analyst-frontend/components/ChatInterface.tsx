@@ -29,7 +29,7 @@ const ChatInterface: React.FC = () => {
     setMessages((prev) => [...prev, { text: message, sender: "user" }])
 
     try {
-      const endpoint = selectedAgent ? `http://localhost:8000/chat/${selectedAgent}` : `http://localhost:8000/chat`
+      const endpoint = selectedAgent ? `https://ashad001-auto-analyst-backend.hf.space/chat/${selectedAgent}` : `https://ashad001-auto-analyst-backend.hf.space/chat`
       const response = await axios.post(endpoint, { query: message })
 
       console.log("Server response:", response.data)
@@ -84,7 +84,7 @@ const ChatInterface: React.FC = () => {
     formData.append("styling_instructions", "Please analyze the data and provide a detailed report.")
 
     try {
-      const response = await axios.post("http://localhost:8000/upload_dataframe", formData, {
+      const response = await axios.post("https://ashad001-auto-analyst-backend.hf.space/upload_dataframe", formData, {
         headers: {
           "Content-Type": "multipart/form-data",
         },

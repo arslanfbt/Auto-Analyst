@@ -2,36 +2,103 @@
 
 import type React from "react"
 import { useEffect, useRef, useCallback, useState } from "react"
-import { motion } from "framer-motion"
+import { motion, AnimatePresence } from "framer-motion"
 import ReactMarkdown from "react-markdown"
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter"
 import { vscDarkPlus } from "react-syntax-highlighter/dist/esm/styles/prism"
 import rehypeRaw from "rehype-raw"
 import remarkGfm from "remark-gfm"
-
-import { Code2, CodeIcon as CodeOff } from "lucide-react"
+import { Code2, ChevronDown, ChevronUp, Copy, Check } from "lucide-react"
 import { Button } from "./ui/button"
-import CopyButton from "./ui/CopyButton"
 import PlotlyChart from "./PlotlyChart"
 
 interface Message {
-  text: string | PlotlyMessage;
+  text: string | PlotlyMessage
   sender: "user" | "ai"
 }
 
 interface PlotlyMessage {
-  type: "plotly";
-  data: any;
-  layout: any;
+  type: "plotly"
+  data: any
+  layout: any
 }
 
 interface ChatWindowProps {
-  messages: Message[];
+  messages: Message[]
+}
+
+interface CodeBlockProps {
+  language: string
+  value: string
+}
+
+const CodeBlock: React.FC<CodeBlockProps> = ({ language, value }) => {
+  const [isVisible, setIsVisible] = useState(false)
+  const [copied, setCopied] = useState(false)
+
+  const copyToClipboard = async () => {
+    try {
+      await navigator.clipboard.writeText(value)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch (err) {
+      console.error("Failed to copy text: ", err)
+    }
+  }
+
+  return (
+    <div className="relative rounded-lg overflow-hidden my-4 bg-[#1E1E1E]">
+      <div className="flex items-center justify-between px-4 py-2 border-b border-gray-700">
+        <div className="flex items-center space-x-2">
+          <Code2 className="w-4 h-4 text-gray-400" />
+          <span className="text-sm font-medium text-gray-300">{language}</span>
+        </div>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => setIsVisible(!isVisible)}
+          className="text-gray-400 hover:text-gray-200"
+        >
+          {isVisible ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+        </Button>
+      </div>
+      <AnimatePresence>
+        {isVisible && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="relative"
+          >
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={copyToClipboard}
+              className="absolute top-2 right-2 text-gray-400 hover:text-gray-200"
+            >
+              {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+            </Button>
+            <SyntaxHighlighter
+              style={vscDarkPlus}
+              language={language}
+              PreTag="div"
+              customStyle={{
+                margin: 0,
+                padding: "1.25rem",
+                background: "#1E1E1E",
+              }}
+            >
+              {value}
+            </SyntaxHighlighter>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  )
 }
 
 const ChatWindow: React.FC<ChatWindowProps> = ({ messages }) => {
-
-  const [showCode, setShowCode] = useState(true)
   const chatWindowRef = useRef<HTMLDivElement>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
@@ -73,31 +140,18 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages }) => {
             components={{
               code({ node, className, children, ...props }) {
                 const match = /language-(\w+)/.exec(className || "")
-                const isInline = (props as { inline?: boolean })?.inline ?? false;
-                return !isInline && match ? (
-                  <div className="relative rounded-lg overflow-hidden my-4">
-                    <CopyButton text={String(children)} />
+                const isInline = (props as { inline?: boolean })?.inline ?? false
 
-                    <SyntaxHighlighter
-                      style={vscDarkPlus}
-                      language={match[1]}
-                      PreTag="div"
-                      // {...props}
-                      customStyle={{
-                        margin: 0,
-                        padding: "1.25rem",
-                        paddingTop: "2rem",
-                      }}
-                    >
-                      {String(children).replace(/\n$/, "")}
-                    </SyntaxHighlighter>
-                  </div>
-                ) : (
+                if (!isInline && match) {
+                  return <CodeBlock language={match[1]} value={String(children).replace(/\n$/, "")} />
+                }
+
+                return (
                   <code className={className} {...props}>
                     {children}
                   </code>
                 )
-              },          
+              },
               h1: ({ node, ...props }) => <h1 className="text-2xl font-bold mt-6 mb-4" {...props} />,
               h2: ({ node, ...props }) => <h2 className="text-xl font-semibold mt-5 mb-3" {...props} />,
               h3: ({ node, ...props }) => <h3 className="text-lg font-medium mt-4 mb-2" {...props} />,
@@ -114,19 +168,6 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages }) => {
               blockquote: ({ node, ...props }) => (
                 <blockquote className="border-l-4 border-gray-300 pl-4 italic my-4" {...props} />
               ),
-              pre: ({ children }) => <pre className="my-4 overflow-x-auto rounded-lg">{children}</pre>,
-              table: ({ children }) => (
-                <div className="overflow-x-auto my-4">
-                  <table className="min-w-full divide-y divide-gray-300">{children}</table>
-                </div>
-              ),
-              thead: ({ children }) => <thead className="bg-gray-50">{children}</thead>,
-              tbody: ({ children }) => <tbody className="divide-y divide-gray-200 bg-white">{children}</tbody>,
-              tr: ({ children }) => <tr>{children}</tr>,
-              th: ({ children }) => (
-                <th className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">{children}</th>
-              ),
-              td: ({ children }) => <td className="px-3 py-4 text-sm text-gray-500">{children}</td>,
             }}
           >
             {part}
@@ -137,27 +178,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages }) => {
   }
 
   return (
-    <div className="flex flex-col h-full">
-      <div className="flex justify-end px-4 py-2 border-b">
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => setShowCode(!showCode)}
-          className="text-gray-500 hover:text-gray-900"
-        >
-          {showCode ? (
-            <>
-              <CodeOff className="w-4 h-4 mr-2" />
-              Hide Code
-            </>
-          ) : (
-            <>
-              <Code2 className="w-4 h-4 mr-2" />
-              Show Code
-            </>
-          )}
-        </Button>
-      </div>
+    <div className="flex flex-col h-full bg-gray-50">
       <div
         ref={chatWindowRef}
         className="flex-1 px-4 py-6 space-y-8 overflow-y-auto scrollbar-thin scrollbar-track-transparent scrollbar-thumb-gray-300"
@@ -190,3 +211,4 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages }) => {
 }
 
 export default ChatWindow
+
