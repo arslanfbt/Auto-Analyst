@@ -34,46 +34,60 @@ const ChatInterface: React.FC = () => {
       const endpoint = selectedAgent
         ? `https://ashad001-auto-analyst-backend.hf.space/chat/${selectedAgent}`
         : `https://ashad001-auto-analyst-backend.hf.space/chat`
-      const response = await axios.post(endpoint, { query: message })
 
+      const response = await axios.post(endpoint, { query: message })
       console.log("Server response:", response.data)
 
       let aiMessage: string | PlotlyMessage = ""
 
-      if (typeof response.data === "string") {
-        aiMessage = response.data
-      } else if (typeof response.data === "object") {
-        if (response.data.response) {
-          aiMessage = response.data.response
-        } else if (response.data.plotly_data && response.data.plotly_layout) {
-          aiMessage = {
-            type: "plotly",
-            data: response.data.plotly_data,
-            layout: response.data.plotly_layout,
+      try {
+        if (!response.data) {
+          throw new Error("Empty response from server")
+        }
+
+        if (typeof response.data === "string") {
+          aiMessage = response.data
+        } else if (typeof response.data === "object") {
+          if (response.data.error) {
+            throw new Error(response.data.error)
+          } else if (response.data.response) {
+            aiMessage = response.data.response
+          } else if (response.data.plotly_data && response.data.plotly_layout) {
+            aiMessage = {
+              type: "plotly",
+              data: response.data.plotly_data,
+              layout: response.data.plotly_layout,
+            }
+          } else {
+            aiMessage = "```json\n" + JSON.stringify(response.data, null, 2) + "\n```"
           }
         } else {
-          aiMessage = "```json\n" + JSON.stringify(response.data, null, 2) + "\n```"
+          throw new Error("Invalid response format from server")
         }
-      } else {
-        aiMessage = String(response.data)
-      }
 
-      setMessages((prev) => [
-        ...prev,
-        {
-          text: typeof aiMessage === "string" ? aiMessage : JSON.stringify(aiMessage),
+        setMessages((prev) => [...prev, {
+          text: typeof aiMessage === "string" ? aiMessage : aiMessage,
           sender: "ai",
-        },
-      ])
+        }])
+      } catch (parseError) {
+        console.error("Error processing response:", parseError)
+        setMessages((prev) => [...prev, {
+          text: "Sorry, I encountered an error processing the response. Please try again.",
+          sender: "ai",
+        }])
+      }
     } catch (error) {
-      console.error("Error in handleSendMessage:", error)
-      setMessages((prev) => [
-        ...prev,
-        {
-          text: `Error: ${error instanceof Error ? error.message : "Unknown error occurred"}`,
-          sender: "ai",
-        },
-      ])
+      console.error("Network or server error:", error)
+      const errorMessage = axios.isAxiosError(error) && error.response?.status === 500
+        ? "The server encountered an error. Please try again later."
+        : error instanceof Error 
+          ? error.message 
+          : "An unknown error occurred"
+
+      setMessages((prev) => [...prev, {
+        text: `Error: ${errorMessage}`,
+        sender: "ai",
+      }])
     } finally {
       setIsLoading(false)
     }
