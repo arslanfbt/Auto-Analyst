@@ -10,38 +10,40 @@ import Sidebar from "./Sidebar"
 import axios from "axios"
 
 interface PlotlyMessage {
-  type: "plotly";
-  data: any;
-  layout: any;
+  type: "plotly"
+  data: any
+  layout: any
 }
 
 interface Message {
-  text: string | PlotlyMessage;
-  sender: "user" | "ai";
+  text: string | PlotlyMessage
+  sender: "user" | "ai"
 }
 
 const ChatInterface: React.FC = () => {
   const [messages, setMessages] = useState<Message[]>([])
+  const [isLoading, setIsLoading] = useState(false)
   const [isSidebarOpen, setSidebarOpen] = useState(false)
   const [selectedAgent, setSelectedAgent] = useState<string | null>(null)
 
   const handleSendMessage = async (message: string) => {
     setMessages((prev) => [...prev, { text: message, sender: "user" }])
+    setIsLoading(true)
 
     try {
-      const endpoint = selectedAgent ? `https://ashad001-auto-analyst-backend.hf.space/chat/${selectedAgent}` : `https://ashad001-auto-analyst-backend.hf.space/chat`
+      const endpoint = selectedAgent
+        ? `https://ashad001-auto-analyst-backend.hf.space/chat/${selectedAgent}`
+        : `https://ashad001-auto-analyst-backend.hf.space/chat`
       const response = await axios.post(endpoint, { query: message })
 
       console.log("Server response:", response.data)
 
-      let aiMessage: string | PlotlyMessage = "";
+      let aiMessage: string | PlotlyMessage = ""
 
       if (typeof response.data === "string") {
-        // If the response is a string, use it directly
         aiMessage = response.data
       } else if (typeof response.data === "object") {
         if (response.data.response) {
-          // If it's a response object, use the response property
           aiMessage = response.data.response
         } else if (response.data.plotly_data && response.data.plotly_layout) {
           aiMessage = {
@@ -49,13 +51,10 @@ const ChatInterface: React.FC = () => {
             data: response.data.plotly_data,
             layout: response.data.plotly_layout,
           }
-        }
-         else {
-          // If it's some other object, stringify it
+        } else {
           aiMessage = "```json\n" + JSON.stringify(response.data, null, 2) + "\n```"
         }
       } else {
-        // If it's neither a string nor an object, convert it to a string
         aiMessage = String(response.data)
       }
 
@@ -75,6 +74,8 @@ const ChatInterface: React.FC = () => {
           sender: "ai",
         },
       ])
+    } finally {
+      setIsLoading(false)
     }
   }
 
@@ -82,6 +83,8 @@ const ChatInterface: React.FC = () => {
     const formData = new FormData()
     formData.append("file", file)
     formData.append("styling_instructions", "Please analyze the data and provide a detailed report.")
+
+    setIsLoading(true)
 
     try {
       const response = await axios.post("https://ashad001-auto-analyst-backend.hf.space/upload_dataframe", formData, {
@@ -105,6 +108,8 @@ const ChatInterface: React.FC = () => {
           sender: "ai",
         },
       ])
+    } finally {
+      setIsLoading(false)
     }
   }
 
@@ -115,13 +120,11 @@ const ChatInterface: React.FC = () => {
       <motion.div
         animate={{ marginLeft: isSidebarOpen ? "16rem" : "0rem" }}
         transition={{ type: "tween", duration: 0.3 }}
-        className="flex-1 flex flex-col min-w-0" // Added min-w-0 to prevent flex item from overflowing
+        className="flex-1 flex flex-col min-w-0"
       >
         <header className="bg-white/70 backdrop-blur-sm p-4 flex justify-between items-center border-b border-gray-200">
           <div className="flex items-center">
             <div className="w-32 h-8 relative">
-              {" "}
-              {/* Constrained image container */}
               <Image
                 src="https://4q2e4qu710mvgubg.public.blob.vercel-storage.com/auto-analyst-logo-R9wBx0kWOUA96KxwKBtl1onOHp6o02.png"
                 alt="Auto-Analyst Logo"
@@ -147,7 +150,7 @@ const ChatInterface: React.FC = () => {
           </button>
         </header>
         <div className="flex-1 overflow-hidden">
-          <ChatWindow messages={messages} />
+          <ChatWindow messages={messages} isLoading={isLoading} />
         </div>
         <ChatInput onSendMessage={handleSendMessage} onFileUpload={handleFileUpload} />
       </motion.div>

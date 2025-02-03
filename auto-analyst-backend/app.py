@@ -30,7 +30,7 @@ app.add_middleware(
 
 # DSPy Configuration
 import dspy
-dspy.configure(lm=dspy.LM(model="gpt-4o-mini", api_key=os.getenv("OPENAI_API_KEY"), temperature=0, max_tokens=1000))
+dspy.configure(lm=dspy.LM(model="gpt-4o-mini", api_key=os.getenv("OPENAI_API_KEY"), temperature=0, max_tokens=3000))
 
 # Helper function to initialize retrievers
 def initialize_retrievers(styling_instructions: List[str], doc: List[str]):
