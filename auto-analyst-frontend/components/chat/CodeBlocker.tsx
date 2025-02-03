@@ -11,7 +11,8 @@ interface CodeBlockProps {
 }
 
 const CodeBlock: React.FC<CodeBlockProps> = ({ language, value }) => {
-  const [isVisible, setIsVisible] = useState(false)
+  // Always show output blocks, collapsible for other languages
+  const [isVisible, setIsVisible] = useState(language === 'output')
   const [copied, setCopied] = useState(false)
 
   const copyToClipboard = async () => {
@@ -31,16 +32,18 @@ const CodeBlock: React.FC<CodeBlockProps> = ({ language, value }) => {
           <Code2 className="w-4 h-4 text-gray-400" />
           <span className="text-sm font-medium text-gray-300">{language}</span>
         </div>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => setIsVisible(!isVisible)}
-          className="text-gray-400 hover:text-gray-200"
-        >
-          {isVisible ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-        </Button>
+        {language !== 'output' && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setIsVisible(!isVisible)}
+            className="text-gray-400 hover:text-gray-200"
+          >
+            {isVisible ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+          </Button>
+        )}
       </div>
-      <AnimatePresence>
+      <AnimatePresence initial={false}>
         {isVisible && (
           <motion.div
             initial={{ height: 0, opacity: 0 }}
@@ -59,7 +62,7 @@ const CodeBlock: React.FC<CodeBlockProps> = ({ language, value }) => {
             </Button>
             <SyntaxHighlighter
               style={vscDarkPlus}
-              language={language}
+              language={language === 'output' ? 'plaintext' : language}
               PreTag="div"
               customStyle={{
                 margin: 0,

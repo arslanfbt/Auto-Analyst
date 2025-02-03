@@ -77,14 +77,17 @@ def execute_code(code_str):
 
     print(modified_code)
 
-
-    with stdoutIO() as s:
-        exec(modified_code, context)  # Execute the modified code
-    output = s.getvalue()
-    json_outputs = context.get('json_outputs', [])
-    with open("json_outputs.json", "w") as f:
-        json.dump(json_outputs, f, indent=4)
-    return output, json_outputs
+    try:
+        with stdoutIO() as s:
+            exec(modified_code, context)  # Execute the modified code
+        output = s.getvalue()
+        print("output: ", output)
+        json_outputs = context.get('json_outputs', [])
+        with open("json_outputs.json", "w") as f:
+            json.dump(json_outputs, f, indent=4)
+        return output, json_outputs
+    except Exception as e:
+        return "Error executing code: " + str(e), []
 
 
 def format_response_to_markdown(api_response):
@@ -98,7 +101,6 @@ def format_response_to_markdown(api_response):
             
         if 'code' in content:
             markdown.append(f"### Code Implementation\n{format_code_backticked_block(content['code'])}\n")
-            
 
         if 'commentary' in content:
             markdown.append(f"### Commentary\n{content['commentary']}\n")
@@ -109,14 +111,18 @@ def format_response_to_markdown(api_response):
             
             if output:
                 markdown.append("### Execution Output\n")
-                markdown.append(f"```\n{output}\n```\n")
+                markdown.append(f"```output\n{output}\n```\n")
+                print("output2: ", output)
                 
             if json_outputs:
                 markdown.append("### Plotly JSON Outputs\n")
                 for idx, json_output in enumerate(json_outputs):
                     markdown.append(f"```plotly\n{json_output}\n```\n")
             print("Length of json_outputs: ", len(json_outputs))
-    
+
+    if len(markdown[0]) < 20:
+        return "No plan can be formulated without a defined goal. Please provide a specific goal for the analysis."
+    # print("Length of markdown: ", len(markdown), "markdown: ", markdown)
     return '\n'.join(markdown)
 
 # Example usage with dummy data

@@ -15,6 +15,23 @@ jobs:
           fetch-depth: 0
           path: auto-analyst-backend
 
+      - name: Configure Git identity
+        run: |
+          cd auto-analyst-backend
+          git config user.email "action@github.com"
+          git config user.name "GitHub Action"
+
+      - name: Remove node_modules from tracking
+        run: |
+          cd auto-analyst-backend
+          git rm --cached -r node_modules || true
+
+      - name: Commit Python file changes
+        run: |
+          cd auto-analyst-backend
+          git add *.py
+          git commit -m "Sync backend to Hugging Face hub" || true
+
       - name: Push to Hugging Face hub
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
@@ -22,6 +39,4 @@ jobs:
           cd auto-analyst-backend
           git remote remove origin || true
           git remote add origin https://Ashad001:${{ secrets.HF_TOKEN }}@huggingface.co/spaces/Ashad001/auto-analyst-backend
-          git add *.py
-          git commit -m "Sync backend to Hugging Face hub" || true
           git push --force origin main
