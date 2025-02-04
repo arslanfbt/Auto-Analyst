@@ -1,11 +1,16 @@
-import React, { useState } from "react"
-import { motion } from "framer-motion"
-import { Send, Paperclip, X } from "lucide-react"
+import React, { useState, useEffect, useRef } from "react"
+import { motion, AnimatePresence } from "framer-motion"
+import { Send, Paperclip, X } from 'lucide-react'
 import AgentHint from './chat/AgentHint'
 
 interface ChatInputProps {
   onSendMessage: (message: string) => void
   onFileUpload: (file: File) => void
+}
+
+interface AgentSuggestion {
+  name: string
+  description: string
 }
 
 const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, onFileUpload }) => {
@@ -14,6 +19,10 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, onFileUpload }) =>
   const fileInputRef = React.useRef<HTMLInputElement>(null)
   const [showHint, setShowHint] = useState(false)
   const [input, setInput] = useState('')
+  const [agentSuggestions, setAgentSuggestions] = useState<AgentSuggestion[]>([])
+  const [showSuggestions, setShowSuggestions] = useState(false)
+  const [cursorPosition, setCursorPosition] = useState(0)
+  const inputRef = useRef<HTMLTextAreaElement>(null)
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -38,9 +47,39 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, onFileUpload }) =>
     }
   }
 
+  useEffect(() => {
+    // Simulated agent list - replace this with actual data from your backend
+    const agents: AgentSuggestion[] = [
+      { name: "data_viz_agent", description: "Specializes in data visualization" },
+      { name: "sk_learn_agent", description: "Handles machine learning tasks" },
+      { name: "statistical_analytics_agent", description: "Performs statistical analysis" },
+      { name: "preprocessing_agent", description: "Handles data preprocessing tasks" },
+    ]
+
+    const atIndex = message.lastIndexOf('@', cursorPosition)
+    if (atIndex !== -1 && atIndex < cursorPosition) {
+      const query = message.slice(atIndex + 1, cursorPosition).toLowerCase()
+      const filtered = agents.filter(agent => agent.name.toLowerCase().includes(query))
+      setAgentSuggestions(filtered)
+      setShowSuggestions(filtered.length > 0)
+    } else {
+      setShowSuggestions(false)
+    }
+  }, [message, cursorPosition])
+
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setInput(e.target.value)
-    setShowHint(e.target.value.startsWith('@'))
+    setMessage(e.target.value)
+    setCursorPosition(e.target.selectionStart || 0)
+  }
+
+  const handleSuggestionClick = (agentName: string) => {
+    const atIndex = message.lastIndexOf('@', cursorPosition)
+    if (atIndex !== -1) {
+      const newMessage = message.slice(0, atIndex + 1) + agentName + ' ' + message.slice(cursorPosition)
+      setMessage(newMessage)
+      setShowSuggestions(false)
+      inputRef.current?.focus()
+    }
   }
 
   return (
@@ -65,13 +104,41 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, onFileUpload }) =>
         <form onSubmit={handleSubmit} className="max-w-3xl mx-auto">
           <div className="flex items-center space-x-2">
             <div className="relative flex-1">
-              <input
-                type="text"
+              <textarea
+                ref={inputRef}
                 value={message}
-                onChange={(e) => setMessage(e.target.value)}
-                placeholder="Type your message..."
-                className="w-full bg-gray-100 text-gray-900 placeholder-gray-500 border-0 rounded-full py-3 pl-6 pr-12 focus:outline-none focus:ring-2 focus:ring-[#FF7F7F] focus:bg-white transition-colors"
+                onChange={handleInputChange}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault()
+                    handleSubmit(e)
+                  }
+                }}
+                placeholder="Type your message... Use @ to mention an agent"
+                className="w-full bg-gray-100 text-gray-900 placeholder-gray-500 border-0 rounded-lg py-3 px-4 pr-12 focus:outline-none focus:ring-2 focus:ring-[#FF7F7F] focus:bg-white transition-colors resize-none"
+                rows={1}
               />
+              <AnimatePresence>
+                {showSuggestions && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: 10 }}
+                    className="absolute bottom-full left-0 mb-2 w-full max-h-40 overflow-y-auto bg-white rounded-lg shadow-lg"
+                  >
+                    {agentSuggestions.map((agent) => (
+                      <div
+                        key={agent.name}
+                        onClick={() => handleSuggestionClick(agent.name)}
+                        className="px-4 py-2 hover:bg-gray-100 cursor-pointer"
+                      >
+                        <div className="font-medium">{agent.name}</div>
+                        <div className="text-sm text-gray-500">{agent.description}</div>
+                      </div>
+                    ))}
+                  </motion.div>
+                )}
+              </AnimatePresence>
               <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
                 <input type="file" ref={fileInputRef} onChange={handleFileSelect} className="hidden" id="file-upload" />
                 <label
@@ -98,4 +165,3 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, onFileUpload }) =>
 }
 
 export default ChatInput
-

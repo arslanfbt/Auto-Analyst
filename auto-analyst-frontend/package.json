@@ -20,7 +20,6 @@
     "lucide-react": "^0.474.0",
     "next": "^13.5.6",
     "plotly.js": "^3.0.0",
-    "plotly.js-dist": "^3.0.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-markdown": "^9.0.3",
