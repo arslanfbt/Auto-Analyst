@@ -15,12 +15,17 @@ from retrievers import *
 from llama_index.core import Document
 from llama_index.embeddings.openai import OpenAIEmbedding
 from llama_index.core import VectorStoreIndex
-from format_response import format_response_to_markdown
+from format_response import format_response_to_markdown, execute_code_from_markdown
+
+# clear console
+def clear_console():
+    os.system('cls' if os.name == 'nt' else 'clear')
 
 # Initialize FastAPI app
 app = FastAPI(title="AI Analytics API", version="1.0")
 
 # Configure middleware
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -71,32 +76,106 @@ async def upload_dataframe(file: UploadFile = File(...), styling_instructions: s
         
         global retrievers
         retrievers = initialize_retrievers(styling_instructions, [str(df)])
-        print(df)
         return {"message": "Dataframe uploaded successfully"}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 @app.post("/chat/{agent_name}", response_model=dict)
 async def chat_with_agent(agent_name: str, request: QueryRequest):
-    if agent_name not in AVAILABLE_AGENTS:
-        raise HTTPException(status_code=404, detail="Agent not found")
+    clear_console()
+    print(f"Received request for agent: {agent_name}")
+    print(f"Query: {request.query}")
     
-    agent = AVAILABLE_AGENTS[agent_name]
-    response_text = agent(request.query)
-    return {
-        "agent_name": agent_name,
-        "query": request.query,
-        "response": response_text,
-    }
+    if agent_name not in AVAILABLE_AGENTS:
+        available = list(AVAILABLE_AGENTS.keys())
+        print(f"Agent not found. Available agents: {available}")
+        raise HTTPException(
+            status_code=404, 
+            detail=f"Agent '{agent_name}' not found. Available agents: {available}"
+        )
+    
+    try:
+        print(f"Executing agent {agent_name}...")
+        agent = AVAILABLE_AGENTS[agent_name]
+        agent = auto_analyst_ind(agents=[agent], retrievers=retrievers)
+        
+
+        # Execute agent with error catching
+        try:
+            response = agent(request.query, agent_name)
+        except Exception as agent_error:
+            print(f"Agent execution error: {str(agent_error)}")
+            raise HTTPException(
+                status_code=500,
+                detail=f"Agent execution failed: {str(agent_error)}"
+            )
+        
+        print("Formatting response...")
+        # try:
+        formatted_response = format_response_to_markdown(response, agent_name)
+        # except Exception as format_error:
+        #     print(f"Response formatting error: {str(format_error)}")
+        #     raise HTTPException(
+        #         status_code=500,
+        #         detail=f"Response formatting failed: {str(format_error)}"
+        #     )
+        
+        print("Sending response...")
+        return {
+            "agent_name": agent_name,
+            "query": request.query,
+            "response": formatted_response,
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Unexpected error: {str(e)}")
+        import traceback
+        print(traceback.format_exc())
+        raise HTTPException(
+            status_code=500,
+            detail=f"Unexpected error: {str(e)}"
+        )
 
 @app.post("/chat", response_model=dict)
 async def chat_with_all(request: QueryRequest):
-    response_text = ai_system(request.query)
-    response_text = format_response_to_markdown(response_text)
+    try:
+        response = ai_system(request.query)
+        formatted_response = format_response_to_markdown(response)
+        
+        return {
+            "agent_name": "ai_system",
+            "query": request.query,
+            "response": formatted_response,
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/execute_code")
+async def execute_code(request: dict):
+    try:
+        code = request.get("code")
+        if not code:
+            raise HTTPException(status_code=400, detail="No code provided")
+        output, json_outputs = execute_code_from_markdown(code)
+        json_outputs = [f"```plotly\n{json_output}\n```\n" for json_output in json_outputs]
+        print("len(json_outputs): ", len(json_outputs))
+        return {
+            "output": output,
+            "plotly_outputs": json_outputs if json_outputs else None
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+
+# Add an endpoint to list available agents
+@app.get("/agents", response_model=dict)
+async def list_agents():
     return {
-        "agent_name": "ai_system",
-        "query": request.query,
-        "response": response_text,
+        "available_agents": list(AVAILABLE_AGENTS.keys()),
+        "description": "List of available specialized agents that can be called using @agent_name"
     }
 
 @app.get("/health", response_model=dict)

@@ -44,9 +44,16 @@ const ChatInterface: React.FC = () => {
       // Use the newly selected agent or fall back to the stored selectedAgent
       const currentAgent = selectAgent || selectedAgent
       console.log("currentAgent: ", currentAgent)
+      // Deployed endpoint
+      // const endpoint = currentAgent
+      //   ? `https://ashad001-auto-analyst-backend.hf.space/chat/${currentAgent}`
+      //   : `https://ashad001-auto-analyst-backend.hf.space/chat`
+
+      // Local endpoint
       const endpoint = currentAgent
-        ? `https://ashad001-auto-analyst-backend.hf.space/chat/${currentAgent}`
-        : `https://ashad001-auto-analyst-backend.hf.space/chat`
+        ? `http://localhost:8000/chat/${currentAgent}`
+        : `http://localhost:8000/chat`
+
 
 
       console.log("Using endpoint:", endpoint)

@@ -25,7 +25,7 @@ def format_code_backticked_block(code_str):
 
     
 # In format_response.py, modify the execute_code function:
-def execute_code(code_str):
+def execute_code_from_markdown(code_str):
     import pandas as pd
     import plotly.express as px
     import plotly
@@ -90,25 +90,47 @@ def execute_code(code_str):
         return "Error executing code: " + str(e), []
 
 
-def format_response_to_markdown(api_response):
+def format_response_to_markdown(api_response, agent_name = None):
     markdown = []
-    
+    print("api_response: ", api_response)
+
     for agent, content in api_response.items():
+        if "memory" in agent:
+            continue
         markdown.append(f"\n## {agent.replace('_', ' ').title()}\n")
         
+
         if 'reasoning' in content:
             markdown.append(f"### Reasoning\n{content['reasoning']}\n")
             
         if 'code' in content:
             markdown.append(f"### Code Implementation\n{format_code_backticked_block(content['code'])}\n")
+            if agent_name is not None:
+                # execute the code
+                clean_code = format_code_block(content['code'])
+                print("clean_code: ", clean_code)
+                output, json_outputs = execute_code_from_markdown(clean_code)
+                if output:
+                    markdown.append("### Execution Output\n")
+                    markdown.append(f"```output\n{output}\n```\n")
+
+                if json_outputs:
+                    markdown.append("### Plotly JSON Outputs\n")
+                    for idx, json_output in enumerate(json_outputs):
+                        markdown.append(f"```plotly\n{json_output}\n```\n")
+                    print("Length of json_outputs: ", len(json_outputs))
+
+
 
         if 'commentary' in content:
             markdown.append(f"### Commentary\n{content['commentary']}\n")
-            
+
         if 'refined_complete_code' in content:
-            clean_code = format_code_block(content['refined_complete_code'])
-            output, json_outputs = execute_code(clean_code)
+            clean_code = format_code_block(content['refined_complete_code']) 
+            output, json_outputs = execute_code_from_markdown(clean_code)
             
+            markdown.append(f"### Refined Complete Code\n{format_code_backticked_block(content['refined_complete_code'])}\n")
+
             if output:
                 markdown.append("### Execution Output\n")
                 markdown.append(f"```output\n{output}\n```\n")
@@ -120,10 +142,16 @@ def format_response_to_markdown(api_response):
                     markdown.append(f"```plotly\n{json_output}\n```\n")
             print("Length of json_outputs: ", len(json_outputs))
 
-    if len(markdown[0]) < 20:
+        # if agent_name is not None:  
+        #     if f"memory_{agent_name}" in api_response:
+        #         markdown.append(f"### Memory\n{api_response[f'memory_{agent_name}']}\n")
+
+
+    print("Length of markdown: ", len(markdown), "markdown: ", markdown)
+    if len(markdown) == 0:
         return "No plan can be formulated without a defined goal. Please provide a specific goal for the analysis."
-    # print("Length of markdown: ", len(markdown), "markdown: ", markdown)
     return '\n'.join(markdown)
+
 
 # Example usage with dummy data
 if __name__ == "__main__":
