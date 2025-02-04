@@ -27,16 +27,42 @@ const ChatInterface: React.FC = () => {
   const [selectedAgent, setSelectedAgent] = useState<string | null>(null)
 
   const handleSendMessage = async (message: string) => {
+    // Check for agent selection via @ symbol
+    const agentMatch = message.match(/^@(\w+)\s+(.+)/)
+    let selectAgent = null
+    let query = message
+
+    if (agentMatch) {
+      selectAgent = agentMatch[1]
+      query = agentMatch[2]
+    }
+
     setMessages((prev) => [...prev, { text: message, sender: "user" }])
     setIsLoading(true)
 
     try {
-      const endpoint = selectedAgent
-        ? `https://ashad001-auto-analyst-backend.hf.space/chat/${selectedAgent}`
-        : `https://ashad001-auto-analyst-backend.hf.space/chat`
+      // Use the newly selected agent or fall back to the stored selectedAgent
+      const currentAgent = selectAgent || selectedAgent
+      console.log("currentAgent: ", currentAgent)
+      // Deployed endpoint
+      // const endpoint = currentAgent
+      //   ? `https://ashad001-auto-analyst-backend.hf.space/chat/${currentAgent}`
+      //   : `https://ashad001-auto-analyst-backend.hf.space/chat`
 
-      const response = await axios.post(endpoint, { query: message })
-      console.log("Server response:", response.data)
+      // Local endpoint
+      const endpoint = currentAgent
+        ? `http://localhost:8000/chat/${currentAgent}`
+        : `http://localhost:8000/chat`
+
+
+
+      console.log("Using endpoint:", endpoint)
+      console.log("With query:", query)
+
+      const response = await axios.post(endpoint, { query })
+
+      // Update the selected agent after successful request
+      setSelectedAgent(selectAgent)
 
       let aiMessage: string | PlotlyMessage = ""
 

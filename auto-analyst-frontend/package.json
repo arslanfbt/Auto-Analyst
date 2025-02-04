@@ -11,6 +11,7 @@
   "dependencies": {
     "@radix-ui/react-scroll-area": "^1.0.5",
     "@radix-ui/react-slot": "^1.0.0",
+    "@radix-ui/react-tooltip": "^1.1.7",
     "@types/react-plotly.js": "^2.6.3",
     "@types/react-syntax-highlighter": "^15.5.13",
     "axios": "^1.7.9",

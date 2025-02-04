@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useEffect, useRef, useCallback } from "react"
+import React, { useEffect, useRef, useCallback, useState } from "react"
 import { motion } from "framer-motion"
 import LoadingIndicator from "@/components/chat/LoadingIndicator"
 import MessageContent from "@/components/chat/MessageContent"
@@ -25,6 +25,11 @@ interface ChatWindowProps {
 const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading }) => {
   const chatWindowRef = useRef<HTMLDivElement>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const [localMessages, setLocalMessages] = useState<Message[]>(messages)
+
+  useEffect(() => {
+    setLocalMessages(messages)
+  }, [messages])
 
   const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "auto" })
@@ -32,10 +37,44 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading }) => {
 
   useEffect(() => {
     scrollToBottom()
-  }, [scrollToBottom])
+  }, [scrollToBottom, localMessages])
+
+  const handleCodeExecute = useCallback((result: any, updateCodeBlock: (code: string) => void) => {
+    if (result.savedCode) {
+      // Just update the code block without adding a message
+      updateCodeBlock(result.savedCode)
+    } else {
+      // Add execution output as a separate message
+      let executionResult = ""
+
+      if (result.error) {
+        executionResult = `\`\`\`error\n${result.error}\n\`\`\``
+      } else {
+        if (result.output) {
+          executionResult = `\`\`\`output\n${result.output}\n\`\`\``
+        }
+        if (result.plotly_outputs && result.plotly_outputs.length > 0) {
+          executionResult += "\nPlotly charts generated:\n"
+          result.plotly_outputs.forEach((plotlyOutput: string, index: number) => {
+            executionResult += `\`\`\`plotly\n${plotlyOutput}\n\`\`\`\n\n`
+          })
+        }
+      }
+
+      // if (executionResult) {
+      //   setLocalMessages((prev) => [
+      //     ...prev,
+      //     {
+      //       text: executionResult,
+      //       sender: "ai",
+      //     },
+      //   ])
+      // }
+    }
+  }, [])
 
   const renderMessage = (message: Message, index: number) => {
-    if (typeof message.text === 'object' && message.text.type === 'plotly') {
+    if (typeof message.text === "object" && message.text.type === "plotly") {
       return (
         <motion.div key={index} className="flex justify-start mb-8">
           <div className="relative max-w-[95%] rounded-2xl p-6 bg-white shadow-md">
@@ -44,7 +83,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading }) => {
         </motion.div>
       )
     }
-    
+
     const parts = message.text.toString().split(/(```plotly[\s\S]*?```)/)
 
     return parts.map((part, partIndex) => {
@@ -101,7 +140,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading }) => {
                   : "bg-white text-gray-900 shadow-md shadow-gray-200/50"
               }`}
             >
-              <MessageContent message={part} />
+              <MessageContent message={part} onCodeExecute={handleCodeExecute} />
             </div>
           </motion.div>
         )
@@ -117,7 +156,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading }) => {
         className="flex-1 px-4 py-6 space-y-8 overflow-y-auto scrollbar-thin scrollbar-track-transparent scrollbar-thumb-gray-300"
       >
         <div className="max-w-5xl mx-auto w-full">
-          {messages.flatMap((message, index) => renderMessage(message, index))}
+          {localMessages.flatMap((message, index) => renderMessage(message, index))}
           {isLoading && (
             <motion.div
               initial={{ opacity: 0, y: 20 }}
