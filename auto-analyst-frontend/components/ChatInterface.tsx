@@ -1,7 +1,7 @@
 "use client"
 
 import type React from "react"
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { motion } from "framer-motion"
 import Image from "next/image"
 import ChatWindow from "./ChatWindow"
@@ -20,11 +20,36 @@ interface Message {
   sender: "user" | "ai"
 }
 
+interface AgentInfo {
+  name: string
+  description: string
+}
+
 const ChatInterface: React.FC = () => {
   const [messages, setMessages] = useState<Message[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [isSidebarOpen, setSidebarOpen] = useState(false)
   const [selectedAgent, setSelectedAgent] = useState<string | null>(null)
+  const [agents, setAgents] = useState<AgentInfo[]>([])
+
+  useEffect(() => {
+    const fetchAgents = async () => {
+      try {
+        const response = await axios.get("https://ashad001-auto-analyst-backend.hf.space/agents")
+        if (response.data && response.data.available_agents) {
+          const agentList: AgentInfo[] = response.data.available_agents.map((name: string) => ({
+            name,
+            description: `Specialized ${name.replace(/_/g, " ")} agent`,
+          }))
+          setAgents(agentList)
+        }
+      } catch (error) {
+        console.error("Error fetching agents:", error)
+      }
+    }
+
+    fetchAgents()
+  }, [])
 
   const handleSendMessage = async (message: string) => {
     // Check for agent selection via @ symbol
@@ -45,16 +70,14 @@ const ChatInterface: React.FC = () => {
       const currentAgent = selectAgent || selectedAgent
       console.log("currentAgent: ", currentAgent)
       // Deployed endpoint
-      // const endpoint = currentAgent
-      //   ? `https://ashad001-auto-analyst-backend.hf.space/chat/${currentAgent}`
-      //   : `https://ashad001-auto-analyst-backend.hf.space/chat`
+      const endpoint = currentAgent
+        ? `https://ashad001-auto-analyst-backend.hf.space/chat/${currentAgent}`
+        : `https://ashad001-auto-analyst-backend.hf.space/chat`
 
       // Local endpoint
-      const endpoint = currentAgent
-        ? `http://localhost:8000/chat/${currentAgent}`
-        : `http://localhost:8000/chat`
-
-
+      // const endpoint = currentAgent
+      //   ? `http://localhost:8000/chat/${currentAgent}`
+      //   : `http://localhost:8000/chat`
 
       console.log("Using endpoint:", endpoint)
       console.log("With query:", query)
@@ -91,29 +114,39 @@ const ChatInterface: React.FC = () => {
           throw new Error("Invalid response format from server")
         }
 
-        setMessages((prev) => [...prev, {
-          text: typeof aiMessage === "string" ? aiMessage : aiMessage,
-          sender: "ai",
-        }])
+        setMessages((prev) => [
+          ...prev,
+          {
+            text: typeof aiMessage === "string" ? aiMessage : aiMessage,
+            sender: "ai",
+          },
+        ])
       } catch (parseError) {
         console.error("Error processing response:", parseError)
-        setMessages((prev) => [...prev, {
-          text: "Sorry, I encountered an error processing the response. Please try again.",
-          sender: "ai",
-        }])
+        setMessages((prev) => [
+          ...prev,
+          {
+            text: "Sorry, I encountered an error processing the response. Please try again.",
+            sender: "ai",
+          },
+        ])
       }
     } catch (error) {
       console.error("Network or server error:", error)
-      const errorMessage = axios.isAxiosError(error) && error.response?.status === 500
-        ? "The server encountered an error. Please try again later."
-        : error instanceof Error 
-          ? error.message 
-          : "An unknown error occurred"
+      const errorMessage =
+        axios.isAxiosError(error) && error.response?.status === 500
+          ? "The server encountered an error. Please try again later."
+          : error instanceof Error
+            ? error.message
+            : "An unknown error occurred"
 
-      setMessages((prev) => [...prev, {
-        text: `Error: ${errorMessage}`,
-        sender: "ai",
-      }])
+      setMessages((prev) => [
+        ...prev,
+        {
+          text: `Error: ${errorMessage}`,
+          sender: "ai",
+        },
+      ])
     } finally {
       setIsLoading(false)
     }

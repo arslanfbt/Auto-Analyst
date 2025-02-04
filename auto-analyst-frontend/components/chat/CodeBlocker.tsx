@@ -42,8 +42,10 @@ const CodeBlock: React.FC<CodeBlockProps> = ({ language, value, onExecute }) => 
     setPlotlyOutputs([])
 
     try {
-      const response = await axios.post("http://localhost:8000/execute_code", {
+      // const response = await axios.post("http://localhost:8000/execute_code", {
+      const response = await axios.post("https://ashad001-auto-analyst-backend.hf.space/execute_code", {
         code: editedCode,
+
       })
 
       // Handle different types of responses
