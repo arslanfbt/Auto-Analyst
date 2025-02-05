@@ -6,6 +6,7 @@ import AgentHint from './chat/AgentHint'
 interface ChatInputProps {
   onSendMessage: (message: string) => void
   onFileUpload: (file: File) => void
+  disabled?: boolean
 }
 
 interface AgentSuggestion {
@@ -13,7 +14,7 @@ interface AgentSuggestion {
   description: string
 }
 
-const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, onFileUpload }) => {
+const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, onFileUpload, disabled }) => {
   const [message, setMessage] = useState("")
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const fileInputRef = React.useRef<HTMLInputElement>(null)
@@ -114,8 +115,11 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, onFileUpload }) =>
                     handleSubmit(e)
                   }
                 }}
-                placeholder="Type your message... Use @ to mention an agent"
-                className="w-full bg-gray-100 text-gray-900 placeholder-gray-500 border-0 rounded-lg py-3 px-4 pr-12 focus:outline-none focus:ring-2 focus:ring-[#FF7F7F] focus:bg-white transition-colors resize-none"
+                disabled={disabled}
+                placeholder={disabled ? "Free trial used. Please sign in to continue." : "Type your message here..."}
+                className={`w-full bg-gray-100 text-gray-900 placeholder-gray-500 border-0 rounded-lg py-3 px-4 pr-12 focus:outline-none focus:ring-2 focus:ring-[#FF7F7F] focus:bg-white transition-colors resize-non ${
+                  disabled ? 'bg-gray-100 text-gray-500' : ''
+                }`}
                 rows={1}
               />
               <AnimatePresence>

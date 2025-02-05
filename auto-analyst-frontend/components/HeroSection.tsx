@@ -1,16 +1,31 @@
 "use client"
 import { motion, useTransform, useScroll } from "framer-motion"
 import Image from "next/image"
-import { useRef } from "react"
+import { useRef, useState, useEffect } from "react"
 import { ArrowRight } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { useRouter } from "next/navigation"
+import { useSession } from "next-auth/react"
 
 export default function HeroSection() {
+  const [mounted, setMounted] = useState(false)
   const containerRef = useRef(null)
   const { scrollYProgress } = useScroll({
     target: containerRef,
     offset: ["start start", "end start"],
   })
   const y = useTransform(scrollYProgress, [0, 1], ["0%", "50%"])
+
+  const router = useRouter()
+  const { data: session } = useSession()
+
+  useEffect(() => {
+    setMounted(true)
+  }, [])
+
+  const handleGetStarted = () => {
+    router.push('/chat')
+  }
 
   return (
     <section ref={containerRef} className="relative h-screen flex items-center overflow-hidden">
@@ -37,14 +52,16 @@ export default function HeroSection() {
             <p className="text-xl text-gray-600 mb-8">
               Harness the power of AI to analyze, predict, and optimize your business decisions
             </p>
-            <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              onClick={() => window.location.href = "/chat"}
-              className="bg-[#FF7F7F] text-white px-8 py-4 rounded-full font-semibold flex items-center gap-2 hover:bg-[#FF6666] transition-colors"
-            >
-              Get Started <ArrowRight className="w-5 h-5" />
-            </motion.button>
+            {mounted && (
+              <motion.button
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={handleGetStarted}
+                className="bg-[#FF7F7F] text-white px-8 py-4 rounded-full font-semibold flex items-center gap-2 hover:bg-[#FF6666] transition-colors"
+              >
+                Get Started <ArrowRight className="w-5 h-5" />
+              </motion.button>
+            )}
           </motion.div>
         </div>
       </div>

@@ -9,6 +9,8 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@auth/core": "^0.34.2",
+    "@auth/nextjs": "^0.0.0-380f8d56",
     "@radix-ui/react-scroll-area": "^1.0.5",
     "@radix-ui/react-slot": "^1.0.0",
     "@radix-ui/react-tooltip": "^1.1.7",
@@ -19,6 +21,7 @@
     "framer-motion": "^10.18.0",
     "lucide-react": "^0.474.0",
     "next": "^13.5.6",
+    "next-auth": "^4.24.11",
     "plotly.js": "^3.0.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
@@ -27,7 +30,8 @@
     "react-syntax-highlighter": "^15.6.1",
     "rehype-raw": "^7.0.0",
     "remark-gfm": "^4.0.0",
-    "tailwind-merge": "^2.0.0"
+    "tailwind-merge": "^2.0.0",
+    "zustand": "^5.0.3"
   },
   "devDependencies": {
     "@types/debounce": "^1.2.4",
