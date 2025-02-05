@@ -147,7 +147,6 @@ def format_response_to_markdown(api_response, agent_name = None):
         #         markdown.append(f"### Memory\n{api_response[f'memory_{agent_name}']}\n")
 
 
-    print("Length of markdown: ", len(markdown), "markdown: ", markdown)
     if len(markdown) == 0:
         return "No plan can be formulated without a defined goal. Please provide a specific goal for the analysis."
     return '\n'.join(markdown)

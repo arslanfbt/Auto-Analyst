@@ -3,7 +3,9 @@
 import type React from "react"
 import Image from "next/image"
 import { motion } from "framer-motion"
-import { X, MessageSquarePlus, History, Settings } from "lucide-react"
+import { X, MessageSquarePlus, History, Settings, LogOut } from "lucide-react"
+import { signOut, useSession } from "next-auth/react"
+import { useRouter } from "next/navigation"
 
 interface SidebarProps {
   isOpen: boolean
@@ -11,6 +13,9 @@ interface SidebarProps {
 }
 
 const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
+  const { data: session } = useSession()
+  const router = useRouter()
+
   return (
     <motion.div
       initial={{ x: "-100%" }}
@@ -43,6 +48,33 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
           <span>Settings</span>
         </a>
       </nav>
+      
+      {session && (
+        <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-gray-200">
+          <div className="flex items-center gap-3 mb-4">
+            {session.user?.image && (
+              <Image
+                src={session.user.image}
+                alt={session.user.name || "User"}
+                width={32}
+                height={32}
+                className="rounded-full"
+              />
+            )}
+            <div className="flex-1">
+              <p className="text-sm font-medium">{session.user?.name}</p>
+              <p className="text-xs text-gray-500">{session.user?.email}</p>
+            </div>
+          </div>
+          <button
+            onClick={() => router.push('/signout')}
+            className="w-full flex items-center gap-2 px-4 py-2 text-red-600 hover:bg-red-50 rounded-md transition-colors"
+          >
+            <LogOut className="w-4 h-4" />
+            <span>Sign out</span>
+          </button>
+        </div>
+      )}
     </motion.div>
   )
 }

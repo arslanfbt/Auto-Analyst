@@ -8,6 +8,9 @@ import ChatWindow from "./ChatWindow"
 import ChatInput from "./ChatInput"
 import Sidebar from "./Sidebar"
 import axios from "axios"
+import { useSession } from "next-auth/react"
+import { useFreeTrialStore } from "@/lib/store/freeTrialStore"
+import FreeTrialOverlay from "./chat/FreeTrialOverlay"
 
 interface PlotlyMessage {
   type: "plotly"
@@ -26,11 +29,18 @@ interface AgentInfo {
 }
 
 const ChatInterface: React.FC = () => {
+  const { data: session, status } = useSession()
+  const { queriesUsed, incrementQueries, hasFreeTrial } = useFreeTrialStore()
+  const [mounted, setMounted] = useState(false)
   const [messages, setMessages] = useState<Message[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [isSidebarOpen, setSidebarOpen] = useState(false)
   const [selectedAgent, setSelectedAgent] = useState<string | null>(null)
   const [agents, setAgents] = useState<AgentInfo[]>([])
+
+  useEffect(() => {
+    setMounted(true)
+  }, [])
 
   useEffect(() => {
     const fetchAgents = async () => {
@@ -52,6 +62,11 @@ const ChatInterface: React.FC = () => {
   }, [])
 
   const handleSendMessage = async (message: string) => {
+    if (!session && !hasFreeTrial()) {
+
+      return
+    }
+
     // Check for agent selection via @ symbol
     const agentMatch = message.match(/^@(\w+)\s+(.+)/)
     let selectAgent = null
@@ -86,6 +101,10 @@ const ChatInterface: React.FC = () => {
 
       // Update the selected agent after successful request
       setSelectedAgent(selectAgent)
+
+      if (!session) {
+        incrementQueries()
+      }
 
       let aiMessage: string | PlotlyMessage = ""
 
@@ -147,9 +166,11 @@ const ChatInterface: React.FC = () => {
           sender: "ai",
         },
       ])
+
     } finally {
       setIsLoading(false)
     }
+
   }
 
   const handleFileUpload = async (file: File) => {
@@ -186,6 +207,11 @@ const ChatInterface: React.FC = () => {
     }
   }
 
+  // Don't render anything until mounted to prevent hydration mismatch
+  if (!mounted) {
+    return null
+  }
+
   return (
     <div className="flex h-screen bg-gradient-to-br from-gray-50 to-white text-gray-900">
       <Sidebar isOpen={isSidebarOpen} onClose={() => setSidebarOpen(false)} />
@@ -193,39 +219,45 @@ const ChatInterface: React.FC = () => {
       <motion.div
         animate={{ marginLeft: isSidebarOpen ? "16rem" : "0rem" }}
         transition={{ type: "tween", duration: 0.3 }}
-        className="flex-1 flex flex-col min-w-0"
+        className="flex-1 flex flex-col min-w-0 relative"
       >
+        {mounted && !session && !hasFreeTrial() && <FreeTrialOverlay />}
+        
         <header className="bg-white/70 backdrop-blur-sm p-4 flex justify-between items-center border-b border-gray-200">
           <div className="flex items-center">
             <div className="w-32 h-8 relative">
-              <Image
-                src="https://4q2e4qu710mvgubg.public.blob.vercel-storage.com/auto-analyst-logo-R9wBx0kWOUA96KxwKBtl1onOHp6o02.png"
-                alt="Auto-Analyst Logo"
+            <Image
+              src="https://4q2e4qu710mvgubg.public.blob.vercel-storage.com/auto-analyst-logo-R9wBx0kWOUA96KxwKBtl1onOHp6o02.png"
+              alt="Auto-Analyst Logo"
                 fill
                 className="object-contain"
                 priority
-              />
+            />
             </div>
           </div>
-          <button
+            <button
             onClick={() => setSidebarOpen((prev) => !prev)}
-            className="text-gray-500 hover:text-[#FF7F7F] focus:outline-none transition-colors"
-          >
-            <svg
-              className="w-6 h-6"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-              xmlns="http://www.w3.org/2000/svg"
+              className="text-gray-500 hover:text-[#FF7F7F] focus:outline-none transition-colors"
             >
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-            </svg>
-          </button>
+              <svg
+                className="w-6 h-6"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+              </svg>
+            </button>
         </header>
         <div className="flex-1 overflow-hidden">
           <ChatWindow messages={messages} isLoading={isLoading} />
         </div>
-        <ChatInput onSendMessage={handleSendMessage} onFileUpload={handleFileUpload} />
+        <ChatInput 
+          onSendMessage={handleSendMessage} 
+          onFileUpload={handleFileUpload}
+          disabled={!session && !hasFreeTrial()} 
+        />
       </motion.div>
     </div>
   )
