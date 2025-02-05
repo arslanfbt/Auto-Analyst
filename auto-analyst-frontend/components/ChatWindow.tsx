@@ -5,6 +5,7 @@ import { motion } from "framer-motion"
 import LoadingIndicator from "@/components/chat/LoadingIndicator"
 import MessageContent from "@/components/chat/MessageContent"
 import PlotlyChart from "@/components/PlotlyChart"
+import { ChatMessage } from "@/lib/store/chatHistoryStore"
 
 interface PlotlyMessage {
   type: "plotly"
@@ -18,14 +19,14 @@ interface Message {
 }
 
 interface ChatWindowProps {
-  messages: Message[]
+  messages: ChatMessage[]
   isLoading: boolean
 }
 
 const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading }) => {
   const chatWindowRef = useRef<HTMLDivElement>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
-  const [localMessages, setLocalMessages] = useState<Message[]>(messages)
+  const [localMessages, setLocalMessages] = useState<ChatMessage[]>(messages)
 
   useEffect(() => {
     setLocalMessages(messages)
@@ -73,7 +74,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading }) => {
     }
   }, [])
 
-  const renderMessage = (message: Message, index: number) => {
+  const renderMessage = (message: ChatMessage, index: number) => {
     if (typeof message.text === "object" && message.text.type === "plotly") {
       return (
         <motion.div key={index} className="flex justify-start mb-8">

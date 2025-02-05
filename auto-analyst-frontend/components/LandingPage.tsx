@@ -7,6 +7,7 @@ import FeaturesSection from "./FeatureSection"
 import TestimonialsSection from "./TestimoniaslSections"
 import Footer from "./Footer"
 import { Button } from "./ui/button"
+import CookieConsent from "./CookieConsent"
 
 export default function LandingPage() {
   const router = useRouter()
@@ -37,6 +38,7 @@ export default function LandingPage() {
       <FeaturesSection />
       <TestimonialsSection />
       <Footer />
+      <CookieConsent />
     </div>
   )
 }
