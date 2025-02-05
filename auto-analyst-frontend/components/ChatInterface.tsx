@@ -11,6 +11,8 @@ import axios from "axios"
 import { useSession } from "next-auth/react"
 import { useFreeTrialStore } from "@/lib/store/freeTrialStore"
 import FreeTrialOverlay from "./chat/FreeTrialOverlay"
+import { useChatHistoryStore, ChatMessage } from "@/lib/store/chatHistoryStore"
+import { useCookieConsentStore } from "@/lib/store/cookieConsentStore"
 
 interface PlotlyMessage {
   type: "plotly"
@@ -30,9 +32,10 @@ interface AgentInfo {
 
 const ChatInterface: React.FC = () => {
   const { data: session, status } = useSession()
+  const { hasConsented } = useCookieConsentStore()
   const { queriesUsed, incrementQueries, hasFreeTrial } = useFreeTrialStore()
+  const { messages: storedMessages, addMessage } = useChatHistoryStore()
   const [mounted, setMounted] = useState(false)
-  const [messages, setMessages] = useState<Message[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [isSidebarOpen, setSidebarOpen] = useState(false)
   const [selectedAgent, setSelectedAgent] = useState<string | null>(null)
@@ -62,25 +65,31 @@ const ChatInterface: React.FC = () => {
   }, [])
 
   const handleSendMessage = async (message: string) => {
-    if (!session && !hasFreeTrial()) {
-
+    // Check for cookie consent before using storage
+    if (!hasConsented) {
       return
     }
 
-    // Check for agent selection via @ symbol
-    const agentMatch = message.match(/^@(\w+)\s+(.+)/)
-    let selectAgent = null
-    let query = message
-
-    if (agentMatch) {
-      selectAgent = agentMatch[1]
-      query = agentMatch[2]
+    if (!session && !hasFreeTrial()) {
+      return
     }
 
-    setMessages((prev) => [...prev, { text: message, sender: "user" }])
+    // Add user message to persistent store
+    addMessage({ text: message, sender: "user" })
+
     setIsLoading(true)
 
     try {
+      // Check for agent selection via @ symbol
+      const agentMatch = message.match(/^@(\w+)\s+(.+)/)
+      let selectAgent = null
+      let query = message
+
+      if (agentMatch) {
+        selectAgent = agentMatch[1]
+        query = agentMatch[2]
+      }
+
       // Use the newly selected agent or fall back to the stored selectedAgent
       const currentAgent = selectAgent || selectedAgent
       console.log("currentAgent: ", currentAgent)
@@ -101,10 +110,6 @@ const ChatInterface: React.FC = () => {
 
       // Update the selected agent after successful request
       setSelectedAgent(selectAgent)
-
-      if (!session) {
-        incrementQueries()
-      }
 
       let aiMessage: string | PlotlyMessage = ""
 
@@ -133,22 +138,25 @@ const ChatInterface: React.FC = () => {
           throw new Error("Invalid response format from server")
         }
 
-        setMessages((prev) => [
-          ...prev,
-          {
-            text: typeof aiMessage === "string" ? aiMessage : aiMessage,
-            sender: "ai",
-          },
-        ])
+        // Add AI response to persistent store
+        addMessage({
+          text: typeof aiMessage === "string" ? aiMessage : aiMessage,
+          sender: "ai",
+        })
+
+        if (!session) {
+          incrementQueries()
+        }
+
       } catch (parseError) {
         console.error("Error processing response:", parseError)
-        setMessages((prev) => [
-          ...prev,
-          {
-            text: "Sorry, I encountered an error processing the response. Please try again.",
-            sender: "ai",
-          },
-        ])
+        aiMessage = "Sorry, I encountered an error processing the response. Please try again."
+
+        // Add error message to persistent store
+        addMessage({
+          text: aiMessage,
+          sender: "ai",
+        })
       }
     } catch (error) {
       console.error("Network or server error:", error)
@@ -159,18 +167,14 @@ const ChatInterface: React.FC = () => {
             ? error.message
             : "An unknown error occurred"
 
-      setMessages((prev) => [
-        ...prev,
-        {
-          text: `Error: ${errorMessage}`,
-          sender: "ai",
-        },
-      ])
-
+      // Add error message to persistent store
+      addMessage({
+        text: `Error: ${errorMessage}`,
+        sender: "ai",
+      })
     } finally {
       setIsLoading(false)
     }
-
   }
 
   const handleFileUpload = async (file: File) => {
@@ -186,22 +190,18 @@ const ChatInterface: React.FC = () => {
           "Content-Type": "multipart/form-data",
         },
       })
-      setMessages((prev) => [
-        ...prev,
-        {
-          text: "```json\n" + JSON.stringify(response.data, null, 2) + "\n```",
-          sender: "ai",
-        },
-      ])
+      // Add AI response to persistent store
+      addMessage({
+        text: "```json\n" + JSON.stringify(response.data, null, 2) + "\n```",
+        sender: "ai",
+      })
     } catch (error) {
       console.error("Error in handleFileUpload:", error)
-      setMessages((prev) => [
-        ...prev,
-        {
-          text: `Error: ${error instanceof Error ? error.message : "Unknown error occurred during file upload"}`,
-          sender: "ai",
-        },
-      ])
+      // Add error message to persistent store
+      addMessage({
+        text: `Error: ${error instanceof Error ? error.message : "Unknown error occurred during file upload"}`,
+        sender: "ai",
+      })
     } finally {
       setIsLoading(false)
     }
@@ -251,7 +251,7 @@ const ChatInterface: React.FC = () => {
             </button>
         </header>
         <div className="flex-1 overflow-hidden">
-          <ChatWindow messages={messages} isLoading={isLoading} />
+          <ChatWindow messages={storedMessages} isLoading={isLoading} />
         </div>
         <ChatInput 
           onSendMessage={handleSendMessage} 

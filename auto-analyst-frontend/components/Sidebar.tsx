@@ -6,6 +6,7 @@ import { motion } from "framer-motion"
 import { X, MessageSquarePlus, History, Settings, LogOut } from "lucide-react"
 import { signOut, useSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
+import { useChatHistoryStore } from "@/lib/store/chatHistoryStore"
 
 interface SidebarProps {
   isOpen: boolean
@@ -13,8 +14,14 @@ interface SidebarProps {
 }
 
 const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
+  const { clearMessages } = useChatHistoryStore()
   const { data: session } = useSession()
   const router = useRouter()
+
+  const handleNewChat = () => {
+    clearMessages()
+    onClose()
+  }
 
   return (
     <motion.div
@@ -35,7 +42,10 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
         />
       </div>
       <nav className="space-y-4">
-        <a href="#" className="flex items-center space-x-3 text-gray-600 hover:text-[#FF7F7F] transition-colors group">
+        <a 
+          onClick={handleNewChat}
+          className="flex items-center space-x-3 text-gray-600 hover:text-[#FF7F7F] transition-colors group cursor-pointer"
+        >
           <MessageSquarePlus className="w-5 h-5 group-hover:scale-110 transition-transform" />
           <span>New Chat</span>
         </a>
