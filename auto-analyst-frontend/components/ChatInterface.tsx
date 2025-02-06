@@ -251,7 +251,11 @@ const ChatInterface: React.FC = () => {
             </button>
         </header>
         <div className="flex-1 overflow-hidden">
-          <ChatWindow messages={storedMessages} isLoading={isLoading} />
+          <ChatWindow 
+            messages={storedMessages} 
+            isLoading={isLoading} 
+            onSendMessage={handleSendMessage} 
+          />
         </div>
         <ChatInput 
           onSendMessage={handleSendMessage} 

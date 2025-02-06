@@ -6,6 +6,7 @@ import LoadingIndicator from "@/components/chat/LoadingIndicator"
 import MessageContent from "@/components/chat/MessageContent"
 import PlotlyChart from "@/components/PlotlyChart"
 import { ChatMessage } from "@/lib/store/chatHistoryStore"
+import WelcomeSection from "./chat/WelcomeSection"
 
 interface PlotlyMessage {
   type: "plotly"
@@ -21,9 +22,10 @@ interface Message {
 interface ChatWindowProps {
   messages: ChatMessage[]
   isLoading: boolean
+  onSendMessage: (message: string) => void
 }
 
-const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading }) => {
+const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMessage }) => {
   const chatWindowRef = useRef<HTMLDivElement>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const [localMessages, setLocalMessages] = useState<ChatMessage[]>(messages)
@@ -32,13 +34,13 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading }) => {
     setLocalMessages(messages)
   }, [messages])
 
-  const scrollToBottom = useCallback(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "auto" })
-  }, [])
-
   useEffect(() => {
     scrollToBottom()
-  }, [scrollToBottom, localMessages])
+  }, [localMessages, isLoading])
+
+  const scrollToBottom = useCallback(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
+  }, [])
 
   const handleCodeExecute = useCallback((result: any, updateCodeBlock: (code: string) => void) => {
     if (result.savedCode) {
@@ -151,26 +153,33 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading }) => {
   }
 
   return (
-    <div className="flex flex-col h-full bg-gray-50">
-      <div
+    <div className="flex flex-col h-full overflow-hidden">
+      <div 
         ref={chatWindowRef}
-        className="flex-1 px-4 py-6 space-y-8 overflow-y-auto scrollbar-thin scrollbar-track-transparent scrollbar-thumb-gray-300"
+        className="flex-1 overflow-y-auto px-4"
       >
-        <div className="max-w-5xl mx-auto w-full">
-          {localMessages.flatMap((message, index) => renderMessage(message, index))}
-          {isLoading && (
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.3 }}
-              className="flex justify-start mb-8"
-            >
-              <div className="relative max-w-[85%] rounded-2xl p-6 transition-shadow duration-200 hover:shadow-lg bg-white text-gray-900 shadow-md shadow-gray-200/50">
-                <LoadingIndicator />
-              </div>
-            </motion.div>
-          )}
-        </div>
+        {messages.length === 0 ? (
+          <WelcomeSection onSampleQueryClick={onSendMessage} />
+        ) : (
+          <div className="max-w-4xl mx-auto py-8">
+            <div className="space-y-8">
+              {localMessages.flatMap((message, index) => renderMessage(message, index))}
+            </div>
+          </div>
+        )}
+        
+        {isLoading && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3 }}
+            className="flex justify-start mb-8 max-w-4xl mx-auto"
+          >
+            <div className="relative max-w-[85%] rounded-2xl p-6 transition-shadow duration-200 hover:shadow-lg bg-white text-gray-900 shadow-md shadow-gray-200/50">
+              <LoadingIndicator />
+            </div>
+          </motion.div>
+        )}
         <div ref={messagesEndRef} />
       </div>
     </div>
@@ -178,4 +187,3 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading }) => {
 }
 
 export default React.memo(ChatWindow)
-
