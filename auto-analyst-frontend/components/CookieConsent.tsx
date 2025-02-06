@@ -28,8 +28,7 @@ export default function CookieConsent() {
     }, 200)
   }
 
-  if (!mounted) return null
-  if (hasConsented !== null) return null
+  if (!mounted || (hasConsented === true && localStorage.getItem('cookie-consent') === 'true')) return null
 
   return (
     <AnimatePresence>

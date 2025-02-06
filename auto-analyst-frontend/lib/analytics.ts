@@ -6,6 +6,7 @@ export const initializeAnalytics = () => {
   if (hasConsented === true) {
     // Initialize your analytics here
     // Example: Google Analytics, Mixpanel, etc.
+    
   } else {
     // Disable analytics and clear any existing cookies
     clearAnalyticsCookies()
