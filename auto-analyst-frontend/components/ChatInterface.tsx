@@ -13,6 +13,7 @@ import { useFreeTrialStore } from "@/lib/store/freeTrialStore"
 import FreeTrialOverlay from "./chat/FreeTrialOverlay"
 import { useChatHistoryStore, ChatMessage } from "@/lib/store/chatHistoryStore"
 import { useCookieConsentStore } from "@/lib/store/cookieConsentStore"
+import { useRouter } from "next/navigation"
 
 interface PlotlyMessage {
   type: "plotly"
@@ -31,6 +32,7 @@ interface AgentInfo {
 }
 
 const ChatInterface: React.FC = () => {
+  const router = useRouter()
   const { data: session, status } = useSession()
   const { hasConsented } = useCookieConsentStore()
   const { queriesUsed, incrementQueries, hasFreeTrial } = useFreeTrialStore()
@@ -225,31 +227,38 @@ const ChatInterface: React.FC = () => {
         
         <header className="bg-white/70 backdrop-blur-sm p-4 flex justify-between items-center border-b border-gray-200">
           <div className="flex items-center">
-            <div className="w-32 h-8 relative">
-            <Image
-              src="https://4q2e4qu710mvgubg.public.blob.vercel-storage.com/auto-analyst-logo-R9wBx0kWOUA96KxwKBtl1onOHp6o02.png"
-              alt="Auto-Analyst Logo"
-                fill
-                className="object-contain"
-                priority
-            />
+            <div className="flex items-center gap-4 cursor-pointer" onClick={() => router.push("/")}>
+              <div className="w-8 h-8 relative">
+                <Image
+                  src="https://4q2e4qu710mvgubg.public.blob.vercel-storage.com/Auto-analysts%20icon%20small-S682Oi8nbFhOADUHXJSD9d0KtSWKCe.png"
+                  alt="Auto-Analyst Logo"
+                  fill
+                  className="object-contain"
+                  priority
+                />
+              </div>
+              <h1 className="text-xl font-semibold text-gray-900">
+                Auto-Analyst
+              </h1>
             </div>
           </div>
-            <button
+
+          <button
             onClick={() => setSidebarOpen((prev) => !prev)}
-              className="text-gray-500 hover:text-[#FF7F7F] focus:outline-none transition-colors"
+            className="text-gray-500 hover:text-[#FF7F7F] focus:outline-none transition-colors"
+          >
+            <svg
+              className="w-6 h-6"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+              xmlns="http://www.w3.org/2000/svg"
             >
-              <svg
-                className="w-6 h-6"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-                xmlns="http://www.w3.org/2000/svg"
-              >
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-              </svg>
-            </button>
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+            </svg>
+          </button>
         </header>
+
         <div className="flex-1 overflow-hidden">
           <ChatWindow 
             messages={storedMessages} 

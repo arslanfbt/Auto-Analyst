@@ -41,18 +41,20 @@ export default function WelcomeSection({ onSampleQueryClick }: WelcomeSectionPro
       <div className="grid md:grid-cols-2 gap-8">
         {/* Left Column - Try These */}
         <div className="bg-white rounded-lg border border-gray-200 p-6">
-          <h2 className="text-xl font-semibold mb-4">Try These</h2>
-          <div className="space-y-6">
+          <h2 className="text-xl font-semibold mb-2">Try These</h2>
+          <div className="space-y-1">
             {sampleQueries.map((query, index) => (
               <div
                 key={index}
-                className="flex gap-3 cursor-pointer group"
+                className="flex gap-3 cursor-pointer group p-3 rounded-lg transition-all duration-200 ease-in-out hover:bg-gray-100"
                 onClick={() => onSampleQueryClick(query.text)}
               >
-                <div className="text-[#FF7F7F] mt-1">{query.icon}</div>
-                <div>
-                  <p className="text-gray-800 text-sm font-medium mb-0.5">{query.text}</p>
-                  <p className="text-gray-500 text-xs">{query.description}</p>
+                <div className="text-[#FF7F7F] mt-1 transition-transform duration-200 ease-in-out group-hover:scale-110">
+                  {query.icon}
+                </div>
+                <div className="transition-all duration-200 ease-in-out group-hover:translate-x-1">
+                  <p className="text-gray-800 text-sm font-medium mb-0.5 group-hover:text-gray-900">{query.text}</p>
+                  <p className="text-gray-500 text-xs group-hover:text-gray-600">{query.description}</p>
                 </div>
               </div>
             ))}
@@ -60,7 +62,7 @@ export default function WelcomeSection({ onSampleQueryClick }: WelcomeSectionPro
         </div>
 
         {/* Right Column - Features & Quick Start */}
-        <div className="space-y-11">
+        <div className="space-y-12">
           {/* Features */}
           <div className="bg-white rounded-lg border border-gray-200 p-6">
             <h2 className="text-xl font-semibold mb-4">Features</h2>
