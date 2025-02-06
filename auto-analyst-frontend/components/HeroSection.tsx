@@ -41,14 +41,22 @@ export default function HeroSection() {
             transition={{ duration: 0.8 }}
             className="flex-1"
           >
-            <Image
-              src="https://4q2e4qu710mvgubg.public.blob.vercel-storage.com/auto-analyst-logo-R9wBx0kWOUA96KxwKBtl1onOHp6o02.png"
-              alt="Auto-Analyst Logo"
-              width={300}
-              height={80}
-              className="mb-8"
-            />
-            <h1 className="text-6xl font-bold text-gray-900 mb-6">Transform Your Data Into Insights</h1>
+            <div className="flex items-center gap-4 mb-8">
+              <Image
+                src="https://4q2e4qu710mvgubg.public.blob.vercel-storage.com/Auto-analysts%20icon%20small-S682Oi8nbFhOADUHXJSD9d0KtSWKCe.png"
+                alt="Auto-Analyst Logo"
+                width={70}
+                height={70}
+                className="object-contain "
+              />
+              <h1 className="text-4xl font-bold text-gray-900 font-weight-normal">
+                Auto-Analyst
+              </h1>
+            </div>
+            
+            <h2 className="text-6xl font-bold text-gray-800 mb-6">
+              Transform Your Data Into Insights
+            </h2>
             <p className="text-xl text-gray-600 mb-8">
               Harness the power of AI to analyze, predict, and optimize your business decisions
             </p>
