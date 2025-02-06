@@ -1,7 +1,13 @@
+"use client"
+
 import React, { useState, useEffect, useRef } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { Send, Paperclip, X } from 'lucide-react'
 import AgentHint from './chat/AgentHint'
+import { Button } from "./ui/button"
+import { Textarea } from "./ui/textarea"
+import { useCookieConsentStore } from "@/lib/store/cookieConsentStore"
+import { AlertCircle } from "lucide-react"
 
 interface ChatInputProps {
   onSendMessage: (message: string) => void
@@ -24,12 +30,21 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, onFileUpload, disa
   const [showSuggestions, setShowSuggestions] = useState(false)
   const [cursorPosition, setCursorPosition] = useState(0)
   const inputRef = useRef<HTMLTextAreaElement>(null)
+  const { hasConsented } = useCookieConsentStore()
+  const [showCookieWarning, setShowCookieWarning] = useState(false)
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
+    if (!hasConsented) {
+      setShowCookieWarning(true)
+      return
+    }
     if (message.trim()) {
-      onSendMessage(message)
+      onSendMessage(message.trim())
       setMessage("")
+      if (inputRef.current) {
+        inputRef.current.style.height = "auto"
+      }
     }
   }
 
@@ -71,6 +86,10 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, onFileUpload, disa
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setMessage(e.target.value)
     setCursorPosition(e.target.selectionStart || 0)
+    if (inputRef.current) {
+      inputRef.current.style.height = "auto"
+      inputRef.current.style.height = `${inputRef.current.scrollHeight}px`
+    }
   }
 
   const handleSuggestionClick = (agentName: string) => {
@@ -85,6 +104,25 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, onFileUpload, disa
 
   return (
     <div className="relative">
+      {showCookieWarning && !hasConsented && (
+        <div className="absolute bottom-full left-0 right-0 p-4 bg-yellow-50 border-t border-yellow-200">
+          <div className="flex items-start gap-3 text-yellow-800">
+            <AlertCircle className="w-5 h-5 mt-0.5" />
+            <div>
+              <p className="font-medium">Cookie Consent Required</p>
+              <p className="text-sm">
+                To use the free trial features, please accept cookies from the banner at the bottom of the page.
+              </p>
+            </div>
+            <button 
+              onClick={() => setShowCookieWarning(false)}
+              className="ml-auto text-yellow-800 hover:text-yellow-900"
+            >
+              ×
+            </button>
+          </div>
+        </div>
+      )}
       {showHint && (
         <div className="absolute bottom-full mb-2 w-full">
           <AgentHint />
@@ -105,7 +143,7 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, onFileUpload, disa
         <form onSubmit={handleSubmit} className="max-w-3xl mx-auto">
           <div className="flex items-center space-x-2">
             <div className="relative flex-1">
-              <textarea
+              <Textarea
                 ref={inputRef}
                 value={message}
                 onChange={handleInputChange}
@@ -113,6 +151,11 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, onFileUpload, disa
                   if (e.key === 'Enter' && !e.shiftKey) {
                     e.preventDefault()
                     handleSubmit(e)
+                  }
+                }}
+                onClick={() => {
+                  if (!hasConsented) {
+                    setShowCookieWarning(true)
                   }
                 }}
                 disabled={disabled}
