@@ -7,16 +7,23 @@ export default function Footer() {
         <div className="container mx-auto px-4">
           <div className="grid md:grid-cols-4 gap-8">
             <div>
-              <Image
-                src="https://4q2e4qu710mvgubg.public.blob.vercel-storage.com/auto-analyst-logo-R9wBx0kWOUA96KxwKBtl1onOHp6o02.png"
-                alt="Auto-Analyst Logo"
+              <div className="flex items-center gap-2">
+                <Image
+                  src="https://4q2e4qu710mvgubg.public.blob.vercel-storage.com/Auto-analysts%20icon%20small-S682Oi8nbFhOADUHXJSD9d0KtSWKCe.png"
+                  alt="Auto-Analyst Logo"
+
                 width={150}
                 height={40}
-                className="mb-4"
+                className="mb-2 "
+                style={{ width: '40px', height: 'auto' }}
               />
-              <p className="text-gray-400">Transforming data into actionable insights</p>
+              <h1 className="text-2xl font-bold">Auto-Analyst</h1>
+              </div>
+              <p className="text-gray-300">Transforming data into actionable insights</p>
             </div>
+
             <div>
+
               <h4 className="font-semibold mb-4">Product</h4>
               <ul className="space-y-2 text-gray-400">
                 <li>Features</li>
