@@ -42,6 +42,7 @@ const ChatInterface: React.FC = () => {
   const [isSidebarOpen, setSidebarOpen] = useState(false)
   const [selectedAgent, setSelectedAgent] = useState<string | null>(null)
   const [agents, setAgents] = useState<AgentInfo[]>([])
+  const [showWelcome, setShowWelcome] = useState(true)
 
   useEffect(() => {
     setMounted(true)
@@ -66,7 +67,17 @@ const ChatInterface: React.FC = () => {
     fetchAgents()
   }, [])
 
+  useEffect(() => {
+    // Show welcome section if there are no messages
+    setShowWelcome(storedMessages.length === 0)
+  }, [storedMessages])
+
+  const handleNewChat = () => {
+    setShowWelcome(true)
+  }
+
   const handleSendMessage = async (message: string) => {
+    setShowWelcome(false)  // Hide welcome section when sending a message
     // Check for cookie consent before using storage
     if (!hasConsented) {
       return
@@ -216,7 +227,11 @@ const ChatInterface: React.FC = () => {
 
   return (
     <div className="flex h-screen bg-gradient-to-br from-gray-50 to-white text-gray-900">
-      <Sidebar isOpen={isSidebarOpen} onClose={() => setSidebarOpen(false)} />
+      <Sidebar 
+        isOpen={isSidebarOpen} 
+        onClose={() => setSidebarOpen(false)} 
+        onNewChat={handleNewChat}
+      />
 
       <motion.div
         animate={{ marginLeft: isSidebarOpen ? "16rem" : "0rem" }}
@@ -243,27 +258,30 @@ const ChatInterface: React.FC = () => {
             </div>
           </div>
 
-          <button
-            onClick={() => setSidebarOpen((prev) => !prev)}
-            className="text-gray-500 hover:text-[#FF7F7F] focus:outline-none transition-colors"
-          >
-            <svg
-              className="w-6 h-6"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-              xmlns="http://www.w3.org/2000/svg"
+          {session && (
+            <button
+              onClick={() => setSidebarOpen((prev) => !prev)}
+              className="text-gray-500 hover:text-[#FF7F7F] focus:outline-none transition-colors"
             >
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-            </svg>
-          </button>
+              <svg
+                className="w-6 h-6"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+              </svg>
+            </button>
+          )}
         </header>
 
         <div className="flex-1 overflow-hidden">
           <ChatWindow 
             messages={storedMessages} 
             isLoading={isLoading} 
-            onSendMessage={handleSendMessage} 
+            onSendMessage={handleSendMessage}
+            showWelcome={showWelcome}
           />
         </div>
         <ChatInput 

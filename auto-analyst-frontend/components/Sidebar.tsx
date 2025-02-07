@@ -11,15 +11,17 @@ import { useChatHistoryStore } from "@/lib/store/chatHistoryStore"
 interface SidebarProps {
   isOpen: boolean
   onClose: () => void
+  onNewChat: () => void
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
+const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, onNewChat }) => {
   const { clearMessages } = useChatHistoryStore()
   const { data: session } = useSession()
   const router = useRouter()
 
   const handleNewChat = () => {
     clearMessages()
+    onNewChat()
     onClose()
   }
 
