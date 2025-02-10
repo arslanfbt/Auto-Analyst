@@ -91,7 +91,6 @@ const ChatInterface: React.FC = () => {
       return
     }
 
-    // Add user message to persistent store
     addMessage({ text: message, sender: "user" })
 
     const controller = new AbortController()
@@ -109,13 +108,16 @@ const ChatInterface: React.FC = () => {
         selectAgent = match[1]
         // Remove the @agent_name from the query
         query = message.replace(/@\w+/, '').trim()
+        // Set the selected agent when @ is used
+        setSelectedAgent(selectAgent)
+      } else {
+        // Reset the selected agent when no @ is used
+        setSelectedAgent(null)
       }
 
-      const currentAgent = selectAgent || selectedAgent
-      console.log("currentAgent: ", currentAgent)
-      
-      const endpoint = currentAgent
-        ? `https://ashad001-auto-analyst-backend.hf.space/chat/${currentAgent}`
+      // Use selectAgent directly instead of falling back to selectedAgent
+      const endpoint = selectAgent
+        ? `https://ashad001-auto-analyst-backend.hf.space/chat/${selectAgent}`
         : `https://ashad001-auto-analyst-backend.hf.space/chat`
 
       console.log("Using endpoint:", endpoint)
@@ -125,9 +127,6 @@ const ChatInterface: React.FC = () => {
         { query }, 
         { signal: controller.signal }
       )
-
-      // Update the selected agent after successful request
-      setSelectedAgent(selectAgent)
 
       let aiMessage: string | PlotlyMessage = ""
 

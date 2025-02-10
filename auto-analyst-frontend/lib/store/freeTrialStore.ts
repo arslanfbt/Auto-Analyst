@@ -14,7 +14,7 @@ export const useFreeTrialStore = create<FreeTrialStore>()(
       queriesUsed: 0,
       incrementQueries: () => set((state) => ({ queriesUsed: state.queriesUsed + 1 })),
       resetQueries: () => set({ queriesUsed: 0 }),
-      hasFreeTrial: () => get().queriesUsed < 2,
+      hasFreeTrial: () => get().queriesUsed < 4,
     }),
     {
       name: 'free-trial-storage',
