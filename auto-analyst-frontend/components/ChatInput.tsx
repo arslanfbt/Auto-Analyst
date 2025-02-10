@@ -11,7 +11,7 @@ import { AlertCircle } from "lucide-react"
 import { useSession } from "next-auth/react"
 import axios from "axios"
 
-interface FileStatus {
+interface FileUpload {
   file: File
   status: 'loading' | 'success' | 'error'
   errorMessage?: string
@@ -32,7 +32,7 @@ interface ChatInputProps {
 
 const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, onFileUpload, disabled, isLoading, onStopGeneration }) => {
   const [message, setMessage] = useState("")
-  const [fileStatuses, setFileStatuses] = useState<FileStatus[]>([])
+  const [fileUpload, setFileUpload] = useState<FileUpload | null>(null)
   const fileInputRef = React.useRef<HTMLInputElement>(null)
   const [showHint, setShowHint] = useState(false)
   const [input, setInput] = useState('')
@@ -55,33 +55,22 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, onFileUpload, disa
   }
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files
-    if (files) {
-      const newFiles = Array.from(files)
-      const newFileStatuses = newFiles.map(file => ({ file, status: 'loading' as const }))
+    const file = e.target.files?.[0]
+    if (file) {
+      setFileUpload({ file, status: 'loading' })
       
-      setFileStatuses(prev => [...prev, ...newFileStatuses])
-
-      newFiles.forEach(async (file) => {
-        try {
-          await onFileUpload(file)
-          setFileStatuses(prev => prev.map(status => 
-            status.file === file ? { ...status, status: 'success' } : status
-          ))
-        } catch (error) {
-          const errorMessage = getErrorMessage(error)
-          setFileStatuses(prev => prev.map(status => 
-            status.file === file ? { 
-              ...status, 
-              status: 'error',
-              errorMessage 
-            } : status
-          ))
-          setTimeout(() => {
-            setFileStatuses(prev => prev.filter(status => status.file !== file))
-          }, 5000)
-        }
-      })
+      try {
+        await onFileUpload(file)
+        setFileUpload(prev => prev ? { ...prev, status: 'success' } : null)
+      } catch (error) {
+        const errorMessage = getErrorMessage(error)
+        setFileUpload(prev => prev ? { ...prev, status: 'error', errorMessage } : null)
+        
+        // Auto-remove error after delay
+        setTimeout(() => {
+          setFileUpload(null)
+        }, 5000)
+      }
     }
   }
 
@@ -95,8 +84,8 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, onFileUpload, disa
     return "Upload failed"
   }
 
-  const removeFile = (fileToRemove: File) => {
-    setFileStatuses(prev => prev.filter(status => status.file !== fileToRemove))
+  const clearFile = () => {
+    setFileUpload(null)
     if (fileInputRef.current) {
       fileInputRef.current.value = ""
     }
@@ -157,7 +146,7 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, onFileUpload, disa
     return !hasConsented // Show consent only for non-signed in users who haven't consented
   }
 
-  const getStatusIcon = (status: FileStatus['status']) => {
+  const getStatusIcon = (status: FileUpload['status']) => {
     switch (status) {
       case 'loading':
         return <Loader2 className="w-3 h-3 text-blue-600 animate-spin" />
@@ -198,35 +187,30 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, onFileUpload, disa
           </div>
         ) : (
           <>
-            {fileStatuses.length > 0 && (
+            {fileUpload && (
               <div className="max-w-3xl mx-auto mb-2">
-                <div className="flex flex-wrap gap-2">
-                  {fileStatuses.map((fileStatus) => (
-                    <div 
-                      key={fileStatus.file.name}
-                      className={`flex items-center gap-2 px-2 py-1 rounded-md text-xs max-w-[200px] ${
-                        fileStatus.status === 'error' ? 'bg-red-50' : 'bg-blue-50'
-                      }`}
-                    >
-                      {getStatusIcon(fileStatus.status)}
-                      <div className="flex-1 min-w-0">
-                        <div className="truncate text-blue-600">
-                          {fileStatus.file.name}
-                        </div>
-                        {fileStatus.status === 'error' && fileStatus.errorMessage && (
-                          <div className="text-red-600 truncate">
-                            {fileStatus.errorMessage}
-                          </div>
-                        )}
-                      </div>
-                      <button 
-                        onClick={() => removeFile(fileStatus.file)}
-                        className="text-blue-600 hover:text-blue-800 p-1 shrink-0"
-                      >
-                        <X className="w-3 h-3" />
-                      </button>
-                    </div>
-                  ))}
+                <div 
+                  className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs ${
+                    fileUpload.status === 'error' ? 'bg-red-50 border border-red-200' : 'bg-blue-50 border border-blue-200'
+                  }`}
+                >
+                  {getStatusIcon(fileUpload.status)}
+                  <span className="text-blue-700 font-medium">
+                    {fileUpload.file.name}
+                  </span>
+                  {fileUpload.status === 'error' && fileUpload.errorMessage && (
+                    <span className="text-red-600">
+                      • {fileUpload.errorMessage}
+                    </span>
+                  )}
+                  <button 
+                    onClick={clearFile}
+                    className={`hover:bg-white/50 p-1 rounded-full transition-colors ${
+                      fileUpload.status === 'error' ? 'text-red-500 hover:text-red-700' : 'text-blue-500 hover:text-blue-700'
+                    }`}
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
                 </div>
               </div>
             )}
@@ -284,7 +268,6 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, onFileUpload, disa
                       onChange={handleFileSelect} 
                       className="hidden" 
                       id="file-upload"
-                      multiple
                     />
                     <label
                       htmlFor="file-upload"
