@@ -219,28 +219,22 @@ const ChatInterface: React.FC = () => {
     formData.append("file", file)
     formData.append("styling_instructions", "Please analyze the data and provide a detailed report.")
 
-    setIsLoading(true)
-
     try {
-      const response = await axios.post("https://ashad001-auto-analyst-backend.hf.space/upload_dataframe", formData, {
+      await axios.post("https://ashad001-auto-analyst-backend.hf.space/upload_dataframe", formData, {
         headers: {
           "Content-Type": "multipart/form-data",
         },
-      })
-      // Add AI response to persistent store
-      addMessage({
-        text: "```json\n" + JSON.stringify(response.data, null, 2) + "\n```",
-        sender: "ai",
+        timeout: 30000, // 30 seconds
+        maxContentLength: 10 * 1024 * 1024, // 10MB
       })
     } catch (error) {
-      console.error("Error in handleFileUpload:", error)
-      // Add error message to persistent store
-      addMessage({
-        text: `Error: ${error instanceof Error ? error.message : "Unknown error occurred during file upload"}`,
-        sender: "ai",
-      })
-    } finally {
-      setIsLoading(false)
+      if (axios.isAxiosError(error)) {
+        if (error.code === 'ECONNABORTED') {
+          throw new Error('Upload timeout')
+        }
+        throw error
+      }
+      throw error
     }
   }
 
