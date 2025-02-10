@@ -154,30 +154,35 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
   }
 
   return (
-    <div className="flex-1 overflow-y-auto bg-gray-50">
-      {showWelcome ? (
-        <WelcomeSection onSampleQueryClick={onSendMessage} />
-      ) : (
-        <div className="max-w-4xl mx-auto py-8 px-4">
-          <div className="space-y-8">
-            {localMessages.flatMap((message, index) => renderMessage(message, index))}
+    <div className="h-full overflow-hidden flex flex-col">
+      <div 
+        ref={chatWindowRef}
+        className="flex-1 overflow-y-auto"
+      >
+        {showWelcome ? (
+          <WelcomeSection onSampleQueryClick={onSendMessage} />
+        ) : (
+          <div className="max-w-4xl mx-auto py-8 px-4">
+            <div className="space-y-8">
+              {localMessages.flatMap((message, index) => renderMessage(message, index))}
+            </div>
           </div>
-        </div>
-      )}
-      
-      {isLoading && (
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3 }}
-          className="flex justify-start mb-8 max-w-4xl mx-auto"
-        >
-          <div className="relative max-w-[85%] rounded-2xl p-6 transition-shadow duration-200 hover:shadow-lg bg-white text-gray-900 shadow-md shadow-gray-200/50">
-            <LoadingIndicator />
-          </div>
-        </motion.div>
-      )}
-      <div ref={messagesEndRef} />
+        )}
+        
+        {isLoading && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3 }}
+            className="flex justify-start mb-8 max-w-4xl mx-auto px-4"
+          >
+            <div className="relative max-w-[85%] rounded-2xl p-6 transition-shadow duration-200 hover:shadow-lg bg-white text-gray-900 shadow-md shadow-gray-200/50">
+              <LoadingIndicator />
+            </div>
+          </motion.div>
+        )}
+        <div ref={messagesEndRef} />
+      </div>
     </div>
   )
 }

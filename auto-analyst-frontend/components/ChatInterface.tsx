@@ -43,6 +43,7 @@ const ChatInterface: React.FC = () => {
   const [selectedAgent, setSelectedAgent] = useState<string | null>(null)
   const [agents, setAgents] = useState<AgentInfo[]>([])
   const [showWelcome, setShowWelcome] = useState(true)
+  const [abortController, setAbortController] = useState<AbortController | null>(null)
 
   useEffect(() => {
     setMounted(true)
@@ -76,6 +77,14 @@ const ChatInterface: React.FC = () => {
     setShowWelcome(true)
   }
 
+  const handleStopGeneration = () => {
+    if (abortController) {
+      abortController.abort()
+      setIsLoading(false)
+      setAbortController(null)
+    }
+  }
+
   const handleSendMessage = async (message: string) => {
     setShowWelcome(false)  // Hide welcome section when sending a message
     // Check for cookie consent before using storage
@@ -90,6 +99,9 @@ const ChatInterface: React.FC = () => {
     // Add user message to persistent store
     addMessage({ text: message, sender: "user" })
 
+    // Create new AbortController for this request
+    const controller = new AbortController()
+    setAbortController(controller)
     setIsLoading(true)
 
     try {
@@ -119,7 +131,11 @@ const ChatInterface: React.FC = () => {
       console.log("Using endpoint:", endpoint)
       console.log("With query:", query)
 
-      const response = await axios.post(endpoint, { query })
+      // Add signal to axios request
+      const response = await axios.post(endpoint, 
+        { query }, 
+        { signal: controller.signal }
+      )
 
       // Update the selected agent after successful request
       setSelectedAgent(selectAgent)
@@ -172,21 +188,29 @@ const ChatInterface: React.FC = () => {
         })
       }
     } catch (error) {
-      console.error("Network or server error:", error)
-      const errorMessage =
-        axios.isAxiosError(error) && error.response?.status === 500
-          ? "The server encountered an error. Please try again later."
-          : error instanceof Error
-            ? error.message
-            : "An unknown error occurred"
+      if (axios.isCancel(error)) {
+        addMessage({
+          text: "Generation stopped by user",
+          sender: "ai",
+        })
+      } else {
+        console.error("Network or server error:", error)
+        const errorMessage =
+          axios.isAxiosError(error) && error.response?.status === 500
+            ? "The server encountered an error. Please try again later."
+            : error instanceof Error
+              ? error.message
+              : "An unknown error occurred"
 
-      // Add error message to persistent store
-      addMessage({
-        text: `Error: ${errorMessage}`,
-        sender: "ai",
-      })
+        // Add error message to persistent store
+        addMessage({
+          text: `Error: ${errorMessage}`,
+          sender: "ai",
+        })
+      }
     } finally {
       setIsLoading(false)
+      setAbortController(null)
     }
   }
 
@@ -218,6 +242,11 @@ const ChatInterface: React.FC = () => {
     } finally {
       setIsLoading(false)
     }
+  }
+
+  const isInputDisabled = () => {
+    if (session) return false // Allow input if user is signed in
+    return !hasFreeTrial() // Only check free trial if not signed in
   }
 
   // Don't render anything until mounted to prevent hydration mismatch
@@ -287,7 +316,9 @@ const ChatInterface: React.FC = () => {
         <ChatInput 
           onSendMessage={handleSendMessage} 
           onFileUpload={handleFileUpload}
-          disabled={!session && !hasFreeTrial()} 
+          disabled={isInputDisabled()} 
+          isLoading={isLoading}
+          onStopGeneration={handleStopGeneration}
         />
       </motion.div>
     </div>
