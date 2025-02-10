@@ -1,42 +1,33 @@
-name: Sync to Hugging Face hub
+name: Deploy Terraform Infrastructure
 
 on:
   push:
-    branches: [main]
-  workflow_dispatch:
+    branches:
+      - main
 
 jobs:
-  sync-to-hub:
+  terraform:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout backend directory
-        uses: actions/checkout@v2
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v2
         with:
-          fetch-depth: 0
-          path: auto-analyst-backend
+          terraform_version: 1.5.0
 
-      - name: Configure Git identity
-        run: |
-          cd auto-analyst-backend
-          git config user.email "action@github.com"
-          git config user.name "GitHub Action"
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
 
-      - name: Remove node_modules from tracking
-        run: |
-          cd auto-analyst-backend
-          git rm --cached -r node_modules || true
+      - name: Initialize Terraform
+        run: terraform init
+        working-directory: terraform
 
-      - name: Commit Python file changes
-        run: |
-          cd auto-analyst-backend
-          git add *.py
-          git commit -m "Sync backend to Hugging Face hub" || true
-
-      - name: Push to Hugging Face hub
-        env:
-          HF_TOKEN: ${{ secrets.HF_TOKEN }}
-        run: |
-          cd auto-analyst-backend
-          git remote remove origin || true
-          git remote add origin https://Ashad001:${{ secrets.HF_TOKEN }}@huggingface.co/spaces/Ashad001/auto-analyst-backend
-          git push --force origin main
+      - name: Apply Terraform Changes
+        run: terraform apply -auto-approve -var "github_oauth_token=${{ secrets.GH_AMPLIFY_TOKEN }}"
+        working-directory: terraform

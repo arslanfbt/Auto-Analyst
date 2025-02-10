@@ -23,9 +23,10 @@ interface ChatWindowProps {
   messages: ChatMessage[]
   isLoading: boolean
   onSendMessage: (message: string) => void
+  showWelcome: boolean
 }
 
-const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMessage }) => {
+const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMessage, showWelcome }) => {
   const chatWindowRef = useRef<HTMLDivElement>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const [localMessages, setLocalMessages] = useState<ChatMessage[]>(messages)
@@ -153,15 +154,15 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
   }
 
   return (
-    <div className="flex flex-col h-full overflow-hidden">
+    <div className="h-full overflow-hidden flex flex-col">
       <div 
         ref={chatWindowRef}
-        className="flex-1 overflow-y-auto px-4"
+        className="flex-1 overflow-y-auto"
       >
-        {messages.length === 0 ? (
+        {showWelcome ? (
           <WelcomeSection onSampleQueryClick={onSendMessage} />
         ) : (
-          <div className="max-w-4xl mx-auto py-8">
+          <div className="max-w-4xl mx-auto py-8 px-4">
             <div className="space-y-8">
               {localMessages.flatMap((message, index) => renderMessage(message, index))}
             </div>
@@ -173,7 +174,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.3 }}
-            className="flex justify-start mb-8 max-w-4xl mx-auto"
+            className="flex justify-start mb-8 max-w-4xl mx-auto px-4"
           >
             <div className="relative max-w-[85%] rounded-2xl p-6 transition-shadow duration-200 hover:shadow-lg bg-white text-gray-900 shadow-md shadow-gray-200/50">
               <LoadingIndicator />

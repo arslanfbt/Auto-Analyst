@@ -42,6 +42,8 @@ const ChatInterface: React.FC = () => {
   const [isSidebarOpen, setSidebarOpen] = useState(false)
   const [selectedAgent, setSelectedAgent] = useState<string | null>(null)
   const [agents, setAgents] = useState<AgentInfo[]>([])
+  const [showWelcome, setShowWelcome] = useState(true)
+  const [abortController, setAbortController] = useState<AbortController | null>(null)
 
   useEffect(() => {
     setMounted(true)
@@ -66,7 +68,25 @@ const ChatInterface: React.FC = () => {
     fetchAgents()
   }, [])
 
+  useEffect(() => {
+    // Show welcome section if there are no messages
+    setShowWelcome(storedMessages.length === 0)
+  }, [storedMessages])
+
+  const handleNewChat = () => {
+    setShowWelcome(true)
+  }
+
+  const handleStopGeneration = () => {
+    if (abortController) {
+      abortController.abort()
+      setIsLoading(false)
+      setAbortController(null)
+    }
+  }
+
   const handleSendMessage = async (message: string) => {
+    setShowWelcome(false)  // Hide welcome section when sending a message
     // Check for cookie consent before using storage
     if (!hasConsented) {
       return
@@ -79,6 +99,9 @@ const ChatInterface: React.FC = () => {
     // Add user message to persistent store
     addMessage({ text: message, sender: "user" })
 
+    // Create new AbortController for this request
+    const controller = new AbortController()
+    setAbortController(controller)
     setIsLoading(true)
 
     try {
@@ -108,7 +131,11 @@ const ChatInterface: React.FC = () => {
       console.log("Using endpoint:", endpoint)
       console.log("With query:", query)
 
-      const response = await axios.post(endpoint, { query })
+      // Add signal to axios request
+      const response = await axios.post(endpoint, 
+        { query }, 
+        { signal: controller.signal }
+      )
 
       // Update the selected agent after successful request
       setSelectedAgent(selectAgent)
@@ -161,21 +188,29 @@ const ChatInterface: React.FC = () => {
         })
       }
     } catch (error) {
-      console.error("Network or server error:", error)
-      const errorMessage =
-        axios.isAxiosError(error) && error.response?.status === 500
-          ? "The server encountered an error. Please try again later."
-          : error instanceof Error
-            ? error.message
-            : "An unknown error occurred"
+      if (axios.isCancel(error)) {
+        addMessage({
+          text: "Generation stopped by user",
+          sender: "ai",
+        })
+      } else {
+        console.error("Network or server error:", error)
+        const errorMessage =
+          axios.isAxiosError(error) && error.response?.status === 500
+            ? "The server encountered an error. Please try again later."
+            : error instanceof Error
+              ? error.message
+              : "An unknown error occurred"
 
-      // Add error message to persistent store
-      addMessage({
-        text: `Error: ${errorMessage}`,
-        sender: "ai",
-      })
+        // Add error message to persistent store
+        addMessage({
+          text: `Error: ${errorMessage}`,
+          sender: "ai",
+        })
+      }
     } finally {
       setIsLoading(false)
+      setAbortController(null)
     }
   }
 
@@ -209,6 +244,11 @@ const ChatInterface: React.FC = () => {
     }
   }
 
+  const isInputDisabled = () => {
+    if (session) return false // Allow input if user is signed in
+    return !hasFreeTrial() // Only check free trial if not signed in
+  }
+
   // Don't render anything until mounted to prevent hydration mismatch
   if (!mounted) {
     return null
@@ -216,7 +256,11 @@ const ChatInterface: React.FC = () => {
 
   return (
     <div className="flex h-screen bg-gradient-to-br from-gray-50 to-white text-gray-900">
-      <Sidebar isOpen={isSidebarOpen} onClose={() => setSidebarOpen(false)} />
+      <Sidebar 
+        isOpen={isSidebarOpen} 
+        onClose={() => setSidebarOpen(false)} 
+        onNewChat={handleNewChat}
+      />
 
       <motion.div
         animate={{ marginLeft: isSidebarOpen ? "16rem" : "0rem" }}
@@ -243,33 +287,38 @@ const ChatInterface: React.FC = () => {
             </div>
           </div>
 
-          <button
-            onClick={() => setSidebarOpen((prev) => !prev)}
-            className="text-gray-500 hover:text-[#FF7F7F] focus:outline-none transition-colors"
-          >
-            <svg
-              className="w-6 h-6"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-              xmlns="http://www.w3.org/2000/svg"
+          {session && (
+            <button
+              onClick={() => setSidebarOpen((prev) => !prev)}
+              className="text-gray-500 hover:text-[#FF7F7F] focus:outline-none transition-colors"
             >
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-            </svg>
-          </button>
+              <svg
+                className="w-6 h-6"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+              </svg>
+            </button>
+          )}
         </header>
 
         <div className="flex-1 overflow-hidden">
           <ChatWindow 
             messages={storedMessages} 
             isLoading={isLoading} 
-            onSendMessage={handleSendMessage} 
+            onSendMessage={handleSendMessage}
+            showWelcome={showWelcome}
           />
         </div>
         <ChatInput 
           onSendMessage={handleSendMessage} 
           onFileUpload={handleFileUpload}
-          disabled={!session && !hasFreeTrial()} 
+          disabled={isInputDisabled()} 
+          isLoading={isLoading}
+          onStopGeneration={handleStopGeneration}
         />
       </motion.div>
     </div>

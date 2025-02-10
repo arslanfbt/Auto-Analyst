@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from "react"
 import { motion, AnimatePresence } from "framer-motion"
-import { Send, Paperclip, X } from 'lucide-react'
+import { Send, Paperclip, X, Square } from 'lucide-react'
 import AgentHint from './chat/AgentHint'
 import { Button } from "./ui/button"
 import { Textarea } from "./ui/textarea"
@@ -13,6 +13,8 @@ interface ChatInputProps {
   onSendMessage: (message: string) => void
   onFileUpload: (file: File) => void
   disabled?: boolean
+  isLoading?: boolean
+  onStopGeneration?: () => void
 }
 
 interface AgentSuggestion {
@@ -20,7 +22,7 @@ interface AgentSuggestion {
   description: string
 }
 
-const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, onFileUpload, disabled }) => {
+const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, onFileUpload, disabled, isLoading, onStopGeneration }) => {
   const [message, setMessage] = useState("")
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const fileInputRef = React.useRef<HTMLInputElement>(null)
@@ -39,7 +41,7 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, onFileUpload, disa
       setShowCookieWarning(true)
       return
     }
-    if (message.trim()) {
+    if (message.trim() && !isLoading && !disabled) {
       onSendMessage(message.trim())
       setMessage("")
       if (inputRef.current) {
@@ -102,6 +104,12 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, onFileUpload, disa
     }
   }
 
+  const getPlaceholderText = () => {
+    if (isLoading) return "Please wait..."
+    if (disabled) return "Free trial used. Please sign in to continue."
+    return "Type your message here..."
+  }
+
   return (
     <div className="relative">
       {showCookieWarning && !hasConsented && (
@@ -158,10 +166,10 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, onFileUpload, disa
                     setShowCookieWarning(true)
                   }
                 }}
-                disabled={disabled}
-                placeholder={disabled ? "Free trial used. Please sign in to continue." : "Type your message here..."}
-                className={`w-full bg-gray-100 text-gray-900 placeholder-gray-500 border-0 rounded-lg py-3 px-4 pr-12 focus:outline-none focus:ring-2 focus:ring-[#FF7F7F] focus:bg-white transition-colors resize-non ${
-                  disabled ? 'bg-gray-100 text-gray-500' : ''
+                disabled={disabled || isLoading}
+                placeholder={getPlaceholderText()}
+                className={`w-full bg-gray-100 text-gray-900 placeholder-gray-500 border-0 rounded-lg py-3 px-4 pr-12 focus:outline-none focus:ring-2 focus:ring-[#FF7F7F] focus:bg-white transition-colors resize-none ${
+                  (disabled || isLoading) ? 'bg-gray-100 text-gray-500 cursor-not-allowed' : ''
                 }`}
                 rows={1}
               />
@@ -197,12 +205,27 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, onFileUpload, disa
               </div>
             </div>
             <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              type="submit"
-              className="bg-[#FF7F7F] text-white p-3 rounded-full hover:bg-[#FF6666] transition-colors"
+              whileHover={{ scale: isLoading ? 1 : 1.05 }}
+              whileTap={{ scale: isLoading ? 1 : 0.95 }}
+              type={isLoading ? 'button' : 'submit'}
+              onClick={() => {
+                if (isLoading && onStopGeneration) {
+                  onStopGeneration()
+                }
+              }}
+              className={`${
+                isLoading 
+                  ? 'bg-red-500 hover:bg-red-600 cursor-pointer' 
+                  : disabled || !message.trim()
+                    ? 'bg-gray-400 cursor-not-allowed'
+                    : 'bg-[#FF7F7F] hover:bg-[#FF6666]'
+              } text-white p-3 rounded-full transition-colors`}
             >
-              <Send className="w-5 h-5" />
+              {isLoading ? (
+                <Square className="w-5 h-5" />
+              ) : (
+                <Send className="w-5 h-5" />
+              )}
             </motion.button>
           </div>
         </form>
