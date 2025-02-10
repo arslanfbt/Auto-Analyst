@@ -86,52 +86,41 @@ const ChatInterface: React.FC = () => {
   }
 
   const handleSendMessage = async (message: string) => {
-    setShowWelcome(false)  // Hide welcome section when sending a message
-    // Check for cookie consent before using storage
-    if (!hasConsented) {
-      return
-    }
-
-    if (!session && !hasFreeTrial()) {
+    setShowWelcome(false)
+    if (!hasConsented || (!session && !hasFreeTrial())) {
       return
     }
 
     // Add user message to persistent store
     addMessage({ text: message, sender: "user" })
 
-    // Create new AbortController for this request
     const controller = new AbortController()
     setAbortController(controller)
     setIsLoading(true)
 
     try {
-      // Check for agent selection via @ symbol
-      const agentMatch = message.match(/^@(\w+)\s+(.+)/)
+      // Check for agent mention anywhere in the message
+      const agentRegex = /@(\w+)/
+      const match = message.match(agentRegex)
       let selectAgent = null
       let query = message
 
-      if (agentMatch) {
-        selectAgent = agentMatch[1]
-        query = agentMatch[2]
+      if (match) {
+        selectAgent = match[1]
+        // Remove the @agent_name from the query
+        query = message.replace(/@\w+/, '').trim()
       }
 
-      // Use the newly selected agent or fall back to the stored selectedAgent
       const currentAgent = selectAgent || selectedAgent
       console.log("currentAgent: ", currentAgent)
-      // Deployed endpoint
+      
       const endpoint = currentAgent
         ? `https://ashad001-auto-analyst-backend.hf.space/chat/${currentAgent}`
         : `https://ashad001-auto-analyst-backend.hf.space/chat`
 
-      // Local endpoint
-      // const endpoint = currentAgent
-      //   ? `http://localhost:8000/chat/${currentAgent}`
-      //   : `http://localhost:8000/chat`
-
       console.log("Using endpoint:", endpoint)
       console.log("With query:", query)
 
-      // Add signal to axios request
       const response = await axios.post(endpoint, 
         { query }, 
         { signal: controller.signal }
@@ -219,28 +208,22 @@ const ChatInterface: React.FC = () => {
     formData.append("file", file)
     formData.append("styling_instructions", "Please analyze the data and provide a detailed report.")
 
-    setIsLoading(true)
-
     try {
-      const response = await axios.post("https://ashad001-auto-analyst-backend.hf.space/upload_dataframe", formData, {
+      await axios.post("https://ashad001-auto-analyst-backend.hf.space/upload_dataframe", formData, {
         headers: {
           "Content-Type": "multipart/form-data",
         },
-      })
-      // Add AI response to persistent store
-      addMessage({
-        text: "```json\n" + JSON.stringify(response.data, null, 2) + "\n```",
-        sender: "ai",
+        timeout: 30000, // 30 seconds
+        maxContentLength: 10 * 1024 * 1024, // 10MB
       })
     } catch (error) {
-      console.error("Error in handleFileUpload:", error)
-      // Add error message to persistent store
-      addMessage({
-        text: `Error: ${error instanceof Error ? error.message : "Unknown error occurred during file upload"}`,
-        sender: "ai",
-      })
-    } finally {
-      setIsLoading(false)
+      if (axios.isAxiosError(error)) {
+        if (error.code === 'ECONNABORTED') {
+          throw new Error('Upload timeout')
+        }
+        throw error
+      }
+      throw error
     }
   }
 
