@@ -3,6 +3,7 @@
 import React, { useState } from "react"
 import { motion } from "framer-motion"
 import Sidebar from "./Sidebar"
+import { useChatHistoryStore } from "@/lib/store/chatHistoryStore"
 
 interface ResponsiveLayoutProps {
   children: React.ReactNode
@@ -10,10 +11,20 @@ interface ResponsiveLayoutProps {
 
 const ResponsiveLayout: React.FC<ResponsiveLayoutProps> = ({ children }) => {
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const { clearMessages } = useChatHistoryStore()
+
+  const handleNewChat = () => {
+    clearMessages()
+    setSidebarOpen(false)
+  }
 
   return (
     <div className="flex h-screen overflow-hidden">
-      <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+      <Sidebar 
+        isOpen={sidebarOpen} 
+        onClose={() => setSidebarOpen(false)}
+        onNewChat={handleNewChat}
+      />
       <motion.div
         className="flex-1 flex flex-col"
         animate={{
