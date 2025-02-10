@@ -92,7 +92,6 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, onFileUpload, disa
   }
 
   useEffect(() => {
-    // Simulated agent list - replace this with actual data from your backend
     const agents: AgentSuggestion[] = [
       { name: "data_viz_agent", description: "Specializes in data visualization" },
       { name: "sk_learn_agent", description: "Handles machine learning tasks" },
@@ -100,15 +99,26 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, onFileUpload, disa
       { name: "preprocessing_agent", description: "Handles data preprocessing tasks" },
     ]
 
-    const atIndex = message.lastIndexOf('@', cursorPosition)
-    if (atIndex !== -1 && atIndex < cursorPosition) {
-      const query = message.slice(atIndex + 1, cursorPosition).toLowerCase()
-      const filtered = agents.filter(agent => agent.name.toLowerCase().includes(query))
-      setAgentSuggestions(filtered)
-      setShowSuggestions(filtered.length > 0)
-    } else {
-      setShowSuggestions(false)
+    // Find the closest @ before cursor
+    const beforeCursor = message.slice(0, cursorPosition)
+    const atIndex = beforeCursor.lastIndexOf('@')
+    
+    if (atIndex !== -1) {
+      // Check if we're still typing the agent name
+      const afterAt = message.slice(atIndex + 1)
+      const spaceAfterAt = afterAt.indexOf(' ')
+      const isTypingAgent = spaceAfterAt === -1 || spaceAfterAt >= cursorPosition - atIndex - 1
+
+      if (isTypingAgent) {
+        const query = message.slice(atIndex + 1, cursorPosition).toLowerCase()
+        const filtered = agents.filter(agent => agent.name.toLowerCase().includes(query))
+        setAgentSuggestions(filtered)
+        setShowSuggestions(filtered.length > 0)
+        return
+      }
     }
+    
+    setShowSuggestions(false)
   }, [message, cursorPosition])
 
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -121,9 +131,16 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, onFileUpload, disa
   }
 
   const handleSuggestionClick = (agentName: string) => {
-    const atIndex = message.lastIndexOf('@', cursorPosition)
+    const beforeCursor = message.slice(0, cursorPosition)
+    const atIndex = beforeCursor.lastIndexOf('@')
+    
     if (atIndex !== -1) {
-      const newMessage = message.slice(0, atIndex + 1) + agentName + ' ' + message.slice(cursorPosition)
+      // Replace just the agent mention part
+      const newMessage = 
+        message.slice(0, atIndex + 1) + 
+        agentName + 
+        message.slice(cursorPosition)
+      
       setMessage(newMessage)
       setShowSuggestions(false)
       inputRef.current?.focus()
