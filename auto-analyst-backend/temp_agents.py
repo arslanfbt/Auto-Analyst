@@ -1,9 +1,8 @@
 import dspy
 import memory_agents as m
-import asyncio
-from concurrent.futures import ThreadPoolExecutor
 
-# Core DSPy agents for data analysis
+# Contains the DSPy agents
+
 
 class analytical_planner(dspy.Signature):
     # The planner agent which routes the query to Agent(s)
@@ -271,79 +270,62 @@ Make your fixes precise and reliable.
 # The ind module is called when agent_name is 
 # explicitly mentioned in the query
 class auto_analyst_ind(dspy.Module):
-    """Handles individual agent execution when explicitly specified in query"""
-    
-    def __init__(self, agents, retrievers):
-        # Initialize agent modules and retrievers
+    # Only doer agents are passed
+    def __init__(self,agents,retrievers):
+        #Initializes all the agents, and makes retrievers
+       
+        #agents stores the DSPy module for each agent
+        # agent_inputs contains all the inputs to use each agent
+        # agent desc contains description on what the agent does 
         self.agents = {}
-        self.agent_inputs = {}
-        self.agent_desc = []
-        
-        # Create modules from agent signatures
-        for i, a in enumerate(agents):
+        self.agent_inputs ={}
+        self.agent_desc =[]
+        i =0
+        #loops through to create module from agent signatures
+        #creates a dictionary with the exact inputs for agents stored
+        for a in agents:
             name = a.__pydantic_core_schema__['schema']['model_name']
             self.agents[name] = dspy.ChainOfThoughtWithHint(a)
-            self.agent_inputs[name] = {x.strip() for x in str(agents[i].__pydantic_core_schema__['cls']).split('->')[0].split('(')[1].split(',')}
+            self.agent_inputs[name] ={x.strip() for x in str(agents[i].__pydantic_core_schema__['cls']).split('->')[0].split('(')[1].split(',')}
             self.agent_desc.append(str(a.__pydantic_core_schema__['cls']))
+            i+=1
             
-        # Initialize components
+        # memory_summary agent builds a summary on what the agent does
         self.memory_summarize_agent = dspy.ChainOfThought(m.memory_summarize_agent)
+        # two retrievers defined, one dataset and styling index
         self.dataset = retrievers['dataframe_index'].as_retriever(k=1)
         self.styling_index = retrievers['style_index'].as_retriever(similarity_top_k=1)
-        
-        # Initialize thread pool
-        self.executor = ThreadPoolExecutor(max_workers=2)
 
-    def execute_agent_with_memory(self, specified_agent, inputs, query):
-        """Execute agent and generate memory summary in parallel"""
-        try:
-            # Execute main agent
-            agent_result = self.agents[specified_agent.strip()](**inputs)
-            agent_dict = dict(agent_result)
-            
-            # Generate memory summary
-            memory_result = self.memory_summarize_agent(
-                agent_response=specified_agent+' '+agent_dict['code']+'\n'+agent_dict['commentary'],
-                user_goal=query
-            )
-            
-            return {
-                specified_agent.strip(): agent_dict,
-                'memory_'+specified_agent.strip(): str(memory_result.summary)
-            }
-        except Exception as e:
-            return {"error": str(e)}
 
     def forward(self, query, specified_agent):
-        try:
-            # Process query with specified agent
-            dict_ = {}
-            dict_['dataset'] = self.dataset.retrieve(query)[0].text
-            dict_['styling_index'] = self.styling_index.retrieve(query)[0].text
-            dict_['hint'] = []
-            dict_['goal'] = query
-            dict_['Agent_desc'] = str(self.agent_desc)
+        
+        # output_dict 
+        dict_ ={}
+        #dict_ is temporary store to be used as input into the agent(s)
+        dict_['dataset'] = self.dataset.retrieve(query)[0].text
+        dict_['styling_index'] = self.styling_index.retrieve(query)[0].text
+        # short_term memory is stored as hint
+        dict_['hint'] = []
+        dict_['goal']=query
+        dict_['Agent_desc'] = str(self.agent_desc)
+        # print(f"User choose this {specified_agent} to answer this ")
 
-            # Prepare inputs
-            inputs = {x:dict_[x] for x in self.agent_inputs[specified_agent.strip()]}
-            inputs['hint'] = str(dict_['hint']).replace('[','').replace(']','')
-            
-            # Execute agent and memory tasks in parallel
-            future = self.executor.submit(
-                self.execute_agent_with_memory,
-                specified_agent,
-                inputs,
-                query
-            )
-            
-            # Get results
-            output_dict = future.result()
-            
-            if "error" in output_dict:
-                output_dict = {"response": f"Error executing agent: {output_dict['error']}"}
 
-        except Exception as e:
-            output_dict = {"response": f"This is the error from the system: {str(e)}"}
+        inputs = {x:dict_[x] for x in self.agent_inputs[specified_agent.strip()]}
+        # creates the hint to passed into the agent(s)
+        inputs['hint'] = str(dict_['hint']).replace('[','').replace(']','')
+        # output dict stores all the information needed
+        output_dict ={}
+        # input sent to specified_agent
+        output_dict[specified_agent.strip()]=self.agents[specified_agent.strip()](**inputs)
+        # loops through the output Prediction object (converted as dict)
+        # for x in dict(output_dict[specified_agent.strip()]).keys():
+        #     if x!='rationale':
+        #         print(f"{specified_agent.strip()}[{x}]: {str(dict(output_dict[specified_agent.strip()])[x]).replace('#','#######')}")
+
+        #sends agent output to memory
+        output_dict['memory_'+specified_agent.strip()] = str(self.memory_summarize_agent(agent_response=specified_agent+' '+output_dict[specified_agent.strip()]['code']+'\n'+output_dict[specified_agent.strip()]['commentary'], user_goal=query).summary)
+
 
         return output_dict
 
@@ -353,92 +335,102 @@ class auto_analyst_ind(dspy.Module):
 
 # This is the auto_analyst with planner
 class auto_analyst(dspy.Module):
-    """Main analyst module that coordinates multiple agents using a planner"""
-    
-    def __init__(self, agents, retrievers):
-        # Initialize agent modules and retrievers
+    def __init__(self,agents,retrievers):
+        #Initializes all the agents, and makes retrievers
+       
+        #agents stores the DSPy module for each agent
+        # agent_inputs contains all the inputs to use each agent
+        # agent desc contains description on what the agent does 
+       
+
         self.agents = {}
-        self.agent_inputs = {}
-        self.agent_desc = []
-        
-        # Create modules from agent signatures
-        for i, a in enumerate(agents):
+        self.agent_inputs ={}
+        self.agent_desc =[]
+        i =0
+        #loops through to create module from agent signatures
+        #creates a dictionary with the exact inputs for agents stored
+        for a in agents:
+            # print("Agent name: ", a)
             name = a.__pydantic_core_schema__['schema']['model_name']
             self.agents[name] = dspy.ChainOfThought(a)
-            self.agent_inputs[name] = {x.strip() for x in str(agents[i].__pydantic_core_schema__['cls']).split('->')[0].split('(')[1].split(',')}
+            self.agent_inputs[name] ={x.strip() for x in str(agents[i].__pydantic_core_schema__['cls']).split('->')[0].split('(')[1].split(',')}
             self.agent_desc.append(str(a.__pydantic_core_schema__['cls']))
+            i+=1
         
-        # Initialize coordination agents
+        # planner agent routes and gives a plan
+        # goal_refine is only sent when query is not routed by the planner
+        # code_combiner agent helps combine different agent output as a single script
         self.planner = dspy.ChainOfThought(analytical_planner)
         self.refine_goal = dspy.ChainOfThought(goal_refiner_agent)
         self.code_combiner_agent = dspy.ChainOfThought(code_combiner_agent)
         self.story_teller = dspy.ChainOfThought(story_teller_agent)
         self.memory_summarize_agent = dspy.ChainOfThought(m.memory_summarize_agent)
                 
-        # Initialize retrievers
+        # two retrievers defined, one dataset and styling index
         self.dataset = retrievers['dataframe_index'].as_retriever(k=1)
         self.styling_index = retrievers['style_index'].as_retriever(similarity_top_k=1)
         
-        # Initialize thread pool for parallel execution
-        self.executor = ThreadPoolExecutor(max_workers=4)
-
-    def execute_agent(self, agent_name, inputs):
-        """Execute a single agent with given inputs"""
-        try:
-            result = self.agents[agent_name.strip()](**inputs)
-            return agent_name.strip(), dict(result)
-        except Exception as e:
-            return agent_name.strip(), {"error": str(e)}
-
     def forward(self, query):
         try:
-            # Initialize processing
-            dict_ = {}
+            # output_dict 
+            dict_ ={}
+            #dict_ is temporary store to be used as input into the agent(s)
             dict_['dataset'] = self.dataset.retrieve(query)[0].text
             dict_['styling_index'] = self.styling_index.retrieve(query)[0].text
+            # short_term memory is stored as hint
             dict_['hint'] = []
-            dict_['goal'] = query
+            dict_['goal']=query
             dict_['Agent_desc'] = str(self.agent_desc)
-            
-            output_dict = {}
-            
-            # Get analysis plan
-            plan = self.planner(goal=dict_['goal'], dataset=dict_['dataset'], Agent_desc=dict_['Agent_desc'])
-            output_dict['analytical_planner'] = dict(plan)
-            
-            # Parse plan
-            plan_list = []
-            code_list = []
-            analysis_list = [plan.plan, plan.plan_desc]
-            
-            if plan.plan.split('->'):
-                plan_text = plan.plan.replace('Plan','').replace(':','').strip()
-                plan_list = plan_text.split('->')
-            
-            # Prepare inputs for all agents
-            agent_tasks = []
-            for agent_name in plan_list:
-                inputs = {x:dict_[x] for x in self.agent_inputs[agent_name.strip()]}
-                agent_tasks.append((agent_name, inputs))
-            
-            # Execute all agents in parallel using thread pool
-            futures = []
-            for agent_name, inputs in agent_tasks:
-                future = self.executor.submit(self.execute_agent, agent_name, inputs)
-                futures.append(future)
-            
-            # Collect results
-            for future in futures:
-                agent_name, result = future.result()
-                output_dict[agent_name] = result
-                
-                if "error" not in result:
-                    code = result['code']
-                    commentary = result['commentary']
-                    code_list.append(code)
-                    analysis_list.append(commentary)
+            #percent complete is just a streamlit component
+            percent_complete =0
+            # output dict stores all the information needed
 
+            output_dict ={}
+            # sends the query to the planner agent to come up with a plan
+            plan = self.planner(goal =dict_['goal'], dataset=dict_['dataset'], Agent_desc=dict_['Agent_desc'] )
+            # print("**This is the proposed plan**")
+
+            len_ = len(plan.plan.split('->'))+2
+            percent_complete += 1/len_
+
+            output_dict['analytical_planner'] = dict(plan)
+            plan_list =[]
+            code_list =[]
+            analysis_list = [plan.plan,plan.plan_desc]
+            #splits the plan and shows it to the user
+            if plan.plan.split('->'):
+                plan_text = plan.plan
+                plan_text = plan.plan.replace('Plan','').replace(':','').strip()
+                # print(plan_text)
+                # print(plan.plan_desc)
+                plan_list = plan_text.split('->')
+            # else:
+            #     # if the planner agent fails at routing the query to any agent this is triggered
+            #     refined_goal = dict(self.refine_goal(dataset=dict_['dataset'], goal=dict_['goal'], Agent_desc= dict_['Agent_desc']))
+            #     self.forward(query=refined_goal.refined_goal)
+            
+           #Loops through all of the agents in the plan
+            for p in plan_list:
+                # fetches the inputs
+                inputs = {x:dict_[x] for x in self.agent_inputs[p.strip()]}
+                output_dict[p.strip()]=dict(self.agents[p.strip()](**inputs))
+                code = output_dict[p.strip()]['code']
+                
+                commentary = output_dict[p.strip()]['commentary']
+                # print('**'+p.strip().capitalize().replace('_','  ')+' -  is working on this analysis....**')
+
+                # print(commentary.replace('#',''))
+                # print(code)
+                percent_complete += 1/len_
+                # stores each of the individual agents code and commentary into seperate lists
+                code_list.append(code)
+                analysis_list.append(commentary)
+            # print("Combining all code into one")
+            # output_dict['code_combiner_agent'] = dict(self.code_combiner_agent(agent_code_list = str(code_list), dataset=dict_['dataset']))
+
+            # creates a summary from code_combiner agent
+            # output_dict['memory_combined'] = str(self.memory_summarize_agent(agent_response='code_combiner_agent'+'\n'+str(output_dict['code_combiner_agent'].refined_complete_code), user_goal=query).summary)
         except Exception as e:
-            output_dict = {"response": f"This is the error from the system: {str(e)}"}
+            output_dict = {"response": "This is the error from the system"+str(e)}
 
         return output_dict

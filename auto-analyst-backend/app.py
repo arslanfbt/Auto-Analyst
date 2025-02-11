@@ -83,8 +83,8 @@ async def upload_dataframe(file: UploadFile = File(...), styling_instructions: s
 @app.post("/chat/{agent_name}", response_model=dict)
 async def chat_with_agent(agent_name: str, request: QueryRequest):
     clear_console()
-    print(f"Received request for agent: {agent_name}")
-    print(f"Query: {request.query}")
+    # print(f"Received request for agent: {agent_name}")
+    # print(f"Query: {request.query}")
     
     if agent_name not in AVAILABLE_AGENTS:
         available = list(AVAILABLE_AGENTS.keys())
@@ -104,13 +104,13 @@ async def chat_with_agent(agent_name: str, request: QueryRequest):
         try:
             response = agent(request.query, agent_name)
         except Exception as agent_error:
-            print(f"Agent execution error: {str(agent_error)}")
+            # print(f"Agent execution error: {str(agent_error)}")
             raise HTTPException(
                 status_code=500,
                 detail=f"Agent execution failed: {str(agent_error)}"
             )
         
-        print("Formatting response...")
+        # print("Formatting response...")
         # try:
         formatted_response = format_response_to_markdown(response, agent_name)
         # except Exception as format_error:
@@ -120,7 +120,7 @@ async def chat_with_agent(agent_name: str, request: QueryRequest):
         #         detail=f"Response formatting failed: {str(format_error)}"
         #     )
         
-        print("Sending response...")
+        # print("Sending response...")
         return {
             "agent_name": agent_name,
             "query": request.query,

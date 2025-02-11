@@ -92,7 +92,7 @@ def execute_code_from_markdown(code_str):
 
 def format_response_to_markdown(api_response, agent_name = None):
     markdown = []
-    print("api_response: ", api_response)
+    # print("api_response: ", api_response)
 
     for agent, content in api_response.items():
         if "memory" in agent:
@@ -108,7 +108,7 @@ def format_response_to_markdown(api_response, agent_name = None):
             if agent_name is not None:
                 # execute the code
                 clean_code = format_code_block(content['code'])
-                print("clean_code: ", clean_code)
+                # print("clean_code: ", clean_code)
                 output, json_outputs = execute_code_from_markdown(clean_code)
                 if output:
                     markdown.append("### Execution Output\n")
@@ -118,7 +118,7 @@ def format_response_to_markdown(api_response, agent_name = None):
                     markdown.append("### Plotly JSON Outputs\n")
                     for idx, json_output in enumerate(json_outputs):
                         markdown.append(f"```plotly\n{json_output}\n```\n")
-                    print("Length of json_outputs: ", len(json_outputs))
+                    # print("Length of json_outputs: ", len(json_outputs))
 
 
 
@@ -134,13 +134,13 @@ def format_response_to_markdown(api_response, agent_name = None):
             if output:
                 markdown.append("### Execution Output\n")
                 markdown.append(f"```output\n{output}\n```\n")
-                print("output2: ", output)
+                # print("output2: ", output)
                 
             if json_outputs:
                 markdown.append("### Plotly JSON Outputs\n")
                 for idx, json_output in enumerate(json_outputs):
                     markdown.append(f"```plotly\n{json_output}\n```\n")
-            print("Length of json_outputs: ", len(json_outputs))
+            # print("Length of json_outputs: ", len(json_outputs))
 
         # if agent_name is not None:  
         #     if f"memory_{agent_name}" in api_response:

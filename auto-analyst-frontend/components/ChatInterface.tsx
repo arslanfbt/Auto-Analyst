@@ -120,6 +120,11 @@ const ChatInterface: React.FC = () => {
         ? `https://ashad001-auto-analyst-backend.hf.space/chat/${selectAgent}`
         : `https://ashad001-auto-analyst-backend.hf.space/chat`
 
+      // Local endpoint
+      // const endpoint = selectAgent
+      //   ? `http://localhost:8000/chat/${selectAgent}`
+      //   : `http://localhost:8000/chat`
+        
       console.log("Using endpoint:", endpoint)
       console.log("With query:", query)
 
@@ -129,7 +134,7 @@ const ChatInterface: React.FC = () => {
       )
 
       let aiMessage: string | PlotlyMessage = ""
-
+        
       try {
         if (!response.data) {
           throw new Error("Empty response from server")
