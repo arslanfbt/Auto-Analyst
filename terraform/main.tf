@@ -1,9 +1,9 @@
 resource "aws_amplify_app" "nextjs_app" {
   name        = "auto-analyst-frontend"
   repository  = "https://github.com/Ashad001/Auto-Analyst-CS"
-  oauth_token = var.github_oauth_token  # Use secure variable
+  oauth_token = var.github_oauth_token
 
-  build_spec = <<EOT
+  build_spec = <<-EOT
 version: 1
 frontend:
   phases:
@@ -14,13 +14,14 @@ frontend:
     build:
       commands:
         - npm run build
+        - npm run export
   artifacts:
-    baseDirectory: auto-analyst-frontend/.next
+    baseDirectory: auto-analyst-frontend/out
     files:
       - '**/*'
   cache:
     paths:
-      - auto-analyst-frontend/node_modules/**/*
+      - auto-analyst-frontend/node_modules/**/*    
 EOT
 }
 
