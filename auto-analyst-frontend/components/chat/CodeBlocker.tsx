@@ -191,7 +191,7 @@ const CodeBlock: React.FC<CodeBlockProps> = ({ language, value, onExecute }) => 
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent side="bottom" className="bg-gray-800 text-white px-3 py-1 rounded shadow-lg">
-                    <p className="text-sm">{isVisible ? "collapse" : "expand"}</p>
+                    <p className="text-sm">{isVisible ? "collapse" : "expandddd"}</p>
                   </TooltipContent>
                 </Tooltip>
               )
