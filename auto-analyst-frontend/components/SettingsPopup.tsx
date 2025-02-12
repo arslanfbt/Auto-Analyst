@@ -6,8 +6,8 @@ interface SettingsPopupProps {
   onClose: () => void;
 }
 
-const API_URL = 'http://localhost:8000';
-// const API_URL = "https://ashad001-auto-analyst-backend.hf.space"
+// const API_URL = 'http://localhost:8000';
+const API_URL = "https://ashad001-auto-analyst-backend.hf.space"
 
 const SettingsPopup: React.FC<SettingsPopupProps> = ({ isOpen, onClose }) => {
   const [selectedModel, setSelectedModel] = useState('gpt-4');
