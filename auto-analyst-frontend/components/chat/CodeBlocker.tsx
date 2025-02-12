@@ -122,7 +122,7 @@ const CodeBlock: React.FC<CodeBlockProps> = ({ language, value, onExecute }) => 
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent side="bottom" className="bg-gray-800 text-white px-3 py-1 rounded shadow-lg">
-                  <p className="text-sm">Edit code</p>
+                  <p className="text-sm">edit</p>
                 </TooltipContent>
               </Tooltip>
             )}
@@ -140,7 +140,7 @@ const CodeBlock: React.FC<CodeBlockProps> = ({ language, value, onExecute }) => 
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent side="bottom" className="bg-gray-800 text-white px-3 py-1 rounded shadow-lg">
-                  <p className="text-sm">Execute code</p>
+                  <p className="text-sm">run</p>
                 </TooltipContent>
               </Tooltip>
             )}
@@ -158,7 +158,7 @@ const CodeBlock: React.FC<CodeBlockProps> = ({ language, value, onExecute }) => 
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent side="bottom" className="bg-gray-800 text-white px-3 py-1 rounded shadow-lg">
-                    <p className="text-sm">Save changes</p>
+                    <p className="text-sm">save</p>
                   </TooltipContent>
                 </Tooltip>
                 <Tooltip>
@@ -173,7 +173,7 @@ const CodeBlock: React.FC<CodeBlockProps> = ({ language, value, onExecute }) => 
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent side="bottom" className="bg-gray-800 text-white px-3 py-1 rounded shadow-lg">
-                    <p className="text-sm">Cancel editing</p>
+                    <p className="text-sm">cancel</p>
                   </TooltipContent>
                 </Tooltip>
               </>
@@ -191,7 +191,7 @@ const CodeBlock: React.FC<CodeBlockProps> = ({ language, value, onExecute }) => 
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent side="bottom" className="bg-gray-800 text-white px-3 py-1 rounded shadow-lg">
-                    <p className="text-sm">{isVisible ? "Collapse" : "Expand"} code block</p>
+                    <p className="text-sm">{isVisible ? "collapse" : "expand"}</p>
                   </TooltipContent>
                 </Tooltip>
               )
@@ -222,7 +222,7 @@ const CodeBlock: React.FC<CodeBlockProps> = ({ language, value, onExecute }) => 
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent side="bottom" className="bg-gray-800 text-white px-3 py-1 rounded shadow-lg">
-                    <p className="text-sm">{copied ? "Copied!" : "Copy to clipboard"}</p>
+                    <p className="text-sm">{copied ? "Copied!" : "copy"}</p>
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
