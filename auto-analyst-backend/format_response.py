@@ -25,7 +25,7 @@ def format_code_backticked_block(code_str):
 
     
 # In format_response.py, modify the execute_code function:
-def execute_code_from_markdown(code_str):
+def execute_code_from_markdown(code_str, dataframe=None):
     import pandas as pd
     import plotly.express as px
     import plotly
@@ -47,8 +47,11 @@ def execute_code_from_markdown(code_str):
         'json_outputs': []  # List to store multiple Plotly JSON outputs
     }
 
+    # If a dataframe is provided, add it to the context
+    if dataframe is not None:
+        context['df'] = dataframe
+
     # Modify code to store multiple JSON outputs
-    # modify regex to match fig*.show()
     modified_code = re.sub(
         r'(\w*_?)fig(\w*)\.show\(\)',
         r'json_outputs.append(plotly.io.to_json(\1fig\2, pretty=True))',
@@ -61,12 +64,13 @@ def execute_code_from_markdown(code_str):
         modified_code
     )
 
-    # read Housing.csv after the imports
-    modified_code = re.sub(
-        r'import pandas as pd',
-        r'import pandas as pd\n\n# Read Housing.csv\ndf = pd.read_csv("Housing.csv")',
-        modified_code
-    )
+    # Only add df = pd.read_csv() if no dataframe was provided and the code contains pd.read_csv
+    if dataframe is None and 'pd.read_csv' not in modified_code:
+        modified_code = re.sub(
+            r'import pandas as pd',
+            r'import pandas as pd\n\n# Read Housing.csv\ndf = pd.read_csv("Housing.csv")',
+            modified_code
+        )
     
     # remove plt.show()
     modified_code = re.sub(
@@ -75,7 +79,7 @@ def execute_code_from_markdown(code_str):
         modified_code
     )
 
-    print(modified_code)
+    print("modified_code: ", modified_code)
 
     try:
         with stdoutIO() as s:
@@ -83,14 +87,13 @@ def execute_code_from_markdown(code_str):
         output = s.getvalue()
         print("output: ", output)
         json_outputs = context.get('json_outputs', [])
-        with open("json_outputs.json", "w") as f:
-            json.dump(json_outputs, f, indent=4)
+
         return output, json_outputs
     except Exception as e:
         return "Error executing code: " + str(e), []
 
 
-def format_response_to_markdown(api_response, agent_name = None):
+def format_response_to_markdown(api_response, agent_name = None, dataframe=None):
     markdown = []
     # print("api_response: ", api_response)
 
@@ -98,8 +101,7 @@ def format_response_to_markdown(api_response, agent_name = None):
         if "memory" in agent:
             continue
         markdown.append(f"\n## {agent.replace('_', ' ').title()}\n")
-        
-
+    
         if 'reasoning' in content:
             markdown.append(f"### Reasoning\n{content['reasoning']}\n")
             
@@ -109,7 +111,7 @@ def format_response_to_markdown(api_response, agent_name = None):
                 # execute the code
                 clean_code = format_code_block(content['code'])
                 # print("clean_code: ", clean_code)
-                output, json_outputs = execute_code_from_markdown(clean_code)
+                output, json_outputs = execute_code_from_markdown(clean_code, dataframe)
                 if output:
                     markdown.append("### Execution Output\n")
                     markdown.append(f"```output\n{output}\n```\n")
@@ -120,14 +122,12 @@ def format_response_to_markdown(api_response, agent_name = None):
                         markdown.append(f"```plotly\n{json_output}\n```\n")
                     # print("Length of json_outputs: ", len(json_outputs))
 
-
-
         if 'commentary' in content:
             markdown.append(f"### Commentary\n{content['commentary']}\n")
 
         if 'refined_complete_code' in content:
             clean_code = format_code_block(content['refined_complete_code']) 
-            output, json_outputs = execute_code_from_markdown(clean_code)
+            output, json_outputs = execute_code_from_markdown(clean_code, dataframe)
             
             markdown.append(f"### Refined Complete Code\n{format_code_backticked_block(content['refined_complete_code'])}\n")
 
@@ -146,8 +146,7 @@ def format_response_to_markdown(api_response, agent_name = None):
         #     if f"memory_{agent_name}" in api_response:
         #         markdown.append(f"### Memory\n{api_response[f'memory_{agent_name}']}\n")
 
-
-    if len(markdown) == 0:
+    if len(markdown) < 2 or len(markdown[-1]) < 15:
         return "No plan can be formulated without a defined goal. Please provide a specific goal for the analysis."
     return '\n'.join(markdown)
 

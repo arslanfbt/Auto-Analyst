@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, File, UploadFile
+from fastapi import FastAPI, HTTPException, File, UploadFile, Request
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -6,6 +6,7 @@ import pandas as pd
 import os
 from typing import List
 import uvicorn
+import logging
 
 from fastapi import Form, UploadFile
 import io
@@ -17,12 +18,94 @@ from llama_index.embeddings.openai import OpenAIEmbedding
 from llama_index.core import VectorStoreIndex
 from format_response import format_response_to_markdown, execute_code_from_markdown
 
+# Add styling_instructions at the top level
+styling_instructions = [
+    "Create clear and informative visualizations",
+    "Use appropriate color schemes",
+    "Include descriptive titles and labels",
+    "Make sure axes are properly labeled",
+    "Add legends where necessary"
+]
+
+# Initialize retrievers with empty data first
+def initialize_retrievers(styling_instructions: List[str], doc: List[str]):
+    style_index = VectorStoreIndex.from_documents([Document(text=x) for x in styling_instructions])
+    data_index = VectorStoreIndex.from_documents([Document(text=x) for x in doc])
+    return {"style_index": style_index, "dataframe_index": data_index}
+
 # clear console
 def clear_console():
     os.system('cls' if os.name == 'nt' else 'clear')
 
-# Initialize FastAPI app
+# Set up logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# Check for Housing.csv
+housing_csv_path = "Housing.csv"
+if not os.path.exists(housing_csv_path):
+    logger.error(f"Housing.csv not found at {os.path.abspath(housing_csv_path)}")
+    raise FileNotFoundError(f"Housing.csv not found at {os.path.abspath(housing_csv_path)}")
+else:
+    logger.info(f"Housing.csv found at {os.path.abspath(housing_csv_path)}")
+
+AVAILABLE_AGENTS = {
+    "data_viz_agent": data_viz_agent,
+    "sk_learn_agent": sk_learn_agent,
+    "statistical_analytics_agent": statistical_analytics_agent,
+    "preprocessing_agent": preprocessing_agent,
+}
+
+class AppState:
+    def __init__(self):
+        self.current_df = None
+        self.retrievers = None
+        self.ai_system = None
+        self.initialize_default_dataset()
+    
+    def initialize_default_dataset(self):
+        try:
+            logger.info("Loading default dataset...")
+            self.current_df = pd.read_csv("Housing.csv")
+            desc = "Housing Dataset"
+            data_dict = make_data(self.current_df, desc)
+            logger.info("Initializing retrievers...")
+            self.retrievers = initialize_retrievers(styling_instructions, [str(data_dict)])
+            logger.info("Initializing AI system...")
+            self.ai_system = auto_analyst(agents=list(AVAILABLE_AGENTS.values()), retrievers=self.retrievers)
+            logger.info("Default dataset initialized successfully")
+        except Exception as e:
+            logger.error(f"Error initializing default dataset: {str(e)}")
+            logger.error(f"Stack trace: ", exc_info=True)
+            raise e
+    
+    def update_dataset(self, df, desc, styling_instructions):
+        try:
+            logger.info("Updating dataset...")
+            self.current_df = df
+            data_dict = make_data(self.current_df, desc)
+            logger.info("Updating retrievers...")
+            self.retrievers = initialize_retrievers(styling_instructions, [str(data_dict)])
+            logger.info("Updating AI system...")
+            self.ai_system = auto_analyst(agents=list(AVAILABLE_AGENTS.values()), retrievers=self.retrievers)
+            logger.info("Dataset updated successfully")
+        except Exception as e:
+            logger.error(f"Error updating dataset: {str(e)}")
+            logger.error(f"Stack trace: ", exc_info=True)
+            # Try to fall back to default dataset
+            logger.info("Attempting to fall back to default dataset...")
+            self.initialize_default_dataset()
+
+# Initialize FastAPI app with state
 app = FastAPI(title="AI Analytics API", version="1.0")
+try:
+    logger.info("Initializing app state...")
+    app.state = AppState()
+    logger.info("App state initialized successfully")
+except Exception as e:
+    logger.error(f"Failed to initialize app state: {str(e)}")
+    logger.error("Stack trace: ", exc_info=True)
+    raise e
 
 # Configure middleware
 
@@ -37,18 +120,6 @@ app.add_middleware(
 import dspy
 dspy.configure(lm=dspy.LM(model="gpt-4o-mini", api_key=os.getenv("OPENAI_API_KEY"), temperature=0, max_tokens=3000))
 
-# Helper function to initialize retrievers
-def initialize_retrievers(styling_instructions: List[str], doc: List[str]):
-    style_index = VectorStoreIndex.from_documents([Document(text=x) for x in styling_instructions])
-    data_index = VectorStoreIndex.from_documents([Document(text=x) for x in doc])
-    return {"style_index": style_index, "dataframe_index": data_index}
-
-# Load initial retrievers
-df = pd.read_csv("Housing.csv")
-desc = "Housing Dataset"
-data_dict = make_data(df, desc)
-retrievers = initialize_retrievers(styling_instructions, [str(data_dict)])
-
 # Available agents
 AVAILABLE_AGENTS = {
     "data_viz_agent": data_viz_agent,
@@ -56,8 +127,6 @@ AVAILABLE_AGENTS = {
     "statistical_analytics_agent": statistical_analytics_agent,
     "preprocessing_agent": preprocessing_agent,
 }
-
-ai_system = auto_analyst(agents=list(AVAILABLE_AGENTS.values()), retrievers=retrievers)
 
 # Pydantic models for validation
 class QueryRequest(BaseModel):
@@ -70,63 +139,53 @@ class DataFrameRequest(BaseModel):
 @app.post("/upload_dataframe", response_model=dict)
 async def upload_dataframe(file: UploadFile = File(...), styling_instructions: str = Form(...)):
     try:
-        # Read the file content
         contents = await file.read()
-        df = pd.read_csv(io.BytesIO(contents))  # Use io.BytesIO to read in-memory file content
+        new_df = pd.read_csv(io.BytesIO(contents))
+        desc = f"{file.filename} Dataset"
         
-        global retrievers
-        retrievers = initialize_retrievers(styling_instructions, [str(df)])
+        # Update the app state with new data
+        app.state.update_dataset(new_df, desc, styling_instructions)
+        
         return {"message": "Dataframe uploaded successfully"}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 @app.post("/chat/{agent_name}", response_model=dict)
 async def chat_with_agent(agent_name: str, request: QueryRequest):
+    if app.state.current_df is None:
+        raise HTTPException(
+            status_code=400,
+            detail="No dataset loaded. Please upload a dataset first."
+        )
+    
     clear_console()
-    # print(f"Received request for agent: {agent_name}")
-    # print(f"Query: {request.query}")
     
     if agent_name not in AVAILABLE_AGENTS:
         available = list(AVAILABLE_AGENTS.keys())
-        print(f"Agent not found. Available agents: {available}")
         raise HTTPException(
             status_code=404, 
             detail=f"Agent '{agent_name}' not found. Available agents: {available}"
         )
     
     try:
-        print(f"Executing agent {agent_name}...")
         agent = AVAILABLE_AGENTS[agent_name]
-        agent = auto_analyst_ind(agents=[agent], retrievers=retrievers)
+        agent = auto_analyst_ind(agents=[agent], retrievers=app.state.retrievers)
         
-
-        # Execute agent with error catching
         try:
             response = agent(request.query, agent_name)
         except Exception as agent_error:
-            # print(f"Agent execution error: {str(agent_error)}")
             raise HTTPException(
                 status_code=500,
                 detail=f"Agent execution failed: {str(agent_error)}"
             )
         
-        # print("Formatting response...")
-        # try:
-        formatted_response = format_response_to_markdown(response, agent_name)
-        # except Exception as format_error:
-        #     print(f"Response formatting error: {str(format_error)}")
-        #     raise HTTPException(
-        #         status_code=500,
-        #         detail=f"Response formatting failed: {str(format_error)}"
-        #     )
+        formatted_response = format_response_to_markdown(response, agent_name, app.state.current_df)
         
-        # print("Sending response...")
         return {
             "agent_name": agent_name,
             "query": request.query,
             "response": formatted_response,
         }
-        
     except HTTPException:
         raise
     except Exception as e:
@@ -141,26 +200,53 @@ async def chat_with_agent(agent_name: str, request: QueryRequest):
 @app.post("/chat", response_model=dict)
 async def chat_with_all(request: QueryRequest):
     try:
-        response = ai_system(request.query)
-        formatted_response = format_response_to_markdown(response)
+        logger.info("Starting chat_with_all...")
         
+        if app.state.current_df is None:
+            logger.error("No dataset loaded")
+            raise HTTPException(
+                status_code=400,
+                detail="No dataset loaded. Please upload a dataset first."
+            )
+        
+        if app.state.ai_system is None:
+            logger.error("AI system not initialized")
+            raise HTTPException(
+                status_code=500,
+                detail="AI system not properly initialized"
+            )
+        
+        logger.info("Executing AI system query...")
+        response = app.state.ai_system(request.query)
+        
+        logger.info("Formatting response...")
+        formatted_response = format_response_to_markdown(response, dataframe=app.state.current_df)
+        
+        logger.info("Returning response...")
         return {
             "agent_name": "ai_system",
             "query": request.query,
             "response": formatted_response,
         }
     except Exception as e:
+        logger.error(f"Error in chat_with_all: {str(e)}")
+        logger.error("Stack trace: ", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/execute_code")
 async def execute_code(request: dict):
+    if app.state.current_df is None:
+        raise HTTPException(
+            status_code=400,
+            detail="No dataset loaded. Please upload a dataset first."
+        )
+        
     try:
         code = request.get("code")
         if not code:
             raise HTTPException(status_code=400, detail="No code provided")
-        output, json_outputs = execute_code_from_markdown(code)
+        output, json_outputs = execute_code_from_markdown(code, app.state.current_df)
         json_outputs = [f"```plotly\n{json_output}\n```\n" for json_output in json_outputs]
-        print("len(json_outputs): ", len(json_outputs))
         return {
             "output": output,
             "plotly_outputs": json_outputs if json_outputs else None
