@@ -438,6 +438,8 @@ class auto_analyst(dspy.Module):
                     code_list.append(code)
                     analysis_list.append(commentary)
 
+            # code combiner agent
+            output_dict['code_combiner_agent'] = dict(self.code_combiner_agent(agent_code_list = str(code_list), dataset=dict_['dataset']))
         except Exception as e:
             output_dict = {"response": f"This is the error from the system: {str(e)}"}
 
