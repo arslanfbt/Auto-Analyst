@@ -79,13 +79,13 @@ def execute_code_from_markdown(code_str, dataframe=None):
         modified_code
     )
 
-    print("modified_code: ", modified_code)
+    # print("modified_code: ", modified_code)
 
     try:
         with stdoutIO() as s:
             exec(modified_code, context)  # Execute the modified code
         output = s.getvalue()
-        print("output: ", output)
+        # print("output: ", output)
         json_outputs = context.get('json_outputs', [])
 
         return output, json_outputs
@@ -94,57 +94,73 @@ def execute_code_from_markdown(code_str, dataframe=None):
 
 
 def format_response_to_markdown(api_response, agent_name = None, dataframe=None):
-    markdown = []
-    # print("api_response: ", api_response)
+    try:
+        markdown = []
+        
+        # print("api_response: ", api_response)
+        if "response" in api_response and isinstance(api_response['response'], str) and ("auth" in api_response['response'].lower() or "api" in api_response['response'].lower() or "LM" in api_response['response']):
+            return "**Error**: Authentication failed. Please check your API key in settings and try again."
+        
+        if "response" in api_response and isinstance(api_response['response'], str) and "model" in api_response['response'].lower():
+            return "**Error**: Model configuration error. Please verify your model selection in settings."
 
-    for agent, content in api_response.items():
-        if "memory" in agent:
-            continue
-        markdown.append(f"\n## {agent.replace('_', ' ').title()}\n")
+        for agent, content in api_response.items():
+            if "memory" in agent:
+                continue
+            # print("agent: ", agent)
+            markdown.append(f"\n## {agent.replace('_', ' ').title()}\n")
     
-        if 'reasoning' in content:
-            markdown.append(f"### Reasoning\n{content['reasoning']}\n")
+            if 'reasoning' in content:
+                markdown.append(f"### Reasoning\n{content['reasoning']}\n")
             
-        if 'code' in content:
-            markdown.append(f"### Code Implementation\n{format_code_backticked_block(content['code'])}\n")
-            if agent_name is not None:
-                # execute the code
-                clean_code = format_code_block(content['code'])
-                # print("clean_code: ", clean_code)
+            if 'code' in content:
+                markdown.append(f"### Code Implementation\n{format_code_backticked_block(content['code'])}\n")
+                if agent_name is not None:
+                    # execute the code
+                    clean_code = format_code_block(content['code'])
+                    # print("clean_code: ", clean_code)
+                    output, json_outputs = execute_code_from_markdown(clean_code, dataframe)
+                    if output:
+                        markdown.append("### Execution Output\n")
+                        markdown.append(f"```output\n{output}\n```\n")
+
+                    if json_outputs:
+                        markdown.append("### Plotly JSON Outputs\n")
+                        for idx, json_output in enumerate(json_outputs):
+                            markdown.append(f"```plotly\n{json_output}\n```\n")
+                        # print("Length of json_outputs: ", len(json_outputs))
+
+            if 'commentary' in content:
+                markdown.append(f"### Commentary\n{content['commentary']}\n")
+
+            if 'refined_complete_code' in content:
+                clean_code = format_code_block(content['refined_complete_code']) 
                 output, json_outputs = execute_code_from_markdown(clean_code, dataframe)
+                
+                markdown.append(f"### Refined Complete Code\n{format_code_backticked_block(content['refined_complete_code'])}\n")
+
                 if output:
                     markdown.append("### Execution Output\n")
                     markdown.append(f"```output\n{output}\n```\n")
-
+                    # print("output2: ", output)
+                    
                 if json_outputs:
                     markdown.append("### Plotly JSON Outputs\n")
                     for idx, json_output in enumerate(json_outputs):
                         markdown.append(f"```plotly\n{json_output}\n```\n")
-                    # print("Length of json_outputs: ", len(json_outputs))
+                # print("Length of json_outputs: ", len(json_outputs))
 
-        if 'commentary' in content:
-            markdown.append(f"### Commentary\n{content['commentary']}\n")
+            # if agent_name is not None:  
+            #     if f"memory_{agent_name}" in api_response:
+            #         markdown.append(f"### Memory\n{api_response[f'memory_{agent_name}']}\n")
 
-        if 'refined_complete_code' in content:
-            clean_code = format_code_block(content['refined_complete_code']) 
-            output, json_outputs = execute_code_from_markdown(clean_code, dataframe)
-            
-            markdown.append(f"### Refined Complete Code\n{format_code_backticked_block(content['refined_complete_code'])}\n")
-
-            if output:
-                markdown.append("### Execution Output\n")
-                markdown.append(f"```output\n{output}\n```\n")
-                # print("output2: ", output)
-                
-            if json_outputs:
-                markdown.append("### Plotly JSON Outputs\n")
-                for idx, json_output in enumerate(json_outputs):
-                    markdown.append(f"```plotly\n{json_output}\n```\n")
-            # print("Length of json_outputs: ", len(json_outputs))
-
-        # if agent_name is not None:  
-        #     if f"memory_{agent_name}" in api_response:
-        #         markdown.append(f"### Memory\n{api_response[f'memory_{agent_name}']}\n")
+    except Exception as e:
+        if "auth" in str(e).lower():
+            return "**Error**: Authentication failed. Please check your API key in settings and try again."
+        elif "model" in str(e).lower():
+            return "**Error**: Model configuration error. Please verify your model selection in settings."
+        else:
+            return f"**Error**: An unexpected error occurred: {str(e)}"
 
     if len(markdown) < 2 or len(markdown[-1]) < 15:
         return "No plan can be formulated without a defined goal. Please provide a specific goal for the analysis."

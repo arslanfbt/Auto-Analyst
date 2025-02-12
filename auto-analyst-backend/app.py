@@ -1,3 +1,4 @@
+import groq
 from fastapi import FastAPI, HTTPException, File, UploadFile, Request
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -46,8 +47,6 @@ housing_csv_path = "Housing.csv"
 if not os.path.exists(housing_csv_path):
     logger.error(f"Housing.csv not found at {os.path.abspath(housing_csv_path)}")
     raise FileNotFoundError(f"Housing.csv not found at {os.path.abspath(housing_csv_path)}")
-else:
-    logger.info(f"Housing.csv found at {os.path.abspath(housing_csv_path)}")
 
 AVAILABLE_AGENTS = {
     "data_viz_agent": data_viz_agent,
@@ -65,47 +64,28 @@ class AppState:
     
     def initialize_default_dataset(self):
         try:
-            logger.info("Loading default dataset...")
             self.current_df = pd.read_csv("Housing.csv")
             desc = "Housing Dataset"
             data_dict = make_data(self.current_df, desc)
-            logger.info("Initializing retrievers...")
             self.retrievers = initialize_retrievers(styling_instructions, [str(data_dict)])
-            logger.info("Initializing AI system...")
             self.ai_system = auto_analyst(agents=list(AVAILABLE_AGENTS.values()), retrievers=self.retrievers)
-            logger.info("Default dataset initialized successfully")
         except Exception as e:
             logger.error(f"Error initializing default dataset: {str(e)}")
-            logger.error(f"Stack trace: ", exc_info=True)
             raise e
     
     def update_dataset(self, df, desc, styling_instructions):
         try:
-            logger.info("Updating dataset...")
             self.current_df = df
             data_dict = make_data(self.current_df, desc)
-            logger.info("Updating retrievers...")
             self.retrievers = initialize_retrievers(styling_instructions, [str(data_dict)])
-            logger.info("Updating AI system...")
             self.ai_system = auto_analyst(agents=list(AVAILABLE_AGENTS.values()), retrievers=self.retrievers)
-            logger.info("Dataset updated successfully")
         except Exception as e:
             logger.error(f"Error updating dataset: {str(e)}")
-            logger.error(f"Stack trace: ", exc_info=True)
-            # Try to fall back to default dataset
-            logger.info("Attempting to fall back to default dataset...")
             self.initialize_default_dataset()
 
 # Initialize FastAPI app with state
 app = FastAPI(title="AI Analytics API", version="1.0")
-try:
-    logger.info("Initializing app state...")
-    app.state = AppState()
-    logger.info("App state initialized successfully")
-except Exception as e:
-    logger.error(f"Failed to initialize app state: {str(e)}")
-    logger.error("Stack trace: ", exc_info=True)
-    raise e
+app.state = AppState()
 
 # Configure middleware
 
@@ -118,7 +98,7 @@ app.add_middleware(
 
 # DSPy Configuration
 import dspy
-dspy.configure(lm=dspy.LM(model="gpt-4o-mini", api_key=os.getenv("OPENAI_API_KEY"), temperature=0, max_tokens=3000))
+# dspy.configure(lm=dspy.LM(model="gpt-4o-mini", api_key=os.getenv("OPENAI_API_KEY"), temperature=0, max_tokens=3000))
 
 # Available agents
 AVAILABLE_AGENTS = {
@@ -135,6 +115,10 @@ class QueryRequest(BaseModel):
 class DataFrameRequest(BaseModel):
     styling_instructions: List[str]
     file: str
+
+class ModelSettings(BaseModel):
+    model: str
+    api_key: str
 
 @app.post("/upload_dataframe", response_model=dict)
 async def upload_dataframe(file: UploadFile = File(...), styling_instructions: str = Form(...)):
@@ -155,10 +139,10 @@ async def chat_with_agent(agent_name: str, request: QueryRequest):
     if app.state.current_df is None:
         raise HTTPException(
             status_code=400,
-            detail="No dataset loaded. Please upload a dataset first."
+            detail="No dataset is currently loaded. Please link a dataset before proceeding with your analysis."
         )
     
-    clear_console()
+    # clear_console()
     
     if agent_name not in AVAILABLE_AGENTS:
         available = list(AVAILABLE_AGENTS.keys())
@@ -200,29 +184,21 @@ async def chat_with_agent(agent_name: str, request: QueryRequest):
 @app.post("/chat", response_model=dict)
 async def chat_with_all(request: QueryRequest):
     try:
-        logger.info("Starting chat_with_all...")
-        
         if app.state.current_df is None:
-            logger.error("No dataset loaded")
             raise HTTPException(
                 status_code=400,
-                detail="No dataset loaded. Please upload a dataset first."
+                detail="No dataset is currently loaded. Please link a dataset before proceeding with your analysis."
             )
         
         if app.state.ai_system is None:
-            logger.error("AI system not initialized")
             raise HTTPException(
                 status_code=500,
-                detail="AI system not properly initialized"
+                detail="AI system not properly initialized. Please try uploading your dataset again."
             )
         
-        logger.info("Executing AI system query...")
         response = app.state.ai_system(request.query)
-        
-        logger.info("Formatting response...")
         formatted_response = format_response_to_markdown(response, dataframe=app.state.current_df)
         
-        logger.info("Returning response...")
         return {
             "agent_name": "ai_system",
             "query": request.query,
@@ -230,7 +206,6 @@ async def chat_with_all(request: QueryRequest):
         }
     except Exception as e:
         logger.error(f"Error in chat_with_all: {str(e)}")
-        logger.error("Stack trace: ", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/execute_code")
@@ -238,7 +213,7 @@ async def execute_code(request: dict):
     if app.state.current_df is None:
         raise HTTPException(
             status_code=400,
-            detail="No dataset loaded. Please upload a dataset first."
+            detail="No dataset is currently loaded. Please link a dataset before executing code."
         )
         
     try:
@@ -254,7 +229,53 @@ async def execute_code(request: dict):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.post("/settings/model")
+async def update_model_settings(settings: ModelSettings):
+    try:
+        # Validate API key by attempting to configure DSPy with it
+        if settings.model == "deepseek-r1-distill-qwen-32b" or settings.model == "llama-3.3-70b-versatile":
+            lm = dspy.GROQ(
+                model=settings.model,
+                api_key=settings.api_key,
+                temperature=0,
+                max_tokens=3000
+            )
+        else:
+            lm = dspy.LM(
+                model=settings.model,
+                api_key=settings.api_key,
+                temperature=0,
+                max_tokens=3000
+            )
 
+        # Test the model configuration with a simple query
+        try:
+            lm("Hello, are you working?")
+            dspy.configure(lm=lm)
+            return {"message": "Model settings updated successfully"}
+        except Exception as model_error:
+            if "auth" in str(model_error).lower() or "api" in str(model_error).lower():
+                raise HTTPException(
+                    status_code=401,
+                    detail=f"Invalid API key for {settings.model}. Please check your API key and try again."
+                )
+            elif "model" in str(model_error).lower():
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Invalid model selection: {settings.model}. Please check if you have access to this model."
+                )
+            else:
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Error configuring model: {str(model_error)}"
+                )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Unexpected error: {str(e)}. Please check your model selection and API key."
+        )
 
 # Add an endpoint to list available agents
 @app.get("/agents", response_model=dict)
