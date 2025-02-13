@@ -8,6 +8,7 @@ import os
 from typing import List
 import uvicorn
 import logging
+from io import StringIO
 
 from fastapi import Form, UploadFile
 import io
@@ -233,20 +234,28 @@ async def execute_code(request: dict):
 @app.post("/settings/model")
 async def update_model_settings(settings: ModelSettings):
     try:
+        # load api key if null
+        if settings.api_key == "" or settings.api_key == None:
+            if settings.provider == "GROQ":
+                settings.api_key = os.getenv("GROQ_API_KEY")
+            elif settings.provider == "OPENAI":
+                settings.api_key = os.getenv("OPENAI_API_KEY")
+            elif settings.provider == "ANTHROPIC":
+                settings.api_key = os.getenv("ANTHROPIC_API_KEY")
         # Validate API key by attempting to configure DSPy with it
         if settings.provider == "GROQ":
             lm = dspy.GROQ(
                 model=settings.model,
                 api_key=settings.api_key,
                 temperature=0,
-                max_tokens=3000
+                max_tokens=1000
             )
         else:
             lm = dspy.LM(
                 model=settings.model,
                 api_key=settings.api_key,
                 temperature=0,
-                max_tokens=3000
+                max_tokens=1000
             )
 
         # Test the model configuration with a simple query
@@ -302,6 +311,28 @@ async def index():
             "danger": "#dc3545",
         },
     }
+
+@app.post("/api/preview-csv")
+async def preview_csv(file: UploadFile = File(...)):
+    if not file.filename.endswith('.csv'):
+        raise HTTPException(status_code=400, detail="File must be a CSV")
+    
+    content = await file.read()
+    try:
+        # Read CSV content
+        df = pd.read_csv(StringIO(content.decode('utf-8')))
+        
+        # Replace NaN values with None (which becomes null in JSON)
+        df = df.where(pd.notna(df), None)
+        
+        # Get first 10 rows and convert to dict
+        preview_data = {
+            "headers": df.columns.tolist(),
+            "rows": df.head(10).values.tolist()
+        }
+        return preview_data
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)

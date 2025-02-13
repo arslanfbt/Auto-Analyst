@@ -6,8 +6,8 @@ interface SettingsPopupProps {
   onClose: () => void;
 }
 
-const API_URL = 'http://localhost:8000';
-// const API_URL = "https://ashad001-auto-analyst-backend.hf.space"
+// const API_URL = 'http://localhost:8000';
+const API_URL = "https://ashad001-auto-analyst-backend.hf.space"
 
 // Define model providers and their models
 const MODEL_PROVIDERS = [
@@ -52,6 +52,15 @@ const SettingsPopup: React.FC<SettingsPopupProps> = ({ isOpen, onClose }) => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
+      // Validate API key if custom API is enabled
+      if (useCustomAPI && !apiKey.trim()) {
+        setNotification({ 
+          type: 'error', 
+          message: 'Please provide an API key or disable custom API option'
+        });
+        return;
+      }
+
       const response = await fetch(`${API_URL}/settings/model`, {
         method: 'POST',
         headers: {
@@ -60,13 +69,13 @@ const SettingsPopup: React.FC<SettingsPopupProps> = ({ isOpen, onClose }) => {
         body: JSON.stringify({
           provider: selectedProvider,
           model: selectedModel,
-          api_key: useCustomAPI ? apiKey : null,
+          api_key: useCustomAPI ? apiKey.trim() : '',
         }),
       });
 
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.detail || 'Failed to update settings');
+        const errorData = await response.json();
+        throw new Error(errorData.detail || errorData.message || 'Failed to update settings');
       }
 
       setNotification({ type: 'success', message: 'Settings updated successfully!' });
