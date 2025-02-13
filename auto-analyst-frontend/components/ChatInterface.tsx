@@ -117,14 +117,14 @@ const ChatInterface: React.FC = () => {
       }
 
       // Use selectAgent directly instead of falling back to selectedAgent
-      const endpoint = selectAgent
-        ? `https://ashad001-auto-analyst-backend.hf.space/chat/${selectAgent}`
-        : `https://ashad001-auto-analyst-backend.hf.space/chat`
+      // const endpoint = selectAgent
+      //   ? `https://ashad001-auto-analyst-backend.hf.space/chat/${selectAgent}`
+      //   : `https://ashad001-auto-analyst-backend.hf.space/chat`
 
       // Local endpoint
-      // const endpoint = selectAgent
-      //   ? `http://localhost:8000/chat/${selectAgent}`
-      //   : `http://localhost:8000/chat`
+      const endpoint = selectAgent
+        ? `http://localhost:8000/chat/${selectAgent}`
+        : `http://localhost:8000/chat`
         
       console.log("Using endpoint:", endpoint)
       console.log("With query:", query)
@@ -214,20 +214,20 @@ const ChatInterface: React.FC = () => {
     formData.append("styling_instructions", "Please analyze the data and provide a detailed report.")
 
     try {
-      await axios.post("https://ashad001-auto-analyst-backend.hf.space/upload_dataframe", formData, {
-        headers: {
-          "Content-Type": "multipart/form-data",
-        },
-        timeout: 30000, // 30 seconds
-        maxContentLength: 10 * 1024 * 1024, // 10MB
-      })
-      // await axios.post("http://localhost:8000/upload_dataframe", formData, {
+      // await axios.post("https://ashad001-auto-analyst-backend.hf.space/upload_dataframe", formData, {
       //   headers: {
       //     "Content-Type": "multipart/form-data",
       //   },
       //   timeout: 30000, // 30 seconds
       //   maxContentLength: 10 * 1024 * 1024, // 10MB
       // })
+      await axios.post("http://localhost:8000/upload_dataframe", formData, {
+        headers: {
+          "Content-Type": "multipart/form-data",
+        },
+        timeout: 30000, // 30 seconds
+        maxContentLength: 10 * 1024 * 1024, // 10MB
+      })
     } catch (error) {
       if (axios.isAxiosError(error)) {
         if (error.code === 'ECONNABORTED') {
@@ -282,8 +282,8 @@ const ChatInterface: React.FC = () => {
             </div>
           </div>
 
-          {session && ( 
-          // {(
+          {/* {session && (  */}
+          {(
             <button
               onClick={() => setSidebarOpen((prev) => !prev)}
               className="text-gray-500 hover:text-[#FF7F7F] focus:outline-none transition-colors"

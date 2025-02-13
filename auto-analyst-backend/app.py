@@ -117,6 +117,7 @@ class DataFrameRequest(BaseModel):
     file: str
 
 class ModelSettings(BaseModel):
+    provider: str
     model: str
     api_key: str
 
@@ -233,7 +234,7 @@ async def execute_code(request: dict):
 async def update_model_settings(settings: ModelSettings):
     try:
         # Validate API key by attempting to configure DSPy with it
-        if settings.model == "deepseek-r1-distill-qwen-32b" or settings.model == "llama-3.3-70b-versatile":
+        if settings.provider == "GROQ":
             lm = dspy.GROQ(
                 model=settings.model,
                 api_key=settings.api_key,
