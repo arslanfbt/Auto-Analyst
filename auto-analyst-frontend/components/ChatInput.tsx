@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from "react"
 import { motion, AnimatePresence } from "framer-motion"
-import { Send, Paperclip, X, Square, Loader2, CheckCircle2, XCircle } from 'lucide-react'
+import { Send, Paperclip, X, Square, Loader2, CheckCircle2, XCircle, Eye } from 'lucide-react'
 import AgentHint from './chat/AgentHint'
 import { Button } from "./ui/button"
 import { Textarea } from "./ui/textarea"
@@ -37,6 +37,12 @@ interface FilePreview {
   rows: string[][];
 }
 
+interface DatasetDescription {
+  name: string;
+  description: string;
+  styling_instructions: string;
+}
+
 interface ChatInputProps {
   onSendMessage: (message: string) => void
   onFileUpload: (file: File) => void
@@ -59,6 +65,12 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, onFileUpload, disa
   const { hasConsented, setConsent } = useCookieConsentStore()
   const [showPreview, setShowPreview] = useState(false)
   const [filePreview, setFilePreview] = useState<FilePreview | null>(null)
+  const [datasetDescription, setDatasetDescription] = useState<DatasetDescription>({
+    name: '',
+    description: '',
+    styling_instructions: ''
+  });
+  const [uploadSuccess, setUploadSuccess] = useState(false);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -77,16 +89,21 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, onFileUpload, disa
       setFileUpload({ file, status: 'loading' })
       
       try {
-        await onFileUpload(file)
+        // First preview the file
+        await handleFilePreview(file);
         setFileUpload(prev => prev ? { ...prev, status: 'success' } : null)
+        // Set default name from filename
+        setDatasetDescription(prev => ({
+          ...prev,
+          name: file.name.replace('.csv', '')
+        }));
       } catch (error) {
         const errorMessage = getErrorMessage(error)
         setFileUpload(prev => prev ? { ...prev, status: 'error', errorMessage } : null)
         
-        // Auto-remove error after delay
         setTimeout(() => {
           setFileUpload(null)
-        }, 5000)
+        }, 3000)
       }
     }
   }
@@ -213,6 +230,38 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, onFileUpload, disa
     }
   }
 
+  const handleUploadWithDescription = async () => {
+    if (!fileUpload?.file || !datasetDescription.name || !datasetDescription.description || !datasetDescription.styling_instructions) return;
+
+    try {
+      const formData = new FormData();
+      formData.append('file', fileUpload.file);
+      formData.append('name', datasetDescription.name);
+      formData.append('description', datasetDescription.description);
+      formData.append('styling_instructions', datasetDescription.styling_instructions);
+
+      const response = await axios.post(`${PREVIEW_API_URL}/upload_dataframe`, formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+
+      if (response.status === 200) {
+        setShowPreview(false);
+        setUploadSuccess(true);
+        setFileUpload(prev => prev ? { ...prev, status: 'success' } : null);
+        setDatasetDescription({ name: '', description: '', styling_instructions: '' });
+        
+        setTimeout(() => {
+          setUploadSuccess(false);
+        }, 3000);
+      }
+    } catch (error) {
+      console.error('Failed to upload file:', error);
+      alert('Failed to upload file. Please try again.');
+    }
+  }
+
   return (
     <>
       <div className="relative">
@@ -244,6 +293,15 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, onFileUpload, disa
             </div>
           ) : (
             <>
+              {uploadSuccess && (
+                <div className="max-w-3xl mx-auto mb-2">
+                  <div className="bg-green-50 border border-green-200 rounded-md p-3 flex items-center gap-2">
+                    <CheckCircle2 className="w-5 h-5 text-green-500" />
+                    <span className="text-green-700 text-sm">Dataset uploaded successfully!</span>
+                  </div>
+                </div>
+              )}
+
               {fileUpload && (
                 <div className="max-w-3xl mx-auto mb-2">
                   <div 
@@ -252,27 +310,23 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, onFileUpload, disa
                     }`}
                   >
                     {getStatusIcon(fileUpload.status)}
-                    <button
-                      onClick={() => fileUpload.status === 'success' && handleFilePreview(fileUpload.file)}
-                      className={`text-blue-700 font-medium hover:underline ${
-                        fileUpload.status === 'success' ? 'cursor-pointer' : 'cursor-default'
-                      }`}
-                    >
+                    <span className="text-blue-700 font-medium">
                       {fileUpload.file.name}
-                    </button>
+                    </span>
                     {fileUpload.status === 'error' && fileUpload.errorMessage && (
                       <span className="text-red-600">
                         • {fileUpload.errorMessage}
                       </span>
                     )}
-                    <button 
-                      onClick={clearFile}
-                      className={`hover:bg-white/50 p-1 rounded-full transition-colors ${
-                        fileUpload.status === 'error' ? 'text-red-500 hover:text-red-700' : 'text-blue-500 hover:text-blue-700'
-                      }`}
-                    >
-                      <X className="w-3 h-3" />
-                    </button>
+                    {fileUpload.status === 'success' && (
+                      <button 
+                        onClick={() => handleFilePreview(fileUpload.file)}
+                        className="hover:bg-white/50 p-1 rounded-full transition-colors text-blue-500 hover:text-blue-700"
+                        title="Preview data"
+                      >
+                        <Eye className="w-3 h-3" />
+                      </button>
+                    )}
                   </div>
                 </div>
               )}
@@ -371,54 +425,113 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, onFileUpload, disa
       <AnimatePresence>
         {showPreview && (
           <Dialog open={showPreview} onOpenChange={setShowPreview}>
-            <DialogContent className="w-[90vw] max-w-4xl max-h-[80vh] overflow-hidden bg-gray-50">
-              <DialogHeader className="border-b pb-4">
+            <DialogContent className="w-[90vw] max-w-4xl h-[90vh] overflow-hidden bg-gray-50 fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
+              <DialogHeader className="border-b pb-4 bg-gray-50 z-10">
                 <DialogTitle className="text-xl text-gray-800">
-                  Preview: {fileUpload?.file.name}
+                  Dataset Details
                 </DialogTitle>
               </DialogHeader>
-              <motion.div 
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: 20 }}
-                className="max-h-[calc(80vh-8rem)] overflow-auto p-4"
-              >
-                {filePreview && (
-                  <div className="rounded-lg border border-gray-200 overflow-hidden bg-white">
-                    <Table>
-                      <TableHeader>
-                        <TableRow className="bg-gray-100">
-                          {filePreview.headers.map((header, i) => (
-                            <TableHead 
-                              key={i} 
-                              className="font-semibold text-gray-700 px-4 py-3 text-left"
-                            >
-                              {header}
-                            </TableHead>
-                          ))}
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {filePreview.rows.map((row, i) => (
-                          <TableRow 
-                            key={i}
-                            className="hover:bg-gray-50 transition-colors"
-                          >
-                            {row.map((cell, j) => (
-                              <TableCell 
-                                key={j} 
-                                className="px-4 py-3 border-b border-gray-100 text-gray-700"
+              <div className="flex flex-col gap-6 p-4 overflow-y-auto h-[calc(90vh-8rem)]">
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-800 mb-1">
+                      Dataset Name
+                    </label>
+                    <input
+                      type="text"
+                      value={datasetDescription.name}
+                      onChange={(e) => setDatasetDescription(prev => ({ ...prev, name: e.target.value }))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-[#FF7F7F] focus:border-transparent text-gray-800"
+                      placeholder="Enter dataset name"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-800 mb-1">
+                      Description
+                    </label>
+                    <textarea
+                      value={datasetDescription.description}
+                      onChange={(e) => setDatasetDescription(prev => ({ ...prev, description: e.target.value }))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-[#FF7F7F] focus:border-transparent text-gray-800"
+                      rows={3}
+                      placeholder="Describe what this dataset contains and its purpose"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-800 mb-1">
+                      Styling Instructions
+                    </label>
+                    <textarea
+                      value={datasetDescription.styling_instructions}
+                      onChange={(e) => setDatasetDescription(prev => ({ ...prev, styling_instructions: e.target.value }))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-[#FF7F7F] focus:border-transparent text-gray-800"
+                      placeholder="Use appropriate color schemes, labels, and titles"
+                      rows={3}
+                    />
+                  </div>
+                </div>
+
+                <div className="border rounded-lg bg-white">
+                  <div className="p-3 border-b bg-gray-50 flex justify-between items-center">
+                    <h3 className="font-medium text-gray-700">Data Preview</h3>
+                    <button
+                      onClick={handleUploadWithDescription}
+                      disabled={!datasetDescription.name || !datasetDescription.description || !datasetDescription.styling_instructions}
+                      className={`px-3 py-1.5 text-xs font-medium text-white rounded-md flex items-center gap-2 ${
+                        !datasetDescription.name || !datasetDescription.description || !datasetDescription.styling_instructions
+                          ? 'bg-gray-400 cursor-not-allowed'
+                          : 'bg-[#FF7F7F] hover:bg-[#FF6666]'
+                      }`}
+                    >
+                      Upload Dataset
+                    </button>
+                  </div>
+                  <div className="overflow-x-auto">
+                    {filePreview && (
+                      <Table>
+                        <TableHeader>
+                          <TableRow className="bg-gray-100">
+                            {filePreview.headers.map((header, i) => (
+                              <TableHead 
+                                key={i} 
+                                className="font-semibold text-gray-700 px-4 py-3 text-left whitespace-nowrap"
                               >
-                                {cell === null ? '-' : cell}
-                              </TableCell>
+                                {header}
+                              </TableHead>
                             ))}
                           </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
+                        </TableHeader>
+                        <TableBody>
+                          {filePreview.rows.map((row, i) => (
+                            <TableRow 
+                              key={i}
+                              className="hover:bg-gray-50 transition-colors"
+                            >
+                              {row.map((cell, j) => (
+                                <TableCell 
+                                  key={j} 
+                                  className="px-4 py-3 border-b border-gray-100 text-gray-700 whitespace-nowrap"
+                                >
+                                  {cell === null ? '-' : cell}
+                                </TableCell>
+                              ))}
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    )}
                   </div>
-                )}
-              </motion.div>
+                </div>
+
+                <div className="flex justify-end gap-3 mt-4">
+                  <button
+                    onClick={() => setShowPreview(false)}
+                    className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
             </DialogContent>
           </Dialog>
         )}
