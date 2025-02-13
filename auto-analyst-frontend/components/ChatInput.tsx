@@ -10,6 +10,16 @@ import { useCookieConsentStore } from "@/lib/store/cookieConsentStore"
 import { AlertCircle } from "lucide-react"
 import { useSession } from "next-auth/react"
 import axios from "axios"
+import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@/components/ui/table"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+
+// const PREVIEW_API_URL = 'http://localhost:8000';
+const PREVIEW_API_URL = 'https://ashad001-auto-analyst-backend.hf.space';
 
 interface FileUpload {
   file: File
@@ -20,6 +30,11 @@ interface FileUpload {
 interface AgentSuggestion {
   name: string
   description: string
+}
+
+interface FilePreview {
+  headers: string[];
+  rows: string[][];
 }
 
 interface ChatInputProps {
@@ -42,6 +57,8 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, onFileUpload, disa
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const { data: session } = useSession()
   const { hasConsented, setConsent } = useCookieConsentStore()
+  const [showPreview, setShowPreview] = useState(false)
+  const [filePreview, setFilePreview] = useState<FilePreview | null>(null)
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -71,6 +88,28 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, onFileUpload, disa
           setFileUpload(null)
         }, 5000)
       }
+    }
+  }
+
+  const handleFilePreview = async (file: File) => {
+    if (file.type === 'text/csv') {
+      try {
+        const formData = new FormData();
+        formData.append('file', file);
+        
+        console.log('Sending preview request...');
+        const response = await axios.post(`${PREVIEW_API_URL}/api/preview-csv`, formData);
+        console.log('Preview response:', response.data);
+        
+        const { headers, rows } = response.data;
+        setFilePreview({ headers, rows });
+        setShowPreview(true);
+        console.log('Dialog should be visible now', { showPreview: true, headers, rows });
+      } catch (error) {
+        console.error('Failed to preview file:', error);
+      }
+    } else {
+      console.log('Not a CSV file');
     }
   }
 
@@ -175,154 +214,216 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, onFileUpload, disa
   }
 
   return (
-    <div className="relative">
-      <div className="bg-white border-t border-gray-200 p-4">
-        {shouldShowCookieConsent() ? (
-          <div className="max-w-3xl mx-auto">
-            <div className="bg-white p-4 rounded-lg border border-gray-200 shadow-sm">
-              <h3 className="text-sm font-medium text-gray-900 mb-2">
-                Cookie Consent Required
-              </h3>
-              <p className="text-sm text-gray-600 mb-4">
-                To chat with Auto-Analyst, we need your consent to use cookies for storing chat history and preferences.
-              </p>
-              <div className="flex gap-3">
-                <button
-                  onClick={handleAcceptCookies}
-                  className="text-sm bg-[#FF7F7F] text-white px-4 py-2 rounded-md hover:bg-[#FF6666] transition-colors"
-                >
-                  Accept & Continue
-                </button>
-                <button
-                  onClick={() => setConsent(false)}
-                  className="text-sm bg-gray-100 text-gray-600 px-4 py-2 rounded-md hover:bg-gray-200 transition-colors"
-                >
-                  Decline
-                </button>
-              </div>
-            </div>
-          </div>
-        ) : (
-          <>
-            {fileUpload && (
-              <div className="max-w-3xl mx-auto mb-2">
-                <div 
-                  className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs ${
-                    fileUpload.status === 'error' ? 'bg-red-50 border border-red-200' : 'bg-blue-50 border border-blue-200'
-                  }`}
-                >
-                  {getStatusIcon(fileUpload.status)}
-                  <span className="text-blue-700 font-medium">
-                    {fileUpload.file.name}
-                  </span>
-                  {fileUpload.status === 'error' && fileUpload.errorMessage && (
-                    <span className="text-red-600">
-                      • {fileUpload.errorMessage}
-                    </span>
-                  )}
-                  <button 
-                    onClick={clearFile}
-                    className={`hover:bg-white/50 p-1 rounded-full transition-colors ${
-                      fileUpload.status === 'error' ? 'text-red-500 hover:text-red-700' : 'text-blue-500 hover:text-blue-700'
-                    }`}
+    <>
+      <div className="relative">
+        <div className="bg-white border-t border-gray-200 p-4">
+          {shouldShowCookieConsent() ? (
+            <div className="max-w-3xl mx-auto">
+              <div className="bg-white p-4 rounded-lg border border-gray-200 shadow-sm">
+                <h3 className="text-sm font-medium text-gray-900 mb-2">
+                  Cookie Consent Required
+                </h3>
+                <p className="text-sm text-gray-600 mb-4">
+                  To chat with Auto-Analyst, we need your consent to use cookies for storing chat history and preferences.
+                </p>
+                <div className="flex gap-3">
+                  <button
+                    onClick={handleAcceptCookies}
+                    className="text-sm bg-[#FF7F7F] text-white px-4 py-2 rounded-md hover:bg-[#FF6666] transition-colors"
                   >
-                    <X className="w-3 h-3" />
+                    Accept & Continue
+                  </button>
+                  <button
+                    onClick={() => setConsent(false)}
+                    className="text-sm bg-gray-100 text-gray-600 px-4 py-2 rounded-md hover:bg-gray-200 transition-colors"
+                  >
+                    Decline
                   </button>
                 </div>
               </div>
-            )}
-
-            <form onSubmit={handleSubmit} className="max-w-3xl mx-auto">
-              <div className="flex items-center space-x-2">
-                <div className="relative flex-1">
-                  <Textarea
-                    ref={inputRef}
-                    value={message}
-                    onChange={handleInputChange}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' && !e.shiftKey) {
-                        e.preventDefault()
-                        handleSubmit(e)
-                      }
-                    }}
-                    onClick={() => {
-                      if (!hasConsented) {
-                        setConsent(true)
-                      }
-                    }}
-                    disabled={disabled || isLoading}
-                    placeholder={getPlaceholderText()}
-                    className={`w-full bg-gray-100 text-gray-900 placeholder-gray-500 border-0 rounded-lg py-3 px-4 pr-12 focus:outline-none focus:ring-2 focus:ring-[#FF7F7F] focus:bg-white transition-colors resize-none ${
-                      (disabled || isLoading) ? 'bg-gray-100 text-gray-500 cursor-not-allowed' : ''
+            </div>
+          ) : (
+            <>
+              {fileUpload && (
+                <div className="max-w-3xl mx-auto mb-2">
+                  <div 
+                    className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs ${
+                      fileUpload.status === 'error' ? 'bg-red-50 border border-red-200' : 'bg-blue-50 border border-blue-200'
                     }`}
-                    rows={1}
-                  />
-                  <AnimatePresence>
-                    {showSuggestions && (
-                      <motion.div
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: 10 }}
-                        className="absolute bottom-full left-0 mb-2 w-full max-h-40 overflow-y-auto bg-white rounded-lg shadow-lg"
-                      >
-                        {agentSuggestions.map((agent) => (
-                          <div
-                            key={agent.name}
-                            onClick={() => handleSuggestionClick(agent.name)}
-                            className="px-4 py-2 hover:bg-gray-100 cursor-pointer"
-                          >
-                            <div className="font-medium">{agent.name}</div>
-                            <div className="text-sm text-gray-500">{agent.description}</div>
-                          </div>
-                        ))}
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-                  <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
-                    <input 
-                      type="file" 
-                      ref={fileInputRef} 
-                      onChange={handleFileSelect} 
-                      className="hidden" 
-                      id="file-upload"
-                    />
-                    <label
-                      htmlFor="file-upload"
-                      className="cursor-pointer p-2 rounded-full hover:bg-gray-200 transition-colors inline-flex items-center justify-center"
+                  >
+                    {getStatusIcon(fileUpload.status)}
+                    <button
+                      onClick={() => fileUpload.status === 'success' && handleFilePreview(fileUpload.file)}
+                      className={`text-blue-700 font-medium hover:underline ${
+                        fileUpload.status === 'success' ? 'cursor-pointer' : 'cursor-default'
+                      }`}
                     >
-                      <Paperclip className="w-5 h-5 text-gray-500 hover:text-blue-600 transition-colors" />
-                    </label>
+                      {fileUpload.file.name}
+                    </button>
+                    {fileUpload.status === 'error' && fileUpload.errorMessage && (
+                      <span className="text-red-600">
+                        • {fileUpload.errorMessage}
+                      </span>
+                    )}
+                    <button 
+                      onClick={clearFile}
+                      className={`hover:bg-white/50 p-1 rounded-full transition-colors ${
+                        fileUpload.status === 'error' ? 'text-red-500 hover:text-red-700' : 'text-blue-500 hover:text-blue-700'
+                      }`}
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
                   </div>
                 </div>
-                <motion.button
-                  whileHover={{ scale: isLoading ? 1 : 1.05 }}
-                  whileTap={{ scale: isLoading ? 1 : 0.95 }}
-                  type={isLoading ? 'button' : 'submit'}
-                  onClick={() => {
-                    if (isLoading && onStopGeneration) {
-                      onStopGeneration()
-                    }
-                  }}
-                  className={`${
-                    isLoading 
-                      ? 'bg-red-500 hover:bg-red-600 cursor-pointer' 
-                      : disabled || !message.trim()
-                        ? 'bg-gray-400 cursor-not-allowed'
-                        : 'bg-[#FF7F7F] hover:bg-[#FF6666]'
-                  } text-white p-3 rounded-full transition-colors`}
-                >
-                  {isLoading ? (
-                    <Square className="w-5 h-5" />
-                  ) : (
-                    <Send className="w-5 h-5" />
-                  )}
-                </motion.button>
-              </div>
-            </form>
-          </>
-        )}
+              )}
+
+              <form onSubmit={handleSubmit} className="max-w-3xl mx-auto">
+                <div className="flex items-center space-x-2">
+                  <div className="relative flex-1">
+                    <Textarea
+                      ref={inputRef}
+                      value={message}
+                      onChange={handleInputChange}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && !e.shiftKey) {
+                          e.preventDefault()
+                          handleSubmit(e)
+                        }
+                      }}
+                      onClick={() => {
+                        if (!hasConsented) {
+                          setConsent(true)
+                        }
+                      }}
+                      disabled={disabled || isLoading}
+                      placeholder={getPlaceholderText()}
+                      className={`w-full bg-gray-100 text-gray-900 placeholder-gray-500 border-0 rounded-lg py-3 px-4 pr-12 focus:outline-none focus:ring-2 focus:ring-[#FF7F7F] focus:bg-white transition-colors resize-none ${
+                        (disabled || isLoading) ? 'bg-gray-100 text-gray-500 cursor-not-allowed' : ''
+                      }`}
+                      rows={1}
+                    />
+                    <AnimatePresence>
+                      {showSuggestions && (
+                        <motion.div
+                          initial={{ opacity: 0, y: 10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, y: 10 }}
+                          className="absolute bottom-full left-0 mb-2 w-full max-h-40 overflow-y-auto bg-white rounded-lg shadow-lg"
+                        >
+                          {agentSuggestions.map((agent) => (
+                            <div
+                              key={agent.name}
+                              onClick={() => handleSuggestionClick(agent.name)}
+                              className="px-4 py-2 hover:bg-gray-100 cursor-pointer"
+                            >
+                              <div className="font-medium">{agent.name}</div>
+                              <div className="text-sm text-gray-500">{agent.description}</div>
+                            </div>
+                          ))}
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                    <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                      <input 
+                        type="file" 
+                        ref={fileInputRef} 
+                        onChange={handleFileSelect} 
+                        className="hidden" 
+                        id="file-upload"
+                      />
+                      <label
+                        htmlFor="file-upload"
+                        className="cursor-pointer p-2 rounded-full hover:bg-gray-200 transition-colors inline-flex items-center justify-center"
+                      >
+                        <Paperclip className="w-5 h-5 text-gray-500 hover:text-blue-600 transition-colors" />
+                      </label>
+                    </div>
+                  </div>
+                  <motion.button
+                    whileHover={{ scale: isLoading ? 1 : 1.05 }}
+                    whileTap={{ scale: isLoading ? 1 : 0.95 }}
+                    type={isLoading ? 'button' : 'submit'}
+                    onClick={() => {
+                      if (isLoading && onStopGeneration) {
+                        onStopGeneration()
+                      }
+                    }}
+                    className={`${
+                      isLoading 
+                        ? 'bg-red-500 hover:bg-red-600 cursor-pointer' 
+                        : disabled || !message.trim()
+                          ? 'bg-gray-400 cursor-not-allowed'
+                          : 'bg-[#FF7F7F] hover:bg-[#FF6666]'
+                    } text-white p-3 rounded-full transition-colors`}
+                  >
+                    {isLoading ? (
+                      <Square className="w-5 h-5" />
+                    ) : (
+                      <Send className="w-5 h-5" />
+                    )}
+                  </motion.button>
+                </div>
+              </form>
+            </>
+          )}
+        </div>
       </div>
-    </div>
+      <AnimatePresence>
+        {showPreview && (
+          <Dialog open={showPreview} onOpenChange={setShowPreview}>
+            <DialogContent className="w-[90vw] max-w-4xl max-h-[80vh] overflow-hidden bg-gray-50">
+              <DialogHeader className="border-b pb-4">
+                <DialogTitle className="text-xl text-gray-800">
+                  Preview: {fileUpload?.file.name}
+                </DialogTitle>
+              </DialogHeader>
+              <motion.div 
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 20 }}
+                className="max-h-[calc(80vh-8rem)] overflow-auto p-4"
+              >
+                {filePreview && (
+                  <div className="rounded-lg border border-gray-200 overflow-hidden bg-white">
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="bg-gray-100">
+                          {filePreview.headers.map((header, i) => (
+                            <TableHead 
+                              key={i} 
+                              className="font-semibold text-gray-700 px-4 py-3 text-left"
+                            >
+                              {header}
+                            </TableHead>
+                          ))}
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {filePreview.rows.map((row, i) => (
+                          <TableRow 
+                            key={i}
+                            className="hover:bg-gray-50 transition-colors"
+                          >
+                            {row.map((cell, j) => (
+                              <TableCell 
+                                key={j} 
+                                className="px-4 py-3 border-b border-gray-100 text-gray-700"
+                              >
+                                {cell === null ? '-' : cell}
+                              </TableCell>
+                            ))}
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
+              </motion.div>
+            </DialogContent>
+          </Dialog>
+        )}
+      </AnimatePresence>
+    </>
   )
 }
 

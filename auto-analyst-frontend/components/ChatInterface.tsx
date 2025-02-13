@@ -282,8 +282,8 @@ const ChatInterface: React.FC = () => {
             </div>
           </div>
 
-          {session && ( 
-          // {(
+          {/* {session && (  */}
+          {(
             <button
               onClick={() => setSidebarOpen((prev) => !prev)}
               className="text-gray-500 hover:text-[#FF7F7F] focus:outline-none transition-colors"
