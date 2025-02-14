@@ -96,8 +96,7 @@ def execute_code_from_markdown(code_str, dataframe=None):
 def format_response_to_markdown(api_response, agent_name = None, dataframe=None):
     try:
         markdown = []
-        
-        # print("api_response: ", api_response)
+                        
         if "response" in api_response and isinstance(api_response['response'], str) and ("auth" in api_response['response'].lower() or "api" in api_response['response'].lower() or "LM" in api_response['response']):
             return "**Error**: Authentication failed. Please check your API key in settings and try again."
         
@@ -109,10 +108,14 @@ def format_response_to_markdown(api_response, agent_name = None, dataframe=None)
                 continue
             # print("agent: ", agent)
             markdown.append(f"\n## {agent.replace('_', ' ').title()}\n")
-    
-            if 'reasoning' in content:
-                markdown.append(f"### Reasoning\n{content['reasoning']}\n")
             
+            if agent == "analytical_planner":
+                if 'rationale' in content:
+                    markdown.append(f"### Reasoning\n{content['rationale']}\n")
+            
+            if "reasoning" in content:
+                markdown.append(f"### Reasoning\n{content['reasoning']}\n")
+
             if 'code' in content:
                 markdown.append(f"### Code Implementation\n{format_code_backticked_block(content['code'])}\n")
                 if agent_name is not None:
@@ -161,7 +164,9 @@ def format_response_to_markdown(api_response, agent_name = None, dataframe=None)
             return "**Error**: Model configuration error. Please verify your model selection in settings."
         else:
             return f"**Error**: An unexpected error occurred: {str(e)}"
-
+    
+    # for i, line in enumerate(markdown):
+    #     print(f"Line {i+1}: {line[:100]}")
     if len(markdown) < 2 or len(markdown[-1]) < 15:
         return "No plan can be formulated without a defined goal. Please provide a specific goal for the analysis."
     return '\n'.join(markdown)

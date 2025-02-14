@@ -429,7 +429,7 @@ class auto_analyst(dspy.Module):
             output_dict['code_combiner_agent'] = dict(self.code_combiner_agent(agent_code_list = str(code_list), dataset=dict_['dataset']))
 
             # creates a summary from code_combiner agent
-            # output_dict['memory_combined'] = str(self.memory_summarize_agent(agent_response='code_combiner_agent'+'\n'+str(output_dict['code_combiner_agent'].refined_complete_code), user_goal=query).summary)
+            output_dict['memory_combined'] = str(self.memory_summarize_agent(agent_response='code_combiner_agent'+'\n'+str(output_dict['code_combiner_agent'].refined_complete_code), user_goal=query).summary)
         except Exception as e:
             output_dict = {"response": "This is the error from the system"+str(e)}
 

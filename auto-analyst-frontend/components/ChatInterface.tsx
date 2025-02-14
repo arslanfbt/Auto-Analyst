@@ -11,7 +11,7 @@ import axios from "axios"
 import { useSession } from "next-auth/react"
 import { useFreeTrialStore } from "@/lib/store/freeTrialStore"
 import FreeTrialOverlay from "./chat/FreeTrialOverlay"
-import { useChatHistoryStore, ChatMessage } from "@/lib/store/chatHistoryStore"
+import { useChatHistoryStore } from "@/lib/store/chatHistoryStore"
 import { useCookieConsentStore } from "@/lib/store/cookieConsentStore"
 import { useRouter } from "next/navigation"
 import { AwardIcon } from "lucide-react"
@@ -32,12 +32,20 @@ interface AgentInfo {
   description: string
 }
 
+interface ChatMessage {
+  text: string | PlotlyMessage;
+  sender: "user" | "ai";
+  agent?: string;
+  
+}
+
+
 const ChatInterface: React.FC = () => {
   const router = useRouter()
   const { data: session, status } = useSession()
   const { hasConsented } = useCookieConsentStore()
   const { queriesUsed, incrementQueries, hasFreeTrial } = useFreeTrialStore()
-  const { messages: storedMessages, addMessage } = useChatHistoryStore()
+  const { messages: storedMessages, addMessage, updateMessage } = useChatHistoryStore()
   const [mounted, setMounted] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [isSidebarOpen, setSidebarOpen] = useState(false)
@@ -93,13 +101,13 @@ const ChatInterface: React.FC = () => {
     }
 
     addMessage({ text: message, sender: "user" })
+    let accumulatedResponse = ""
 
     const controller = new AbortController()
     setAbortController(controller)
     setIsLoading(true)
 
     try {
-      // Check for agent mention anywhere in the message
       const agentRegex = /@(\w+)/
       const match = message.match(agentRegex)
       let selectAgent = null
@@ -107,12 +115,9 @@ const ChatInterface: React.FC = () => {
 
       if (match) {
         selectAgent = match[1]
-        // Remove the @agent_name from the query
         query = message.replace(/@\w+/, '').trim()
-        // Set the selected agent when @ is used
         setSelectedAgent(selectAgent)
       } else {
-        // Reset the selected agent when no @ is used
         setSelectedAgent(null)
       }
 
@@ -125,81 +130,73 @@ const ChatInterface: React.FC = () => {
       // const endpoint = selectAgent
       //   ? `http://localhost:8000/chat/${selectAgent}`
       //   : `http://localhost:8000/chat`
-        
-      console.log("Using endpoint:", endpoint)
-      console.log("With query:", query)
 
-      const response = await axios.post(endpoint, 
-        { query }, 
-        { signal: controller.signal }
-      )
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ query }),
+        signal: controller.signal,
+      })
 
-      let aiMessage: string | PlotlyMessage = ""
-        
-      try {
-        if (!response.data) {
-          throw new Error("Empty response from server")
-        }
-
-        if (typeof response.data === "string") {
-          aiMessage = response.data
-        } else if (typeof response.data === "object") {
-          if (response.data.error) {
-            throw new Error(response.data.error)
-          } else if (response.data.response) {
-            aiMessage = response.data.response
-          } else if (response.data.plotly_data && response.data.plotly_layout) {
-            aiMessage = {
-              type: "plotly",
-              data: response.data.plotly_data,
-              layout: response.data.plotly_layout,
-            }
-          } else {
-            aiMessage = "```json\n" + JSON.stringify(response.data, null, 2) + "\n```"
-          }
-        } else {
-          throw new Error("Invalid response format from server")
-        }
-
-        // Add AI response to persistent store
-        addMessage({
-          text: typeof aiMessage === "string" ? aiMessage : aiMessage,
-          sender: "ai",
-        })
-
-        if (!session) {
-          incrementQueries()
-        }
-
-      } catch (parseError) {
-        console.error("Error processing response:", parseError)
-        aiMessage = "Sorry, I encountered an error processing the response. Please try again."
-
-        // Add error message to persistent store
-        addMessage({
-          text: aiMessage,
-          sender: "ai",
-        })
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
       }
+
+      const reader = response.body?.getReader()
+      if (!reader) {
+        throw new Error('No response body')
+      }
+
+      // Add initial AI message that we'll update
+      const messageId = addMessage({
+        text: "",
+        sender: "ai"
+      })
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        const chunk = new TextDecoder().decode(value)
+        const lines = chunk.split('\n').filter(line => line.trim())
+
+        for (const line of lines) {
+          try {
+            const { agent, content, error } = JSON.parse(line)
+            if (error) {
+              accumulatedResponse += `\nError: ${error}`
+            } else {
+              accumulatedResponse += `\n${content}`
+            }
+            
+            // Update the existing message with accumulated content
+            updateMessage(messageId, {
+              text: accumulatedResponse.trim(),
+              sender: "ai"
+            })
+          } catch (e) {
+            console.error('Error parsing chunk:', e)
+          }
+        }
+      }
+
+      if (!session) {
+        incrementQueries()
+      }
+
     } catch (error) {
-      if (axios.isCancel(error)) {
+      if (error instanceof DOMException && error.name === 'AbortError') {
         addMessage({
           text: "Generation stopped by user",
-          sender: "ai",
+          sender: "ai"
         })
       } else {
-        console.error("Network or server error:", error)
-        const errorMessage =
-          axios.isAxiosError(error) && error.response?.status === 500
-            ? "The server encountered an error. Please try again later."
-            : error instanceof Error
-              ? error.message
-              : "An unknown error occurred"
-
-        // Add error message to persistent store
+        console.error("Error:", error)
         addMessage({
-          text: `Error: ${errorMessage}`,
-          sender: "ai",
+          text: `Error: ${error instanceof Error ? error.message : 'Unknown error'}`,
+          sender: "ai"
         })
       }
     } finally {
@@ -282,8 +279,8 @@ const ChatInterface: React.FC = () => {
             </div>
           </div>
 
-          {session && ( 
-          // {(
+          {/* {session && (  */}
+          {(
             <button
               onClick={() => setSidebarOpen((prev) => !prev)}
               className="text-gray-500 hover:text-[#FF7F7F] focus:outline-none transition-colors"
