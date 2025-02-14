@@ -40,7 +40,6 @@ interface FilePreview {
 interface DatasetDescription {
   name: string;
   description: string;
-  styling_instructions: string;
 }
 
 interface ChatInputProps {
@@ -68,7 +67,6 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, onFileUpload, disa
   const [datasetDescription, setDatasetDescription] = useState<DatasetDescription>({
     name: '',
     description: '',
-    styling_instructions: ''
   });
   const [uploadSuccess, setUploadSuccess] = useState(false);
 
@@ -231,14 +229,13 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, onFileUpload, disa
   }
 
   const handleUploadWithDescription = async () => {
-    if (!fileUpload?.file || !datasetDescription.name || !datasetDescription.description || !datasetDescription.styling_instructions) return;
+    if (!fileUpload?.file || !datasetDescription.name || !datasetDescription.description) return;
 
     try {
       const formData = new FormData();
       formData.append('file', fileUpload.file);
       formData.append('name', datasetDescription.name);
       formData.append('description', datasetDescription.description);
-      formData.append('styling_instructions', datasetDescription.styling_instructions);
 
       const response = await axios.post(`${PREVIEW_API_URL}/upload_dataframe`, formData, {
         headers: {
@@ -250,7 +247,7 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, onFileUpload, disa
         setShowPreview(false);
         setUploadSuccess(true);
         setFileUpload(prev => prev ? { ...prev, status: 'success' } : null);
-        setDatasetDescription({ name: '', description: '', styling_instructions: '' });
+        setDatasetDescription({ name: '', description: ''});
         
         setTimeout(() => {
           setUploadSuccess(false);
@@ -457,18 +454,6 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, onFileUpload, disa
                       placeholder="Describe what this dataset contains and its purpose"
                     />
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-800 mb-1">
-                      Styling Instructions
-                    </label>
-                    <textarea
-                      value={datasetDescription.styling_instructions}
-                      onChange={(e) => setDatasetDescription(prev => ({ ...prev, styling_instructions: e.target.value }))}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-[#FF7F7F] focus:border-transparent text-gray-800"
-                      placeholder="Use appropriate color schemes, labels, and titles"
-                      rows={3}
-                    />
-                  </div>
                 </div>
 
                 <div className="border rounded-lg bg-white">
@@ -476,9 +461,9 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, onFileUpload, disa
                     <h3 className="font-medium text-gray-700">Data Preview</h3>
                     <button
                       onClick={handleUploadWithDescription}
-                      disabled={!datasetDescription.name || !datasetDescription.description || !datasetDescription.styling_instructions}
+                      disabled={!datasetDescription.name || !datasetDescription.description}
                       className={`px-3 py-1.5 text-xs font-medium text-white rounded-md flex items-center gap-2 ${
-                        !datasetDescription.name || !datasetDescription.description || !datasetDescription.styling_instructions
+                        !datasetDescription.name || !datasetDescription.description
                           ? 'bg-gray-400 cursor-not-allowed'
                           : 'bg-[#FF7F7F] hover:bg-[#FF6666]'
                       }`}
