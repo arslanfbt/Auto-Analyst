@@ -45,7 +45,7 @@ const ChatInterface: React.FC = () => {
   const { data: session, status } = useSession()
   const { hasConsented } = useCookieConsentStore()
   const { queriesUsed, incrementQueries, hasFreeTrial } = useFreeTrialStore()
-  const { messages: storedMessages, addMessage, updateMessage } = useChatHistoryStore()
+  const { messages: storedMessages, addMessage, updateMessage, clearMessages } = useChatHistoryStore()
   const [mounted, setMounted] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [isSidebarOpen, setSidebarOpen] = useState(false)
@@ -81,6 +81,13 @@ const ChatInterface: React.FC = () => {
     // Show welcome section if there are no messages
     setShowWelcome(storedMessages.length === 0)
   }, [storedMessages])
+
+  useEffect(() => {
+    if (status === "unauthenticated") {
+      clearMessages()
+      setShowWelcome(true)
+    }
+  }, [status, clearMessages])
 
   const handleNewChat = () => {
     setShowWelcome(true)
@@ -121,69 +128,87 @@ const ChatInterface: React.FC = () => {
         setSelectedAgent(null)
       }
 
-      // Use selectAgent directly instead of falling back to selectedAgent
+      const baseUrl = 'https://ashad001-auto-analyst-backend.hf.space'
+      // const baseUrl = 'http://localhost:8000'
       const endpoint = selectAgent
-        ? `https://ashad001-auto-analyst-backend.hf.space/chat/${selectAgent}`
-        : `https://ashad001-auto-analyst-backend.hf.space/chat`
+        ? `${baseUrl}/chat/${selectAgent}`
+        : `${baseUrl}/chat`
 
-      // Local endpoint
-      // const endpoint = selectAgent
-      //   ? `http://localhost:8000/chat/${selectAgent}`
-      //   : `http://localhost:8000/chat`
-
-      const response = await fetch(endpoint, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ query }),
-        signal: controller.signal,
-      })
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`)
+      const headers = {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive'
       }
 
-      const reader = response.body?.getReader()
-      if (!reader) {
-        throw new Error('No response body')
-      }
+      if (selectAgent) {
+        // Individual agent handling
+        const response = await fetch(endpoint, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ query }),
+          signal: controller.signal,
+        })
 
-      // Add initial AI message that we'll update
-      const messageId = addMessage({
-        text: "",
-        sender: "ai"
-      })
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`)
+        }
 
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
+        const data = await response.json()
+        addMessage({
+          text: data.response || data.content || JSON.stringify(data),
+          sender: "ai"
+        })
+      } else {
+        // Streaming response handling
+        const response = await fetch(endpoint, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ query }),
+          signal: controller.signal,
+        })
 
-        const chunk = new TextDecoder().decode(value)
-        const lines = chunk.split('\n').filter(line => line.trim())
+        const reader = response.body?.getReader()
+        if (!reader) {
+          throw new Error('No response body')
+        }
 
-        for (const line of lines) {
-          try {
-            const { agent, content, error } = JSON.parse(line)
-            if (error) {
-              accumulatedResponse += `\nError: ${error}`
-            } else {
-              accumulatedResponse += `\n${content}`
+        // Add initial AI message that we'll update
+        const messageId = addMessage({
+          text: "",
+          sender: "ai"
+        })
+
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
+
+          const chunk = new TextDecoder().decode(value)
+          const lines = chunk.split('\n').filter(line => line.trim())
+
+          for (const line of lines) {
+            try {
+              const { agent, content, error } = JSON.parse(line)
+              if (error) {
+                accumulatedResponse += `\nError: ${error}`
+              } else {
+                accumulatedResponse += `\n${content}`
+              }
+              
+              // Update the existing message with accumulated content
+              updateMessage(messageId, {
+                text: accumulatedResponse.trim(),
+                sender: "ai"
+              })
+            } catch (e) {
+              console.error('Error parsing chunk:', e)
             }
-            
-            // Update the existing message with accumulated content
-            updateMessage(messageId, {
-              text: accumulatedResponse.trim(),
-              sender: "ai"
-            })
-          } catch (e) {
-            console.error('Error parsing chunk:', e)
           }
         }
-      }
 
-      if (!session) {
-        incrementQueries()
+        if (!session) {
+          incrementQueries()
+        }
       }
 
     } catch (error) {

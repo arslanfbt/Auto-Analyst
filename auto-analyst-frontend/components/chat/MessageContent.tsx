@@ -7,9 +7,10 @@ import CodeBlock from "./CodeBlocker"
 interface MessageContentProps {
   message: string
   onCodeExecute?: (result: any, updateCodeBlock: (code: string) => void) => void
+  agentName?: string
 }
 
-const MessageContent: React.FC<MessageContentProps> = ({ message, onCodeExecute }) => {
+const MessageContent: React.FC<MessageContentProps> = ({ message, onCodeExecute, agentName }) => {
   const renderContent = useCallback(
     (content: string) => {
       const parts = content.split(/(```plotly[\s\S]*?```)/)
@@ -33,11 +34,10 @@ const MessageContent: React.FC<MessageContentProps> = ({ message, onCodeExecute 
                       <CodeBlock
                         language={match[1]}
                         value={String(children).replace(/\n$/, "")}
-                        onExecute={(result: any, updateCodeBlock: (code: string) => void) => onCodeExecute && onCodeExecute(result, updateCodeBlock)}
+                        onExecute={onCodeExecute || (() => {})}
+                        agentName={agentName}
                       />
-
                     )
-
                   }
 
                   return (
@@ -70,7 +70,7 @@ const MessageContent: React.FC<MessageContentProps> = ({ message, onCodeExecute 
         }
       })
     },
-    [onCodeExecute],
+    [onCodeExecute, agentName],
   )
 
   return <>{renderContent(message)}</>

@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState } from "react"
+import React, { useState, useEffect } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter"
 import { vscDarkPlus } from "react-syntax-highlighter/dist/esm/styles/prism"
@@ -14,9 +14,10 @@ interface CodeBlockProps {
   language: string
   value: string
   onExecute: (result: any, updateCodeBlock: (code: string) => void) => void
+  agentName?: string
 }
 
-const CodeBlock: React.FC<CodeBlockProps> = ({ language, value, onExecute }) => {
+const CodeBlock: React.FC<CodeBlockProps> = ({ language, value, onExecute, agentName }) => {
   const [isVisible, setIsVisible] = useState(language === "output")
   const [copied, setCopied] = useState(false)
   const [isEditing, setIsEditing] = useState(false)
@@ -24,6 +25,12 @@ const CodeBlock: React.FC<CodeBlockProps> = ({ language, value, onExecute }) => 
   const [isExecuting, setIsExecuting] = useState(false)
   const [executionOutput, setExecutionOutput] = useState<string | null>(null)
   const [plotlyOutputs, setPlotlyOutputs] = useState<any[]>([])
+
+  useEffect(() => {
+    if (language === "python" && agentName === "code_combiner_agent") {
+      handleExecuteAndUpdate()
+    }
+  }, [value, agentName])
 
   const copyToClipboard = async () => {
     try {
