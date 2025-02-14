@@ -1,6 +1,6 @@
 import groq
 from fastapi import FastAPI, HTTPException, File, UploadFile, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import pandas as pd
@@ -19,6 +19,8 @@ from llama_index.core import Document
 from llama_index.embeddings.openai import OpenAIEmbedding
 from llama_index.core import VectorStoreIndex
 from format_response import format_response_to_markdown, execute_code_from_markdown
+import json
+import asyncio
 
 # Add styling_instructions at the top level
 styling_instructions = [
@@ -31,9 +33,13 @@ styling_instructions = [
 
 # Initialize retrievers with empty data first
 def initialize_retrievers(styling_instructions: List[str], doc: List[str]):
-    style_index = VectorStoreIndex.from_documents([Document(text=x) for x in styling_instructions])
-    data_index = VectorStoreIndex.from_documents([Document(text=x) for x in doc])
-    return {"style_index": style_index, "dataframe_index": data_index}
+    try:
+        style_index = VectorStoreIndex.from_documents([Document(text=x) for x in styling_instructions])
+        data_index = VectorStoreIndex.from_documents([Document(text=x) for x in doc])
+        return {"style_index": style_index, "dataframe_index": data_index}
+    except Exception as e:
+        logger.error(f"Error initializing retrievers: {str(e)}")
+        raise e
 
 # clear console
 def clear_console():
@@ -74,11 +80,21 @@ class AppState:
             logger.error(f"Error initializing default dataset: {str(e)}")
             raise e
     
-    def update_dataset(self, df, desc, styling_instructions):
+    def clear_state(self):
+        """Clear all state data"""
+        self.current_df = None
+        self.retrievers = None
+        self.ai_system = None
+
+    def update_dataset(self, df, desc, styling_instr_list):
         try:
+            # Clear existing state
+            self.clear_state()
+            
+            # Initialize new state
             self.current_df = df
             data_dict = make_data(self.current_df, desc)
-            self.retrievers = initialize_retrievers(styling_instructions, [str(data_dict)])
+            self.retrievers = initialize_retrievers(styling_instr_list, [str(data_dict)])
             self.ai_system = auto_analyst(agents=list(AVAILABLE_AGENTS.values()), retrievers=self.retrievers)
         except Exception as e:
             logger.error(f"Error updating dataset: {str(e)}")
@@ -116,24 +132,35 @@ class QueryRequest(BaseModel):
 class DataFrameRequest(BaseModel):
     styling_instructions: List[str]
     file: str
+    name: str
+    description: str
 
 class ModelSettings(BaseModel):
     provider: str
     model: str
     api_key: str
 
-@app.post("/upload_dataframe", response_model=dict)
-async def upload_dataframe(file: UploadFile = File(...), styling_instructions: str = Form(...)):
+@app.post("/upload_dataframe")
+async def upload_dataframe(
+    file: UploadFile = File(...),
+    name: str = Form(...),
+    description: str = Form(...),
+    styling_instructions: str = Form(...)
+):
     try:
         contents = await file.read()
         new_df = pd.read_csv(io.BytesIO(contents))
-        desc = f"{file.filename} Dataset"
+        desc = f"{name} Dataset: {description}"
+        
+        # Convert styling_instructions string to list
+        styling_instr_list = [s.strip() for s in styling_instructions.split('\n') if s.strip()]
         
         # Update the app state with new data
-        app.state.update_dataset(new_df, desc, styling_instructions)
+        app.state.update_dataset(new_df, desc, styling_instr_list)
         
         return {"message": "Dataframe uploaded successfully"}
     except Exception as e:
+        logger.error(f"Error in upload_dataframe: {str(e)}")
         raise HTTPException(status_code=400, detail=str(e))
 
 @app.post("/chat/{agent_name}", response_model=dict)
@@ -198,14 +225,34 @@ async def chat_with_all(request: QueryRequest):
                 detail="AI system not properly initialized. Please try uploading your dataset again."
             )
         
-        response = app.state.ai_system(request.query)
-        formatted_response = format_response_to_markdown(response, dataframe=app.state.current_df)
-        
-        return {
-            "agent_name": "ai_system",
-            "query": request.query,
-            "response": formatted_response,
-        }
+        async def generate_responses():
+            try:
+                # Get the plan first
+                plan_response = await asyncio.to_thread(
+                    app.state.ai_system.get_plan,
+                    request.query
+                )
+                # yield json.dumps({"agent": "analytical_planner", "content": plan_response}) + "\n"
+                print("plan_response: ", plan_response)
+                # Execute agents in parallel based on the plan
+                responses = await asyncio.to_thread(
+                    app.state.ai_system.execute_plan,
+                    request.query,
+                    plan_response
+                )
+                
+                for agent_name, response in responses:
+                    formatted_response = format_response_to_markdown({agent_name: response}, agent_name, app.state.current_df)
+                    yield json.dumps({"agent": agent_name, "content": formatted_response}) + "\n"
+
+            except Exception as e:
+                yield json.dumps({"error": str(e)}) + "\n"
+
+        return StreamingResponse(
+            generate_responses(),
+            media_type='text/event-stream'
+        )
+
     except Exception as e:
         logger.error(f"Error in chat_with_all: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -333,6 +380,12 @@ async def preview_csv(file: UploadFile = File(...)):
         return preview_data
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+@app.post("/chat_history_name")
+async def chat_history_name(request: dict):
+    query = request.get("query")
+    name = dspy.ChainOfThought(chat_history_name_agent)(query=query)
+    return {"name": name.name}
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)

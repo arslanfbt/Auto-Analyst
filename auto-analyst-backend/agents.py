@@ -2,7 +2,7 @@ import dspy
 import memory_agents as m
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
-
+import os
 # Core DSPy agents for data analysis
 
 class analytical_planner(dspy.Signature):
@@ -390,57 +390,53 @@ class auto_analyst(dspy.Module):
         except Exception as e:
             return agent_name.strip(), {"error": str(e)}
 
-    def forward(self, query):
-        try:
-            # Initialize processing
-            dict_ = {}
-            dict_['dataset'] = self.dataset.retrieve(query)[0].text
-            dict_['styling_index'] = self.styling_index.retrieve(query)[0].text
-            dict_['hint'] = []
-            dict_['goal'] = query
-            dict_['Agent_desc'] = str(self.agent_desc)
-            
-            output_dict = {}
-            
-            # Get analysis plan
-            plan = self.planner(goal=dict_['goal'], dataset=dict_['dataset'], Agent_desc=dict_['Agent_desc'])
-            output_dict['analytical_planner'] = dict(plan)
-            
-            # Parse plan
-            plan_list = []
-            code_list = []
-            analysis_list = [plan.plan, plan.plan_desc]
-            
-            if plan.plan.split('->'):
-                plan_text = plan.plan.replace('Plan','').replace(':','').strip()
-                plan_list = plan_text.split('->')
-            
-            # Prepare inputs for all agents
-            agent_tasks = []
-            for agent_name in plan_list:
-                inputs = {x:dict_[x] for x in self.agent_inputs[agent_name.strip()]}
-                agent_tasks.append((agent_name, inputs))
-            
-            # Execute all agents in parallel using thread pool
-            futures = []
-            for agent_name, inputs in agent_tasks:
-                future = self.executor.submit(self.execute_agent, agent_name, inputs)
-                futures.append(future)
-            
-            # Collect results
-            for future in futures:
-                agent_name, result = future.result()
-                output_dict[agent_name] = result
-                
-                if "error" not in result:
-                    code = result['code']
-                    commentary = result['commentary']
-                    code_list.append(code)
-                    analysis_list.append(commentary)
+    def get_plan(self, query):
+        """Get the analysis plan"""
+        dict_ = {}
+        dict_['dataset'] = self.dataset.retrieve(query)[0].text
+        dict_['styling_index'] = self.styling_index.retrieve(query)[0].text
+        dict_['goal'] = query
+        dict_['Agent_desc'] = str(self.agent_desc)
+        
+        plan = self.planner(goal=dict_['goal'], dataset=dict_['dataset'], Agent_desc=dict_['Agent_desc'])
+        return dict(plan)
 
-            # code combiner agent
-            output_dict['code_combiner_agent'] = dict(self.code_combiner_agent(agent_code_list = str(code_list), dataset=dict_['dataset']))
-        except Exception as e:
-            output_dict = {"response": f"This is the error from the system: {str(e)}"}
+    def execute_plan(self, query, plan):
+        """Execute the plan and yield results as they complete"""
+        dict_ = {}
+        dict_['dataset'] = self.dataset.retrieve(query)[0].text
+        dict_['styling_index'] = self.styling_index.retrieve(query)[0].text
+        dict_['hint'] = []
+        dict_['goal'] = query
+        
+        plan_text = plan['plan'].replace('Plan','').replace(':','').strip()
+        plan_list = plan_text.split('->')
+        
 
-        return output_dict
+        # Execute agents in parallel
+        futures = []
+        for agent_name in plan_list:
+            inputs = {x:dict_[x] for x in self.agent_inputs[agent_name.strip()]}
+            future = self.executor.submit(self.execute_agent, agent_name, inputs)
+            futures.append((agent_name, future))
+        
+        yield "analytical_planner", dict(plan)
+
+        # Yield results as they complete
+        completed_results = []
+        for agent_name, future in futures:
+            name, result = future.result()
+            completed_results.append((name, result))
+            yield name, result
+        
+        # Execute code combiner after all agents complete
+        code_list = [result['code'] for _, result in completed_results if 'code' in result]
+        combiner_result = self.code_combiner_agent(agent_code_list=str(code_list), dataset=dict_['dataset'])
+        yield 'code_combiner_agent', dict(combiner_result)
+
+
+# Agent to make a Chat history name from a query
+class chat_history_name_agent(dspy.Signature):
+    """You are an agent that takes a query and returns a name for the chat history"""
+    query = dspy.InputField(desc="The query to make a name for")
+    name = dspy.OutputField(desc="A name for the chat history (max 3 words)")
