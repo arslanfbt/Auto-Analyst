@@ -20,4 +20,4 @@ export const useFreeTrialStore = create<FreeTrialStore>()(
       name: 'free-trial-storage',
     }
   )
-) 
+) cls

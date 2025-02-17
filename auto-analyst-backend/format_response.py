@@ -3,6 +3,10 @@ import json
 import sys
 import contextlib
 from io import StringIO
+import time
+import logging
+
+logger = logging.getLogger(__name__)
 
 @contextlib.contextmanager
 def stdoutIO(stdout=None):
@@ -94,19 +98,24 @@ def execute_code_from_markdown(code_str, dataframe=None):
 
 
 def format_response_to_markdown(api_response, agent_name = None, dataframe=None):
+    start_time = time.time()
     try:
         markdown = []
-                        
-        if "response" in api_response and isinstance(api_response['response'], str) and ("auth" in api_response['response'].lower() or "api" in api_response['response'].lower() or "LM" in api_response['response']):
-            return "**Error**: Authentication failed. Please check your API key in settings and try again."
         
-        if "response" in api_response and isinstance(api_response['response'], str) and "model" in api_response['response'].lower():
-            return "**Error**: Model configuration error. Please verify your model selection in settings."
+        # Handle error responses
+        if isinstance(api_response, dict) and "error" in api_response:
+            return f"**Error**: {api_response['error']}"
+                        
+        if "response" in api_response and isinstance(api_response['response'], str):
+            if any(err in api_response['response'].lower() for err in ["auth", "api", "lm"]):
+                return "**Error**: Authentication failed. Please check your API key in settings and try again."
+            if "model" in api_response['response'].lower():
+                return "**Error**: Model configuration error. Please verify your model selection in settings."
 
         for agent, content in api_response.items():
-            if "memory" in agent:
+            if "memory" in agent or not content:
                 continue
-            # print("agent: ", agent)
+                
             markdown.append(f"\n## {agent.replace('_', ' ').title()}\n")
             
             if agent == "analytical_planner":
@@ -119,6 +128,7 @@ def format_response_to_markdown(api_response, agent_name = None, dataframe=None)
             if 'code' in content:
                 markdown.append(f"### Code Implementation\n{format_code_backticked_block(content['code'])}\n")
                 if agent_name is not None:
+                    # print("agent_name: ", agent_name)
                     # execute the code
                     clean_code = format_code_block(content['code'])
                     # print("clean_code: ", clean_code)
@@ -130,6 +140,8 @@ def format_response_to_markdown(api_response, agent_name = None, dataframe=None)
                     if json_outputs:
                         markdown.append("### Plotly JSON Outputs\n")
                         for idx, json_output in enumerate(json_outputs):
+                            if len(json_output) > 1000000:  # If JSON is larger than 1MB
+                                logger.warning(f"Large JSON output detected: {len(json_output)} bytes")
                             markdown.append(f"```plotly\n{json_output}\n```\n")
                         # print("Length of json_outputs: ", len(json_outputs))
 
@@ -137,8 +149,14 @@ def format_response_to_markdown(api_response, agent_name = None, dataframe=None)
                 markdown.append(f"### Commentary\n{content['commentary']}\n")
 
             if 'refined_complete_code' in content:
-                clean_code = format_code_block(content['refined_complete_code']) 
-                output, json_outputs = execute_code_from_markdown(clean_code, dataframe)
+                # print("content['refined_complete_code']: ", content['refined_complete_code'])
+                try:
+                    clean_code = format_code_block(content['refined_complete_code']) 
+                    output, json_outputs = execute_code_from_markdown(clean_code, dataframe)
+                except Exception as e:
+                    logger.error(f"Error in execute_code_from_markdown: {str(e)}")
+                    markdown.append(f"**Error**: {str(e)}")
+                    continue
                 
                 markdown.append(f"### Refined Complete Code\n{format_code_backticked_block(content['refined_complete_code'])}\n")
 
@@ -158,17 +176,12 @@ def format_response_to_markdown(api_response, agent_name = None, dataframe=None)
             #         markdown.append(f"### Memory\n{api_response[f'memory_{agent_name}']}\n")
 
     except Exception as e:
-        if "auth" in str(e).lower():
-            return "**Error**: Authentication failed. Please check your API key in settings and try again."
-        elif "model" in str(e).lower():
-            return "**Error**: Model configuration error. Please verify your model selection in settings."
-        else:
-            return f"**Error**: An unexpected error occurred: {str(e)}"
-    
-    # for i, line in enumerate(markdown):
-    #     print(f"Line {i+1}: {line[:100]}")
-    if len(markdown) < 2 or len(markdown[-1]) < 15:
-        return "No plan can be formulated without a defined goal. Please provide a specific goal for the analysis."
+        logger.error(f"Error in format_response_to_markdown: {str(e)}")
+        return f"**Error**: {str(e)}"
+            
+    if not markdown:
+        return "Please provide a valid query..."
+        
     return '\n'.join(markdown)
 
 

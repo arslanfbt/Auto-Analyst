@@ -292,7 +292,7 @@ class auto_analyst_ind(dspy.Module):
         self.styling_index = retrievers['style_index'].as_retriever(similarity_top_k=1)
         
         # Initialize thread pool
-        self.executor = ThreadPoolExecutor(max_workers=2)
+        self.executor = ThreadPoolExecutor(max_workers=min(4, os.cpu_count() * 2))
 
     def execute_agent_with_memory(self, specified_agent, inputs, query):
         """Execute agent and generate memory summary in parallel"""
@@ -328,24 +328,17 @@ class auto_analyst_ind(dspy.Module):
             inputs = {x:dict_[x] for x in self.agent_inputs[specified_agent.strip()]}
             inputs['hint'] = str(dict_['hint']).replace('[','').replace(']','')
             
-            # Execute agent and memory tasks in parallel
-            future = self.executor.submit(
-                self.execute_agent_with_memory,
-                specified_agent,
-                inputs,
-                query
-            )
-            
-            # Get results
-            output_dict = future.result()
-            
+            # Execute agent
+            result = self.agents[specified_agent.strip()](**inputs)
+            output_dict = {specified_agent.strip(): dict(result)}
+
             if "error" in output_dict:
-                output_dict = {"response": f"Error executing agent: {output_dict['error']}"}
+                return {"response": f"Error executing agent: {output_dict['error']}"}
+
+            return output_dict
 
         except Exception as e:
-            output_dict = {"response": f"This is the error from the system: {str(e)}"}
-
-        return output_dict
+            return {"response": f"This is the error from the system: {str(e)}"}
 
 
 
@@ -380,7 +373,7 @@ class auto_analyst(dspy.Module):
         self.styling_index = retrievers['style_index'].as_retriever(similarity_top_k=1)
         
         # Initialize thread pool for parallel execution
-        self.executor = ThreadPoolExecutor(max_workers=4)
+        self.executor = ThreadPoolExecutor(max_workers=min(len(agents) + 2, os.cpu_count() * 2))
 
     def execute_agent(self, agent_name, inputs):
         """Execute a single agent with given inputs"""
@@ -401,7 +394,7 @@ class auto_analyst(dspy.Module):
         plan = self.planner(goal=dict_['goal'], dataset=dict_['dataset'], Agent_desc=dict_['Agent_desc'])
         return dict(plan)
 
-    def execute_plan(self, query, plan):
+    async def execute_plan(self, query, plan):
         """Execute the plan and yield results as they complete"""
         dict_ = {}
         dict_['dataset'] = self.dataset.retrieve(query)[0].text
@@ -412,7 +405,6 @@ class auto_analyst(dspy.Module):
         plan_text = plan['plan'].replace('Plan','').replace(':','').strip()
         plan_list = plan_text.split('->')
         
-
         # Execute agents in parallel
         futures = []
         for agent_name in plan_list:
@@ -425,15 +417,20 @@ class auto_analyst(dspy.Module):
         # Yield results as they complete
         completed_results = []
         for agent_name, future in futures:
-            name, result = future.result()
-            completed_results.append((name, result))
-            yield name, result
-        
+            try:
+                name, result = await asyncio.get_event_loop().run_in_executor(None, future.result)
+                completed_results.append((name, result))
+                yield name, result
+            except Exception as e:
+                yield agent_name, {"error": str(e)}
+
         # Execute code combiner after all agents complete
         code_list = [result['code'] for _, result in completed_results if 'code' in result]
-        combiner_result = self.code_combiner_agent(agent_code_list=str(code_list), dataset=dict_['dataset'])
-        yield 'code_combiner_agent', dict(combiner_result)
-
+        try:
+            combiner_result = self.code_combiner_agent(agent_code_list=str(code_list), dataset=dict_['dataset'])
+            yield 'code_combiner_agent', dict(combiner_result)
+        except Exception as e:
+            yield 'code_combiner_agent', {'error': str(e)}
 
 # Agent to make a Chat history name from a query
 class chat_history_name_agent(dspy.Signature):
