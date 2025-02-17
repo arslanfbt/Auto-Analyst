@@ -22,6 +22,13 @@ from format_response import format_response_to_markdown, execute_code_from_markd
 import json
 import asyncio
 
+from dotenv import load_dotenv
+
+load_dotenv()
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
 # Add styling_instructions at the top level
 styling_instructions = [
     "Create clear and informative visualizations",
@@ -30,6 +37,33 @@ styling_instructions = [
     "Make sure axes are properly labeled",
     "Add legends where necessary"
 ]
+
+# Add near the top of the file, after imports
+DEFAULT_MODEL_CONFIG = {
+    "provider": "openai",
+    "model": "gpt-4o-mini",
+    "api_key": os.getenv("OPENAI_API_KEY"),
+    "temperature": 0,
+    "max_tokens": 1000
+}
+
+# Initialize DSPy with default model
+if DEFAULT_MODEL_CONFIG["provider"].lower() == "groq":
+    default_lm = dspy.GROQ(
+        model=DEFAULT_MODEL_CONFIG["model"],
+        api_key=DEFAULT_MODEL_CONFIG["api_key"],
+        temperature=0,
+        max_tokens=1000
+    )
+else:
+    default_lm = dspy.LM(
+        model=DEFAULT_MODEL_CONFIG["model"],
+        api_key=DEFAULT_MODEL_CONFIG["api_key"],
+        temperature=0,
+        max_tokens=1000
+    )
+
+dspy.configure(lm=default_lm)
 
 # Initialize retrievers with empty data first
 def initialize_retrievers(styling_instructions: List[str], doc: List[str]):
@@ -45,9 +79,6 @@ def initialize_retrievers(styling_instructions: List[str], doc: List[str]):
 def clear_console():
     os.system('cls' if os.name == 'nt' else 'clear')
 
-# Set up logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
 
 # Check for Housing.csv
 housing_csv_path = "Housing.csv"
@@ -140,7 +171,9 @@ class DataFrameRequest(BaseModel):
 class ModelSettings(BaseModel):
     provider: str
     model: str
-    api_key: str
+    api_key: str = ""
+    temperature: float = 0
+    max_tokens: int = 1000
 
 @app.post("/upload_dataframe")
 async def upload_dataframe(
@@ -308,34 +341,55 @@ async def execute_code(request: dict):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.get("/api/model-settings")
+async def get_model_settings():
+    """Get current model settings"""
+    return {
+        "provider": DEFAULT_MODEL_CONFIG["provider"],
+        "model": DEFAULT_MODEL_CONFIG["model"],
+        "hasCustomKey": bool(os.getenv("CUSTOM_API_KEY")),
+        "temperature": DEFAULT_MODEL_CONFIG["temperature"],
+        "maxTokens": DEFAULT_MODEL_CONFIG["max_tokens"]
+    }
+
 @app.post("/settings/model")
 async def update_model_settings(settings: ModelSettings):
     try:
-        # load api key if null
-        if settings.api_key == "" or settings.api_key == None:
-            if settings.provider == "GROQ":
+        # If no API key provided, use default
+        if not settings.api_key:
+            if settings.provider.lower() == "groq":
                 settings.api_key = os.getenv("GROQ_API_KEY")
-            elif settings.provider == "OPENAI":
+            elif settings.provider.lower() == "openai":
                 settings.api_key = os.getenv("OPENAI_API_KEY")
-            elif settings.provider == "ANTHROPIC":
+            elif settings.provider.lower() == "anthropic":
                 settings.api_key = os.getenv("ANTHROPIC_API_KEY")
-        # Validate API key by attempting to configure DSPy with it
-        if settings.provider == "GROQ":
+        
+        # # Store custom API key if provided
+        # if settings.api_key and settings.api_key != os.getenv(f"{settings.provider}_API_KEY"):
+        #     os.environ["CUSTOM_API_KEY"] = settings.api_key
+        print("settings.api_key: ", settings.api_key)
+        print("settings.model: ", settings.model)
+        print("settings.temperature: ", settings.temperature)
+        print("settings.max_tokens: ", settings.max_tokens)
+        print("settings.provider: ", settings.provider)
+
+        # Configure model with temperature and max_tokens
+        if settings.provider.lower() == "groq":
             lm = dspy.GROQ(
                 model=settings.model,
                 api_key=settings.api_key,
-                temperature=0,
-                max_tokens=1000
+                temperature=settings.temperature,
+                max_tokens=settings.max_tokens
             )
         else:
             lm = dspy.LM(
                 model=settings.model,
                 api_key=settings.api_key,
-                temperature=0,
-                max_tokens=1000
+                temperature=settings.temperature,
+                max_tokens=settings.max_tokens
             )
 
-        # Test the model configuration with a simple query
+        # Test the model configuration
         try:
             lm("Hello, are you working?")
             dspy.configure(lm=lm)
@@ -356,8 +410,6 @@ async def update_model_settings(settings: ModelSettings):
                     status_code=500,
                     detail=f"Error configuring model: {str(model_error)}"
                 )
-    except HTTPException:
-        raise
     except Exception as e:
         raise HTTPException(
             status_code=500,

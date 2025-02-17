@@ -18,8 +18,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 
-const PREVIEW_API_URL = 'http://localhost:8000';
-// const PREVIEW_API_URL = 'https://ashad001-auto-analyst-backend.hf.space';
+// const PREVIEW_API_URL = 'http://localhost:8000';
+const PREVIEW_API_URL = 'https://ashad001-auto-analyst-backend.hf.space';
 
 interface FileUpload {
   file: File
@@ -84,6 +84,23 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, onFileUpload, disa
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (file) {
+      // Check file type before proceeding
+      const isCSVByExtension = file.name.toLowerCase().endsWith('.csv');
+      const isCSVByType = file.type === 'text/csv' || file.type === 'application/csv';
+      
+      if (!isCSVByExtension || !isCSVByType) {
+        setFileUpload({ 
+          file, 
+          status: 'error', 
+          errorMessage: 'Please upload a CSV file only' 
+        });
+        
+        setTimeout(() => {
+          setFileUpload(null);
+        }, 3000);
+        return;
+      }
+      
       setFileUpload({ file, status: 'loading' })
       
       try {
@@ -100,7 +117,7 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, onFileUpload, disa
         setFileUpload(prev => prev ? { ...prev, status: 'error', errorMessage } : null)
         
         setTimeout(() => {
-          setFileUpload(null)
+          setFileUpload(null);
         }, 3000)
       }
     }

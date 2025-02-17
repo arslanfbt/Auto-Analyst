@@ -123,13 +123,14 @@ const ChatInterface: React.FC = () => {
       if (match) {
         selectAgent = match[1]
         query = message.replace(/@\w+/, '').trim()
+
         setSelectedAgent(selectAgent)
       } else {
         setSelectedAgent(null)
       }
 
-      // const baseUrl = 'https://ashad001-auto-analyst-backend.hf.space'
-      const baseUrl = 'http://localhost:8000'
+      const baseUrl = 'https://ashad001-auto-analyst-backend.hf.space'
+      // const baseUrl = 'http://localhost:8000'
       const endpoint = selectAgent
         ? `${baseUrl}/chat/${selectAgent}`
         : `${baseUrl}/chat`
@@ -231,33 +232,72 @@ const ChatInterface: React.FC = () => {
   }
 
   const handleFileUpload = async (file: File) => {
+    // More thorough CSV validation
+    const isCSVByExtension = file.name.toLowerCase().endsWith('.csv');
+    const isCSVByType = file.type === 'text/csv' || file.type === 'application/csv';
+    
+    if (!isCSVByExtension || !isCSVByType) {
+      addMessage({
+        text: "Error: Please upload a valid CSV file. Other file formats are not supported.",
+        sender: "ai"
+      });
+      return;
+    }
+
+    // Add file size validation (30MB)
+    if (file.size > 30 * 1024 * 1024) {
+      addMessage({
+        text: "Error: File size exceeds 30MB limit. Please upload a smaller file.",
+        sender: "ai"
+      });
+      return;
+    }
+
     const formData = new FormData()
     formData.append("file", file)
     formData.append("styling_instructions", "Please analyze the data and provide a detailed report.")
 
     try {
-      // await axios.post("https://ashad001-auto-analyst-backend.hf.space/upload_dataframe", formData, {
-      //   headers: {
-      //     "Content-Type": "multipart/form-data",
-      //   },
-      //   timeout: 30000, // 30 seconds
-      //   maxContentLength: 10 * 1024 * 1024, // 10MB
-      // })
-      await axios.post("http://localhost:8000/upload_dataframe", formData, {
+      await axios.post("https://ashad001-auto-analyst-backend.hf.space/upload_dataframe", formData, {
         headers: {
           "Content-Type": "multipart/form-data",
         },
         timeout: 30000, // 30 seconds
-        maxContentLength: 10 * 1024 * 1024, // 10MB
+        maxContentLength: 30 * 1024 * 1024, // 30MB
       })
+      
+      // await axios.post("http://localhost:8000/upload_dataframe", formData, {
+      //   headers: {
+      //     "Content-Type": "multipart/form-data",
+      //   },
+      //   timeout: 30000, // 30 seconds
+      //   maxContentLength: 30 * 1024 * 1024, // 30MB
+      // })
+      
+      // Add success message
+      addMessage({
+        text: "File uploaded successfully! You can now ask questions about your data.",
+        sender: "ai"
+      });
+
     } catch (error) {
+      let errorMessage = "An error occurred while uploading the file.";
+      
       if (axios.isAxiosError(error)) {
         if (error.code === 'ECONNABORTED') {
-          throw new Error('Upload timeout')
+          errorMessage = "Upload timeout: The request took too long to complete. Please try again with a smaller file.";
+        } else if (error.response) {
+          // Use backend error message if available
+          errorMessage = `Upload failed: ${error.response.data?.message || error.message}`;
         }
-        throw error
       }
-      throw error
+      
+      addMessage({
+        text: errorMessage,
+        sender: "ai"
+      });
+      
+      throw error;
     }
   }
 

@@ -128,7 +128,7 @@ def format_response_to_markdown(api_response, agent_name = None, dataframe=None)
             if 'code' in content:
                 markdown.append(f"### Code Implementation\n{format_code_backticked_block(content['code'])}\n")
                 if agent_name is not None:
-                    print("agent_name: ", agent_name)
+                    # print("agent_name: ", agent_name)
                     # execute the code
                     clean_code = format_code_block(content['code'])
                     # print("clean_code: ", clean_code)
@@ -149,7 +149,7 @@ def format_response_to_markdown(api_response, agent_name = None, dataframe=None)
                 markdown.append(f"### Commentary\n{content['commentary']}\n")
 
             if 'refined_complete_code' in content:
-                print("content['refined_complete_code']: ", content['refined_complete_code'])
+                # print("content['refined_complete_code']: ", content['refined_complete_code'])
                 try:
                     clean_code = format_code_block(content['refined_complete_code']) 
                     output, json_outputs = execute_code_from_markdown(clean_code, dataframe)

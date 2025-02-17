@@ -1,45 +1,67 @@
 import React, { useState, useEffect } from 'react';
-import { X, CheckCircle, AlertCircle, Info } from 'lucide-react';
+import { X, CheckCircle, AlertCircle, Info, Settings } from 'lucide-react';
+import { name } from 'plotly.js/lib/scatter';
 
 interface SettingsPopupProps {
   isOpen: boolean;
   onClose: () => void;
+  initialSettings?: {
+    provider: string;
+    model: string;
+    hasCustomKey: boolean;
+    apiKey: string;
+    temperature: number;
+    maxTokens: number;
+  };
 }
 
-const API_URL = 'http://localhost:8000';
-// const API_URL = "https://ashad001-auto-analyst-backend.hf.space"
+// const API_URL = 'http://localhost:8000';
+const API_URL = "https://ashad001-auto-analyst-backend.hf.space"
 
 // Define model providers and their models
 const MODEL_PROVIDERS = [
   {
     name: 'OpenAI',
     models: [
-      { id: 'gpt-4', name: 'GPT-4' },
-      { id: 'gpt-4o-mini', name: 'GPT-4o Mini' },
-      { id: 'gpt-3.5-turbo', name: 'GPT-3.5 Turbo' },
+      { id: 'o3-mini', name: 'o3-mini' }, 
+      { id: 'o1', name: 'o1' }, 
+      { id: 'o1-mini', name: 'o1-mini' }, 
+      { id: 'gpt-4o', name: 'GPT-4o' }, 
+      { id: 'gpt-4o-mini', name: 'GPT-4o Mini' }, 
+      { id: 'gpt-4', name: 'GPT-4' }, 
+      { id: 'gpt-3.5-turbo', name: 'GPT-3.5 Turbo' }, 
     ]
   },
   {
     name: 'Anthropic',
     models: [
-      { id: 'anthropic/claude-3-opus-20240229', name: 'Claude 3 Opus' },
+      { id: 'anthropic/claude-3-opus-20240229', name: 'Claude 3 Opus' }, 
+      { id: 'anthropic/claude-3-5-sonnet-latest', name: 'Claude 3.5 Sonnet' }, 
+      { id: 'anthropic/claude-3-haiku-latest', name: 'Claude 3 Haiku' }, 
     ]
   },
   {
     name: 'GROQ',
     models: [
-      { id: 'deepseek-r1-distill-qwen-32b', name: 'DeepSeek R1 Distill Qwen 32b' },
-      { id: 'llama-3.3-70b-versatile', name: 'Llama 3.3 70b' },
+      { id: 'deepseek-r1-distill-qwen-32b', name: 'DeepSeek R1 Distill Qwen 32b' }, 
+      { id: 'llama-3.3-70b-versatile', name: 'Llama 3.3 70b' }, 
+      { id: 'llama3-8b-8192', name: 'Llama 3 8b' }, 
+      { id: 'gemma2-9b-it', name: 'Gemma 2 9b' }, 
+      { id: 'qwen-2.5-32b', name: 'Qwen 2.5 32b' }, 
+      { id: 'mixtral-8x7b-32768', name: 'Mixtral 8x7b' }, 
     ]
   }
 ];
 
-const SettingsPopup: React.FC<SettingsPopupProps> = ({ isOpen, onClose }) => {
-  const [selectedProvider, setSelectedProvider] = useState(MODEL_PROVIDERS[0].name);
-  const [selectedModel, setSelectedModel] = useState(MODEL_PROVIDERS[0].models[0].id);
-  const [useCustomAPI, setUseCustomAPI] = useState(false);
-  const [apiKey, setApiKey] = useState('');
+const SettingsPopup: React.FC<SettingsPopupProps> = ({ isOpen, onClose, initialSettings }) => {
+  const [selectedProvider, setSelectedProvider] = useState(initialSettings?.provider || MODEL_PROVIDERS[0].name);
+  const [selectedModel, setSelectedModel] = useState(initialSettings?.model || MODEL_PROVIDERS[0].models[0].id);
+  const [useCustomAPI, setUseCustomAPI] = useState(initialSettings?.hasCustomKey || false);
+  const [apiKey, setApiKey] = useState(initialSettings?.apiKey || '');
   const [notification, setNotification] = useState<{type: 'success' | 'error', message: string} | null>(null);
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [temperature, setTemperature] = useState(initialSettings?.temperature || 0);
+  const [maxTokens, setMaxTokens] = useState(initialSettings?.maxTokens || 1000);
 
   // Update selected model when provider changes
   useEffect(() => {
@@ -70,6 +92,8 @@ const SettingsPopup: React.FC<SettingsPopupProps> = ({ isOpen, onClose }) => {
           provider: selectedProvider,
           model: selectedModel,
           api_key: useCustomAPI ? apiKey.trim() : '',
+          temperature: temperature,
+          max_tokens: maxTokens,
         }),
       });
 
@@ -147,7 +171,7 @@ const SettingsPopup: React.FC<SettingsPopupProps> = ({ isOpen, onClose }) => {
               id="useCustomAPI"
               checked={useCustomAPI}
               onChange={(e) => setUseCustomAPI(e.target.checked)}
-              className="rounded border-gray-300 text-[#FF7F7F] focus:ring-[#FF7F7F]"
+              className="rounded border-gray-300 text-[#FF7F7F] focusj:ring-[#FF7F7F]"
             />
             <label htmlFor="useCustomAPI" className="text-sm font-medium text-gray-700">
               Use custom API key
@@ -177,6 +201,50 @@ const SettingsPopup: React.FC<SettingsPopupProps> = ({ isOpen, onClose }) => {
                 placeholder="Enter your API key"
                 className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-[#FF7F7F] focus:border-transparent"
               />
+            </div>
+          )}
+          
+          <div className="border-t pt-4">
+            <button
+              type="button"
+              onClick={() => setShowAdvanced(!showAdvanced)}
+              className="text-sm text-gray-600 hover:text-gray-900 flex items-center gap-2"
+            >
+              <Settings className="w-4 h-4" />
+              Advanced Settings
+            </button>
+          </div>
+
+          {showAdvanced && (
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Temperature ({temperature})
+                </label>
+                <input
+                  type="range"
+                  min="0"
+                  max="1"
+                  step="0.1"
+                  value={temperature}
+                  onChange={(e) => setTemperature(parseFloat(e.target.value))}
+                  className="w-full"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Max Tokens
+                </label>
+                <input
+                  type="number"
+                  value={maxTokens}
+                  onChange={(e) => setMaxTokens(parseInt(e.target.value))}
+                  min="1"
+                  max="32000"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                />
+              </div>
             </div>
           )}
           

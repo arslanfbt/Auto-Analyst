@@ -262,10 +262,10 @@ const CodeBlock: React.FC<CodeBlockProps> = ({ language, value, onExecute, agent
                 <div className="border-t border-gray-700">
                   <div className="px-4 py-2 text-sm font-medium text-gray-300">output</div>
                   {executionOutput && (
-                    <div className="px-5 py-4 text-gray-300 font-mono text-sm bg-[#1E1E1E]">{executionOutput}</div>
+                    <div className="px-5 py-4 text-gray-300 font-mono text-sm bg-[#1E1E1E] overflow-x-auto">{executionOutput}</div>
                   )}
                   {plotlyOutputs.map((plotlyOutput, index) => (
-                    <div key={index} className="px-5 py-4 bg-white">
+                    <div key={index} className="px-5 py-4 bg-white overflow-x-auto">
                       <PlotlyChart data={plotlyOutput.data} layout={plotlyOutput.layout} />
                     </div>
                   ))}

@@ -1,6 +1,6 @@
 "use client"
 
-import { type FC, useState } from "react"
+import { type FC, useState, useEffect } from "react"
 import Image from "next/image"
 import { motion } from "framer-motion"
 import { X, MessageSquarePlus, History, Settings, LogOut } from "lucide-react"
@@ -8,6 +8,10 @@ import { signOut, useSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
 import { useChatHistoryStore } from "@/lib/store/chatHistoryStore"
 import SettingsPopup from './SettingsPopup'
+import axios from "axios"
+
+// const PREVIEW_API_URL = 'http://localhost:8000';
+const PREVIEW_API_URL = 'https://ashad001-auto-analyst-backend.hf.space';
 
 interface SidebarProps {
   isOpen: boolean
@@ -20,6 +24,29 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, onNewChat }) => {
   const { data: session } = useSession()
   const router = useRouter()
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
+  const [modelSettings, setModelSettings] = useState({
+    provider: '',
+    model: '',
+    hasCustomKey: false,
+    apiKey: '',
+    temperature: 0.7,
+    maxTokens: 2000
+  });
+
+  useEffect(() => {
+    // Fetch current model settings when settings popup is opened
+    if (isSettingsOpen) {
+      const fetchModelSettings = async () => {
+        try {
+          const response = await axios.get(`${PREVIEW_API_URL}/api/model-settings`);
+          setModelSettings(response.data);
+        } catch (error) {
+          console.error('Failed to fetch model settings:', error);
+        }
+      };
+      fetchModelSettings();
+    }
+  }, [isSettingsOpen]);
 
   const handleNewChat = () => {
     clearMessages()
@@ -98,6 +125,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, onNewChat }) => {
       <SettingsPopup 
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
+        initialSettings={modelSettings}
       />
     </>
   )
