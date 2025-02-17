@@ -128,8 +128,8 @@ const ChatInterface: React.FC = () => {
         setSelectedAgent(null)
       }
 
-      const baseUrl = 'https://ashad001-auto-analyst-backend.hf.space'
-      // const baseUrl = 'http://localhost:8000'
+      // const baseUrl = 'https://ashad001-auto-analyst-backend.hf.space'
+      const baseUrl = 'http://localhost:8000'
       const endpoint = selectAgent
         ? `${baseUrl}/chat/${selectAgent}`
         : `${baseUrl}/chat`
@@ -236,20 +236,20 @@ const ChatInterface: React.FC = () => {
     formData.append("styling_instructions", "Please analyze the data and provide a detailed report.")
 
     try {
-      await axios.post("https://ashad001-auto-analyst-backend.hf.space/upload_dataframe", formData, {
-        headers: {
-          "Content-Type": "multipart/form-data",
-        },
-        timeout: 30000, // 30 seconds
-        maxContentLength: 10 * 1024 * 1024, // 10MB
-      })
-      // await axios.post("http://localhost:8000/upload_dataframe", formData, {
+      // await axios.post("https://ashad001-auto-analyst-backend.hf.space/upload_dataframe", formData, {
       //   headers: {
       //     "Content-Type": "multipart/form-data",
       //   },
       //   timeout: 30000, // 30 seconds
       //   maxContentLength: 10 * 1024 * 1024, // 10MB
       // })
+      await axios.post("http://localhost:8000/upload_dataframe", formData, {
+        headers: {
+          "Content-Type": "multipart/form-data",
+        },
+        timeout: 30000, // 30 seconds
+        maxContentLength: 10 * 1024 * 1024, // 10MB
+      })
     } catch (error) {
       if (axios.isAxiosError(error)) {
         if (error.code === 'ECONNABORTED') {

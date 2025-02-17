@@ -18,8 +18,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 
-// const PREVIEW_API_URL = 'http://localhost:8000';
-const PREVIEW_API_URL = 'https://ashad001-auto-analyst-backend.hf.space';
+const PREVIEW_API_URL = 'http://localhost:8000';
+// const PREVIEW_API_URL = 'https://ashad001-auto-analyst-backend.hf.space';
 
 interface FileUpload {
   file: File
@@ -228,12 +228,37 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, onFileUpload, disa
     }
   }
 
+  const handlePreviewDefaultDataset = async () => {
+    try {
+      const response = await axios.get(`${PREVIEW_API_URL}/api/default-dataset`);
+      setFilePreview({
+        headers: response.data.headers,
+        rows: response.data.rows
+      });
+      setDatasetDescription({
+        name: response.data.name,
+        description: response.data.description
+      });
+      setShowPreview(true);
+    } catch (error) {
+      console.error('Failed to fetch default dataset:', error);
+    }
+  };
+
   const handleUploadWithDescription = async () => {
-    if (!fileUpload?.file || !datasetDescription.name || !datasetDescription.description) return;
+    if (!datasetDescription.name || !datasetDescription.description) return;
 
     try {
-      const formData = new FormData();
-      formData.append('file', fileUpload.file);
+      let formData = new FormData();
+      
+      if (fileUpload?.file) {
+        // Handle uploaded file
+        formData.append('file', fileUpload.file);
+      } else {
+        // For default dataset, no need to upload the file again
+        formData.append('file', 'Housing.csv');
+      }
+      
       formData.append('name', datasetDescription.name);
       formData.append('description', datasetDescription.description);
 
@@ -246,8 +271,10 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, onFileUpload, disa
       if (response.status === 200) {
         setShowPreview(false);
         setUploadSuccess(true);
-        setFileUpload(prev => prev ? { ...prev, status: 'success' } : null);
-        setDatasetDescription({ name: '', description: ''});
+        if (fileUpload) {
+          setFileUpload(prev => prev ? { ...prev, status: 'success' } : null);
+        }
+        setDatasetDescription({ name: '', description: '' });
         
         setTimeout(() => {
           setUploadSuccess(false);
@@ -325,6 +352,18 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, onFileUpload, disa
                       </button>
                     )}
                   </div>
+                </div>
+              )}
+
+              {!fileUpload && (
+                <div className="max-w-3xl mx-auto mb-2">
+                  <button
+                    onClick={handlePreviewDefaultDataset}
+                    className="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-blue-600 bg-blue-50 border border-blue-200 rounded-md hover:bg-blue-100 transition-colors"
+                  >
+                    <Eye className="w-4 h-4" />
+                    Preview Default Dataset
+                  </button>
                 </div>
               )}
 
@@ -458,7 +497,9 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, onFileUpload, disa
 
                 <div className="border rounded-lg bg-white">
                   <div className="p-3 border-b bg-gray-50 flex justify-between items-center">
-                    <h3 className="font-medium text-gray-700">Data Preview</h3>
+                    <h3 className="font-medium text-gray-700">
+                      {fileUpload ? 'Data Preview' : 'Default Dataset Preview'}
+                    </h3>
                     <button
                       onClick={handleUploadWithDescription}
                       disabled={!datasetDescription.name || !datasetDescription.description}
@@ -468,7 +509,7 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, onFileUpload, disa
                           : 'bg-[#FF7F7F] hover:bg-[#FF6666]'
                       }`}
                     >
-                      Upload Dataset
+                      {fileUpload ? 'Upload Dataset' : 'Use Default Dataset'}
                     </button>
                   </div>
                   <div className="overflow-x-auto">
@@ -511,7 +552,7 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, onFileUpload, disa
                 <div className="flex justify-end gap-3 mt-4">
                   <button
                     onClick={() => setShowPreview(false)}
-                    className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
+                    className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-[#FF7F7F] focus:border-transparent transition-colors hover:border-[#FF7F7F]"
                   >
                     Close
                   </button>

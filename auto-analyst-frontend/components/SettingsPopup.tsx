@@ -6,8 +6,8 @@ interface SettingsPopupProps {
   onClose: () => void;
 }
 
-// const API_URL = 'http://localhost:8000';
-const API_URL = "https://ashad001-auto-analyst-backend.hf.space"
+const API_URL = 'http://localhost:8000';
+// const API_URL = "https://ashad001-auto-analyst-backend.hf.space"
 
 // Define model providers and their models
 const MODEL_PROVIDERS = [
