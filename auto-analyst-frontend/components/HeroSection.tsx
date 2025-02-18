@@ -82,10 +82,7 @@ export default function HeroSection() {
                   onClick={handleCustomSolution}
                   className="border-2 border-[#FF7F7F] text-[#FF7F7F] px-8 py-4 rounded-full font-semibold flex items-center justify-center gap-2 hover:bg-[#FF7F7F] hover:text-white transition-colors"
                 >
-                  Enterprise Solutions
-                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-[#FF7F7F] text-white">
-                    Custom API
-                  </span>
+                  Custom Solutions
                 </motion.button>
               </div>
             )}

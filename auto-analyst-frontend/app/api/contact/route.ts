@@ -41,8 +41,14 @@ export async function POST(request: Request) {
       to: email,
       subject: 'Demo Request Received - Auto-Analyst',
       html: `
-        <h2>Thank you for your interest in Auto-Analyst!</h2>
-        <p>We've received your demo request and our team will be in touch with you shortly to schedule a personalized demo.</p>
+        <h2>Thank You for Reaching Out!</h2>
+        <p>We appreciate you taking the time to fill out our form. Our team is reviewing your request and will get back to you shortly.</p>
+        <p>In the meantime, stay connected and explore our latest insights:</p>
+        <ul style="margin-top: 10px;">
+          <li><a href="https://www.firebird-technologies.com/" style="color: #FF7F7F;">Subscribe to Our Newsletter</a></li>
+          <li><a href="https://www.linkedin.com/company/firebird-technologies-singapore/" style="color: #FF7F7F;">Follow Us on LinkedIn</a></li>
+        </ul>
+        <p>If you have any questions, feel free to reply to this email.</p>
         <p>Best regards,<br>The Auto-Analyst Team</p>
       `,
     })

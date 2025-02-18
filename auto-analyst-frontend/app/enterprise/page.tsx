@@ -1,5 +1,6 @@
 "use client"
 
+import { useState } from "react"
 import { motion } from "framer-motion"
 import Image from "next/image"
 import { useRouter } from "next/navigation"
@@ -13,7 +14,8 @@ import {
   Facebook,
   Linkedin,
   LineChart,
-  Chrome
+  Chrome,
+  Loader2
 } from "lucide-react"
 
 const features = [
@@ -47,11 +49,53 @@ const features = [
   }
 ]
 
+interface FormData {
+  name: string
+  email: string
+  company: string
+  budget?: string
+  message: string
+}
+
 export default function EnterprisePage() {
   const router = useRouter()
+  const [isLoading, setIsLoading] = useState(false)
+  const [submitted, setSubmitted] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [formData, setFormData] = useState<FormData>({
+    name: "",
+    email: "",
+    company: "",
+    budget: "10000",
+    message: ""
+  })
 
-  const handleContact = () => {
-    router.push('/contact')
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setIsLoading(true)
+    setError(null)
+    
+    try {
+      const response = await fetch('/api/contact', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(formData),
+      })
+
+      if (response.ok) {
+        setSubmitted(true)
+      } else {
+        const data = await response.json()
+        setError(data.error || 'Failed to submit form. Please try again.')
+      }
+    } catch (error) {
+      console.error('Error submitting form:', error)
+      setError('Network error. Please check your connection and try again.')
+    }
+    
+    setIsLoading(false)
   }
 
   return (
@@ -70,14 +114,6 @@ export default function EnterprisePage() {
             <p className="text-xl text-gray-600 mb-8">
               Customize Auto-Analyst to your organization's specific needs with our enterprise solutions
             </p>
-            <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              onClick={handleContact}
-              className="bg-[#FF7F7F] text-white px-8 py-4 rounded-full font-semibold inline-flex items-center gap-2 hover:bg-[#FF6666] transition-colors"
-            >
-              Schedule a Demo <ArrowRight className="w-5 h-5" />
-            </motion.button>
           </motion.div>
         </div>
       </section>
@@ -126,24 +162,127 @@ export default function EnterprisePage() {
         </div>
       </section>
 
-      {/* CTA Section */}
-      <section className="py-16 bg-gray-50">
+      {/* Contact Form */}
+      <section className="py-16 bg-white">
         <div className="container mx-auto px-4">
-          <div className="max-w-3xl mx-auto text-center">
-            <h2 className="text-3xl font-bold text-gray-900 mb-6">
-              Ready to Transform Your Data Analytics?
-            </h2>
-            <p className="text-xl text-gray-600 mb-8">
-              Let's discuss how Auto-Analyst can be customized for your organization's needs
-            </p>
-            <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              onClick={handleContact}
-              className="bg-[#FF7F7F] text-white px-8 py-4 rounded-full font-semibold inline-flex items-center gap-2 hover:bg-[#FF6666] transition-colors"
+          <div className="max-w-2xl mx-auto">
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              className="bg-white rounded-2xl shadow-xl p-8"
             >
-              Contact Sales Team <ArrowRight className="w-5 h-5" />
-            </motion.button>
+              {submitted ? (
+                <div className="text-center py-8">
+                  <h2 className="text-2xl font-bold text-gray-900 mb-4">Thank You!</h2>
+                  <p className="text-gray-600 mb-6">
+                    We'll be in touch with you shortly to schedule your demo.
+                  </p>
+                </div>
+              ) : (
+                <>
+                  <h2 className="text-3xl font-bold text-gray-900 mb-6">Schedule a Demo</h2>
+                  {error && (
+                    <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-600">
+                      <p>{error}</p>
+                    </div>
+                  )}
+                  <form onSubmit={handleSubmit} className="space-y-6">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Name
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={formData.name}
+                        onChange={(e) => setFormData({...formData, name: e.target.value})}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#FF7F7F] focus:border-transparent text-black"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Business Email
+                      </label>
+                      <input
+                        type="email"
+                        required
+                        value={formData.email}
+                        onChange={(e) => setFormData({...formData, email: e.target.value})}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#FF7F7F] focus:border-transparent text-black"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Company
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={formData.company}
+                        onChange={(e) => setFormData({...formData, company: e.target.value})}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#FF7F7F] focus:border-transparent text-black"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Budget (USD)
+                      </label>
+                      <div className="space-y-2">
+                        <input
+                          type="range"
+                          min="1000"
+                          max="50000"
+                          step="1000"
+                          value={formData.budget}
+                          onChange={(e) => setFormData({...formData, budget: e.target.value})}
+                          className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-[#FF7F7F] text-black"
+                        />
+                        <div className="flex justify-between text-sm text-gray-600">
+                          <span>$1,000</span>
+                          <span className="text-[#FF7F7F] font-medium">
+                            ${Number(formData.budget).toLocaleString()}
+                          </span>
+                          <span>$50,000+</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Message
+                      </label>
+                      <textarea
+                        required
+                        value={formData.message}
+                        onChange={(e) => setFormData({...formData, message: e.target.value})}
+                        rows={4}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#FF7F7F] focus:border-transparent text-black"
+                        placeholder="Tell us about your needs..."
+                      />
+                    </div>
+
+                    <button
+                      type="submit"
+                      disabled={isLoading}
+                      className="w-full bg-[#FF7F7F] text-white px-6 py-3 rounded-full hover:bg-[#FF6666] disabled:opacity-50 flex items-center justify-center gap-2"
+                    >
+                      {isLoading ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          Submitting...
+                        </>
+                      ) : (
+                        'Schedule Demo'
+                      )}
+                    </button>
+                  </form>
+                </>
+              )}
+            </motion.div>
           </div>
         </div>
       </section>

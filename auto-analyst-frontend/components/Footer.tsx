@@ -1,6 +1,6 @@
-"use client"
-import Image from "next/image"
-import { Newspaper } from "lucide-react"
+"use client";
+import Image from "next/image";
+import { Newspaper } from "lucide-react";
 
 export default function Footer() {
   return (
@@ -15,13 +15,29 @@ export default function Footer() {
                 width={150}
                 height={40}
                 className="mb-2"
-                style={{ width: '40px', height: 'auto' }}
+                style={{ width: "40px", height: "auto" }}
               />
               <h1 className="text-2xl font-bold">Auto-Analyst</h1>
             </div>
-            <p className="text-gray-300">Transforming data into actionable insights</p>
-            <div className="mt-4 text-sm text-gray-400">
-              Made by <a href="https://www.firebird-technologies.com/" target="_blank" rel="noopener noreferrer" className="text-[#FF7F7F] hover:text-[#FF6666]">FireBirdTech</a>
+            <p className="text-gray-300">
+              Transforming data into actionable insights
+            </p>
+            <div className="mt-4 text-sm text-gray-400 flex items-center gap-1">
+              Made by{" "}
+              <Image
+                src="https://4q2e4qu710mvgubg.public.blob.vercel-storage.com/20x20%20icon-5zjC17IFXIcvOzFbGSHl5b0hIQT1s3.png"
+                alt="FireBirdTech Logo"
+                width={20}
+                height={20}
+              />{" "}
+              <a
+                href="https://www.firebird-technologies.com/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-[#FF7F7F] hover:text-[#FF6666]"
+              >
+                FireBirdTech
+              </a>
             </div>
           </div>
 
@@ -52,10 +68,12 @@ export default function Footer() {
             </ul>
           </div>
         </div>
-        
+
         <div className="mt-8 pt-8 border-t border-gray-800 flex justify-between items-center">
-          <p>&copy; {new Date().getFullYear()} Auto-Analyst. All rights reserved.</p>
-          
+          <p>
+            &copy; {new Date().getFullYear()} Auto-Analyst. All rights reserved.
+          </p>
+
           <a
             href="https://www.firebird-technologies.com/"
             target="_blank"
@@ -69,5 +87,5 @@ export default function Footer() {
         </div>
       </div>
     </footer>
-  )
+  );
 }
