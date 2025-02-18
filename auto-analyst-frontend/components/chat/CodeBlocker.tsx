@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import PlotlyChart from "@/components/PlotlyChart"
 import axios from "axios"
+import { useSessionStore } from '@/lib/store/sessionStore'
 
 interface CodeBlockProps {
   language: string
@@ -18,6 +19,7 @@ interface CodeBlockProps {
 }
 
 const CodeBlock: React.FC<CodeBlockProps> = ({ language, value, onExecute, agentName }) => {
+  const { sessionId } = useSessionStore()
   const [isVisible, setIsVisible] = useState(language === "output")
   const [copied, setCopied] = useState(false)
   const [isEditing, setIsEditing] = useState(false)
@@ -49,10 +51,14 @@ const CodeBlock: React.FC<CodeBlockProps> = ({ language, value, onExecute, agent
     setPlotlyOutputs([])
 
     try {
-      // const response = await axios.post("http://localhost:8000/execute_code", {
-      const response = await axios.post("https://ashad001-auto-analyst-backend.hf.space/execute_code", {
+      const API_URL = 'http://localhost:8000'
+      const response = await axios.post(`${API_URL}/execute_code`, {
         code: editedCode,
-
+        session_id: sessionId,
+      }, {
+        headers: {
+          ...(sessionId && { 'X-Session-ID': sessionId }),
+        },
       })
 
       // Handle different types of responses
