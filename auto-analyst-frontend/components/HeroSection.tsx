@@ -27,6 +27,10 @@ export default function HeroSection() {
     router.push('/chat')
   }
 
+  const handleCustomSolution = () => {
+    router.push('/enterprise') // You'll need to create this route
+  }
+
   return (
     <section ref={containerRef} className="relative h-screen flex items-center overflow-hidden">
       <motion.div
@@ -60,15 +64,30 @@ export default function HeroSection() {
             <p className="text-xl text-gray-600 mb-8">
               Harness the power of AI to analyze, predict, and optimize your business decisions
             </p>
+            
             {mounted && (
-              <motion.button
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                onClick={handleGetStarted}
-                className="bg-[#FF7F7F] text-white px-8 py-4 rounded-full font-semibold flex items-center gap-2 hover:bg-[#FF6666] transition-colors"
-              >
-                Get Started <ArrowRight className="w-5 h-5" />
-              </motion.button>
+              <div className="flex flex-col sm:flex-row gap-4">
+                <motion.button
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                  onClick={handleGetStarted}
+                  className="bg-[#FF7F7F] text-white px-8 py-4 rounded-full font-semibold flex items-center justify-center gap-2 hover:bg-[#FF6666] transition-colors"
+                >
+                  Get Started <ArrowRight className="w-5 h-5" />
+                </motion.button>
+                
+                <motion.button
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                  onClick={handleCustomSolution}
+                  className="border-2 border-[#FF7F7F] text-[#FF7F7F] px-8 py-4 rounded-full font-semibold flex items-center justify-center gap-2 hover:bg-[#FF7F7F] hover:text-white transition-colors"
+                >
+                  Enterprise Solutions
+                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-[#FF7F7F] text-white">
+                    Custom API
+                  </span>
+                </motion.button>
+              </div>
             )}
           </motion.div>
         </div>

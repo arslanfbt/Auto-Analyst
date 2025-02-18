@@ -1,7 +1,7 @@
 "use client"
 
 import type React from "react"
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { motion } from "framer-motion"
 import Image from "next/image"
 import ChatWindow from "./ChatWindow"
@@ -15,6 +15,7 @@ import { useChatHistoryStore } from "@/lib/store/chatHistoryStore"
 import { useCookieConsentStore } from "@/lib/store/cookieConsentStore"
 import { useRouter } from "next/navigation"
 import { AwardIcon } from "lucide-react"
+import { useSessionStore } from '@/lib/store/sessionStore'
 
 interface PlotlyMessage {
   type: "plotly"
@@ -53,6 +54,8 @@ const ChatInterface: React.FC = () => {
   const [agents, setAgents] = useState<AgentInfo[]>([])
   const [showWelcome, setShowWelcome] = useState(true)
   const [abortController, setAbortController] = useState<AbortController | null>(null)
+  const { sessionId } = useSessionStore()
+  const chatInputRef = useRef<{ handlePreviewDefaultDataset: () => void }>(null);
 
   useEffect(() => {
     setMounted(true)
@@ -89,8 +92,31 @@ const ChatInterface: React.FC = () => {
     }
   }, [status, clearMessages])
 
-  const handleNewChat = () => {
+  const handleNewChat = async () => {
     setShowWelcome(true)
+    clearMessages()
+    
+    if (sessionId) {
+      try {
+        // const baseUrl = 'http://localhost:8000'
+        const baseUrl = 'https://ashad001-auto-analyst-backend.hf.space'
+        
+        // Reset session first
+        await axios.post(`${baseUrl}/reset-session`, null, {
+          headers: {
+            'X-Session-ID': sessionId,
+          },
+        });
+
+        // Small delay to ensure backend state is updated
+        await new Promise(resolve => setTimeout(resolve, 100));
+        
+        // Now show the preview dialog - this will also ensure we're using the default dataset
+        chatInputRef.current?.handlePreviewDefaultDataset();
+      } catch (error) {
+        console.error('Failed to reset session:', error);
+      }
+    }
   }
 
   const handleStopGeneration = () => {
@@ -139,7 +165,8 @@ const ChatInterface: React.FC = () => {
         'Content-Type': 'application/json',
         'Access-Control-Allow-Origin': '*',
         'Cache-Control': 'no-cache',
-        'Connection': 'keep-alive'
+        'Connection': 'keep-alive',
+        ...(sessionId && { 'X-Session-ID': sessionId }),
       }
 
       if (selectAgent) {
@@ -258,27 +285,23 @@ const ChatInterface: React.FC = () => {
     formData.append("styling_instructions", "Please analyze the data and provide a detailed report.")
 
     try {
-      await axios.post("https://ashad001-auto-analyst-backend.hf.space/upload_dataframe", formData, {
+      // const baseUrl = 'http://localhost:8000'
+      const baseUrl = 'https://ashad001-auto-analyst-backend.hf.space'
+     
+      await axios.post(`${baseUrl}/upload_dataframe`, formData, {
         headers: {
           "Content-Type": "multipart/form-data",
+          ...(sessionId && { 'X-Session-ID': sessionId }),
         },
         timeout: 30000, // 30 seconds
         maxContentLength: 30 * 1024 * 1024, // 30MB
       })
       
-      // await axios.post("http://localhost:8000/upload_dataframe", formData, {
-      //   headers: {
-      //     "Content-Type": "multipart/form-data",
-      //   },
-      //   timeout: 30000, // 30 seconds
-      //   maxContentLength: 30 * 1024 * 1024, // 30MB
-      // })
-      
       // Add success message
-      addMessage({
-        text: "File uploaded successfully! You can now ask questions about your data.",
-        sender: "ai"
-      });
+      // addMessage({
+      //   text: "File uploaded successfully! You can now ask questions about your data.",
+      //   sender: "ai"
+      // });
 
     } catch (error) {
       let errorMessage = "An error occurred while uploading the file.";
@@ -372,6 +395,7 @@ const ChatInterface: React.FC = () => {
           />
         </div>
         <ChatInput 
+          ref={chatInputRef}
           onSendMessage={handleSendMessage} 
           onFileUpload={handleFileUpload}
           disabled={isInputDisabled()} 

@@ -1,5 +1,5 @@
 import groq
-from fastapi import FastAPI, HTTPException, File, UploadFile, Request
+from fastapi import FastAPI, HTTPException, File, UploadFile, Request, Depends
 from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -9,6 +9,8 @@ from typing import List
 import uvicorn
 import logging
 from io import StringIO
+import uuid
+from fastapi.security import APIKeyHeader
 
 from fastapi import Form, UploadFile
 import io
@@ -93,43 +95,85 @@ AVAILABLE_AGENTS = {
     "preprocessing_agent": preprocessing_agent,
 }
 
+# Add session header
+X_SESSION_ID = APIKeyHeader(name="X-Session-ID", auto_error=False)
+
+# Helper function to get session ID
+async def get_session_id(session_id: str = Depends(X_SESSION_ID)):
+    if not session_id:
+        # Generate a random session ID if none provided
+        session_id = str(uuid.uuid4())
+    return session_id
+
+# Update the AppState class to handle session-specific state
 class AppState:
     def __init__(self):
-        self.current_df = None
-        self.retrievers = None
-        self.ai_system = None
+        self._sessions = {}  # Store session-specific states
+        self._default_df = None
+        self._default_retrievers = None
+        self._default_ai_system = None
         self.initialize_default_dataset()
     
     def initialize_default_dataset(self):
+        """Initialize the default dataset and store it"""
         try:
-            self.current_df = pd.read_csv("Housing.csv")
+            self._default_df = pd.read_csv("Housing.csv")
             desc = "Housing Dataset"
-            data_dict = make_data(self.current_df, desc)
-            self.retrievers = initialize_retrievers(styling_instructions, [str(data_dict)])
-            self.ai_system = auto_analyst(agents=list(AVAILABLE_AGENTS.values()), retrievers=self.retrievers)
+            data_dict = make_data(self._default_df, desc)
+            self._default_retrievers = initialize_retrievers(styling_instructions, [str(data_dict)])
+            self._default_ai_system = auto_analyst(agents=list(AVAILABLE_AGENTS.values()), retrievers=self._default_retrievers)
         except Exception as e:
             logger.error(f"Error initializing default dataset: {str(e)}")
             raise e
-    
-    def clear_state(self):
-        """Clear all state data"""
-        self.current_df = None
-        self.retrievers = None
-        self.ai_system = None
 
-    def update_dataset(self, df, desc):
+    def get_session_state(self, session_id: str):
+        """Get or create session-specific state"""
+        if session_id not in self._sessions:
+            # Initialize with default state
+            self._sessions[session_id] = {
+                "current_df": self._default_df,
+                "retrievers": self._default_retrievers,
+                "ai_system": self._default_ai_system
+            }
+        return self._sessions[session_id]
+
+    def clear_session_state(self, session_id: str):
+        """Clear session-specific state"""
+        if session_id in self._sessions:
+            del self._sessions[session_id]
+
+    def update_session_dataset(self, session_id: str, df, desc):
+        """Update dataset for a specific session"""
         try:
-            # Clear existing state
-            self.clear_state()
+            data_dict = make_data(df, desc)
+            retrievers = initialize_retrievers(styling_instructions, [str(data_dict)])
+            ai_system = auto_analyst(agents=list(AVAILABLE_AGENTS.values()), retrievers=retrievers)
             
-            # Initialize new state
-            self.current_df = df
-            data_dict = make_data(self.current_df, desc)
-            self.retrievers = initialize_retrievers(styling_instructions, [str(data_dict)])
-            self.ai_system = auto_analyst(agents=list(AVAILABLE_AGENTS.values()), retrievers=self.retrievers)
+            self._sessions[session_id] = {
+                "current_df": df,
+                "retrievers": retrievers,
+                "ai_system": ai_system
+            }
         except Exception as e:
-            logger.error(f"Error updating dataset: {str(e)}")
-            self.initialize_default_dataset()
+            logger.error(f"Error updating dataset for session {session_id}: {str(e)}")
+            # Revert to default state
+            self.clear_session_state(session_id)
+
+    def reset_session_to_default(self, session_id: str):
+        """Reset a session to use the default dataset"""
+        try:
+            # First clear any existing session
+            self.clear_session_state(session_id)
+            
+            # Then initialize with default state
+            self._sessions[session_id] = {
+                "current_df": self._default_df.copy(),  # Create a copy to ensure isolation
+                "retrievers": self._default_retrievers,
+                "ai_system": self._default_ai_system
+            }
+        except Exception as e:
+            logger.error(f"Error resetting session {session_id}: {str(e)}")
+            raise e
 
 # Initialize FastAPI app with state
 app = FastAPI(title="AI Analytics API", version="1.0")
@@ -180,28 +224,33 @@ async def upload_dataframe(
     file: UploadFile = File(...),
     name: str = Form(...),
     description: str = Form(...),
+    session_id: str = Depends(get_session_id)
 ):
     try:
         contents = await file.read()
         new_df = pd.read_csv(io.BytesIO(contents))
         desc = f"{name} Dataset: {description}"
         
-        app.state.update_dataset(new_df, desc)
+        app.state.update_session_dataset(session_id, new_df, desc)
         
-        return {"message": "Dataframe uploaded successfully"}
+        return {"message": "Dataframe uploaded successfully", "session_id": session_id}
     except Exception as e:
         logger.error(f"Error in upload_dataframe: {str(e)}")
         raise HTTPException(status_code=400, detail=str(e))
 
 @app.post("/chat/{agent_name}", response_model=dict)
-async def chat_with_agent(agent_name: str, request: QueryRequest):
-    if app.state.current_df is None:
+async def chat_with_agent(
+    agent_name: str, 
+    request: QueryRequest,
+    session_id: str = Depends(get_session_id)
+):
+    session_state = app.state.get_session_state(session_id)
+    
+    if session_state["current_df"] is None:
         raise HTTPException(
             status_code=400,
             detail="No dataset is currently loaded. Please link a dataset before proceeding with your analysis."
         )
-    
-    # clear_console()
     
     if agent_name not in AVAILABLE_AGENTS:
         available = list(AVAILABLE_AGENTS.keys())
@@ -212,7 +261,7 @@ async def chat_with_agent(agent_name: str, request: QueryRequest):
     
     try:
         agent = AVAILABLE_AGENTS[agent_name]
-        agent = auto_analyst_ind(agents=[agent], retrievers=app.state.retrievers)
+        agent = auto_analyst_ind(agents=[agent], retrievers=session_state["retrievers"])
         
         try:
             response = agent(request.query, agent_name)
@@ -222,107 +271,107 @@ async def chat_with_agent(agent_name: str, request: QueryRequest):
                 detail=f"Agent execution failed: {str(agent_error)}"
             )
         
-        formatted_response = format_response_to_markdown(response, agent_name, app.state.current_df)
+        formatted_response = format_response_to_markdown(response, agent_name, session_state["current_df"])
         
         return {
             "agent_name": agent_name,
             "query": request.query,
             "response": formatted_response,
+            "session_id": session_id
         }
     except HTTPException:
         raise
     except Exception as e:
-        print(f"Unexpected error: {str(e)}")
-        import traceback
-        print(traceback.format_exc())
-        raise HTTPException(
-            status_code=500,
-            detail=f"Unexpected error: {str(e)}"
-        )
+        logger.error(f"Unexpected error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Unexpected error: {str(e)}")
 
 @app.post("/chat", response_model=dict)
-async def chat_with_all(request: QueryRequest):
-    try:
-        if app.state.current_df is None:
-            raise HTTPException(
-                status_code=400,
-                detail="No dataset is currently loaded."
-            )
-        
-        if app.state.ai_system is None:
-            raise HTTPException(
-                status_code=500,
-                detail="AI system not properly initialized."
-            )
-        
-        async def generate_responses():
-            try:
-                # Run plan generation in a thread pool to avoid blocking
-                loop = asyncio.get_event_loop()
-                plan_response = await loop.run_in_executor(
-                    None,
-                    app.state.ai_system.get_plan,
-                    request.query
-                )
-                
-                # Execute agents based on the plan
-                async for agent_name, response in app.state.ai_system.execute_plan(request.query, plan_response):
-                    try:
-                        formatted_response = format_response_to_markdown(
-                            {agent_name: response}, 
-                            dataframe=app.state.current_df
-                        )
-                        
-                        # Ensure response is not None or empty
-                        if formatted_response:
-                            response_data = {
-                                "agent": agent_name, 
-                                "content": formatted_response,
-                                "status": "success"
-                            }
-                        else:
-                            response_data = {
-                                "agent": agent_name,
-                                "content": "No response generated",
-                                "status": "error"
-                            }
-                        
-                        yield json.dumps(response_data) + "\n"
-                    except Exception as format_error:
-                        logger.error(f"Error formatting response for {agent_name}: {str(format_error)}")
-                        yield json.dumps({
-                            "agent": agent_name,
-                            "content": f"Error formatting response: {str(format_error)}",
-                            "status": "error"
-                        }) + "\n"
-
-            except Exception as e:
-                logger.error(f"Error in generate_responses: {str(e)}")
-                yield json.dumps({
-                    "agent": "system",
-                    "content": f"Error: {str(e)}",
-                    "status": "error"
-                }) + "\n"
-
-        return StreamingResponse(
-            generate_responses(),
-            media_type='text/event-stream',
-            headers={
-                'Cache-Control': 'no-cache',
-                'Connection': 'keep-alive',
-                'Content-Type': 'text/event-stream',
-                'Access-Control-Allow-Origin': '*',
-                'X-Accel-Buffering': 'no'  # Disable buffering for nginx
-            }
+async def chat_with_all(
+    request: QueryRequest,
+    session_id: str = Depends(get_session_id)
+):
+    session_state = app.state.get_session_state(session_id)
+    
+    if session_state["current_df"] is None:
+        raise HTTPException(
+            status_code=400,
+            detail="No dataset is currently loaded."
         )
+    
+    if session_state["ai_system"] is None:
+        raise HTTPException(
+            status_code=500,
+            detail="AI system not properly initialized."
+        )
+    
+    # Update the generate_responses function to use session state
+    async def generate_responses():
+        try:
+            loop = asyncio.get_event_loop()
+            plan_response = await loop.run_in_executor(
+                None,
+                session_state["ai_system"].get_plan,
+                request.query
+            )
+            
+            async for agent_name, response in session_state["ai_system"].execute_plan(request.query, plan_response):
+                try:
+                    formatted_response = format_response_to_markdown(
+                        {agent_name: response}, 
+                        dataframe=session_state["current_df"]
+                    )
+                    
+                    # Ensure response is not None or empty
+                    if formatted_response:
+                        response_data = {
+                            "agent": agent_name, 
+                            "content": formatted_response,
+                            "status": "success"
+                        }
+                    else:
+                        response_data = {
+                            "agent": agent_name,
+                            "content": "No response generated",
+                            "status": "error"
+                        }
+                    
+                    yield json.dumps(response_data) + "\n"
+                except Exception as format_error:
+                    logger.error(f"Error formatting response for {agent_name}: {str(format_error)}")
+                    yield json.dumps({
+                        "agent": agent_name,
+                        "content": f"Error formatting response: {str(format_error)}",
+                        "status": "error"
+                    }) + "\n"
 
-    except Exception as e:
-        logger.error(f"Error in chat_with_all: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        except Exception as e:
+            logger.error(f"Error in generate_responses: {str(e)}")
+            yield json.dumps({
+                "agent": "system",
+                "content": f"Error: {str(e)}",
+                "status": "error"
+            }) + "\n"
+
+    return StreamingResponse(
+        generate_responses(),
+        media_type='text/event-stream',
+        headers={
+            'Cache-Control': 'no-cache',
+            'Connection': 'keep-alive',
+            'Content-Type': 'text/event-stream',
+            'Access-Control-Allow-Origin': '*',
+            'X-Accel-Buffering': 'no'  # Disable buffering for nginx
+        }
+    )
 
 @app.post("/execute_code")
-async def execute_code(request: dict):
-    if app.state.current_df is None:
+async def execute_code(
+    request: dict,
+    session_id: str = Depends(get_session_id)
+):
+    session_state = app.state.get_session_state(session_id)
+    
+    if session_state["current_df"] is None:
         raise HTTPException(
             status_code=400,
             detail="No dataset is currently loaded. Please link a dataset before executing code."
@@ -332,7 +381,7 @@ async def execute_code(request: dict):
         code = request.get("code")
         if not code:
             raise HTTPException(status_code=400, detail="No code provided")
-        output, json_outputs = execute_code_from_markdown(code, app.state.current_df)
+        output, json_outputs = execute_code_from_markdown(code, session_state["current_df"])
         json_outputs = [f"```plotly\n{json_output}\n```\n" for json_output in json_outputs]
         return {
             "output": output,
@@ -470,9 +519,15 @@ async def chat_history_name(request: dict):
     return {"name": name.name}
 
 @app.get("/api/default-dataset")
-async def get_default_dataset():
+async def get_default_dataset(session_id: str = Depends(get_session_id)):
+    """Get default dataset and ensure session is using it"""
     try:
-        df = pd.read_csv("Housing.csv")
+        # First ensure the session is reset to default
+        app.state.reset_session_to_default(session_id)
+        
+        # Get the session state to ensure we're using the default dataset
+        session_state = app.state.get_session_state(session_id)
+        df = session_state["current_df"]
         
         # Replace NaN values with None (which becomes null in JSON)
         df = df.where(pd.notna(df), None)
@@ -486,6 +541,23 @@ async def get_default_dataset():
         return preview_data
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+@app.post("/reset-session")
+async def reset_session(session_id: str = Depends(get_session_id)):
+    """Reset session to use default dataset"""
+    try:
+        app.state.reset_session_to_default(session_id)
+        # Return the default dataset info to confirm reset
+        return {
+            "message": "Session reset to default dataset",
+            "session_id": session_id,
+            "dataset": "Housing.csv"
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to reset session: {str(e)}"
+        )
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)

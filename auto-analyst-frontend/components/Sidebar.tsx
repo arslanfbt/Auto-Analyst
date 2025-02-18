@@ -9,6 +9,7 @@ import { useRouter } from "next/navigation"
 import { useChatHistoryStore } from "@/lib/store/chatHistoryStore"
 import SettingsPopup from './SettingsPopup'
 import axios from "axios"
+import { useSessionStore } from '@/lib/store/sessionStore'
 
 // const PREVIEW_API_URL = 'http://localhost:8000';
 const PREVIEW_API_URL = 'https://ashad001-auto-analyst-backend.hf.space';
@@ -32,6 +33,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, onNewChat }) => {
     temperature: 0.7,
     maxTokens: 2000
   });
+  const { sessionId } = useSessionStore()
 
   useEffect(() => {
     // Fetch current model settings when settings popup is opened
@@ -48,10 +50,28 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, onNewChat }) => {
     }
   }, [isSettingsOpen]);
 
-  const handleNewChat = () => {
-    clearMessages()
-    onNewChat()
-    onClose()
+  const handleNewChat = async () => {
+    if (sessionId) {
+      try {
+        // Wait for reset to complete
+        await axios.post(`${PREVIEW_API_URL}/reset-session`, null, {
+          headers: {
+            'X-Session-ID': sessionId,
+          },
+        });
+        
+        clearMessages()
+        onClose()
+        // Call onNewChat last to ensure proper order
+        onNewChat()  // This will trigger handleNewChat in ChatInterface
+      } catch (error) {
+        console.error('Failed to reset session:', error);
+      }
+    } else {
+      clearMessages()
+      onClose()
+      onNewChat()
+    }
   }
 
   return (

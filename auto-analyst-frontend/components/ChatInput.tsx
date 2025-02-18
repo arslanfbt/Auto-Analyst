@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useEffect, useRef } from "react"
+import React, { useState, useEffect, useRef, forwardRef, useImperativeHandle } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { Send, Paperclip, X, Square, Loader2, CheckCircle2, XCircle, Eye } from 'lucide-react'
 import AgentHint from './chat/AgentHint'
@@ -17,6 +17,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import { useSessionStore } from '@/lib/store/sessionStore'
 
 // const PREVIEW_API_URL = 'http://localhost:8000';
 const PREVIEW_API_URL = 'https://ashad001-auto-analyst-backend.hf.space';
@@ -50,7 +51,10 @@ interface ChatInputProps {
   onStopGeneration?: () => void
 }
 
-const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, onFileUpload, disabled, isLoading, onStopGeneration }) => {
+const ChatInput = forwardRef<
+  { handlePreviewDefaultDataset: () => void },
+  ChatInputProps
+>(({ onSendMessage, onFileUpload, disabled, isLoading, onStopGeneration }, ref) => {
   const [message, setMessage] = useState("")
   const [fileUpload, setFileUpload] = useState<FileUpload | null>(null)
   const fileInputRef = React.useRef<HTMLInputElement>(null)
@@ -69,6 +73,12 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, onFileUpload, disa
     description: '',
   });
   const [uploadSuccess, setUploadSuccess] = useState(false);
+  const { sessionId, setSessionId } = useSessionStore()
+
+  // Expose handlePreviewDefaultDataset to parent
+  useImperativeHandle(ref, () => ({
+    handlePreviewDefaultDataset
+  }));
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -107,7 +117,7 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, onFileUpload, disa
         // First preview the file
         await handleFilePreview(file);
         setFileUpload(prev => prev ? { ...prev, status: 'success' } : null)
-        // Set default name from filename
+        // Set default name from filename (without .csv extension)
         setDatasetDescription(prev => ({
           ...prev,
           name: file.name.replace('.csv', '')
@@ -247,32 +257,43 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, onFileUpload, disa
 
   const handlePreviewDefaultDataset = async () => {
     try {
-      const response = await axios.get(`${PREVIEW_API_URL}/api/default-dataset`);
+      // This will now also ensure we're using the default dataset
+      const response = await axios.get(`${PREVIEW_API_URL}/api/default-dataset`, {
+        headers: {
+          ...(sessionId && { 'X-Session-ID': sessionId }),
+        },
+      });
+      
       setFilePreview({
         headers: response.data.headers,
         rows: response.data.rows
       });
+      
+      // Pre-fill the name and description for default dataset
       setDatasetDescription({
-        name: response.data.name,
-        description: response.data.description
+        name: response.data.name || 'Housing Dataset',
+        description: response.data.description || 'Please provide a description for this dataset'
       });
+      
       setShowPreview(true);
+      setFileUpload(null); // Clear any previously uploaded file
     } catch (error) {
       console.error('Failed to fetch default dataset:', error);
     }
   };
 
   const handleUploadWithDescription = async () => {
-    if (!datasetDescription.name || !datasetDescription.description) return;
+    if (!datasetDescription.name || !datasetDescription.description) {
+      alert('Please provide both a name and description for the dataset');
+      return;
+    }
 
     try {
       let formData = new FormData();
       
       if (fileUpload?.file) {
-        // Handle uploaded file
         formData.append('file', fileUpload.file);
       } else {
-        // For default dataset, no need to upload the file again
         formData.append('file', 'Housing.csv');
       }
       
@@ -282,16 +303,25 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, onFileUpload, disa
       const response = await axios.post(`${PREVIEW_API_URL}/upload_dataframe`, formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
+          ...(sessionId && { 'X-Session-ID': sessionId }),
         },
       });
 
       if (response.status === 200) {
+        // Store the session ID received from the server
+        if (response.data.session_id) {
+          setSessionId(response.data.session_id);
+        }
+        
         setShowPreview(false);
         setUploadSuccess(true);
         if (fileUpload) {
           setFileUpload(prev => prev ? { ...prev, status: 'success' } : null);
         }
         setDatasetDescription({ name: '', description: '' });
+        
+        // // Add success message
+        // onSendMessage(`Dataset "${datasetDescription.name}" has been loaded. You can now ask questions about your data.`);
         
         setTimeout(() => {
           setUploadSuccess(false);
@@ -581,6 +611,6 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, onFileUpload, disa
       </AnimatePresence>
     </>
   )
-}
+})
 
 export default ChatInput
