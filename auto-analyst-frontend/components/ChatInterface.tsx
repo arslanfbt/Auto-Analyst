@@ -98,7 +98,8 @@ const ChatInterface: React.FC = () => {
     
     if (sessionId) {
       try {
-        const baseUrl = 'http://localhost:8000'
+        // const baseUrl = 'http://localhost:8000'
+        const baseUrl = 'https://ashad001-auto-analyst-backend.hf.space'
         
         // Reset session first
         await axios.post(`${baseUrl}/reset-session`, null, {
@@ -154,8 +155,8 @@ const ChatInterface: React.FC = () => {
         setSelectedAgent(null)
       }
 
-      // const baseUrl = 'https://ashad001-auto-analyst-backend.hf.space'
-      const baseUrl = 'http://localhost:8000'
+      const baseUrl = 'https://ashad001-auto-analyst-backend.hf.space'
+      // const baseUrl = 'http://localhost:8000'
       const endpoint = selectAgent
         ? `${baseUrl}/chat/${selectAgent}`
         : `${baseUrl}/chat`
@@ -284,15 +285,9 @@ const ChatInterface: React.FC = () => {
     formData.append("styling_instructions", "Please analyze the data and provide a detailed report.")
 
     try {
-      const baseUrl = 'http://localhost:8000'
-      // await axios.post("https://ashad001-auto-analyst-backend.hf.space/upload_dataframe", formData, {
-      //   headers: {
-      //     "Content-Type": "multipart/form-data",
-      //   },
-      //   timeout: 30000, // 30 seconds
-      //   maxContentLength: 30 * 1024 * 1024, // 30MB
-      // })
-      
+      // const baseUrl = 'http://localhost:8000'
+      const baseUrl = 'https://ashad001-auto-analyst-backend.hf.space'
+     
       await axios.post(`${baseUrl}/upload_dataframe`, formData, {
         headers: {
           "Content-Type": "multipart/form-data",

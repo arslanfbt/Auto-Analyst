@@ -51,7 +51,8 @@ const CodeBlock: React.FC<CodeBlockProps> = ({ language, value, onExecute, agent
     setPlotlyOutputs([])
 
     try {
-      const API_URL = 'http://localhost:8000'
+      // const API_URL = 'http://localhost:8000'
+      const API_URL = "https://ashad001-auto-analyst-backend.hf.space"
       const response = await axios.post(`${API_URL}/execute_code`, {
         code: editedCode,
         session_id: sessionId,
