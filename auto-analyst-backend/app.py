@@ -543,11 +543,23 @@ async def get_default_dataset(session_id: str = Depends(get_session_id)):
         raise HTTPException(status_code=400, detail=str(e))
 
 @app.post("/reset-session")
-async def reset_session(session_id: str = Depends(get_session_id)):
-    """Reset session to use default dataset"""
+async def reset_session(
+    session_id: str = Depends(get_session_id),
+    name: str = None,
+    description: str = None
+):
+    """Reset session to use default dataset with optional new description"""
     try:
         app.state.reset_session_to_default(session_id)
-        # Return the default dataset info to confirm reset
+        
+        # If name and description are provided, update the dataset description
+        if name and description:
+            session_state = app.state.get_session_state(session_id)
+            desc = f"{name} Dataset: {description}"
+            data_dict = make_data(session_state["current_df"], desc)
+            session_state["retrievers"] = initialize_retrievers(styling_instructions, [str(data_dict)])
+            session_state["ai_system"] = auto_analyst(agents=list(AVAILABLE_AGENTS.values()), retrievers=session_state["retrievers"])
+        
         return {
             "message": "Session reset to default dataset",
             "session_id": session_id,
