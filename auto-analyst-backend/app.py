@@ -43,10 +43,10 @@ styling_instructions = [
 # Add near the top of the file, after imports
 DEFAULT_MODEL_CONFIG = {
     "provider": "openai",
-    "model": "gpt-4o-mini",
+    "model": "o1-mini",
     "api_key": os.getenv("OPENAI_API_KEY"),
-    "temperature": 0,
-    "max_tokens": 1000
+    "temperature": 1.0,
+    "max_tokens": 6000
 }
 
 # Initialize DSPy with default model
@@ -54,15 +54,15 @@ if DEFAULT_MODEL_CONFIG["provider"].lower() == "groq":
     default_lm = dspy.GROQ(
         model=DEFAULT_MODEL_CONFIG["model"],
         api_key=DEFAULT_MODEL_CONFIG["api_key"],
-        temperature=0,
-        max_tokens=1000
+        temperature=DEFAULT_MODEL_CONFIG["temperature"],
+        max_tokens=DEFAULT_MODEL_CONFIG["max_tokens"]
     )
 else:
     default_lm = dspy.LM(
         model=DEFAULT_MODEL_CONFIG["model"],
         api_key=DEFAULT_MODEL_CONFIG["api_key"],
-        temperature=0,
-        max_tokens=1000
+        temperature=DEFAULT_MODEL_CONFIG["temperature"],
+        max_tokens=DEFAULT_MODEL_CONFIG["max_tokens"]
     )
 
 dspy.configure(lm=default_lm)

@@ -21,9 +21,9 @@ const MODEL_PROVIDERS = [
   {
     name: 'OpenAI',
     models: [
-      { id: 'o3-mini', name: 'o3-mini' }, 
-      { id: 'o1', name: 'o1' }, 
       { id: 'o1-mini', name: 'o1-mini' }, 
+      { id: 'o1', name: 'o1' }, 
+      { id: 'o3-mini', name: 'o3-mini' }, 
       { id: 'gpt-4o', name: 'GPT-4o' }, 
       { id: 'gpt-4o-mini', name: 'GPT-4o Mini' }, 
       { id: 'gpt-4', name: 'GPT-4' }, 

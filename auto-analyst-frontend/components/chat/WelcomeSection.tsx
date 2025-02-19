@@ -7,6 +7,7 @@ interface WelcomeSectionProps {
   onSampleQueryClick: (message: string) => void
 }
 
+
 const sampleQueries = [
   {
     text: "Analyze this dataset for trends and patterns",
