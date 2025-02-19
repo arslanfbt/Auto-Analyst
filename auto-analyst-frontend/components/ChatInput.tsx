@@ -18,9 +18,10 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { useSessionStore } from '@/lib/store/sessionStore'
+import API_URL from '@/config/api'
 
 // const PREVIEW_API_URL = 'http://localhost:8000';
-const PREVIEW_API_URL = 'https://ashad001-auto-analyst-backend.hf.space';
+const PREVIEW_API_URL = API_URL;
 
 interface FileUpload {
   file: File
