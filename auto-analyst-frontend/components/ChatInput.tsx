@@ -292,44 +292,54 @@ const ChatInput = forwardRef<
       let formData = new FormData();
       
       if (fileUpload?.file) {
+        // For uploaded file
         formData.append('file', fileUpload.file);
+        formData.append('name', datasetDescription.name);
+        formData.append('description', datasetDescription.description);
+
+        const response = await axios.post(`${PREVIEW_API_URL}/upload_dataframe`, formData, {
+          headers: {
+            'Content-Type': 'multipart/form-data',
+            ...(sessionId && { 'X-Session-ID': sessionId }),
+          },
+        });
+
+        if (response.status === 200) {
+          if (response.data.session_id) {
+            setSessionId(response.data.session_id);
+          }
+        }
       } else {
-        formData.append('file', 'Housing.csv');
+        // For default dataset, just update the session with the new description
+        const response = await axios.post(`${PREVIEW_API_URL}/reset-session`, {
+          name: datasetDescription.name,
+          description: datasetDescription.description
+        }, {
+          headers: {
+            ...(sessionId && { 'X-Session-ID': sessionId }),
+          },
+        });
+
+        if (response.status === 200) {
+          if (response.data.session_id) {
+            setSessionId(response.data.session_id);
+          }
+        }
       }
       
-      formData.append('name', datasetDescription.name);
-      formData.append('description', datasetDescription.description);
-
-      const response = await axios.post(`${PREVIEW_API_URL}/upload_dataframe`, formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-          ...(sessionId && { 'X-Session-ID': sessionId }),
-        },
-      });
-
-      if (response.status === 200) {
-        // Store the session ID received from the server
-        if (response.data.session_id) {
-          setSessionId(response.data.session_id);
-        }
-        
-        setShowPreview(false);
-        setUploadSuccess(true);
-        if (fileUpload) {
-          setFileUpload(prev => prev ? { ...prev, status: 'success' } : null);
-        }
-        setDatasetDescription({ name: '', description: '' });
-        
-        // // Add success message
-        // onSendMessage(`Dataset "${datasetDescription.name}" has been loaded. You can now ask questions about your data.`);
-        
-        setTimeout(() => {
-          setUploadSuccess(false);
-        }, 3000);
+      setShowPreview(false);
+      setUploadSuccess(true);
+      if (fileUpload) {
+        setFileUpload(prev => prev ? { ...prev, status: 'success' } : null);
       }
+      setDatasetDescription({ name: '', description: '' });
+      
+      setTimeout(() => {
+        setUploadSuccess(false);
+      }, 3000);
     } catch (error) {
-      console.error('Failed to upload file:', error);
-      alert('Failed to upload file. Please try again.');
+      console.error('Failed to process dataset:', error);
+      alert('Failed to process dataset. Please try again.');
     }
   }
 
