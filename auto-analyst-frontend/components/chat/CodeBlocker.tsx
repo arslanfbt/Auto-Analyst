@@ -10,6 +10,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import PlotlyChart from "@/components/PlotlyChart"
 import axios from "axios"
 import { useSessionStore } from '@/lib/store/sessionStore'
+import API_URL from '@/config/api'
 
 interface CodeBlockProps {
   language: string
@@ -51,9 +52,8 @@ const CodeBlock: React.FC<CodeBlockProps> = ({ language, value, onExecute, agent
     setPlotlyOutputs([])
 
     try {
-      // const API_URL = 'http://localhost:8000'
-      const API_URL = "https://ashad001-auto-analyst-backend.hf.space"
-      const response = await axios.post(`${API_URL}/execute_code`, {
+      const BASE_URL = API_URL
+      const response = await axios.post(`${BASE_URL}/execute_code`, {
         code: editedCode,
         session_id: sessionId,
       }, {

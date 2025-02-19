@@ -16,6 +16,7 @@ import { useCookieConsentStore } from "@/lib/store/cookieConsentStore"
 import { useRouter } from "next/navigation"
 import { AwardIcon } from "lucide-react"
 import { useSessionStore } from '@/lib/store/sessionStore'
+import API_URL from '@/config/api'
 
 interface PlotlyMessage {
   type: "plotly"
@@ -99,7 +100,7 @@ const ChatInterface: React.FC = () => {
     if (sessionId) {
       try {
         // const baseUrl = 'http://localhost:8000'
-        const baseUrl = 'https://ashad001-auto-analyst-backend.hf.space'
+        const baseUrl = API_URL
         
         // Reset session first
         await axios.post(`${baseUrl}/reset-session`, null, {
@@ -155,7 +156,7 @@ const ChatInterface: React.FC = () => {
         setSelectedAgent(null)
       }
 
-      const baseUrl = 'https://ashad001-auto-analyst-backend.hf.space'
+      const baseUrl = API_URL
       // const baseUrl = 'http://localhost:8000'
       const endpoint = selectAgent
         ? `${baseUrl}/chat/${selectAgent}`
@@ -286,7 +287,7 @@ const ChatInterface: React.FC = () => {
 
     try {
       // const baseUrl = 'http://localhost:8000'
-      const baseUrl = 'https://ashad001-auto-analyst-backend.hf.space'
+      const baseUrl = API_URL
      
       await axios.post(`${baseUrl}/upload_dataframe`, formData, {
         headers: {

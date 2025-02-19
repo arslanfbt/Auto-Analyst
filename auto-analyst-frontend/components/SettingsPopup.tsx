@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, CheckCircle, AlertCircle, Info, Settings } from 'lucide-react';
 import { name } from 'plotly.js/lib/scatter';
+import API_URL from '@/config/api'
 
 interface SettingsPopupProps {
   isOpen: boolean;
@@ -14,9 +15,6 @@ interface SettingsPopupProps {
     maxTokens: number;
   };
 }
-
-// const API_URL = 'http://localhost:8000';
-const API_URL = "https://ashad001-auto-analyst-backend.hf.space"
 
 // Define model providers and their models
 const MODEL_PROVIDERS = [
@@ -53,6 +51,8 @@ const MODEL_PROVIDERS = [
   }
 ];
 
+const BASE_URL = API_URL;
+
 const SettingsPopup: React.FC<SettingsPopupProps> = ({ isOpen, onClose, initialSettings }) => {
   const [selectedProvider, setSelectedProvider] = useState(initialSettings?.provider || MODEL_PROVIDERS[0].name);
   const [selectedModel, setSelectedModel] = useState(initialSettings?.model || MODEL_PROVIDERS[0].models[0].id);
@@ -83,7 +83,7 @@ const SettingsPopup: React.FC<SettingsPopupProps> = ({ isOpen, onClose, initialS
         return;
       }
 
-      const response = await fetch(`${API_URL}/settings/model`, {
+      const response = await fetch(`${BASE_URL}/settings/model`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
