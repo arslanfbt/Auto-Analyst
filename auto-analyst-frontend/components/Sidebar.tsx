@@ -11,6 +11,7 @@ import SettingsPopup from './SettingsPopup'
 import axios from "axios"
 import { useSessionStore } from '@/lib/store/sessionStore'
 import API_URL from '@/config/api'
+import { Button } from "@/components/ui/button"
 
 // const PREVIEW_API_URL = 'http://localhost:8000';
 const PREVIEW_API_URL = API_URL;
@@ -80,6 +81,18 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, onNewChat }) => {
     }
   }
 
+  const handleSignOut = async () => {
+    if (localStorage.getItem('isAdmin') === 'true') {
+      // Clear admin status
+      localStorage.removeItem('isAdmin')
+      // Redirect to home page
+      window.location.href = '/'
+    } else {
+      // Sign out from next-auth (Google)
+      await signOut({ callbackUrl: '/' })
+    }
+  }
+
   return (
     <>
       <motion.div
@@ -145,7 +158,15 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, onNewChat }) => {
                 </p>
               </div>
             </div>
-
+            
+            <Button
+              onClick={handleSignOut}
+              variant="ghost"
+              className="w-full flex items-center gap-2 text-gray-600 hover:text-red-600 hover:bg-red-50"
+            >
+              <LogOut className="w-4 h-4" />
+              Sign Out
+            </Button>
           </div>
         )}
       </motion.div>

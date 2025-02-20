@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { useSession } from 'next-auth/react'
 
 interface CookieConsentStore {
   hasConsented: boolean | null
@@ -10,6 +11,18 @@ interface CookieConsentStore {
 export const useCookieConsentStore = create<CookieConsentStore>((set) => ({
   hasConsented: null,
   setConsent: (consent) => {
+    // Auto-accept for any authenticated user (including admin)
+    if (typeof window !== 'undefined') {
+      const isAuthenticated = localStorage.getItem('isAdmin') === 'true' || 
+                            document.cookie.includes('next-auth.session-token')
+      
+      if (isAuthenticated) {
+        localStorage.setItem('cookie-consent', 'true')
+        set({ hasConsented: true })
+        return
+      }
+    }
+
     if (consent) {
       // If user accepts, store in localStorage to persist
       localStorage.setItem('cookie-consent', 'true')
@@ -27,17 +40,27 @@ export const useCookieConsentStore = create<CookieConsentStore>((set) => ({
     }
   },
   resetConsent: () => {
+    // Don't reset consent for authenticated users
+    if (typeof window !== 'undefined') {
+      const isAuthenticated = localStorage.getItem('isAdmin') === 'true' || 
+                            document.cookie.includes('next-auth.session-token')
+      if (isAuthenticated) {
+        return
+      }
+    }
     set({ hasConsented: null })
   }
 }))
 
-// Add an initialization effect to check localStorage on page load
+// Update initialization effect to handle authenticated users
 if (typeof window !== 'undefined') {
   const storedConsent = localStorage.getItem('cookie-consent')
-  if (storedConsent === 'true') {
+  const isAuthenticated = localStorage.getItem('isAdmin') === 'true' || 
+                         document.cookie.includes('next-auth.session-token')
+  
+  if (storedConsent === 'true' || isAuthenticated) {
     useCookieConsentStore.getState().setConsent(true)
   } else {
-    // If no stored consent or stored consent is false, reset to null
     useCookieConsentStore.getState().resetConsent()
   }
 } 

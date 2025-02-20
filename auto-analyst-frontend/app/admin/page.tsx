@@ -14,12 +14,12 @@ export default function AdminLogin() {
     e.preventDefault()
     
     // Simple admin bypass - replace with secure method in production
-    if (password === "admin123") {
+    if (password === process.env.NEXT_PUBLIC_ADMIN_PASSWORD) {
       // Store admin status in localStorage
       localStorage.setItem('isAdmin', 'true')
       router.push("/chat")
     } else {
-      setError("Invalid password")
+      setError("Invalid temporary code")
     }
   }
 
@@ -39,7 +39,7 @@ export default function AdminLogin() {
       <div className="flex items-center justify-center min-h-[calc(100vh-100px)]">
         <div className="p-8 bg-white rounded-lg shadow-lg w-full max-w-md">
           <h2 className="text-2xl font-bold text-center text-gray-800 mb-6">
-            Admin Access
+            Temporary Login
           </h2>
           
           <form onSubmit={handleSubmit} className="space-y-4">
@@ -54,7 +54,7 @@ export default function AdminLogin() {
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="Enter admin password"
+                placeholder="Enter password"
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#FF7F7F] focus:border-transparent text-black"
               />
             </div>
@@ -63,7 +63,7 @@ export default function AdminLogin() {
               type="submit"
               className="w-full bg-[#FF7F7F] text-white hover:bg-[#FF6666]"
             >
-              Access Admin
+              Temporary Login
             </Button>
           </form>
         </div>

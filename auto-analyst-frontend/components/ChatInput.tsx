@@ -241,8 +241,15 @@ const ChatInput = forwardRef<
   }
 
   const shouldShowCookieConsent = () => {
-    if (session) return false // Skip cookie consent for signed in users
-    return !hasConsented // Show consent only for non-signed in users who haven't consented
+    const isAuthenticated = session || localStorage.getItem('isAdmin') === 'true'
+    if (isAuthenticated) {
+      // Auto-accept cookies for authenticated users
+      if (!hasConsented) {
+        setConsent(true)
+      }
+      return false
+    }
+    return !hasConsented // Show consent only for non-authenticated users who haven't consented
   }
 
   const getStatusIcon = (status: FileUpload['status']) => {
