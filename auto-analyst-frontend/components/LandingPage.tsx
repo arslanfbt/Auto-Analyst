@@ -56,7 +56,7 @@ export default function LandingPage() {
       <FeaturesSection />
       <TestimonialsSection />
       <Footer />
-      <CookieConsent />
+      {!isAdmin && <CookieConsent />}
     </div>
   )
 }

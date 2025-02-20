@@ -8,10 +8,12 @@ import { useCookieConsentStore } from "@/lib/store/cookieConsentStore"
 export default function CookieConsent() {
   const [mounted, setMounted] = useState(false)
   const [isVisible, setIsVisible] = useState(true)
+  const [isAdmin, setIsAdmin] = useState(false)
   const { hasConsented, setConsent } = useCookieConsentStore()
 
   useEffect(() => {
     setMounted(true)
+    setIsAdmin(localStorage.getItem('isAdmin') === 'true')
   }, [])
 
   const handleAccept = () => {
@@ -28,7 +30,7 @@ export default function CookieConsent() {
     }, 200)
   }
 
-  if (!mounted || (hasConsented === true && localStorage.getItem('cookie-consent') === 'true')) return null
+  if (!mounted || isAdmin || (hasConsented === true && localStorage.getItem('cookie-consent') === 'true')) return null
 
   return (
     <AnimatePresence>
