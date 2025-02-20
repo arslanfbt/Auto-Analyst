@@ -13,11 +13,11 @@ export default function LoginPage() {
 
   const handleAdminSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (adminPassword === "admin123") {
+    if (adminPassword === process.env.NEXT_PUBLIC_ADMIN_PASSWORD) {
       localStorage.setItem('isAdmin', 'true')
       router.push("/chat")
     } else {
-      setError("Invalid admin password")
+      setError("Invalid temporary code")
     }
   }
 
@@ -83,7 +83,7 @@ export default function LoginPage() {
                   type="password"
                   value={adminPassword}
                   onChange={(e) => setAdminPassword(e.target.value)}
-                  placeholder="Admin password"
+                  placeholder="Enter temporary code"
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#FF7F7F] focus:border-transparent text-black"
                 />
               </div>
@@ -92,7 +92,7 @@ export default function LoginPage() {
                 type="submit"
                 className="w-full bg-[#FF7F7F] text-white hover:bg-[#FF6666]"
               >
-                Admin Access
+                Temporary Login
               </Button>
             </form>
           </div>

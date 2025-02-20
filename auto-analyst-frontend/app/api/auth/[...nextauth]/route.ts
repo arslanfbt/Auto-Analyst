@@ -16,13 +16,13 @@ const handler = NextAuth({
       }
     }),
     CredentialsProvider({
-      name: "Admin Access",
+      name: "Temporary Login",
       credentials: {
-        password: { label: "Password", type: "password" },
+        password: { label: "Temporary Code", type: "password" },
         isAdmin: { label: "Is Admin", type: "text" }
       },
       async authorize(credentials) {
-        if (credentials?.password === "admin123" && credentials?.isAdmin === "true") {
+        if (credentials?.password === process.env.NEXT_PUBLIC_ADMIN_PASSWORD && credentials?.isAdmin === "true") {
           return {
             id: "admin",
             name: "Administrator",
