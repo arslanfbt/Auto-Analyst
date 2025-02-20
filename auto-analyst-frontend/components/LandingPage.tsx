@@ -14,16 +14,18 @@ export default function LandingPage() {
   const router = useRouter()
   const { data: session, status } = useSession()
   const [mounted, setMounted] = useState(false)
+  const [isAdmin, setIsAdmin] = useState(false)
 
   useEffect(() => {
     setMounted(true)
+    setIsAdmin(localStorage.getItem('isAdmin') === 'true')
   }, [])
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-white">
       <nav className="fixed top-0 right-0 w-full z-50 p-6">
         <div className="max-w-7xl mx-auto flex justify-end">
-          {mounted && status !== 'loading' && (
+          {mounted && status !== 'loading' && !isAdmin && (
             session ? (
               <Button
                 onClick={() => router.push('/chat')}
@@ -39,6 +41,14 @@ export default function LandingPage() {
                 Sign in
               </Button>
             )
+          )}
+          {isAdmin && (
+            <Button
+              onClick={() => router.push('/chat')}
+              className="bg-[#FF7F7F] text-white hover:bg-[#FF6666] shadow-md"
+            >
+              Go to Chat
+            </Button>
           )}
         </div>
       </nav>
