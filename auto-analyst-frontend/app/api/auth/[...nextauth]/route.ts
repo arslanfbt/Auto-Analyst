@@ -1,5 +1,6 @@
 import NextAuth from "next-auth"
 import GoogleProvider from "next-auth/providers/google"
+import CredentialsProvider from "next-auth/providers/credentials"
 
 const handler = NextAuth({
   providers: [
@@ -14,6 +15,24 @@ const handler = NextAuth({
         }
       }
     }),
+    CredentialsProvider({
+      name: "Admin Access",
+      credentials: {
+        password: { label: "Password", type: "password" },
+        isAdmin: { label: "Is Admin", type: "text" }
+      },
+      async authorize(credentials) {
+        if (credentials?.password === "admin123" && credentials?.isAdmin === "true") {
+          return {
+            id: "admin",
+            name: "Administrator",
+            email: "admin@example.com",
+            image: "https://4q2e4qu710mvgubg.public.blob.vercel-storage.com/Auto-analysts%20icon%20small-S682Oi8nbFhOADUHXJSD9d0KtSWKCe.png"
+          }
+        }
+        return null
+      }
+    })
   ],
   secret: process.env.NEXTAUTH_SECRET,
   pages: {
@@ -22,9 +41,16 @@ const handler = NextAuth({
   },
   callbacks: {
     async session({ session, token }) {
+      // Pass the admin status to the session
+      if (token.email === "admin@example.com") {
+        session.user.isAdmin = true
+      }
       return session
     },
     async jwt({ token, user }) {
+      if (user?.email === "admin@example.com") {
+        token.isAdmin = true
+      }
       return token
     },
   },
