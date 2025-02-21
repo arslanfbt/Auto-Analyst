@@ -177,9 +177,9 @@ def format_response_to_markdown(api_response, agent_name = None, dataframe=None)
 
     except Exception as e:
         logger.error(f"Error in format_response_to_markdown: {str(e)}")
-        return f"**Error**: {str(e)}"
+        return f"{str(e)}"
             
-    if not markdown:
+    if not markdown or len(markdown) <= 1:
         return "Please provide a valid query..."
         
     return '\n'.join(markdown)
