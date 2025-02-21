@@ -41,6 +41,11 @@ interface ChatMessage {
   
 }
 
+interface AgentResponse {
+  agent: string;
+  response: string;
+  messageId: string;
+}
 
 const ChatInterface: React.FC = () => {
   const router = useRouter()
@@ -142,58 +147,89 @@ const ChatInterface: React.FC = () => {
     setIsLoading(true)
 
     try {
-      const agentRegex = /@(\w+)/
-      const match = message.match(agentRegex)
-      let selectAgent = null
-      let query = message
+      // Extract all agent mentions from the message
+      const agentMentions = message.match(/@(\w+)/g) || []
+      const agents = agentMentions.map(mention => mention.slice(1)) // Remove @ symbol
 
-      if (match) {
-        selectAgent = match[1]
-        query = message.replace(/@\w+/, '').trim()
+      if (agents.length > 0) {
+        // Split message into segments for each agent
+        const segments = message.split(/@\w+\s/).filter(Boolean)
+        const responses: AgentResponse[] = []
 
-        setSelectedAgent(selectAgent)
-      } else {
-        setSelectedAgent(null)
-      }
+        // Create placeholder messages for each agent
+        const messageIds = agents.map((agent, index) => {
+          const query = segments[index]?.trim()
+          if (!query) return null
 
-      const baseUrl = API_URL
-      // const baseUrl = 'http://localhost:8000'
-      const endpoint = selectAgent
-        ? `${baseUrl}/chat/${selectAgent}`
-        : `${baseUrl}/chat`
+          return addMessage({
+            text: `${agent} is processing...`,
+            sender: "ai"
+          })
+        }).filter(Boolean) as string[]
 
-      const headers = {
-        'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*',
-        'Cache-Control': 'no-cache',
-        'Connection': 'keep-alive',
-        ...(sessionId && { 'X-Session-ID': sessionId }),
-      }
+        // Process each agent query independently
+        agents.forEach(async (agent, index) => {
+          const query = segments[index]?.trim()
+          const messageId = messageIds[index]
+          if (!query || !messageId) return
 
-      if (selectAgent) {
-        // Individual agent handling
-        const response = await fetch(endpoint, {
-          method: 'POST',
-          headers,
-          body: JSON.stringify({ query }),
-          signal: controller.signal,
+          try {
+            const endpoint = `${API_URL}/chat/${agent}`
+            
+            const response = await fetch(endpoint, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Access-Control-Allow-Origin': '*',
+                'Cache-Control': 'no-cache',
+                'Connection': 'keep-alive',
+                ...(sessionId && { 'X-Session-ID': sessionId }),
+              },
+              body: JSON.stringify({ query }),
+              signal: controller.signal,
+            })
+
+            if (!response.ok) {
+              throw new Error(`Error from ${agent}: ${response.statusText}`)
+            }
+
+            const data = await response.json()
+            const agentResponse = data.response || data.content || JSON.stringify(data)
+
+            // Update the placeholder message with the actual response
+            updateMessage(messageId, {
+              text: agentResponse,
+              sender: "ai"
+            })
+
+          } catch (error) {
+            // Handle individual agent errors
+            if (error instanceof Error) {
+              updateMessage(messageId, {
+                text: `Error from ${agent}: ${error.message}`,
+                sender: "ai"
+              })
+            }
+          }
         })
 
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`)
+      } else {
+        // Handle regular chat without agent mentions (existing streaming code)
+        const baseUrl = API_URL
+        const endpoint = `${baseUrl}/chat`
+
+        const headers = {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*',
+          'Cache-Control': 'no-cache',
+          'Connection': 'keep-alive',
+          ...(sessionId && { 'X-Session-ID': sessionId }),
         }
 
-        const data = await response.json()
-        addMessage({
-          text: data.response || data.content || JSON.stringify(data),
-          sender: "ai"
-        })
-      } else {
-        // Streaming response handling
         const response = await fetch(endpoint, {
           method: 'POST',
           headers,
-          body: JSON.stringify({ query }),
+          body: JSON.stringify({ query: message }),
           signal: controller.signal,
         })
 

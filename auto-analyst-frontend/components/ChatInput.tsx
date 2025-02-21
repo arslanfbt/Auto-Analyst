@@ -181,19 +181,36 @@ const ChatInput = forwardRef<
       { name: "preprocessing_agent", description: "Handles data preprocessing tasks" },
     ]
 
-    // Find the closest @ before cursor
+    // Find the @ symbol closest to cursor that's being typed
     const beforeCursor = message.slice(0, cursorPosition)
-    const atIndex = beforeCursor.lastIndexOf('@')
+    const textAfterCursor = message.slice(cursorPosition)
     
-    if (atIndex !== -1) {
-      // Check if we're still typing the agent name
-      const afterAt = message.slice(atIndex + 1)
-      const spaceAfterAt = afterAt.indexOf(' ')
-      const isTypingAgent = spaceAfterAt === -1 || spaceAfterAt >= cursorPosition - atIndex - 1
+    // Find the last @ before cursor that's not part of a completed agent mention
+    let lastAtIndex = -1
+    let currentIndex = -1
+    
+    while ((currentIndex = beforeCursor.indexOf('@', currentIndex + 1)) !== -1) {
+      // Check if this @ is part of a completed mention
+      const textAfterAt = message.slice(currentIndex + 1)
+      const nextSpace = textAfterAt.indexOf(' ')
+      
+      // If there's no space after @ or the space is after cursor, this might be the active mention
+      if (nextSpace === -1 || currentIndex + nextSpace + 1 >= cursorPosition) {
+        lastAtIndex = currentIndex
+      }
+    }
 
+    if (lastAtIndex !== -1) {
+      // Get the text being typed for the agent name
+      const typedText = message.slice(lastAtIndex + 1, cursorPosition).toLowerCase()
+      
+      // Only show suggestions if we're actively typing an agent name
+      const isTypingAgent = !typedText.includes(' ')
+      
       if (isTypingAgent) {
-        const query = message.slice(atIndex + 1, cursorPosition).toLowerCase()
-        const filtered = agents.filter(agent => agent.name.toLowerCase().includes(query))
+        const filtered = agents.filter(agent => 
+          agent.name.toLowerCase().includes(typedText)
+        )
         setAgentSuggestions(filtered)
         setShowSuggestions(filtered.length > 0)
         return
@@ -214,18 +231,28 @@ const ChatInput = forwardRef<
 
   const handleSuggestionClick = (agentName: string) => {
     const beforeCursor = message.slice(0, cursorPosition)
-    const atIndex = beforeCursor.lastIndexOf('@')
+    const afterCursor = message.slice(cursorPosition)
+    const lastAtIndex = beforeCursor.lastIndexOf('@')
     
-    if (atIndex !== -1) {
+    if (lastAtIndex !== -1) {
       // Replace just the agent mention part
       const newMessage = 
-        message.slice(0, atIndex + 1) + 
-        agentName + 
-        message.slice(cursorPosition)
+        message.slice(0, lastAtIndex + 1) + 
+        agentName + ' ' +  // Add a space after the agent name
+        afterCursor
       
       setMessage(newMessage)
+      
+      // Move cursor after the inserted agent name and space
+      const newCursorPos = lastAtIndex + agentName.length + 2
+      setTimeout(() => {
+        if (inputRef.current) {
+          inputRef.current.focus()
+          inputRef.current.setSelectionRange(newCursorPos, newCursorPos)
+        }
+      }, 0)
+      
       setShowSuggestions(false)
-      inputRef.current?.focus()
     }
   }
 
