@@ -139,84 +139,116 @@ const ChatInterface: React.FC = () => {
       return
     }
 
-    addMessage({ text: message, sender: "user" })
-    let accumulatedResponse = ""
-
+    // Add user message immediately and store its reference
+    addMessage({ 
+      text: message, 
+      sender: "user" 
+    })
+    
     const controller = new AbortController()
     setAbortController(controller)
     setIsLoading(true)
 
     try {
-      // Extract all agent mentions from the message
-      const agentMentions = message.match(/@(\w+)/g) || []
-      const agents = agentMentions.map(mention => mention.slice(1)) // Remove @ symbol
+      // Extract all agent mentions and their corresponding queries
+      const parts = message.split(/(@\w+)/).filter(Boolean)
+      const agentQueries: { agent: string; query: string }[] = []
+      let currentAgent: string | null = null
+      let currentQuery = ''
 
-      if (agents.length > 0) {
-        // Split message into segments for each agent
-        const segments = message.split(/@\w+\s/).filter(Boolean)
-        const responses: AgentResponse[] = []
+      // Improved parsing to handle multiple queries per agent
+      for (let i = 0; i < parts.length; i++) {
+        const part = parts[i]
+        if (part.startsWith('@')) {
+          // If we have a previous agent and query, save it
+          if (currentAgent && currentQuery.trim()) {
+            agentQueries.push({ agent: currentAgent, query: currentQuery.trim() })
+          }
+          currentAgent = part.slice(1) // Remove @ symbol
+          currentQuery = ''
+        } else if (currentAgent) {
+          // Accumulate query until next @ or end
+          currentQuery += ' ' + part
+        }
+      }
+      // Add the last agent-query pair if exists
+      if (currentAgent && currentQuery.trim()) {
+        agentQueries.push({ agent: currentAgent, query: currentQuery.trim() })
+      }
 
-        // Create placeholder messages for each agent
-        const messageIds = agents.map((agent, index) => {
-          const query = segments[index]?.trim()
-          if (!query) return null
+      if (agentQueries.length > 0) {
+        // Create a single message for all agent responses
+        const messageId = addMessage({
+          text: "",
+          sender: "ai"
+        });
 
-          return addMessage({
-            text: `${agent} is processing...`,
-            sender: "ai"
-          })
-        }).filter(Boolean) as string[]
+        let combinedResponse = "";
 
-        // Process each agent query independently
-        agents.forEach(async (agent, index) => {
-          const query = segments[index]?.trim()
-          const messageId = messageIds[index]
-          if (!query || !messageId) return
+        // Process each agent query sequentially
+        for (const { agent, query } of agentQueries) {
+          const endpoint = `${API_URL}/chat/${agent}`;
+          const response = await fetch(endpoint, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Access-Control-Allow-Origin': '*',
+              'Cache-Control': 'no-cache',
+              'Connection': 'keep-alive',
+              ...(sessionId && { 'X-Session-ID': sessionId }),
+            },
+            body: JSON.stringify({ query }),
+            signal: controller.signal,
+          });
 
-          try {
-            const endpoint = `${API_URL}/chat/${agent}`
+          if (!response.ok) {
+            throw new Error(`Error from ${agent}: ${response.statusText}`);
+          }
+
+          const reader = response.body?.getReader();
+          if (!reader) {
+            throw new Error('No response body');
+          }
+
+          combinedResponse += `\n\nResponse from @${agent}:\n`;
+          let agentResponse = "";
+
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            const chunk = new TextDecoder().decode(value);
+            const lines = chunk.split('\n').filter(line => line.trim());
             
-            const response = await fetch(endpoint, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'Access-Control-Allow-Origin': '*',
-                'Cache-Control': 'no-cache',
-                'Connection': 'keep-alive',
-                ...(sessionId && { 'X-Session-ID': sessionId }),
-              },
-              body: JSON.stringify({ query }),
-              signal: controller.signal,
-            })
+            for (const line of lines) {
+              try {
+                const parsedLine = JSON.parse(line);
+                const content = parsedLine.content || parsedLine.response;
+                const error = parsedLine.error;
 
-            if (!response.ok) {
-              throw new Error(`Error from ${agent}: ${response.statusText}`)
-            }
+                if (error) {
+                  agentResponse += `\nError: ${error}`;
+                } else if (content) {
+                  agentResponse += content;
+                }
 
-            const data = await response.json()
-            const agentResponse = data.response || data.content || JSON.stringify(data)
-
-            // Update the placeholder message with the actual response
-            updateMessage(messageId, {
-              text: agentResponse,
-              sender: "ai"
-            })
-
-          } catch (error) {
-            // Handle individual agent errors
-            if (error instanceof Error) {
-              updateMessage(messageId, {
-                text: `Error from ${agent}: ${error.message}`,
-                sender: "ai"
-              })
+                // Update message with combined response
+                updateMessage(messageId, {
+                  text: (combinedResponse + agentResponse).trim(),
+                  sender: "ai"
+                });
+              } catch (e) {
+                console.error(`Error parsing chunk from ${agent}:`, e, line);
+              }
             }
           }
-        })
-
+          combinedResponse += agentResponse;
+        }
       } else {
-        // Handle regular chat without agent mentions (existing streaming code)
+        // Handle regular chat without agent mentions
         const baseUrl = API_URL
         const endpoint = `${baseUrl}/chat`
+        let accumulatedResponse = ""
 
         const headers = {
           'Content-Type': 'application/json',
