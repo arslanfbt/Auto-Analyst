@@ -87,8 +87,8 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
         </motion.div>
       )
     }
-
-    const parts = message.text.toString().split(/(```plotly[\s\S]*?```)/)
+    const messageText = typeof message.text === 'string' ? message.text : JSON.stringify(message.text);
+    const parts = messageText ? messageText.split(/(```plotly[\s\S]*?```)/) : [];
 
     return parts.map((part, partIndex) => {
       if (part.startsWith("```plotly") && part.endsWith("```")) {
