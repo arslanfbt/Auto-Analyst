@@ -1,5 +1,6 @@
 import dspy
 import memory_agents as m
+from fastapi.concurrency import run_in_threadpool
 
 # Contains the DSPy agents
 
@@ -434,3 +435,30 @@ class auto_analyst(dspy.Module):
             output_dict = {"response": "This is the error from the system"+str(e)}
 
         return output_dict
+
+    async def execute_plan(self, query, plan_response, semaphore=None):
+        """Execute the plan with concurrency control"""
+        plan_text = plan_response.plan.replace('Plan','').replace(':','').strip()
+        plan_list = plan_text.split('->')
+        
+        for agent_name in plan_list:
+            agent_name = agent_name.strip()
+            if not agent_name:
+                continue
+            
+            # Use semaphore if provided to limit concurrency
+            if semaphore:
+                async with semaphore:
+                    response = await run_in_threadpool(
+                        self.execute_agent,
+                        agent_name,
+                        query
+                    )
+            else:
+                response = await run_in_threadpool(
+                    self.execute_agent,
+                    agent_name,
+                    query
+                )
+            
+            yield agent_name, response

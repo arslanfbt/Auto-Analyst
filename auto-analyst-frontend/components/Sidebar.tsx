@@ -12,6 +12,7 @@ import axios from "axios"
 import { useSessionStore } from '@/lib/store/sessionStore'
 import API_URL from '@/config/api'
 import { Button } from "@/components/ui/button"
+import { format } from 'date-fns'
 
 // const PREVIEW_API_URL = 'http://localhost:8000';
 const PREVIEW_API_URL = API_URL;
@@ -20,9 +21,18 @@ interface SidebarProps {
   isOpen: boolean
   onClose: () => void
   onNewChat: () => void
+  chatHistories: Array<{
+    chat_id: number;
+    title: string;
+    created_at: string;
+    user_id?: number;
+  }>
+  activeChatId: number | null
+  onChatSelect: (chatId: number) => void
+  isLoading: boolean
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, onNewChat }) => {
+const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, onNewChat, chatHistories = [], activeChatId, onChatSelect, isLoading }) => {
   const { clearMessages } = useChatHistoryStore()
   const { data: session } = useSession()
   const router = useRouter()
@@ -37,8 +47,6 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, onNewChat }) => {
   });
   const { sessionId } = useSessionStore()
   const [isAdmin, setIsAdmin] = useState(false)
-  const [histories, setHistories] = useState([])
-  const [currentChatId, setCurrentChatId] = useState('')
 
   useEffect(() => {
     setIsAdmin(localStorage.getItem('isAdmin') === 'true')
@@ -95,33 +103,62 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, onNewChat }) => {
     }
   }
 
+  // Add a function to delete a chat
+  const handleDeleteChat = async (chatId: number, e: React.MouseEvent) => {
+    e.stopPropagation(); // Prevent triggering the chat selection
+    
+    try {
+      await axios.delete(`${PREVIEW_API_URL}/chats/${chatId}`, {
+        headers: {
+          'X-Session-ID': sessionId,
+        },
+      });
+      
+      // If the deleted chat was active, create a new chat
+      if (chatId === activeChatId) {
+        clearMessages();
+        onNewChat();
+      }
+    } catch (error) {
+      console.error(`Failed to delete chat ${chatId}:`, error);
+    }
+  };
+  
+  // Format the date for display
+  const formatDate = (dateString: string) => {
+    try {
+      const date = new Date(dateString);
+      return format(date, 'MMM d, yyyy');
+    } catch (error) {
+      return dateString;
+    }
+  };
+
   return (
     <>
+      {/* Backdrop for mobile */}
+      {isOpen && (
+        <div 
+          className="md:hidden fixed inset-0 bg-black/30 z-40"
+          onClick={onClose}
+        />
+      )}
+
+      {/* Sidebar */}
       <motion.div
         initial={{ x: "-100%" }}
         animate={{ x: isOpen ? 0 : "-100%" }}
         transition={{ type: "tween", duration: 0.3 }}
-        className="fixed inset-y-0 left-0 w-64 bg-gradient-to-b from-white to-gray-50 text-gray-900 shadow-lg z-50 flex flex-col h-full"
+        className="fixed top-0 left-0 h-full w-64 bg-white shadow-lg z-50 flex flex-col"
       >
-        <div className="flex flex-col h-full">
-          {/* Header */}
-          <div className="p-4 flex items-center justify-between border-b border-gray-100 bg-white/80 backdrop-blur-sm">
-            <div className="flex items-center space-x-3">
-              <div className="relative w-8 h-8">
-                <Image
-                  src="https://4q2e4qu710mvgubg.public.blob.vercel-storage.com/Auto-analysts%20icon%20small-S682Oi8nbFhOADUHXJSD9d0KtSWKCe.png"
-                  alt="Auto-Analyst Logo"
-                  fill
-                  className="object-contain rounded-lg"
-                />
-              </div>
-              <span className="font-semibold text-gray-800 text-lg">Auto-Analyst</span>
-            </div>
-            <button 
-              onClick={onClose} 
-              className="text-gray-400 hover:text-[#FF7F7F] transition-colors p-1 hover:bg-gray-50 rounded-md"
+        <div className="flex-1 flex flex-col h-full">
+          <div className="flex justify-between items-center p-4 border-b border-gray-100">
+            <h2 className="text-lg font-semibold text-gray-800">Chat History</h2>
+            <button
+              onClick={onClose}
+              className="text-gray-500 hover:text-[#FF7F7F] focus:outline-none"
             >
-              <X className="h-5 w-5" />
+              <X className="w-5 h-5" />
             </button>
           </div>
 
@@ -136,9 +173,44 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, onNewChat }) => {
 
           {/* Chat History */}
           <div className="flex-1 overflow-y-auto px-3 py-2">
-            <div className="space-y-1">
-              {/* Chat history items would go here */}
-            </div>
+            {isLoading ? (
+              <div className="flex justify-center py-4">
+                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-[#FF7F7F]"></div>
+              </div>
+            ) : chatHistories && chatHistories.length > 0 ? (
+              <div className="space-y-1">
+                {chatHistories.map((chat) => (
+                  <div 
+                    key={chat.chat_id}
+                    onClick={() => onChatSelect(chat.chat_id)}
+                    className={`flex items-center justify-between p-2 rounded-lg cursor-pointer group ${
+                      activeChatId === chat.chat_id 
+                        ? 'bg-[#FF7F7F]/10 text-[#FF7F7F]' 
+                        : 'hover:bg-gray-100 text-gray-700'
+                    }`}
+                  >
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">{chat.title}</p>
+                      <p className="text-xs text-gray-500">{formatDate(chat.created_at)}</p>
+                    </div>
+                    <button
+                      onClick={(e) => handleDeleteChat(chat.chat_id, e)}
+                      className={`opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500 focus:outline-none transition-opacity ${
+                        activeChatId === chat.chat_id ? 'opacity-100' : ''
+                      }`}
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-8 text-gray-500">
+                <History className="w-12 h-12 mx-auto mb-2 opacity-30" />
+                <p className="text-sm">No chat history yet</p>
+                <p className="text-xs mt-1">Start a new conversation</p>
+              </div>
+            )}
           </div>
 
           {/* Bottom Navigation */}
