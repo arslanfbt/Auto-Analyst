@@ -18,12 +18,26 @@ const ResponsiveLayout: React.FC<ResponsiveLayoutProps> = ({ children }) => {
     setSidebarOpen(false)
   }
 
+  const handleChatSelect = (chatId: number) => {
+    console.log("Chat selected:", chatId)
+    setSidebarOpen(false)
+  }
+
+  const handleDeleteChat = (chatId: number) => {
+    console.log("Delete chat:", chatId)
+  }
+
   return (
     <div className="flex h-screen overflow-hidden">
-      <Sidebar 
-        isOpen={sidebarOpen} 
+      <Sidebar
+        isOpen={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
         onNewChat={handleNewChat}
+        chatHistories={[]}
+        activeChatId={null}
+        onChatSelect={handleChatSelect}
+        isLoading={false}
+        onDeleteChat={handleDeleteChat}
       />
       <motion.div
         className="flex-1 flex flex-col"

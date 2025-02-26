@@ -42,7 +42,7 @@ interface ChatMessage {
   chat_id?: number | null;
   timestamp?: string;
 }
-
+  
 interface ChatHistory {
   chat_id: number;
   title: string;
@@ -324,9 +324,9 @@ const ChatInterface: React.FC = () => {
       console.error("Error sending message:", error);
       
       // Add error message
-      addMessage({
+        addMessage({
         text: "Sorry, there was an error processing your request. Please try again.",
-        sender: "ai"
+          sender: "ai"
       });
     } finally {
       setIsLoading(false);
@@ -346,18 +346,6 @@ const ChatInterface: React.FC = () => {
       'Cache-Control': 'no-cache',
       'Connection': 'keep-alive',
       ...(sessionId && { 'X-Session-ID': sessionId }),
-    }
-
-    // First, save the user message to the database
-    if (activeChatId) {
-      try {
-        await axios.post(`${API_URL}/chats/${activeChatId}/messages`, {
-          content: message,
-          sender: 'user'
-        });
-      } catch (error) {
-        console.error('Failed to save user message:', error);
-      }
     }
 
     // Streaming response handling
@@ -423,18 +411,6 @@ const ChatInterface: React.FC = () => {
   const processAgentMessage = async (agentName: string, query: string, controller: AbortController) => {
     let accumulatedResponse = ""
     const baseUrl = API_URL
-
-    // First, save the agent query to the database
-    if (activeChatId) {
-      try {
-        await axios.post(`${API_URL}/chats/${activeChatId}/messages`, {
-          content: `@${agentName} ${query}`,
-          sender: 'user'
-        });
-      } catch (error) {
-        console.error('Failed to save agent query:', error);
-      }
-    }
 
     const endpoint = `${baseUrl}/chat/${agentName}`
 
