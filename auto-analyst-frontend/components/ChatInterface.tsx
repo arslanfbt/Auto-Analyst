@@ -59,7 +59,6 @@ const ChatInterface: React.FC = () => {
   const [mounted, setMounted] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [isSidebarOpen, setSidebarOpen] = useState(false)
-  const [selectedAgent, setSelectedAgent] = useState<string | null>(null)
   const [agents, setAgents] = useState<AgentInfo[]>([])
   const [showWelcome, setShowWelcome] = useState(true)
   const [abortController, setAbortController] = useState<AbortController | null>(null)
@@ -224,11 +223,13 @@ const ChatInterface: React.FC = () => {
     }
   }
 
-  const handleSendMessage = useCallback(async (message: string) => {
+  const handleSendMessage = async (message: string) => {
     if (!message.trim()) return;
     
     // Get current chat ID or create a new one
     let currentChatId = activeChatId;
+    const isNewChat = !currentChatId || 
+      chatHistories.find(chat => chat.chat_id === currentChatId)?.title === 'New Chat';
     
     // If no active chat, create a new one
     if (!currentChatId) {
@@ -242,6 +243,7 @@ const ChatInterface: React.FC = () => {
       text: message,
       sender: "user",
     });
+    setShowWelcome(false);
 
     // Also save user message to the database immediately
     try {
@@ -252,14 +254,22 @@ const ChatInterface: React.FC = () => {
     } catch (error) {
       console.error('Failed to save user message:', error);
     }
-    
-    // Continue with the existing AI response logic
+
+    // Counting user queries for free trial
+    if (!session) {
+      incrementQueries()
+    }
+
     setIsLoading(true);
-    const controller = new AbortController();
-    setAbortController(controller);
     
-    // Existing code for handling AI response
+    // Store original message for later use with chat title generation
+    const originalQuery = message;
+
     try {
+      // Create an abort controller for this request
+      const controller = new AbortController();
+      setAbortController(controller);
+
       // Update the regex to match the format without requiring curly braces
       // This will match patterns like "@agent_name query text"
       const agentRegex = /@(\w+)(?:\s+\{([^}]+)\}|\s+([^@]+))/g
@@ -286,50 +296,43 @@ const ChatInterface: React.FC = () => {
         }
       }
 
-      if (!session) {
-        incrementQueries()
-      }
-    } catch (error) {
-      if (error instanceof DOMException && error.name === 'AbortError') {
-        addMessage({
-          text: "Generation stopped by user",
-          sender: "ai"
-        })
-      } else {
-        console.error("Error:", error)
-        addMessage({
-          text: `Error: ${error instanceof Error ? error.message : 'Unknown error'}`,
-          sender: "ai"
-        })
-      }
-    } finally {
-      setIsLoading(false)
-      setAbortController(null)
-    }
-
-    // After receiving AI response, update chat title if this is the first message
-    const currentChat = chatHistories.find(chat => chat.chat_id === activeChatId);
-    if (currentChat && currentChat.title === 'New Chat') {
-      try {
-        // Generate a title from the first message
-        const titleResponse = await axios.post(`${API_URL}/chat_history_name`, {
-          query: message
-        });
-        
-        if (titleResponse.data && titleResponse.data.name) {
-          // Update the chat title in the backend
-          await axios.put(`${API_URL}/chats/${activeChatId}`, {
-            title: titleResponse.data.name
+      // After the AI response is generated and saved, update the chat title for new chats
+      if (isNewChat) {
+        try {
+          console.log("Generating title for new chat using query:", originalQuery);
+          // Generate a title from the first message
+          const titleResponse = await axios.post(`${API_URL}/chat_history_name`, {
+            query: originalQuery
           });
           
-          // Refresh chat histories to get the updated title
-          fetchChatHistories();
+          console.log("Title response:", titleResponse.data);
+          
+          if (titleResponse.data && titleResponse.data.name) {
+            // Update the chat title in the backend
+            await axios.put(`${API_URL}/chats/${currentChatId}`, {
+              title: titleResponse.data.name
+            });
+            
+            // Refresh chat histories to get the updated title
+            fetchChatHistories();
+          }
+        } catch (error) {
+          console.error('Failed to update chat title:', error);
         }
-      } catch (error) {
-        console.error('Failed to update chat title:', error);
       }
+    } catch (error) {
+      console.error("Error sending message:", error);
+      
+      // Add error message
+      addMessage({
+        text: "Sorry, there was an error processing your request. Please try again.",
+        sender: "ai"
+      });
+    } finally {
+      setIsLoading(false);
+      setAbortController(null);
     }
-  }, [activeChatId, createNewChat, addMessage, sessionId, incrementQueries]);
+  };
 
   // Update the processRegularMessage function to save AI responses
   const processRegularMessage = async (message: string, controller: AbortController) => {
@@ -560,6 +563,32 @@ const ChatInterface: React.FC = () => {
     }
   }, [mounted, activeChatId, session, hasFreeTrial, createNewChat]);
 
+  const handleChatDelete = useCallback((chatId: number) => {
+    // Remove the chat from the chat histories
+    setChatHistories(prev => prev.filter(chat => chat.chat_id !== chatId));
+    
+    // If the deleted chat was the active chat, reset the active chat and clear messages
+    if (chatId === activeChatId) {
+      setActiveChatId(null);
+      clearMessages();
+      setShowWelcome(true);
+      
+      // If there are other chats, select the most recent one
+      const remainingChats = chatHistories.filter(chat => chat.chat_id !== chatId);
+      if (remainingChats.length > 0) {
+        const mostRecentChat = [...remainingChats].sort(
+          (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+        )[0];
+        
+        setActiveChatId(mostRecentChat.chat_id);
+        loadChat(mostRecentChat.chat_id);
+      } else {
+        // If no chats remain, create a new one
+        createNewChat();
+      }
+    }
+  }, [activeChatId, chatHistories, clearMessages, createNewChat, loadChat]);
+
   // Don't render anything until mounted to prevent hydration mismatch
   if (!mounted) {
     return null
@@ -575,6 +604,7 @@ const ChatInterface: React.FC = () => {
         activeChatId={activeChatId}
         onChatSelect={loadChat}
         isLoading={isLoadingHistory}
+        onDeleteChat={handleChatDelete}
       />
 
       <motion.div

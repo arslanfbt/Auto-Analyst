@@ -68,7 +68,7 @@ class ChatManager:
     
     def add_message(self, chat_id: int, content: str, sender: str) -> Dict[str, Any]:
         """
-        Add a message to an existing chat.
+        Add a message to a chat.
         
         Args:
             chat_id: ID of the chat to add the message to
@@ -76,47 +76,52 @@ class ChatManager:
             sender: Message sender ('user' or 'bot')
             
         Returns:
-            Dictionary containing the added message information
+            Dictionary containing message information
         """
         session = self.Session()
         try:
-            # Verify chat exists
+            # Check if chat exists
             chat = session.query(Chat).filter(Chat.chat_id == chat_id).first()
             if not chat:
                 raise ValueError(f"Chat with ID {chat_id} not found")
             
-            # Create new message
-            new_message = Message(
+            # Create a new message
+            message = Message(
                 chat_id=chat_id,
                 content=content,
-                sender=sender
+                sender=sender,
+                timestamp=datetime.utcnow()
             )
-            session.add(new_message)
+            session.add(message)
             
-            # If this is the first bot response, update the chat title
+            # If this is the first bot response and chat title is still default,
+            # update the chat title based on the first user query
             if sender == 'bot':
-                message_count = session.query(Message).filter(
+                first_bot_message = session.query(Message).filter(
                     Message.chat_id == chat_id,
                     Message.sender == 'bot'
-                ).count()
+                ).first()
                 
-                if message_count == 0:
-                    # This will be the first bot message, so we'll need to update the title
-                    # We'll commit first to ensure the message is saved
-                    session.commit()
-                    self._update_chat_title(chat_id, content)
-                    # Refresh chat object to get updated title
-                    chat = session.query(Chat).filter(Chat.chat_id == chat_id).first()
+                if not first_bot_message and chat.title == 'New Chat':
+                    # Get the user's first message
+                    first_user_message = session.query(Message).filter(
+                        Message.chat_id == chat_id,
+                        Message.sender == 'user'
+                    ).order_by(Message.timestamp).first()
+                    
+                    if first_user_message:
+                        # Generate title from user query
+                        new_title = self.generate_title_from_query(first_user_message.content)
+                        chat.title = new_title
             
             session.commit()
             
             return {
-                "message_id": new_message.message_id,
-                "chat_id": chat_id,
-                "content": content,
-                "sender": sender,
-                "timestamp": new_message.timestamp.isoformat(),
-                "chat_title": chat.title
+                "message_id": message.message_id,
+                "chat_id": message.chat_id,
+                "content": message.content,
+                "sender": message.sender,
+                "timestamp": message.timestamp.isoformat()
             }
         except SQLAlchemyError as e:
             session.rollback()
@@ -463,4 +468,31 @@ class ChatManager:
             logger.error(f"Error updating chat: {str(e)}")
             raise
         finally:
-            session.close() 
+            session.close()
+    
+    def generate_title_from_query(self, query: str) -> str:
+        """
+        Generate a title for a chat based on the first query.
+        
+        Args:
+            query: The user's first query in the chat
+            
+        Returns:
+            A generated title string
+        """
+        try:
+            # Simple title generation - take first few words
+            words = query.split()
+            if len(words) > 3:
+                title = "Chat about " + " ".join(words[0:3]) + "..."
+            else:
+                title = "Chat about " + query
+            
+            # Limit title length
+            if len(title) > 40:
+                title = title[:37] + "..."
+            
+            return title
+        except Exception as e:
+            logger.error(f"Error generating title: {str(e)}")
+            return "New Chat" 

@@ -30,9 +30,10 @@ interface SidebarProps {
   activeChatId: number | null
   onChatSelect: (chatId: number) => void
   isLoading: boolean
+  onDeleteChat: (chatId: number) => void
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, onNewChat, chatHistories = [], activeChatId, onChatSelect, isLoading }) => {
+const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, onNewChat, chatHistories = [], activeChatId, onChatSelect, isLoading, onDeleteChat }) => {
   const { clearMessages } = useChatHistoryStore()
   const { data: session } = useSession()
   const router = useRouter()
@@ -47,6 +48,8 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, onNewChat, chatHisto
   });
   const { sessionId } = useSessionStore()
   const [isAdmin, setIsAdmin] = useState(false)
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [chatToDelete, setChatToDelete] = useState<number | null>(null);
 
   useEffect(() => {
     setIsAdmin(localStorage.getItem('isAdmin') === 'true')
@@ -104,23 +107,23 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, onNewChat, chatHisto
   }
 
   // Add a function to delete a chat
-  const handleDeleteChat = async (chatId: number, e: React.MouseEvent) => {
-    e.stopPropagation(); // Prevent triggering the chat selection
+  const handleDeleteChat = (chatId: number, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setChatToDelete(chatId);
+    setIsDeleteModalOpen(true);
+  };
+
+  // Add a function to confirm deletion
+  const confirmDeleteChat = async () => {
+    if (!chatToDelete) return;
     
     try {
-      await axios.delete(`${PREVIEW_API_URL}/chats/${chatId}`, {
-        headers: {
-          'X-Session-ID': sessionId,
-        },
-      });
-      
-      // If the deleted chat was active, create a new chat
-      if (chatId === activeChatId) {
-        clearMessages();
-        onNewChat();
-      }
+      await axios.delete(`${API_URL}/chats/${chatToDelete}`);
+      onDeleteChat(chatToDelete);
+      setIsDeleteModalOpen(false);
     } catch (error) {
-      console.error(`Failed to delete chat ${chatId}:`, error);
+      console.error(`Failed to delete chat ${chatToDelete}:`, error);
+      alert("Failed to delete chat. Please try again.");
     }
   };
   
@@ -270,6 +273,41 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, onNewChat, chatHisto
         onClose={() => setIsSettingsOpen(false)}
         initialSettings={modelSettings}
       />
+
+      {isDeleteModalOpen && (
+        <>
+          {/* Modal backdrop */}
+          <div 
+            className="fixed inset-0 bg-black/30 z-[60] flex items-center justify-center"
+            onClick={() => setIsDeleteModalOpen(false)}
+          >
+            {/* Modal content */}
+            <div 
+              className="bg-white rounded-xl shadow-lg p-6 max-w-md w-[90%] mx-4 z-[70]"
+              onClick={e => e.stopPropagation()}
+            >
+              <h3 className="text-lg font-semibold text-gray-800 mb-2">Delete Chat</h3>
+              <p className="text-gray-600 mb-6">
+                Are you sure you want to delete this chat? This action cannot be undone.
+              </p>
+              <div className="flex justify-end gap-3">
+                <button
+                  onClick={() => setIsDeleteModalOpen(false)}
+                  className="px-4 py-2 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={confirmDeleteChat}
+                  className="px-4 py-2 rounded-lg bg-[#FF7F7F] text-white hover:bg-[#FF7F7F]/90 transition-colors"
+                >
+                  Delete
+                </button>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
     </>
   )
 }
