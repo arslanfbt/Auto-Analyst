@@ -25,6 +25,7 @@ import json
 import asyncio
 
 from dotenv import load_dotenv
+from chat_routes import router as chat_router
 
 load_dotenv()
 
@@ -570,6 +571,9 @@ async def reset_session(
             status_code=500,
             detail=f"Failed to reset session: {str(e)}"
         )
+
+# Add this line where other routers are included
+app.include_router(chat_router)
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
