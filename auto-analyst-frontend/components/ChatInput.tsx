@@ -84,7 +84,18 @@ const ChatInput = forwardRef<
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     if (message.trim() && !isLoading && !disabled) {
+      // Store the current timestamp when sending a message
+      const messageTimestamp = new Date().toISOString()
+      
+      // Add a data attribute to track this message for correlation with the AI response
+      const messageData = {
+        text: message.trim(),
+        timestamp: messageTimestamp
+      }
+      
+      // Pass the additional metadata to help with message correlation
       onSendMessage(message.trim())
+      
       setMessage("")
       if (inputRef.current) {
         inputRef.current.style.height = "auto"

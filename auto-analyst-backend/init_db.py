@@ -30,7 +30,7 @@ class Message(Base):
     
     message_id = Column(Integer, primary_key=True, autoincrement=True)
     chat_id = Column(Integer, ForeignKey('chats.chat_id'), nullable=False)
-    sender = Column(String, nullable=False)  # 'user' or 'bot'
+    sender = Column(String, nullable=False)  # 'user' or 'ai'
     content = Column(Text, nullable=False)
     timestamp = Column(DateTime, default=datetime.utcnow)
 

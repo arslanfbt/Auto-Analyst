@@ -118,8 +118,32 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, onNewChat, chatHisto
     if (!chatToDelete) return;
     
     try {
-      await axios.delete(`${API_URL}/chats/${chatToDelete}`);
+      await axios.delete(`${API_URL}/chats/${chatToDelete}`, {
+        params: { user_id: session?.user?.id },
+        headers: { 'X-Session-ID': sessionId }
+      });
+      
+      // Call onDeleteChat to update the sidebar
       onDeleteChat(chatToDelete);
+      
+      // Check if the deleted chat was the active chat
+      if (activeChatId === chatToDelete) {
+        // Find the most recent chat or create a new one
+        const remainingChats = chatHistories.filter(chat => chat.chat_id !== chatToDelete);
+        
+        if (remainingChats.length > 0) {
+          // Set the most recent chat as active
+          const mostRecentChat = [...remainingChats].sort(
+            (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+          )[0];
+          
+          onChatSelect(mostRecentChat.chat_id); // Switch to the most recent chat
+        } else {
+          // If no chats remain, create a new one
+          onNewChat(); // This will trigger handleNewChat in ChatInterface
+        }
+      }
+      
       setIsDeleteModalOpen(false);
     } catch (error) {
       console.error(`Failed to delete chat ${chatToDelete}:`, error);
@@ -135,6 +159,11 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, onNewChat, chatHisto
     } catch (error) {
       return dateString;
     }
+  };
+
+  // Update the onClick handler to call onChatSelect
+  const handleChatSelect = (chatId: number) => {
+    onChatSelect(chatId);
   };
 
   return (
@@ -183,14 +212,18 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, onNewChat, chatHisto
             ) : chatHistories && chatHistories.length > 0 ? (
               <div className="space-y-1">
                 {chatHistories.map((chat) => (
-                  <div 
+                  <motion.div 
                     key={chat.chat_id}
-                    onClick={() => onChatSelect(chat.chat_id)}
+                    onClick={() => handleChatSelect(chat.chat_id)}
                     className={`flex items-center justify-between p-2 rounded-lg cursor-pointer group ${
                       activeChatId === chat.chat_id 
                         ? 'bg-[#FF7F7F]/10 text-[#FF7F7F]' 
                         : 'hover:bg-gray-100 text-gray-700'
                     }`}
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.9 }}
+                    transition={{ duration: 0.2 }}
                   >
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium truncate">{chat.title}</p>
@@ -204,7 +237,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, onNewChat, chatHisto
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
-                  </div>
+                  </motion.div>
                 ))}
               </div>
             ) : (
