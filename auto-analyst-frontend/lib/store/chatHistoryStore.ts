@@ -10,12 +10,15 @@ export interface ChatMessage {
   sender: "user" | "ai"
   agent?: string
   id?: string
+  message_id?: number
+  chat_id?: number
+  timestamp?: string
 }
 
 interface ChatHistoryStore {
   messages: ChatMessage[]
   addMessage: (message: ChatMessage) => string
-  updateMessage: (id: string, message: ChatMessage) => void
+  updateMessage: (id: string, updatedMessage: Partial<ChatMessage>) => void
   clearMessages: () => void
 }
 
@@ -24,23 +27,23 @@ export const useChatHistoryStore = create<ChatHistoryStore>()(
     (set) => ({
       messages: [],
       addMessage: (message) => {
-        const id = Date.now().toString()
+        const id = Math.random().toString(36).substring(7)
         set((state) => ({
-          messages: [...state.messages, { ...message, id }]
+          messages: [...state.messages, { ...message, id }],
         }))
         return id
       },
-      updateMessage: (id, message) => {
+      updateMessage: (id, updatedMessage) => {
         set((state) => ({
-          messages: state.messages.map((msg) => 
-            msg.id === id ? { ...message, id } : msg
-          )
+          messages: state.messages.map((message) =>
+            message.id === id ? { ...message, ...updatedMessage } : message
+          ),
         }))
       },
       clearMessages: () => set({ messages: [] }),
     }),
     {
-      name: 'chat-history-storage',
+      name: 'chat-history',
     }
   )
 ) 

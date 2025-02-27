@@ -143,11 +143,22 @@ const ChatInterface: React.FC = () => {
         // Clear existing messages
         clearMessages();
         
+        // Verify we have all messages before processing
+        if (response.data.messages.length === 0) {
+          console.warn("No messages found in chat history");
+        } else {
+          console.log(`Found ${response.data.messages.length} messages in history`);
+        }
+        
         // Map messages to the format expected by the chat window
         response.data.messages.forEach((msg: any) => {
+          console.log("Processing message:", msg.message_id, msg.sender, msg.timestamp);
           addMessage({
             text: msg.content,
-            sender: msg.sender
+            sender: msg.sender,
+            message_id: msg.message_id,
+            chat_id: msg.chat_id,
+            timestamp: msg.timestamp
           });
         });
         
@@ -270,7 +281,11 @@ const ChatInterface: React.FC = () => {
           
           console.log("New chat created:", response.data);
           currentChatId = response.data.chat_id;
-          setActiveChatId(currentChatId);
+          // Wait for the state to be updated
+          await new Promise(resolve => {
+            setActiveChatId(currentChatId);
+            resolve(true);
+          });
         } catch (error) {
           console.error("Failed to create new chat:", error);
           return;
@@ -320,7 +335,7 @@ const ChatInterface: React.FC = () => {
       
       // If no agent calls are found, process as a regular message
       if (matches.length === 0) {
-        await processRegularMessage(message, controller)
+        await processRegularMessage(message, controller, currentChatId)
       } else {
         // Process each agent call separately
         for (const match of matches) {
@@ -335,7 +350,7 @@ const ChatInterface: React.FC = () => {
             agent: agentName
           })
           
-          await processAgentMessage(agentName, agentQuery, controller)
+          await processAgentMessage(agentName, agentQuery, controller, currentChatId)
         }
       }
 
@@ -378,7 +393,7 @@ const ChatInterface: React.FC = () => {
   };
 
   // Update the processRegularMessage function to save AI responses
-  const processRegularMessage = async (message: string, controller: AbortController) => {
+  const processRegularMessage = async (message: string, controller: AbortController, currentId: number | null) => {
     let accumulatedResponse = ""
     const baseUrl = API_URL
     const endpoint = `${baseUrl}/chat`
@@ -438,23 +453,45 @@ const ChatInterface: React.FC = () => {
     }
 
     // Save the final AI response to the database for signed-in or admin users
-    if (activeChatId && (session || isAdmin)) {
+    if (currentId && (session || isAdmin)) {
       try {
-        await axios.post(`${API_URL}/chats/${activeChatId}/messages`, {
-          content: accumulatedResponse.trim(),
-          sender: 'ai'
-        }, {
-          params: { user_id: userId, is_admin: isAdmin },
-          headers: { 'X-Session-ID': sessionId }
-        });
+        console.log("Saving AI response for chat ID:", currentId);
+        
+        // More robust save process with retry for the critical first message
+        const saveAIResponse = async (retryCount = 0) => {
+          try {
+            const response = await axios.post(`${API_URL}/chats/${currentId}/messages`, {
+              content: accumulatedResponse.trim(),
+              sender: 'ai'
+            }, {
+              params: { user_id: userId, is_admin: isAdmin },
+              headers: { 'X-Session-ID': sessionId }
+            });
+            
+            console.log("AI response saved successfully:", response.data);
+            return response;
+          } catch (error) {
+            console.error(`Failed to save AI response (attempt ${retryCount + 1}):`, error);
+            
+            // Retry up to 3 times for the first AI response
+            if (retryCount < 3) {
+              console.log(`Retrying in ${(retryCount + 1) * 500}ms...`);
+              await new Promise(resolve => setTimeout(resolve, (retryCount + 1) * 500));
+              return saveAIResponse(retryCount + 1);
+            }
+            throw error;
+          }
+        };
+        
+        await saveAIResponse();
       } catch (error) {
-        console.error('Failed to save AI response:', error);
+        console.error('Failed to save AI response after retries:', error);
       }
     }
   }
 
   // Update the processAgentMessage function
-  const processAgentMessage = async (agentName: string, query: string, controller: AbortController) => {
+  const processAgentMessage = async (agentName: string, query: string, controller: AbortController, currentId: number | null) => {
     let accumulatedResponse = ""
     const baseUrl = API_URL
 
@@ -488,9 +525,10 @@ const ChatInterface: React.FC = () => {
     })
 
     // Save the final agent response to the database for signed-in or admin users
-    if (activeChatId && (session || isAdmin)) {
+    if (currentId && (session || isAdmin)) {
       try {
-        await axios.post(`${API_URL}/chats/${activeChatId}/messages`, {
+        console.log("Saving agent response for chat ID:", currentId);
+        await axios.post(`${API_URL}/chats/${currentId}/messages`, {
           content: accumulatedResponse.trim(),
           sender: 'ai'
         }, {

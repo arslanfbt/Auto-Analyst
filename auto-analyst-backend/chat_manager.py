@@ -73,7 +73,7 @@ class ChatManager:
         Args:
             chat_id: ID of the chat to add the message to
             content: Message content
-            sender: Message sender ('user' or 'bot')
+            sender: Message sender ('user' or 'ai')
             user_id: Optional user ID to verify ownership
             
         Returns:
@@ -99,15 +99,15 @@ class ChatManager:
             )
             session.add(message)
             
-            # If this is the first bot response and chat title is still default,
+            # If this is the first AI response and chat title is still default,
             # update the chat title based on the first user query
-            if sender == 'bot':
-                first_bot_message = session.query(Message).filter(
+            if sender == 'ai':
+                first_ai_message = session.query(Message).filter(
                     Message.chat_id == chat_id,
-                    Message.sender == 'bot'
+                    Message.sender == 'ai'
                 ).first()
                 
-                if not first_bot_message and chat.title == 'New Chat':
+                if not first_ai_message and chat.title == 'New Chat':
                     # Get the user's first message
                     first_user_message = session.query(Message).filter(
                         Message.chat_id == chat_id,
@@ -566,5 +566,22 @@ class ChatManager:
             session.rollback()
             logger.error(f"Error deleting empty chats: {str(e)}")
             return 0
+        finally:
+            session.close()
+
+    def save_ai_response(self, chat_id: int, content: str):
+        session = self.Session()
+        try:
+            new_message = Message(
+                chat_id=chat_id,
+                sender='ai',
+                content=content,
+                timestamp=datetime.utcnow()
+            )
+            session.add(new_message)
+            session.commit()
+        except SQLAlchemyError as e:
+            logger.error(f"Error saving AI response: {str(e)}")
+            session.rollback()
         finally:
             session.close() 
