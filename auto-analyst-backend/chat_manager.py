@@ -183,12 +183,13 @@ class ChatManager:
         finally:
             session.close()
     
-    def get_chat(self, chat_id: int) -> Dict[str, Any]:
+    def get_chat(self, chat_id: int, user_id: Optional[int] = None) -> Dict[str, Any]:
         """
-        Get a chat by ID with all its messages.
+        Get a chat by ID with all its messages, ensuring the user has access.
         
         Args:
             chat_id: ID of the chat to retrieve
+            user_id: Optional user ID to verify ownership
             
         Returns:
             Dictionary containing chat information and messages
@@ -199,6 +200,10 @@ class ChatManager:
             chat = session.query(Chat).filter(Chat.chat_id == chat_id).first()
             if not chat:
                 raise ValueError(f"Chat with ID {chat_id} not found")
+            
+            # Verify the user has access to this chat (if user_id provided)
+            if user_id is not None and chat.user_id != user_id:
+                raise ValueError(f"User {user_id} does not have access to chat {chat_id}")
             
             # Get the chat messages ordered by timestamp
             messages = session.query(Message).filter(

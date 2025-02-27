@@ -77,24 +77,24 @@ async def add_message(chat_id: int, message: MessageCreate):
         raise HTTPException(status_code=500, detail=f"Failed to add message: {str(e)}")
 
 @router.get("/{chat_id}", response_model=ChatDetailResponse)
-async def get_chat(chat_id: int):
-    """Get a chat by ID with all messages"""
+async def get_chat(chat_id: int, user_id: int = Query(..., description="ID of the user requesting access")):
+    """Get a chat by ID with all messages, verifying user has access"""
     try:
-        chat = chat_manager.get_chat(chat_id)
+        chat = chat_manager.get_chat(chat_id, user_id)
         return chat
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=404 if "not found" in str(e) else 403, detail=str(e))
     except Exception as e:
         logger.error(f"Error retrieving chat: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to retrieve chat: {str(e)}")
 
 @router.get("/", response_model=List[ChatResponse])
 async def get_chats(
-    user_id: Optional[int] = None,
+    user_id: int = Query(..., description="ID of the user whose chats to retrieve"),
     limit: int = Query(10, ge=1, le=100),
     offset: int = Query(0, ge=0)
 ):
-    """Get recent chats, optionally filtered by user_id"""
+    """Get recent chats for the specified user only"""
     try:
         chats = chat_manager.get_user_chats(user_id, limit, offset)
         return chats

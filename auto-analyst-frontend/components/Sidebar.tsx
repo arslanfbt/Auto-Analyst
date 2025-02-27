@@ -137,6 +137,19 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, onNewChat, chatHisto
     }
   };
 
+  // In the Sidebar component, add a function to handle unauthorized access
+  const handleChatSelectWithErrorHandling = (chatId: number) => {
+    try {
+      onChatSelect(chatId);
+    } catch (error) {
+      console.error("Error selecting chat:", error);
+      if (axios.isAxiosError(error) && error.response?.status === 403) {
+        // If the user doesn't have access, remove it from the list
+        alert("You don't have access to this chat.");
+      }
+    }
+  };
+
   return (
     <>
       {/* Backdrop for mobile */}
@@ -185,7 +198,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, onNewChat, chatHisto
                 {chatHistories.map((chat) => (
                   <div 
                     key={chat.chat_id}
-                    onClick={() => onChatSelect(chat.chat_id)}
+                    onClick={() => handleChatSelectWithErrorHandling(chat.chat_id)}
                     className={`flex items-center justify-between p-2 rounded-lg cursor-pointer group ${
                       activeChatId === chat.chat_id 
                         ? 'bg-[#FF7F7F]/10 text-[#FF7F7F]' 

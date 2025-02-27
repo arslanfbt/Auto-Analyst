@@ -25,7 +25,8 @@ export const useFreeTrialStore = create<FreeTrialStore>()(
         }
         
         // For unauthenticated users, check free trial limit
-        return get().queriesUsed < 2
+        const freeTrialLimit = process.env.NEXT_PUBLIC_FREE_TRIAL_LIMIT || '2'
+        return get().queriesUsed < parseInt(freeTrialLimit)
       },
     }),
     {
