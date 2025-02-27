@@ -65,10 +65,10 @@ async def create_chat(chat_create: ChatCreate):
         raise HTTPException(status_code=500, detail=f"Failed to create chat: {str(e)}")
 
 @router.post("/{chat_id}/messages", response_model=MessageResponse)
-async def add_message(chat_id: int, message: MessageCreate):
+async def add_message(chat_id: int, message: MessageCreate, user_id: Optional[int] = None):
     """Add a message to a chat"""
     try:
-        result = chat_manager.add_message(chat_id, message.content, message.sender)
+        result = chat_manager.add_message(chat_id, message.content, message.sender, user_id)
         return result
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
@@ -77,24 +77,24 @@ async def add_message(chat_id: int, message: MessageCreate):
         raise HTTPException(status_code=500, detail=f"Failed to add message: {str(e)}")
 
 @router.get("/{chat_id}", response_model=ChatDetailResponse)
-async def get_chat(chat_id: int, user_id: int = Query(..., description="ID of the user requesting access")):
-    """Get a chat by ID with all messages, verifying user has access"""
+async def get_chat(chat_id: int, user_id: Optional[int] = None):
+    """Get a chat by ID with all messages"""
     try:
         chat = chat_manager.get_chat(chat_id, user_id)
         return chat
     except ValueError as e:
-        raise HTTPException(status_code=404 if "not found" in str(e) else 403, detail=str(e))
+        raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
         logger.error(f"Error retrieving chat: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to retrieve chat: {str(e)}")
 
 @router.get("/", response_model=List[ChatResponse])
 async def get_chats(
-    user_id: int = Query(..., description="ID of the user whose chats to retrieve"),
+    user_id: Optional[int] = None,
     limit: int = Query(10, ge=1, le=100),
     offset: int = Query(0, ge=0)
 ):
-    """Get recent chats for the specified user only"""
+    """Get recent chats, optionally filtered by user_id"""
     try:
         chats = chat_manager.get_user_chats(user_id, limit, offset)
         return chats
@@ -103,12 +103,12 @@ async def get_chats(
         raise HTTPException(status_code=500, detail=f"Failed to retrieve chats: {str(e)}")
 
 @router.delete("/{chat_id}")
-async def delete_chat(chat_id: int):
+async def delete_chat(chat_id: int, user_id: Optional[int] = None):
     """Delete a chat and all its messages"""
     try:
-        success = chat_manager.delete_chat(chat_id)
+        success = chat_manager.delete_chat(chat_id, user_id)
         if not success:
-            raise HTTPException(status_code=404, detail=f"Chat with ID {chat_id} not found")
+            raise HTTPException(status_code=404, detail=f"Chat with ID {chat_id} not found or access denied")
         return {"message": f"Chat {chat_id} deleted successfully"}
     except HTTPException:
         raise
@@ -157,4 +157,14 @@ async def update_chat(chat_id: int, chat_update: ChatUpdate):
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
         logger.error(f"Error updating chat: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Failed to update chat: {str(e)}") 
+        raise HTTPException(status_code=500, detail=f"Failed to update chat: {str(e)}")
+
+@router.post("/cleanup-empty", response_model=dict)
+async def cleanup_empty_chats(request: ChatCreate):
+    """Delete empty chats for a user"""
+    try:
+        deleted_count = chat_manager.delete_empty_chats(request.user_id, request.is_admin)
+        return {"message": f"Deleted {deleted_count} empty chats"}
+    except Exception as e:
+        logger.error(f"Error cleaning up empty chats: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to clean up empty chats: {str(e)}") 

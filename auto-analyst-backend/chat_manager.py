@@ -66,7 +66,7 @@ class ChatManager:
         finally:
             session.close()
     
-    def add_message(self, chat_id: int, content: str, sender: str) -> Dict[str, Any]:
+    def add_message(self, chat_id: int, content: str, sender: str, user_id: Optional[int] = None) -> Dict[str, Any]:
         """
         Add a message to a chat.
         
@@ -74,16 +74,21 @@ class ChatManager:
             chat_id: ID of the chat to add the message to
             content: Message content
             sender: Message sender ('user' or 'bot')
+            user_id: Optional user ID to verify ownership
             
         Returns:
             Dictionary containing message information
         """
         session = self.Session()
         try:
-            # Check if chat exists
-            chat = session.query(Chat).filter(Chat.chat_id == chat_id).first()
+            # Check if chat exists and belongs to the user if user_id is provided
+            query = session.query(Chat).filter(Chat.chat_id == chat_id)
+            if user_id is not None:
+                query = query.filter((Chat.user_id == user_id) | (Chat.user_id.is_(None)))
+            
+            chat = query.first()
             if not chat:
-                raise ValueError(f"Chat with ID {chat_id} not found")
+                raise ValueError(f"Chat with ID {chat_id} not found or access denied")
             
             # Create a new message
             message = Message(
@@ -185,7 +190,7 @@ class ChatManager:
     
     def get_chat(self, chat_id: int, user_id: Optional[int] = None) -> Dict[str, Any]:
         """
-        Get a chat by ID with all its messages, ensuring the user has access.
+        Get a chat by ID with all its messages.
         
         Args:
             chat_id: ID of the chat to retrieve
@@ -197,13 +202,15 @@ class ChatManager:
         session = self.Session()
         try:
             # Get the chat
-            chat = session.query(Chat).filter(Chat.chat_id == chat_id).first()
-            if not chat:
-                raise ValueError(f"Chat with ID {chat_id} not found")
+            query = session.query(Chat).filter(Chat.chat_id == chat_id)
             
-            # Verify the user has access to this chat (if user_id provided)
-            if user_id is not None and chat.user_id != user_id:
-                raise ValueError(f"User {user_id} does not have access to chat {chat_id}")
+            # If user_id is provided, ensure the chat belongs to this user
+            if user_id is not None:
+                query = query.filter(Chat.user_id == user_id)
+            
+            chat = query.first()
+            if not chat:
+                raise ValueError(f"Chat with ID {chat_id} not found or access denied")
             
             # Get the chat messages ordered by timestamp
             messages = session.query(Message).filter(
@@ -296,23 +303,37 @@ class ChatManager:
         finally:
             session.close()
     
-    def delete_chat(self, chat_id: int) -> bool:
+    def delete_chat(self, chat_id: int, user_id: Optional[int] = None) -> bool:
         """
         Delete a chat and all its messages.
         
         Args:
             chat_id: ID of the chat to delete
+            user_id: Optional user ID to verify ownership
             
         Returns:
             True if deletion was successful, False otherwise
         """
         session = self.Session()
         try:
+            # Check if chat exists and belongs to the user if user_id is provided
+            if user_id is not None:
+                chat = session.query(Chat).filter(
+                    Chat.chat_id == chat_id,
+                    Chat.user_id == user_id
+                ).first()
+                if not chat:
+                    return False  # Chat not found or doesn't belong to the user
+            
             # Delete all messages in the chat
             session.query(Message).filter(Message.chat_id == chat_id).delete()
             
-            # Delete the chat
-            result = session.query(Chat).filter(Chat.chat_id == chat_id).delete()
+            # Delete the chat (with user_id filter if provided)
+            query = session.query(Chat).filter(Chat.chat_id == chat_id)
+            if user_id is not None:
+                query = query.filter(Chat.user_id == user_id)
+            
+            result = query.delete()
             session.commit()
             
             return result > 0
@@ -500,4 +521,50 @@ class ChatManager:
             return title
         except Exception as e:
             logger.error(f"Error generating title: {str(e)}")
-            return "New Chat" 
+            return "New Chat"
+    
+    def delete_empty_chats(self, user_id: Optional[int] = None, is_admin: bool = False) -> int:
+        """
+        Delete empty chats (chats with no messages) for a user.
+        
+        Args:
+            user_id: ID of the user whose empty chats should be deleted
+            is_admin: Whether this is an admin user
+            
+        Returns:
+            Number of chats deleted
+        """
+        session = self.Session()
+        try:
+            # Get all chats for the user
+            query = session.query(Chat)
+            if user_id is not None:
+                query = query.filter(Chat.user_id == user_id)
+            elif not is_admin:
+                return 0  # Don't delete anything if not a user or admin
+            
+            # For each chat, check if it has any messages
+            chats_to_delete = []
+            for chat in query.all():
+                message_count = session.query(Message).filter(
+                    Message.chat_id == chat.chat_id
+                ).count()
+                
+                if message_count == 0:
+                    chats_to_delete.append(chat.chat_id)
+            
+            # Delete the empty chats
+            if chats_to_delete:
+                deleted = session.query(Chat).filter(
+                    Chat.chat_id.in_(chats_to_delete)
+                ).delete(synchronize_session=False)
+                
+                session.commit()
+                return deleted
+            return 0
+        except SQLAlchemyError as e:
+            session.rollback()
+            logger.error(f"Error deleting empty chats: {str(e)}")
+            return 0
+        finally:
+            session.close() 

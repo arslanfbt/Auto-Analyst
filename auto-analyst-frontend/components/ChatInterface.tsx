@@ -106,43 +106,37 @@ const ChatInterface: React.FC = () => {
   }, [status, clearMessages])
 
   useEffect(() => {
-    if (mounted) {
-      const adminStatus = localStorage.getItem('isAdmin') === 'true';
-      setIsAdmin(adminStatus);
+    if (session?.user && mounted) {
+      const createOrGetUser = async () => {
+        try {
+          const response = await axios.post(`${API_URL}/chats/users`, {
+            username: session.user.name || 'Anonymous User',
+            email: session.user.email || `anonymous-${Date.now()}@example.com`
+          });
+          
+          setUserId(response.data.user_id);
+          
+          // Now fetch chat history for this user
+          fetchChatHistories(response.data.user_id);
+        } catch (error) {
+          console.error("Error creating/getting user:", error);
+        }
+      };
       
-      // If user is admin, create or get admin user in database
-      if (adminStatus) {
-        const createOrGetAdminUser = async () => {
-          try {
-            const response = await axios.post(`${API_URL}/chats/users`, {
-              username: 'Administrator',
-              email: `admin-${Date.now()}@auto-analyst.com` // Use timestamp to ensure uniqueness
-            });
-            
-            setUserId(response.data.user_id);
-            
-            // Now fetch chat history for this admin user
-            fetchChatHistories();
-          } catch (error) {
-            console.error("Error creating/getting admin user:", error);
-          }
-        };
-        
-        createOrGetAdminUser();
-      }
+      createOrGetUser();
     }
-  }, [mounted]);
+  }, [session, mounted]);
 
   // Define loadChat before it's used in the fetchChatHistories dependency array
   const loadChat = useCallback(async (chatId: number) => {
-    if (!userId) return; // Ensure we have a user ID
-    
     try {
       setActiveChatId(chatId);
       console.log(`Loading chat ${chatId}...`);
       const response = await axios.get(`${API_URL}/chats/${chatId}`, {
-        params: { user_id: userId }
+        params: { user_id: userId },
+        headers: { 'X-Session-ID': sessionId }
       });
+      
       console.log("Chat data:", response.data);
       
       if (response.data && response.data.messages) {
@@ -163,65 +157,85 @@ const ChatInterface: React.FC = () => {
       }
     } catch (error) {
       console.error(`Failed to load chat ${chatId}:`, error);
-      // If access denied, remove the chat from the local list
-      if (axios.isAxiosError(error) && error.response?.status === 403) {
-        setChatHistories(prev => prev.filter(chat => chat.chat_id !== chatId));
-      }
     }
-  }, [addMessage, clearMessages, userId]);
+  }, [addMessage, clearMessages, userId, sessionId]);
 
   // Now fetchChatHistories can use loadChat in its dependency array
-  const fetchChatHistories = useCallback(async () => {
-    // Fetch chat histories for signed-in users or admins
-    if (!session && !isAdmin) {
-      setChatHistories([]);
-      setIsLoadingHistory(false);
-      return;
-    }
-
-    if (!userId) {
-      setIsLoadingHistory(false);
-      return; // Don't fetch if we don't have a user ID
-    }
+  const fetchChatHistories = useCallback(async (userIdParam?: number) => {
+    // Fetch chat histories for signed-in users or admin
+    if (!session && !isAdmin) return;
+    
+    const currentUserId = userIdParam || userId;
+    
+    // For admin users, we might not have a userId but still want to fetch chats
+    if (!currentUserId && !isAdmin) return;
     
     setIsLoadingHistory(true);
     try {
-      // Pass the user ID to filter chats
+      // Fetch chat histories for the user or admin
       const response = await axios.get(`${API_URL}/chats/`, {
-        params: { user_id: userId }
+        params: { user_id: currentUserId, is_admin: isAdmin },
+        headers: { 'X-Session-ID': sessionId }
       });
+      
+      console.log("Fetched chat histories:", response.data);
       setChatHistories(response.data);
+      
+      // If we have chat histories but no active chat, set the most recent one
+      if (response.data.length > 0 && !activeChatId) {
+        // Sort by created_at descending and take the first one
+        const mostRecentChat = [...response.data].sort(
+          (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+        )[0];
+        
+        setActiveChatId(mostRecentChat.chat_id);
+        loadChat(mostRecentChat.chat_id);
+      }
     } catch (error) {
       console.error("Failed to fetch chat histories:", error);
     } finally {
       setIsLoadingHistory(false);
     }
-  }, [session, isAdmin, userId]);
+  }, [session, userId, activeChatId, sessionId, loadChat, isAdmin]);
 
   const createNewChat = useCallback(async () => {
-    try {
-      console.log("Creating new chat with user_id:", userId); // Add logging
-      const response = await axios.post(`${API_URL}/chats/`, 
-        { user_id: userId },
-        { headers: { 'X-Session-ID': sessionId } }
-      );
-      
-      console.log("New chat created:", response.data); // Add logging
-      setActiveChatId(response.data.chat_id);
-      // Refresh the chat list
-      fetchChatHistories();
-      return response.data.chat_id;
-    } catch (error) {
-      console.error("Failed to create new chat:", error);
-      return null;
-    }
-  }, [userId, sessionId, fetchChatHistories]);
-
-  const handleNewChat = useCallback(async () => {
+    // Clear local messages state
     clearMessages();
     setShowWelcome(true);
-    await createNewChat();
-  }, [clearMessages, createNewChat]);
+    
+    // Just set a temporary ID - we'll create the actual chat when the user sends a message
+    const tempId = Date.now(); // Use timestamp as temporary ID
+    setActiveChatId(tempId);
+    return tempId;
+  }, [clearMessages]);
+
+  const handleNewChat = useCallback(async () => {
+    // Clean up empty chats before creating a new one
+    if (session || isAdmin) {
+      try {
+        // Call backend endpoint to clean up empty chats for this user
+        await axios.post(`${API_URL}/chats/cleanup-empty`, {
+          user_id: userId,
+          is_admin: isAdmin
+        }, {
+          headers: { 'X-Session-ID': sessionId }
+        });
+      } catch (error) {
+        console.error('Failed to clean up empty chats:', error);
+      }
+    }
+    
+    // Clear messages and set up for a new chat
+    clearMessages();
+    setShowWelcome(true);
+    
+    // Set a temporary ID - real chat will be created on first message
+    const tempId = Date.now();
+    setActiveChatId(tempId);
+    
+    // Refresh chat list after cleanup
+    fetchChatHistories();
+  }, [clearMessages, fetchChatHistories, userId, sessionId, session, isAdmin]);
 
   const handleStopGeneration = () => {
     if (abortController) {
@@ -234,27 +248,33 @@ const ChatInterface: React.FC = () => {
   const handleSendMessage = async (message: string) => {
     if (!message.trim()) return;
     
-    // Always add the message to local state for display
-    addMessage({
-      text: message,
-      sender: "user",
-    });
-    setShowWelcome(false);
-
-    // Get current chat ID or create a new one for signed-in users or admins
+    // Get current chat ID or create a real one when the user sends a message
     let currentChatId = activeChatId;
+    let isFirstMessage = false;
     
-    // Define isNewChat outside the if block so it's available throughout the function
-    const isNewChat = !currentChatId || 
-      chatHistories.find(chat => chat.chat_id === currentChatId)?.title === 'New Chat';
-    
-    // Create and save chats for signed-in users or admins
+    // For signed-in or admin users, ensure we have a real database chat ID
     if (session || isAdmin) {
-      // If no active chat, create a new one
-      if (!currentChatId) {
-        const newChatId = await createNewChat();
-        if (!newChatId) return; // Failed to create chat
-        currentChatId = newChatId;
+      const existingChat = chatHistories.find(chat => chat.chat_id === currentChatId);
+      
+      // If the currentChatId is a temporary one (not in chat histories), create a real chat
+      if (!existingChat) {
+        isFirstMessage = true;
+        try {
+          console.log("Creating new chat on first message with user_id:", userId, "isAdmin:", isAdmin);
+          const response = await axios.post(`${API_URL}/chats/`, { 
+            user_id: userId,
+            is_admin: isAdmin 
+          }, { 
+            headers: { 'X-Session-ID': sessionId } 
+          });
+          
+          console.log("New chat created:", response.data);
+          currentChatId = response.data.chat_id;
+          setActiveChatId(currentChatId);
+        } catch (error) {
+          console.error("Failed to create new chat:", error);
+          return;
+        }
       }
 
       // Save user message to the database
@@ -262,14 +282,24 @@ const ChatInterface: React.FC = () => {
         await axios.post(`${API_URL}/chats/${currentChatId}/messages`, {
           content: message,
           sender: 'user'
+        }, {
+          params: { user_id: userId, is_admin: isAdmin },
+          headers: { 'X-Session-ID': sessionId }
         });
       } catch (error) {
         console.error('Failed to save user message:', error);
       }
     }
 
-    // Counting user queries for free trial (only for non-signed-in, non-admin users)
-    if (!session && !isAdmin) {
+    // Add user message to local state for all users
+    addMessage({
+      text: message,
+      sender: "user",
+    });
+    setShowWelcome(false);
+
+    // Counting user queries for free trial
+    if (!session) {
       incrementQueries();
     }
 
@@ -309,13 +339,13 @@ const ChatInterface: React.FC = () => {
         }
       }
 
-      // Only update chat title for signed-in users and admins with a valid chat
-      if ((session || isAdmin) && currentChatId && isNewChat) {
+      // After the AI response is generated and saved, update the chat title for new chats
+      if (isFirstMessage) {
         try {
-          console.log("Generating title for new chat using query:", originalQuery);
+          console.log("Generating title for new chat using query:", message);
           // Generate a title from the first message
           const titleResponse = await axios.post(`${API_URL}/chat_history_name`, {
-            query: originalQuery
+            query: message
           });
           
           console.log("Title response:", titleResponse.data);
@@ -347,11 +377,11 @@ const ChatInterface: React.FC = () => {
     }
   };
 
-  // Update the processRegularMessage function
+  // Update the processRegularMessage function to save AI responses
   const processRegularMessage = async (message: string, controller: AbortController) => {
-    let accumulatedResponse = "";
-    const baseUrl = API_URL;
-    const endpoint = `${baseUrl}/chat`;
+    let accumulatedResponse = ""
+    const baseUrl = API_URL
+    const endpoint = `${baseUrl}/chat`
 
     const headers = {
       'Content-Type': 'application/json',
@@ -359,7 +389,7 @@ const ChatInterface: React.FC = () => {
       'Cache-Control': 'no-cache',
       'Connection': 'keep-alive',
       ...(sessionId && { 'X-Session-ID': sessionId }),
-    };
+    }
 
     // Streaming response handling
     const response = await fetch(endpoint, {
@@ -367,7 +397,7 @@ const ChatInterface: React.FC = () => {
       headers,
       body: JSON.stringify({ query: message }),
       signal: controller.signal,
-    });
+    })
 
     const reader = response.body?.getReader()
     if (!reader) {
@@ -407,12 +437,15 @@ const ChatInterface: React.FC = () => {
       }
     }
 
-    // Save the final AI response to the database only for signed-in users or admins
-    if ((session || isAdmin) && activeChatId) {
+    // Save the final AI response to the database for signed-in or admin users
+    if (activeChatId && (session || isAdmin)) {
       try {
         await axios.post(`${API_URL}/chats/${activeChatId}/messages`, {
           content: accumulatedResponse.trim(),
           sender: 'ai'
+        }, {
+          params: { user_id: userId, is_admin: isAdmin },
+          headers: { 'X-Session-ID': sessionId }
         });
       } catch (error) {
         console.error('Failed to save AI response:', error);
@@ -454,12 +487,15 @@ const ChatInterface: React.FC = () => {
       agent: agentName
     })
 
-    // Save the final agent response to the database only for signed-in users or admins
-    if ((session || isAdmin) && activeChatId) {
+    // Save the final agent response to the database for signed-in or admin users
+    if (activeChatId && (session || isAdmin)) {
       try {
         await axios.post(`${API_URL}/chats/${activeChatId}/messages`, {
           content: accumulatedResponse.trim(),
           sender: 'ai'
+        }, {
+          params: { user_id: userId, is_admin: isAdmin },
+          headers: { 'X-Session-ID': sessionId }
         });
       } catch (error) {
         console.error('Failed to save agent response:', error);
@@ -538,48 +574,62 @@ const ChatInterface: React.FC = () => {
     return !hasFreeTrial() // Only check free trial if not signed in
   }
 
-  // Add useEffect to fetch chat histories on mount
+  // Add useEffect to fetch chat histories on mount for signed-in or admin users
   useEffect(() => {
-    if (mounted) {
-      // Fetch chat histories for signed-in users or admins
-      if (session || isAdmin) {
-        fetchChatHistories();
-      }
+    if (mounted && (session || isAdmin)) {
+      fetchChatHistories();
     }
   }, [mounted, fetchChatHistories, session, isAdmin]);
 
-  // Add useEffect to create a new chat on mount if needed
+  // Remove the useEffect that creates a new chat on mount - let's not create chats until needed
+  // Instead, just clear messages and set a temporary ID
   useEffect(() => {
-    if (mounted && !activeChatId && (session || isAdmin || hasFreeTrial())) {
-      createNewChat();
-    }
-  }, [mounted, activeChatId, session, isAdmin, hasFreeTrial, createNewChat]);
-
-  const handleChatDelete = useCallback((chatId: number) => {
-    // Remove the chat from the chat histories
-    setChatHistories(prev => prev.filter(chat => chat.chat_id !== chatId));
-    
-    // If the deleted chat was the active chat, reset the active chat and clear messages
-    if (chatId === activeChatId) {
-      setActiveChatId(null);
+    if (mounted) {
       clearMessages();
       setShowWelcome(true);
-      
-      // If there are other chats, select the most recent one
-      const remainingChats = chatHistories.filter(chat => chat.chat_id !== chatId);
-      if (remainingChats.length > 0) {
-        const mostRecentChat = [...remainingChats].sort(
-          (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-        )[0];
-        
-        setActiveChatId(mostRecentChat.chat_id);
-        loadChat(mostRecentChat.chat_id);
-      } else {
-        // If no chats remain, create a new one
-        createNewChat();
-      }
+      setActiveChatId(Date.now()); // Just a temporary ID
     }
-  }, [activeChatId, chatHistories, clearMessages, createNewChat, loadChat]);
+  }, [mounted, clearMessages]);
+
+  // Add useEffect to check admin status
+  useEffect(() => {
+    if (mounted) {
+      setIsAdmin(localStorage.getItem('isAdmin') === 'true');
+    }
+  }, [mounted]);
+
+  const handleChatDelete = useCallback((chatId: number) => {
+    axios.delete(`${API_URL}/chats/${chatId}`, {
+      params: { user_id: userId },
+      headers: { 'X-Session-ID': sessionId }
+    }).then(() => {
+      // Remove the chat from the chat histories
+      setChatHistories(prev => prev.filter(chat => chat.chat_id !== chatId));
+      
+      // If the deleted chat was the active chat, reset the active chat and clear messages
+      if (chatId === activeChatId) {
+        setActiveChatId(null);
+        clearMessages();
+        setShowWelcome(true);
+        
+        // If there are other chats, select the most recent one
+        const remainingChats = chatHistories.filter(chat => chat.chat_id !== chatId);
+        if (remainingChats.length > 0) {
+          const mostRecentChat = [...remainingChats].sort(
+            (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+          )[0];
+          
+          setActiveChatId(mostRecentChat.chat_id);
+          loadChat(mostRecentChat.chat_id);
+        } else {
+          // If no chats remain, create a new one
+          createNewChat();
+        }
+      }
+    }).catch(error => {
+      console.error(`Failed to delete chat ${chatId}:`, error);
+    });
+  }, [activeChatId, chatHistories, clearMessages, createNewChat, loadChat, userId, sessionId]);
 
   // Don't render anything until mounted to prevent hydration mismatch
   if (!mounted) {
@@ -588,7 +638,7 @@ const ChatInterface: React.FC = () => {
 
   return (
     <div className="flex h-screen bg-gradient-to-br from-gray-50 to-white text-gray-900">
-      {/* Render sidebar for signed-in users or admins */}
+      {/* Include sidebar for signed-in users or admin */}
       {(session || isAdmin) && (
       <Sidebar 
         isOpen={isSidebarOpen} 
@@ -603,13 +653,11 @@ const ChatInterface: React.FC = () => {
       )}
 
       <motion.div
-        className="flex-1 flex flex-col"
-        animate={{
-          marginLeft: (session || isAdmin) && isSidebarOpen ? "16rem" : "0",
-          transition: { duration: 0.3 },
-        }}
+        animate={{ marginLeft: (session || isAdmin) && isSidebarOpen ? "16rem" : "0rem" }}
+        transition={{ type: "tween", duration: 0.3 }}
+        className="flex-1 flex flex-col min-w-0 relative"
       >
-        {mounted && !session && !isAdmin && !hasFreeTrial() && <FreeTrialOverlay />}
+        {mounted && !session && !hasFreeTrial() && <FreeTrialOverlay />}
         
         <header className="bg-white/70 backdrop-blur-sm p-4 flex justify-between items-center border-b border-gray-200">
           <div className="flex items-center">
@@ -629,8 +677,8 @@ const ChatInterface: React.FC = () => {
             </div>
           </div>
 
-          {/* Display the appropriate button based on user's authentication status */}
-          {(session || isAdmin) ? (
+          {/* Only show sidebar button for signed-in users or admin */}
+          {(session || isAdmin) && (
             <button
               onClick={() => setSidebarOpen((prev) => !prev)}
               className="text-gray-500 hover:text-[#FF7F7F] focus:outline-none transition-colors"
@@ -644,13 +692,6 @@ const ChatInterface: React.FC = () => {
               >
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
               </svg>
-            </button>
-          ) : (
-            <button
-              onClick={() => router.push('/login')}
-              className="text-white bg-[#FF7F7F] hover:bg-[#FF7F7F]/90 transition-colors px-4 py-2 rounded-lg text-sm font-medium"
-            >
-              Sign In
             </button>
           )}
         </header>
