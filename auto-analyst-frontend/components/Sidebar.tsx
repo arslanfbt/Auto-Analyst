@@ -117,38 +117,11 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, onNewChat, chatHisto
   const confirmDeleteChat = async () => {
     if (!chatToDelete) return;
     
-    try {
-      await axios.delete(`${API_URL}/chats/${chatToDelete}`, {
-        params: { user_id: session?.user?.id },
-        headers: { 'X-Session-ID': sessionId }
-      });
-      
-      // Call onDeleteChat to update the sidebar
-      onDeleteChat(chatToDelete);
-      
-      // Check if the deleted chat was the active chat
-      if (activeChatId === chatToDelete) {
-        // Find the most recent chat or create a new one
-        const remainingChats = chatHistories.filter(chat => chat.chat_id !== chatToDelete);
-        
-        if (remainingChats.length > 0) {
-          // Set the most recent chat as active
-          const mostRecentChat = [...remainingChats].sort(
-            (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-          )[0];
-          
-          onChatSelect(mostRecentChat.chat_id); // Switch to the most recent chat
-        } else {
-          // If no chats remain, create a new one
-          onNewChat(); // This will trigger handleNewChat in ChatInterface
-        }
-      }
-      
-      setIsDeleteModalOpen(false);
-    } catch (error) {
-      console.error(`Failed to delete chat ${chatToDelete}:`, error);
-      alert("Failed to delete chat. Please try again.");
-    }
+    // Call onDeleteChat to update the sidebar - this will handle the API call in ChatInterface
+    onDeleteChat(chatToDelete);
+    
+    // Close the modal
+    setIsDeleteModalOpen(false);
   };
   
   // Format the date for display
