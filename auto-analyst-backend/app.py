@@ -253,7 +253,17 @@ async def chat_with_agent(
             detail="No dataset is currently loaded. Please link a dataset before proceeding with your analysis."
         )
     
-    if agent_name not in AVAILABLE_AGENTS:
+    # For comma-separated agents, verify each agent exists
+    if "," in agent_name:
+        agent_list = [agent.strip() for agent in agent_name.split(",")]
+        for agent in agent_list:
+            if agent not in AVAILABLE_AGENTS:
+                available = list(AVAILABLE_AGENTS.keys())
+                raise HTTPException(
+                    status_code=404, 
+                    detail=f"Agent '{agent}' not found. Available agents: {available}"
+                )
+    elif agent_name not in AVAILABLE_AGENTS:
         available = list(AVAILABLE_AGENTS.keys())
         raise HTTPException(
             status_code=404, 
@@ -261,8 +271,14 @@ async def chat_with_agent(
         )
     
     try:
-        agent = AVAILABLE_AGENTS[agent_name]
-        agent = auto_analyst_ind(agents=[agent], retrievers=session_state["retrievers"])
+        # For multiple agents
+        if "," in agent_name:
+            agent_list = [AVAILABLE_AGENTS[agent.strip()] for agent in agent_name.split(",")]
+            agent = auto_analyst_ind(agents=agent_list, retrievers=session_state["retrievers"])
+        else:
+            # Single agent case
+            agent = AVAILABLE_AGENTS[agent_name]
+            agent = auto_analyst_ind(agents=[agent], retrievers=session_state["retrievers"])
         
         try:
             response = agent(request.query, agent_name)

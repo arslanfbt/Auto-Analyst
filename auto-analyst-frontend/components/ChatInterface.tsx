@@ -328,20 +328,20 @@ const ChatInterface: React.FC = () => {
       const controller = new AbortController();
       setAbortController(controller);
 
-      // Update the regex to match the format without requiring curly braces
-      // This will match patterns like "@agent_name query text"
-      const agentRegex = /@(\w+)(?:\s+\{([^}]+)\}|\s+([^@]+))/g
+      // Match all @agent mentions in the query
+      const agentRegex = /@(\w+)/g
       const matches = [...message.matchAll(agentRegex)]
       
       // If no agent calls are found, process as a regular message
       if (matches.length === 0) {
         await processRegularMessage(message, controller, currentChatId)
       } else {
-        // Process each agent call separately
-        for (const match of matches) {
-          const agentName = match[1]
-          // Use either the content in braces or the text until the next @ or end of string
-          const agentQuery = (match[2] || match[3] || "").trim()
+        // Extract all unique agent names
+        const agentNames = [...new Set(matches.map(match => match[1]))]
+        
+        if (agentNames.length === 1) {
+          // Single agent case - use the original logic
+          const agentName = agentNames[0]
           
           // Add a system message indicating which agent is being called
           addMessage({
@@ -350,7 +350,23 @@ const ChatInterface: React.FC = () => {
             agent: agentName
           })
           
-          await processAgentMessage(agentName, agentQuery, controller, currentChatId)
+          // Extract the query text by removing the @mentions
+          const cleanQuery = message.replace(agentRegex, '').trim()
+          await processAgentMessage(agentName, cleanQuery, controller, currentChatId)
+        } else {
+          // Multiple agents case - send a single request with comma-separated agent names
+          const combinedAgentName = agentNames.join(",")
+          
+          // Add a system message indicating which agents are being called
+          addMessage({
+            text: "",
+            sender: "ai",
+            agent: `Using agents: ${agentNames.join(", ")}`
+          })
+          
+          // Extract the query text by removing the @mentions
+          const cleanQuery = message.replace(agentRegex, '').trim()
+          await processAgentMessage(combinedAgentName, cleanQuery, controller, currentChatId)
         }
       }
 
@@ -382,9 +398,9 @@ const ChatInterface: React.FC = () => {
       console.error("Error sending message:", error);
       
       // Add error message
-        addMessage({
+      addMessage({
         text: "Sorry, there was an error processing your request. Please try again.",
-          sender: "ai"
+        sender: "ai"
       });
     } finally {
       setIsLoading(false);

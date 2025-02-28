@@ -192,35 +192,39 @@ const ChatInput = forwardRef<
       { name: "preprocessing_agent", description: "Handles data preprocessing tasks" },
     ]
 
-    // Find the @ symbol closest to cursor that's being typed
-    const beforeCursor = message.slice(0, cursorPosition)
-    const textAfterCursor = message.slice(cursorPosition)
-    
-    // Find the last @ before cursor that's not part of a completed agent mention
-    let lastAtIndex = -1
-    let currentIndex = -1
-    
-    while ((currentIndex = beforeCursor.indexOf('@', currentIndex + 1)) !== -1) {
-      // Check if this @ is part of a completed mention
-      const textAfterAt = message.slice(currentIndex + 1)
-      const nextSpace = textAfterAt.indexOf(' ')
+    // Find all @ symbol positions in the message
+    const atPositions: number[] = [];
+    let pos = -1;
+    while ((pos = message.indexOf('@', pos + 1)) !== -1) {
+      atPositions.push(pos);
+    }
+
+    // Find the @ position closest to the cursor that's being typed
+    let activeAtPos = -1;
+    for (const pos of atPositions) {
+      // Check if the cursor is within or at the end of an agent mention
+      const textAfterAt = message.slice(pos + 1);
+      const spaceAfterAt = textAfterAt.indexOf(' ');
+      const endOfMention = spaceAfterAt !== -1 ? pos + 1 + spaceAfterAt : message.length;
       
-      // If there's no space after @ or the space is after cursor, this might be the active mention
-      if (nextSpace === -1 || currentIndex + nextSpace + 1 >= cursorPosition) {
-        lastAtIndex = currentIndex
+      if (cursorPosition >= pos + 1 && cursorPosition <= endOfMention) {
+        activeAtPos = pos;
+        break;
       }
     }
 
-    if (lastAtIndex !== -1) {
+    if (activeAtPos !== -1) {
       // Get the text being typed for the agent name
-      const typedText = message.slice(lastAtIndex + 1, cursorPosition).toLowerCase()
+      const textAfterAt = message.slice(activeAtPos + 1);
+      const spaceIndex = textAfterAt.indexOf(' ');
+      const typedText = spaceIndex !== -1 
+        ? message.slice(activeAtPos + 1, activeAtPos + 1 + spaceIndex) 
+        : textAfterAt;
       
       // Only show suggestions if we're actively typing an agent name
-      const isTypingAgent = !typedText.includes(' ')
-      
-      if (isTypingAgent) {
+      if (typedText && !typedText.includes(' ')) {
         const filtered = agents.filter(agent => 
-          agent.name.toLowerCase().includes(typedText)
+          agent.name.toLowerCase().includes(typedText.toLowerCase())
         )
         setAgentSuggestions(filtered)
         setShowSuggestions(filtered.length > 0)

@@ -290,9 +290,20 @@ class auto_analyst_ind(dspy.Module):
         self.memory_summarize_agent = dspy.ChainOfThought(m.memory_summarize_agent)
         self.dataset = retrievers['dataframe_index'].as_retriever(k=1)
         self.styling_index = retrievers['style_index'].as_retriever(similarity_top_k=1)
+        self.code_combiner_agent = dspy.ChainOfThought(code_combiner_agent)
         
         # Initialize thread pool
         self.executor = ThreadPoolExecutor(max_workers=min(4, os.cpu_count() * 2))
+    
+    def execute_agent(self, specified_agent, inputs):
+        """Execute agent and generate memory summary in parallel"""
+        try:
+            # Execute main agent
+            agent_result = self.agents[specified_agent.strip()](**inputs)
+            return specified_agent.strip(), dict(agent_result)
+            
+        except Exception as e:
+            return specified_agent.strip(), {"error": str(e)}
 
     def execute_agent_with_memory(self, specified_agent, inputs, query):
         """Execute agent and generate memory summary in parallel"""
@@ -316,7 +327,13 @@ class auto_analyst_ind(dspy.Module):
 
     def forward(self, query, specified_agent):
         try:
-            # Process query with specified agent
+            # If specified_agent contains multiple agents separated by commas
+            # This is for handling multiple @agent mentions in one query
+            if "," in specified_agent:
+                agent_list = [agent.strip() for agent in specified_agent.split(",")]
+                return self.execute_multiple_agents(query, agent_list)
+            
+            # Process query with specified agent (single agent case)
             dict_ = {}
             dict_['dataset'] = self.dataset.retrieve(query)[0].text
             dict_['styling_index'] = self.styling_index.retrieve(query)[0].text
@@ -339,10 +356,50 @@ class auto_analyst_ind(dspy.Module):
 
         except Exception as e:
             return {"response": f"This is the error from the system: {str(e)}"}
-
-
-
-
+    
+    def execute_multiple_agents(self, query, agent_list):
+        """Execute multiple agents sequentially on the same query"""
+        try:
+            # Initialize resources
+            dict_ = {}
+            dict_['dataset'] = self.dataset.retrieve(query)[0].text
+            dict_['styling_index'] = self.styling_index.retrieve(query)[0].text
+            dict_['hint'] = []
+            dict_['goal'] = query
+            dict_['Agent_desc'] = str(self.agent_desc)
+            
+            results = {}
+            code_list = []
+            
+            # Execute each agent sequentially
+            for agent_name in agent_list:
+                if agent_name not in self.agents:
+                    results[agent_name] = {"error": f"Agent '{agent_name}' not found"}
+                    continue
+                
+                # Prepare inputs for this agent
+                inputs = {x:dict_[x] for x in self.agent_inputs[agent_name] if x in dict_}
+                inputs['hint'] = str(dict_['hint']).replace('[','').replace(']','')
+                
+                # Execute agent
+                agent_result = self.agents[agent_name](**inputs)
+                agent_dict = dict(agent_result)
+                results[agent_name] = agent_dict
+                
+                # Collect code for later combination
+                if 'code' in agent_dict:
+                    code_list.append(agent_dict['code'])
+            
+            # If we have code from multiple agents, combine them
+            # if len(code_list) > 1:
+            #     with dspy.settings.context(lm=dspy.LM(model="anthropic/claude-3-5-sonnet-latest", max_tokens=8000, temperature=1.0)):
+            #         combiner_result = self.code_combiner_agent(agent_code_list=str(code_list), dataset=dict_['dataset'])
+            #         results['code_combiner_agent'] = dict(combiner_result)
+            
+            return results
+            
+        except Exception as e:
+            return {"response": f"Error executing multiple agents: {str(e)}"}
 
 # This is the auto_analyst with planner
 class auto_analyst(dspy.Module):
