@@ -152,9 +152,14 @@ class AppState:
         self._default_df = None
         self._default_retrievers = None
         self._default_ai_system = None
+        self.model_config = DEFAULT_MODEL_CONFIG
         if not hasattr(app, "state"):
             app.state = type("AppState", (), {})()
         self.ai_manager = AI_Manager()
+
+        if not hasattr(self, "model_config"):
+            self.model_config = DEFAULT_MODEL_CONFIG
+
         self.initialize_default_dataset()
     
     def initialize_default_dataset(self):
@@ -417,8 +422,8 @@ async def chat_with_agent(
             prompt_size = len(request.query)
             response_size = len(formatted_response)
             
-            # Get provider and model
-            model_name = getattr(session_state, "model_config", {}).get("model", "gpt-4o-mini")
+            # Get model name and provider
+            model_name = session_state.get("model_config", {}).get("model", "gpt-4o-mini")
             provider = ai_manager.get_provider_for_model(model_name)
             
             # Estimate tokens (actual implementation may vary)
@@ -490,7 +495,7 @@ async def chat_with_all(
     async def generate_responses():
         # Record start time for the entire operation
         overall_start_time = time.time()
-        total_response_length = 0
+        total_response = ""
         
         try:
             loop = asyncio.get_event_loop()
@@ -507,8 +512,8 @@ async def chat_with_all(
                         dataframe=session_state["current_df"]
                     )
                     
-                    # Track the total response length for token estimation
-                    total_response_length += len(formatted_response) if formatted_response else 0
+                    # Track the total response for token estimation
+                    total_response += formatted_response if formatted_response else ""
                     
                     # Ensure response is not None or empty
                     if formatted_response:
@@ -540,13 +545,14 @@ async def chat_with_all(
                 # Calculate overall processing time
                 overall_processing_time_ms = int((time.time() - overall_start_time) * 1000)
                 
-                # Extract model name from config
-                model_name = getattr(session_state, "model_config", {}).get("model", "gpt-4o-mini")
-                
+    
                 # Get prompt and total response sizes
                 prompt_size = len(request.query)
                 
                 # Get provider
+                print("Model config:")
+                print(app.state.model_config)
+                model_name = app.state.model_config.get("model", "gpt-4o-mini")
                 provider = app.state.ai_manager.get_provider_for_model(model_name)
                 print("--------------------------------")
                 print(f"Provider: {provider}")
@@ -555,11 +561,11 @@ async def chat_with_all(
                 # Estimate tokens
                 try:
                     prompt_tokens = len(app.state.ai_manager.tokenizer.encode(request.query))
-                    completion_tokens = len(app.state.ai_manager.tokenizer.encode(" ".join([str(r) for r in response])))
+                    completion_tokens = len(app.state.ai_manager.tokenizer.encode(total_response))
                     total_tokens = prompt_tokens + completion_tokens
                 except:
                     # Fallback estimation
-                    words = len(request.query.split()) + (total_response_length / 5)  # avg word length
+                    words = len(request.query.split()) + (len(total_response) / 5)  # avg word length
                     total_tokens = int(words * 1.5)  # rough estimate
                     prompt_tokens = int(len(request.query.split()) * 1.5)
                     completion_tokens = total_tokens - prompt_tokens
@@ -577,13 +583,13 @@ async def chat_with_all(
                     completion_tokens=completion_tokens,
                     total_tokens=total_tokens,
                     query_size=prompt_size,
-                    response_size=total_response_length,
+                    response_size=len(total_response),
                     cost=cost,
                     request_time_ms=overall_processing_time_ms,
                     is_streaming=True
                 )
                 
-                logger.info(f"Tracked streaming model usage: {model_name}, {total_tokens} tokens, ${cost:.6f}")
+                logger.info(f"Tracked streaming model usage: {model_name}, {total_tokens} tokens, ${cost:.6f}, input: {prompt_tokens}, output: {completion_tokens}")
 
         except Exception as e:
             logger.error(f"Error in generate_responses: {str(e)}")
@@ -643,7 +649,10 @@ async def get_model_settings():
     }
 
 @app.post("/settings/model")
-async def update_model_settings(settings: ModelSettings):
+async def update_model_settings(
+    settings: ModelSettings,
+    session_id: str = Depends(get_session_id)
+):
     try:
         # If no API key provided, use default
         if not settings.api_key:
@@ -654,9 +663,24 @@ async def update_model_settings(settings: ModelSettings):
             elif settings.provider.lower() == "anthropic":
                 settings.api_key = os.getenv("ANTHROPIC_API_KEY")
         
-        # # Store custom API key if provided
-        # if settings.api_key and settings.api_key != os.getenv(f"{settings.provider}_API_KEY"):
-        #     os.environ["CUSTOM_API_KEY"] = settings.api_key
+        # update session state
+        session_state = app.state.get_session_state(session_id)
+        session_state["model_config"] = {
+            "provider": settings.provider,
+            "model": settings.model,
+            "api_key": settings.api_key,
+            "temperature": settings.temperature,
+            "max_tokens": settings.max_tokens
+        }
+
+        # Update app state model config too, for tracking in streaming chat
+        app.state.model_config = {
+            "provider": settings.provider,
+            "model": settings.model,
+            "temperature": settings.temperature,
+            "max_tokens": settings.max_tokens
+        }
+
         print("settings.api_key: ", settings.api_key)
         print("settings.model: ", settings.model)
         print("settings.temperature: ", settings.temperature)
@@ -671,7 +695,14 @@ async def update_model_settings(settings: ModelSettings):
                 temperature=settings.temperature,
                 max_tokens=settings.max_tokens
             )
-        else:
+        elif settings.provider.lower() == "anthropic":
+            lm = dspy.LM(
+                model=settings.model,
+                api_key=settings.api_key,
+                temperature=settings.temperature,
+                max_tokens=settings.max_tokens
+            )
+        else:  # OpenAI is the default
             lm = dspy.LM(
                 model=settings.model,
                 api_key=settings.api_key,
@@ -693,7 +724,7 @@ async def update_model_settings(settings: ModelSettings):
             elif "model" in str(model_error).lower():
                 raise HTTPException(
                     status_code=400,
-                    detail=f"Invalid model selection: {settings.model}. Please check if you have access to this model."
+                    detail=f"Invalid model selection: {settings.model}. Please check if you have access to this model. {model_error}"
                 )
             else:
                 raise HTTPException(
@@ -812,88 +843,10 @@ async def reset_session(
             detail=f"Failed to reset session: {str(e)}"
         )
 
-@app.post("/auth/login", response_model=dict)
-async def login_user(request: UserLoginRequest):
-    """Login or create a user and associate with session"""
-    try:
-        # Create or get the user
-        user = create_user(username=request.username, email=request.email)
-        
-        # Get or create session ID
-        session_id = request.session_id or str(uuid.uuid4())
-        
-        # Associate user with the session
-        session_state = app.state.set_session_user(
-            session_id=session_id,
-            user_id=user.user_id
-        )
-        
-        return {
-            "success": True,
-            "user_id": user.user_id,
-            "username": user.username,
-            "email": user.email,
-            "session_id": session_id
-        }
-    except Exception as e:
-        logger.error(f"Error in login: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Login failed: {str(e)}")
-
-@app.get("/debug/session/{session_id}")
-async def debug_session(session_id: str):
-    """Debug endpoint to check session state"""
-    session_state = app.state.get_session_state(session_id)
-    # Return a safe copy without any sensitive data
-    return {
-        "session_id": session_id,
-        "user_id": session_state.get("user_id"),
-        "chat_id": session_state.get("chat_id"),
-        "has_dataframe": session_state["current_df"] is not None,
-        "has_ai_system": session_state["ai_system"] is not None,
-    }
-
-@app.post("/debug/create-user")
-async def debug_create_user(
-    username: str = "test_user",
-    email: str = "test@example.com",
-    session_id: str = Depends(get_session_id)
-):
-    """Debug endpoint to create a user and associate with session"""
-    try:
-        # Create the user
-        user = create_user(username=username, email=email)
-        
-        # Force associate with the session
-        session_state = app.state.set_session_user(
-            session_id=session_id,
-            user_id=user.user_id
-        )
-        
-        # Print session state to logs
-        logger.info(f"User {user.user_id} created and associated with session {session_id}")
-        logger.info(f"Session state: {session_state}")
-        
-        return {
-            "success": True,
-            "message": "User created and associated with session",
-            "user_id": user.user_id,
-            "session_id": session_id,
-            "chat_id": session_state.get("chat_id"),
-            "session_state": {
-                "user_id": session_state.get("user_id"),
-                "chat_id": session_state.get("chat_id")
-            }
-        }
-    except Exception as e:
-        logger.error(f"Error in debug_create_user: {str(e)}")
-        return {
-            "success": False,
-            "error": str(e)
-        }
-
 # Add this line where other routers are included
 app.include_router(chat_router)
 app.include_router(analytics_router)
+
 
 def ensure_user_metadata(session_id: str, session_state: dict) -> tuple:
     """Ensure a session has user_id and chat_id, creating if necessary"""

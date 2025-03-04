@@ -134,7 +134,7 @@ async def get_usage_summary(
                 "daily_usage": calculate_daily_usage(usage_records, start_date, end_date)
             }
             
-            logger.info(f"Generated summary: {json.dumps(summary_data, default=str)[:200]}...")
+            logger.info(f"Generated summary: {json.dumps(summary_data, default=str)}")
             
             return summary_data
             
