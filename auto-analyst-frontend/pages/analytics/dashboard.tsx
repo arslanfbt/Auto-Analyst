@@ -1,24 +1,11 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { LineChart, BarChart, PieChart } from '@/components/admin/Charts';
-import { UsageTable } from '@/components/admin/UsageTable';
-import { DateRangePicker } from '@/components/admin/DateRangePicker';
-import { Button } from '@/components/ui/button';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { ExclamationTriangleIcon, ReloadIcon } from '@radix-ui/react-icons';
-import { fetchUsageSummary, fetchDailyUsage, fetchDetailedUsage } from '@/lib/api/analytics';
-import AdminLayout from '@/components/admin/AdminLayout';
-import { formatCurrency } from '@/lib/utils';
 import { 
   LineChart as RechartsLineChart, Line, CartesianGrid, XAxis, YAxis,
   Tooltip, Legend, ResponsiveContainer, BarChart as RechartsBarChart, Bar 
 } from 'recharts';
-import { getSessionId } from '@/lib/api/auth';
 import AnalyticsLayout from '@/components/analytics/AnalyticsLayout';
-import { Input } from '@/components/ui/input';
 
 // Styles that match the app's theme
 const styles = {
@@ -26,12 +13,12 @@ const styles = {
   header: 'text-2xl font-bold text-gray-800 mb-6',
   sectionTitle: 'text-xl font-semibold text-gray-700 mb-3',
   card: 'bg-white rounded-lg shadow-md overflow-hidden',
-  cardHeader: 'bg-blue-50 px-4 py-3 border-b border-gray-200',
+  cardHeader: 'bg-[#FFF0F0] px-4 py-3 border-b border-gray-200',
   cardTitle: 'text-lg font-medium text-gray-800',
   cardBody: 'p-4',
   gridLayout: 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8',
   statCard: 'bg-white rounded-lg shadow-sm p-6',
-  statNumber: 'text-2xl font-bold text-blue-600',
+  statNumber: 'text-2xl font-bold text-[#FF7F7F]',
   statLabel: 'text-sm text-gray-500',
   chartContainer: 'h-80 mb-8',
   table: 'min-w-full divide-y divide-gray-200',
@@ -45,8 +32,8 @@ const styles = {
   authTitle: 'text-xl font-bold text-center mb-4',
   inputGroup: 'space-y-2',
   inputLabel: 'text-sm font-medium text-gray-700',
-  button: 'w-full bg-blue-600 text-white py-2 px-4 rounded hover:bg-blue-700 transition',
-  input: 'w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500',
+  button: 'w-full bg-[#FF7F7F] text-white py-2 px-4 rounded hover:bg-[#FF6666] transition shadow-md',
+  input: 'w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#FF7F7F]',
 };
 
 export default function AnalyticsDashboard() {
@@ -282,7 +269,7 @@ export default function AnalyticsDashboard() {
                             yAxisId="left"
                             type="monotone"
                             dataKey="tokens"
-                            stroke="#3b82f6"
+                            stroke="#FF7F7F"
                             activeDot={{ r: 8 }}
                             name="Tokens"
                           />
@@ -290,7 +277,7 @@ export default function AnalyticsDashboard() {
                             yAxisId="right"
                             type="monotone"
                             dataKey="cost"
-                            stroke="#ef4444"
+                            stroke="#FF6666"
                             name="Cost"
                           />
                         </RechartsLineChart>
@@ -329,8 +316,8 @@ export default function AnalyticsDashboard() {
                             }}
                           />
                           <Legend />
-                          <Bar dataKey="tokens" fill="#3b82f6" name="Tokens" />
-                          <Bar dataKey="cost" fill="#ef4444" name="Cost" />
+                          <Bar dataKey="tokens" fill="#FF7F7F" name="Tokens" />
+                          <Bar dataKey="cost" fill="#FF6666" name="Cost" />
                         </RechartsBarChart>
                       </ResponsiveContainer>
                     </div>

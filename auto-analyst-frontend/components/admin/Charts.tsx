@@ -58,10 +58,11 @@ export function LineChart({ data, xAxis, series, height = 400 }: LineChartProps)
         <YAxis tick={{ fontSize: 12 }} />
         <Tooltip 
           formatter={(value, name) => {
-            if (name.toLowerCase().includes('cost')) {
-              return [`$${parseFloat(value as string).toFixed(2)}`, name];
+            const nameString = typeof name === 'string' ? name : '';
+            if (nameString.toLowerCase().includes('cost')) {
+              return [`$${parseFloat(value as string).toFixed(2)}`, nameString];
             }
-            return [value, name];
+            return [value, nameString];
           }}
           labelFormatter={(label) => {
             if (typeof label === 'string' && label.includes('-')) {
@@ -130,13 +131,14 @@ export function BarChart({ data, xAxis, series, height = 400, stacked = false }:
         <YAxis tick={{ fontSize: 12 }} />
         <Tooltip 
           formatter={(value, name) => {
-            if (name.toLowerCase().includes('cost')) {
-              return [`$${parseFloat(value as string).toFixed(2)}`, name];
+            const nameString = typeof name === 'string' ? name : '';
+            if (nameString.toLowerCase().includes('cost')) {
+              return [`$${parseFloat(value as string).toFixed(2)}`, nameString];
             }
-            if (name.toLowerCase().includes('tokens')) {
-              return [parseFloat(value as string).toLocaleString(), name];
+            if (nameString.toLowerCase().includes('tokens')) {
+              return [parseFloat(value as string).toLocaleString(), nameString];
             }
-            return [value, name];
+            return [value, nameString];
           }}
           labelFormatter={(label) => {
             if (typeof label === 'string' && label.includes('-')) {

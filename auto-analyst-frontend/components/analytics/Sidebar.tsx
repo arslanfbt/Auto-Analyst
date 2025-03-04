@@ -13,30 +13,29 @@ export default function Sidebar() {
     router.reload(); // Reload the page to trigger re-authentication
   };
   
-  // Sidebar menu items - only include dashboard for now
+  // Sidebar menu items - now all enabled since we've implemented the pages
   const menuItems = [
     { name: 'Dashboard', href: '/analytics/dashboard', enabled: true },
-    // These items are disabled until their pages are implemented
-    { name: 'Model Usage', href: '#', enabled: false },
-    { name: 'User Activity', href: '#', enabled: false },
-    { name: 'Cost Analysis', href: '#', enabled: false },
+    { name: 'Model Usage', href: '/analytics/models', enabled: true },
+    { name: 'User Activity', href: '/analytics/users', enabled: true },
+    { name: 'Cost Analysis', href: '/analytics/costs', enabled: true },
   ];
   
   return (
-    <aside className="w-64 bg-white shadow-sm rounded-lg overflow-hidden">
+    <aside className="w-64 bg-white shadow-md rounded-lg overflow-hidden">
       <div className="px-4 py-5 sm:p-6">
         <h3 className="text-lg font-medium text-gray-900">Analytics</h3>
         <div className="mt-3 space-y-1">
           {menuItems.map((item) => (
             <Link 
               key={item.name} 
-              href={item.enabled ? item.href : '#'}
+              href={item.href}
               onClick={(e) => !item.enabled && e.preventDefault()}
             >
               <span
                 className={`block px-3 py-2 rounded-md text-base font-medium ${
                   router.pathname === item.href 
-                    ? 'bg-blue-50 text-blue-700' 
+                    ? 'bg-[#FFF0F0] text-[#FF7F7F]' 
                     : item.enabled 
                       ? 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
                       : 'text-gray-400 cursor-not-allowed'
@@ -69,7 +68,7 @@ export default function Sidebar() {
             
             <button 
               onClick={handleSignOut}
-              className="w-full text-left px-3 py-2 rounded-md text-base font-medium text-red-600 hover:bg-red-50"
+              className="w-full text-left px-3 py-2 rounded-md text-base font-medium bg-[#FFF0F0] text-[#FF7F7F] hover:bg-[#FFEDED]"
             >
               Sign Out
             </button>

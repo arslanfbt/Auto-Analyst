@@ -227,8 +227,8 @@ class AppState:
     def get_provider_for_model(self, model_name):
         return self.ai_manager.get_provider_for_model(model_name)
     
-    def calculate_cost(self, model_name, total_tokens):
-        return self.ai_manager.calculate_cost(model_name, total_tokens)
+    def calculate_cost(self, model_name, input_tokens, output_tokens):
+        return self.ai_manager.calculate_cost(model_name, input_tokens, output_tokens)
     
     def save_usage_to_db(self, user_id, chat_id, model_name, provider, prompt_tokens, completion_tokens, total_tokens, query_size, response_size, cost, request_time_ms, is_streaming=False):
         return self.ai_manager.save_usage_to_db(user_id, chat_id, model_name, provider, prompt_tokens, completion_tokens, total_tokens, query_size, response_size, cost, request_time_ms, is_streaming)
@@ -434,7 +434,7 @@ async def chat_with_agent(
                 completion_tokens = total_tokens - prompt_tokens
             
             # Calculate cost
-            cost = ai_manager.calculate_cost(model_name, total_tokens)
+            cost = ai_manager.calculate_cost(model_name, prompt_tokens, completion_tokens)
             
             # Save to DB
             ai_manager.save_usage_to_db(
@@ -565,7 +565,7 @@ async def chat_with_all(
                     completion_tokens = total_tokens - prompt_tokens
                 
                 # Calculate cost
-                cost = app.state.ai_manager.calculate_cost(model_name, total_tokens)
+                cost = app.state.ai_manager.calculate_cost(model_name, prompt_tokens, completion_tokens)
                 
                 # Save to DB
                 app.state.ai_manager.save_usage_to_db(

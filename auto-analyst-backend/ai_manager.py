@@ -3,6 +3,7 @@ from typing import Optional, Dict, Any
 import time
 from init_db import ModelUsage, session_factory
 from datetime import datetime
+import tiktoken
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, 
@@ -17,7 +18,7 @@ class AI_Manager:
         # Initialize tokenizer - could use tiktoken or another tokenizer
         try:
             import tiktoken
-            self.tokenizer = tiktoken.encoding_for_model("gpt-3.5-turbo")
+            self.tokenizer = tiktoken.get_encoding("cl100k_base")
         except ImportError:
             logger.warning("Tiktoken not available, using simple tokenizer")
             self.tokenizer = SimpleTokenizer()
@@ -119,35 +120,54 @@ class AI_Manager:
         finally:
             session.close()
         
-    def calculate_cost(self, model_name, total_tokens):
+    def calculate_cost(self, model_name, input_tokens, output_tokens):
         """Calculate the cost for using the model based on tokens"""
         if not model_name:
             return 0
             
         # Convert tokens to thousands
-        tokens_in_thousands = total_tokens / 1000
+        input_tokens_in_thousands = input_tokens / 1000
+        output_tokens_in_thousands = output_tokens / 1000
         
         # Cost per 1K tokens for different models
-        # These are example rates, you should update with actual pricing
         costs = {
-            "gpt-3.5-turbo": 0.0015,  # $0.0015 per 1K tokens
-            "gpt-4": 0.03,  # $0.03 per 1K tokens
-            "claude-3-opus": 0.015,  # $0.015 per 1K tokens
-            "claude-3-sonnet": 0.008,  # $0.008 per 1K tokens
-            "claude-3-haiku": 0.003,  # $0.003 per 1K tokens
-            "llama-3-70b": 0.0007,  # Example cost
-            "llama-3-8b": 0.0002,  # Example cost
-            "llama-3-70b-8192": 0.0007,  # Example cost
-            "llama-3-8b-8192": 0.0002,  # Example cost
-            "mixtral-8x7b-32768": 0.0006,  # Example cost
-            "gpt-4o": 0.01,  # Example cost
-            "gpt-4o-mini": 0.0015,  # Example cost
-            "o1-mini": 0.00015,  # Example cost
-            # Add other models as needed
+            "gpt-3.5-turbo": {"input": 0.0005, "output": 0.0015},  
+            "gpt-4.5-preview": {"input": 0.075, "output": 0.15},
+            "gpt-4": {"input": 0.03, "output": 0.06},  
+            "gpt-4o": {"input": 0.0025, "output": 0.01},  
+            "gpt-4o-mini": {"input": 0.00015, "output": 0.0006},  
+            "o1": {"input": 0.015, "output": 0.06},  
+            "o1-mini": {"input": 0.00011, "output": 0.00044},  
+            "o3-mini": {"input": 0.00011, "output": 0.00044},  
+            "claude-3-opus-latest": {"input": 0.015, "output": 0.075},  
+            "claude-3-7-sonnet-latest": {"input": 0.003, "output": 0.015},   
+            "claude-3-5-sonnet-latest": {"input": 0.000003 * 1000, "output": 0.000015 * 1000}, 
+            "claude-3-5-haiku-latest": {"input": 0.0008, "output": 0.0004},
+            "deepseek-r1-distill-llama-70b": {"input": 0.00075, "output": 0.00099},
+            "llama-3.3-70b-versatile": {"input": 0.00059, "output": 0.00079},
+            "llama-3.3-70b-specdec": {"input": 0.00059, "output": 0.00099},
+            "llama2-70b-4096": {"input": 0.0007, "output": 0.0008},
+            "llama3-8b-8192": {"input": 0.00005, "output": 0.00008},
+            "llama-3.2-1b-preview": {"input": 0.00004, "output": 0.00004},
+            "llama-3.2-3b-preview": {"input": 0.00006, "output": 0.00006},
+            "llama-3.2-11b-text-preview": {"input": 0.00018, "output": 0.00018},
+            "llama-3.2-11b-vision-preview": {"input": 0.00018, "output": 0.00018},
+            "llama-3.2-90b-text-preview": {"input": 0.0009, "output": 0.0009},
+            "llama-3.2-90b-vision-preview": {"input": 0.0009, "output": 0.0009},
+            "llama3-70b-8192": {"input": 0.00059, "output": 0.00079},
+            "llama-3.1-8b-instant": {"input": 0.00005, "output": 0.00008},
+            "llama-3.1-70b-versatile": {"input": 0.00059, "output": 0.00079},
+            "llama-3.1-405b-reasoning": {"input": 0.00059, "output": 0.00079},
+            "mixtral-8x7b-32768": {"input": 0.00024, "output": 0.00024},
+            "gemma-7b-it": {"input": 0.00007, "output": 0.00007},
+            "gemma2-9b-it": {"input": 0.0002, "output": 0.0002},
+            "llama3-groq-70b-8192-tool-use-preview": {"input": 0.00089, "output": 0.00089},
+            "llama3-groq-8b-8192-tool-use-preview": {"input": 0.00019, "output": 0.00019},
         }
         
         # Default cost if model not found
-        return tokens_in_thousands * costs.get(model_name, 0.002)
+        logger.info(f"[>] Model: {model_name}, Costs: {costs}")
+        return input_tokens_in_thousands * costs.get(model_name, 0.002) + output_tokens_in_thousands * costs.get(model_name, 0.002)
 
     def get_provider_for_model(self, model_name):
         """Determine the provider based on model name"""
@@ -168,6 +188,4 @@ class AI_Manager:
 class SimpleTokenizer:
     """A very simple tokenizer implementation for fallback"""
     def encode(self, text):
-        # This is a very rough approximation - not for production use
-        # In reality, you'd want to use a proper tokenizer
-        return text.split() 
+        return len(text.split())

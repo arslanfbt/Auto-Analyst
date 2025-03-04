@@ -14,7 +14,7 @@ export default function AnalyticsLayout({
   title = 'Analytics | Auto-Analyst' 
 }: AnalyticsLayoutProps) {
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col">
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-white flex flex-col">
       <Head>
         <title>{title}</title>
         <meta name="description" content="Auto-Analyst analytics dashboard" />

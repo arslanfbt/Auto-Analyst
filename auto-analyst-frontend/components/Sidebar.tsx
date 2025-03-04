@@ -3,7 +3,7 @@
 import { type FC, useState, useEffect } from "react"
 import Image from "next/image"
 import { motion } from "framer-motion"
-import { X, MessageSquarePlus, History, Settings, LogOut, Trash2, Database } from "lucide-react"
+import { X, MessageSquarePlus, History, Settings, LogOut, Trash2, Database, BarChart2 } from "lucide-react"
 import { signOut, useSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
 import { useChatHistoryStore } from "@/lib/store/chatHistoryStore"
@@ -224,52 +224,44 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, onNewChat, chatHisto
 
           {/* Bottom Navigation */}
           <div className="border-t border-gray-100 bg-white/50 backdrop-blur-sm">
-            <button
-              onClick={() => setIsSettingsOpen(true)}
-              className="w-full flex items-center gap-3 px-4 py-3 text-sm text-gray-600 hover:bg-gray-50 hover:text-[#FF7F7F] transition-colors"
-            >
-              <Settings className="w-4 h-4" />
-              <span>Settings</span>
-            </button>
-
-            {(session || isAdmin) && (
-              <div className="px-4 py-3 border-t border-gray-100 bg-white">
-                <div className="flex items-center gap-3 mb-3">
-                  {session?.user?.image ? (
-                    <Image
-                      src={session.user.image}
-                      alt={session.user.name || "User"}
-                      width={36}
-                      height={36}
-                      className="rounded-full ring-2 ring-gray-100"
-                    />
-                  ) : (
-                    <div className="w-9 h-9 rounded-full bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center">
-                      <span className="text-gray-500 text-sm font-medium">
-                        {(session?.user?.name?.[0] || 'A').toUpperCase()}
-                      </span>
-                    </div>
-                  )}
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-gray-800 truncate">
-                      {isAdmin ? "Administrator" : session?.user?.name}
-                    </p>
-                    <p className="text-xs text-gray-500 truncate">
-                      {isAdmin ? "Admin Access" : session?.user?.email}
-                    </p>
-                  </div>
-                </div>
+            <div className="p-4 border-t border-gray-200">
+              <div className="flex flex-col space-y-2">
+                {/* New Dashboard Button - Only show for admin users */}
+                {isAdmin && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="flex items-center justify-start text-gray-600 hover:text-gray-900 hover:bg-gray-100"
+                    onClick={() => window.location.href = '/analytics/dashboard'}
+                  >
+                    <BarChart2 className="h-4 w-4 mr-2" />
+                    <span>Analytics Dashboard</span>
+                  </Button>
+                )}
                 
+                {/* Existing buttons for Settings, etc. */}
                 <Button
-                  onClick={handleSignOut}
-                  variant="ghost"
-                  className="w-full flex items-center justify-center gap-2 text-gray-600 hover:text-[#FF7F7F] hover:bg-gray-50 rounded-xl py-2"
+                  variant="outline"
+                  size="sm"
+                  className="flex items-center justify-start text-gray-600 hover:text-gray-900 hover:bg-gray-100"
+                  onClick={() => setIsSettingsOpen(true)}
                 >
-                  <LogOut className="w-4 h-4" />
-                  <span>Sign Out</span>
+                  <Settings className="h-4 w-4 mr-2" />
+                  <span>Settings</span>
+                </Button>
+                
+                {/* Sign Out Button */}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="flex items-center justify-start text-gray-600 hover:text-gray-900 hover:bg-gray-100"
+                  onClick={handleSignOut}
+                >
+                  <LogOut className="h-4 w-4 mr-2" />
+                  <span>Sign out</span>
                 </Button>
               </div>
-            )}
+            </div>
           </div>
         </div>
       </motion.div>
