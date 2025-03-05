@@ -29,7 +29,7 @@ export async function POST(request: Request) {
         <p><strong>Name:</strong> ${name}</p>
         <p><strong>Email:</strong> ${email}</p>
         <p><strong>Company:</strong> ${company}</p>
-        ${budget ? `<p><strong>Budget:</strong> $${Number(budget).toLocaleString()} USD</p>` : ''}
+        ${budget ? `<p><strong>Budget:</strong> $${Number(budget).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD</p>` : ''}
         <p><strong>Message:</strong></p>
         <p>${message}</p>
       `,

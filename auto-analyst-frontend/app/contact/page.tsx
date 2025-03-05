@@ -148,7 +148,7 @@ export default function ContactPage() {
                       <div className="flex justify-between text-sm text-gray-600">
                         <span>$1,000</span>
                         <span className="text-[#FF7F7F] font-medium">
-                          ${Number(formData.budget).toLocaleString()}
+                          ${Number(formData.budget).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </span>
                         <span>$50,000+</span>
                       </div>

@@ -3,7 +3,6 @@ import memory_agents as m
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 import os
-# Core DSPy agents for data analysis
 
 class analytical_planner(dspy.Signature):
     # The planner agent which routes the query to Agent(s)
@@ -461,6 +460,7 @@ class auto_analyst(dspy.Module):
         
         plan_text = plan['plan'].replace('Plan','').replace(':','').strip()
         plan_list = plan_text.split('->')
+
         
         # Execute agents in parallel
         futures = []
@@ -482,13 +482,22 @@ class auto_analyst(dspy.Module):
                 yield agent_name, {"error": str(e)}
         # Execute code combiner after all agents complete
         code_list = [result['code'] for _, result in completed_results if 'code' in result]
-        with dspy.settings.context(lm=dspy.LM(model="anthropic/claude-3-5-sonnet-latest", max_tokens=8000, temperature=1.0)):
-            combiner_result = self.code_combiner_agent(agent_code_list=str(code_list), dataset=dict_['dataset'])
-            # print("combiner_result", str(combiner_result))
-            yield 'code_combiner_agent', dict(combiner_result)
+        # with dspy.settings.context(lm=dspy.LM(model="anthropic/claude-3-5-sonnet-latest", max_tokens=8000, temperature=1.0)):
+        combiner_result = self.code_combiner_agent(agent_code_list=str(code_list), dataset=dict_['dataset'])
+        # print("combiner_result", str(combiner_result))
+        yield 'code_combiner_agent', dict(combiner_result)
 
 # Agent to make a Chat history name from a query
 class chat_history_name_agent(dspy.Signature):
     """You are an agent that takes a query and returns a name for the chat history"""
     query = dspy.InputField(desc="The query to make a name for")
     name = dspy.OutputField(desc="A name for the chat history (max 3 words)")
+
+
+if __name__ == "__main__":
+    import dspy
+    from dspy import ChainOfThought
+    dspy.configure(lm=dspy.LM(model="anthropic/claude-3-5-sonnet-latest", max_tokens=8000, temperature=1.0))
+    query = "What is the average price of the product?"
+    respose = ChainOfThought(chat_history_name_agent)(query=query)
+    print(respose)

@@ -1,12 +1,14 @@
 from sqlalchemy import create_engine, desc, func
 from sqlalchemy.orm import sessionmaker, scoped_session
 from sqlalchemy.exc import SQLAlchemyError
-from init_db import Base, User, Chat, Message
+from init_db import Base, User, Chat, Message, ModelUsage
 import logging
 import requests
 import json
 from typing import List, Dict, Optional, Tuple, Any
 from datetime import datetime
+import time
+import tiktoken
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, 
@@ -29,6 +31,34 @@ class ChatManager:
         self.engine = create_engine(db_url)
         Base.metadata.create_all(self.engine)  # Ensure tables exist
         self.Session = scoped_session(sessionmaker(bind=self.engine))
+        
+        # Add price mappings for different models
+        self.model_costs = {
+            # OpenAI models (per 1M tokens)
+            "gpt-3.5-turbo": {"input": 0.0015, "output": 0.002},
+            "gpt-3.5-turbo-16k": {"input": 0.003, "output": 0.004},
+            "gpt-4o": {"input": 0.01, "output": 0.03},
+            "gpt-4o-mini": {"input": 0.0015, "output": 0.002},
+            "gpt-4": {"input": 0.03, "output": 0.06},
+            "gpt-4-32k": {"input": 0.06, "output": 0.12},
+            # Anthropic models
+            "claude-3-opus-20240229": {"input": 0.015, "output": 0.075},
+            "claude-3-sonnet-20240229": {"input": 0.003, "output": 0.015},
+            "claude-3-haiku-20240307": {"input": 0.00025, "output": 0.00125},
+            "claude-3-5-sonnet-latest": {"input": 0.003, "output": 0.015},
+            # Groq models
+            "llama-3-70b-8192": {"input": 0.0007, "output": 0.0007},
+            "llama-3-8b-8192": {"input": 0.0002, "output": 0.0002},
+            "mixtral-8x7b-32768": {"input": 0.0006, "output": 0.0006},
+        }
+        
+        # Add model providers mapping
+        self.model_providers = {
+            "gpt-": "openai",
+            "claude-": "anthropic", 
+            "llama-": "groq",
+            "mixtral-": "groq",
+        }
     
     def create_chat(self, user_id: Optional[int] = None) -> Dict[str, Any]:
         """
@@ -569,9 +599,27 @@ class ChatManager:
         finally:
             session.close()
 
-    def save_ai_response(self, chat_id: int, content: str):
+    def save_ai_response(self, chat_id: int, content: str, user_id: Optional[int] = None, 
+                         model_name: str = "gpt-4o-mini", prompt: str = "", 
+                         prompt_tokens: Optional[int] = None, 
+                         completion_tokens: Optional[int] = None, 
+                         start_time: Optional[float] = None):
+        """
+        Save an AI response to a chat and track model usage.
+        
+        Args:
+            chat_id: ID of the chat to add the message to
+            content: AI response content
+            user_id: Optional user ID for tracking
+            model_name: Model used to generate the response
+            prompt: The prompt sent to the model
+            prompt_tokens: Optional pre-counted prompt tokens
+            completion_tokens: Optional pre-counted completion tokens
+            start_time: Optional start time of the request
+        """
         session = self.Session()
         try:
+            # Create and save message
             new_message = Message(
                 chat_id=chat_id,
                 sender='ai',
@@ -580,8 +628,311 @@ class ChatManager:
             )
             session.add(new_message)
             session.commit()
+            
+            # Track model usage
+            end_time = time.time()
+            start_time = start_time or end_time - 1  # Default to 1 second if not provided
+            
+            self.track_model_usage(
+                user_id=user_id,
+                chat_id=chat_id,
+                model_name=model_name,
+                prompt=prompt,
+                response=content,
+                start_time=start_time,
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens
+            )
+            
         except SQLAlchemyError as e:
             logger.error(f"Error saving AI response: {str(e)}")
             session.rollback()
+        finally:
+            session.close()
+
+    def track_model_usage(self, user_id: Optional[int], chat_id: int, model_name: str, 
+                           prompt: str, response: str, start_time: float, 
+                           is_streaming: bool = False, 
+                           prompt_tokens: Optional[int] = None, 
+                           completion_tokens: Optional[int] = None) -> Dict[str, Any]:
+        """
+        Track AI model usage for analytics and billing.
+        
+        Args:
+            user_id: Optional user ID making the request
+            chat_id: Chat ID associated with the request
+            model_name: Name of the AI model used
+            prompt: The prompt text sent to the model
+            response: The response text from the model
+            start_time: Start time of the request (time.time() value)
+            is_streaming: Whether the response was streamed
+            prompt_tokens: Optional pre-counted prompt tokens
+            completion_tokens: Optional pre-counted completion tokens
+            
+        Returns:
+            Dictionary with usage information
+        """
+        session = self.Session()
+        try:
+            # Determine model provider
+            provider = "unknown"
+            for prefix, prov in self.model_providers.items():
+                if model_name.startswith(prefix):
+                    provider = prov
+                    break
+                
+            # Calculate tokens if not provided
+            if prompt_tokens is None or completion_tokens is None:
+                try:
+                    encoding = tiktoken.encoding_for_model(model_name) if provider == "openai" else tiktoken.get_encoding("cl100k_base")
+                    prompt_tokens = len(encoding.encode(prompt)) if prompt_tokens is None else prompt_tokens
+                    completion_tokens = len(encoding.encode(response)) if completion_tokens is None else completion_tokens
+                except Exception as e:
+                    logger.warning(f"Error calculating tokens: {str(e)}")
+                    # Fallback to character-based estimation
+                    prompt_tokens = len(prompt) // 4
+                    completion_tokens = len(response) // 4
+            
+            total_tokens = prompt_tokens + completion_tokens
+            
+            # Calculate cost
+            cost = 0.0
+            if model_name in self.model_costs:
+                cost = (prompt_tokens * self.model_costs[model_name]["input"] / 1000000) + \
+                       (completion_tokens * self.model_costs[model_name]["output"] / 1000000)
+            
+            # Calculate request time
+            request_time_ms = int((time.time() - start_time) * 1000)
+            
+            # Create usage record
+            usage = ModelUsage(
+                user_id=user_id,
+                chat_id=chat_id,
+                model_name=model_name,
+                provider=provider,
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+                total_tokens=total_tokens,
+                query_size=len(prompt),
+                response_size=len(response),
+                cost=cost,
+                timestamp=datetime.utcnow(),
+                is_streaming=is_streaming,
+                request_time_ms=request_time_ms
+            )
+            
+            session.add(usage)
+            session.commit()
+            
+            return {
+                "usage_id": usage.usage_id,
+                "model_name": model_name,
+                "provider": provider,
+                "prompt_tokens": prompt_tokens,
+                "completion_tokens": completion_tokens,
+                "total_tokens": total_tokens,
+                "cost": cost,
+                "request_time_ms": request_time_ms
+            }
+        
+        except SQLAlchemyError as e:
+            session.rollback()
+            logger.error(f"Error tracking model usage: {str(e)}")
+            return {}
+        finally:
+            session.close()
+
+    def get_model_usage_analytics(self, start_date: Optional[datetime] = None, 
+                                  end_date: Optional[datetime] = None,
+                                  user_id: Optional[int] = None,
+                                  model_name: Optional[str] = None,
+                                  provider: Optional[str] = None,
+                                  limit: int = 1000) -> List[Dict[str, Any]]:
+        """
+        Get model usage analytics with optional filtering.
+        
+        Args:
+            start_date: Optional start date for the analytics period
+            end_date: Optional end date for the analytics period
+            user_id: Optional user ID to filter by
+            model_name: Optional model name to filter by
+            provider: Optional provider to filter by
+            limit: Maximum number of records to return
+            
+        Returns:
+            List of dictionaries containing usage records
+        """
+        session = self.Session()
+        try:
+            query = session.query(ModelUsage)
+            
+            # Apply filters
+            if start_date:
+                query = query.filter(ModelUsage.timestamp >= start_date)
+            if end_date:
+                query = query.filter(ModelUsage.timestamp <= end_date)
+            if user_id:
+                query = query.filter(ModelUsage.user_id == user_id)
+            if model_name:
+                query = query.filter(ModelUsage.model_name == model_name)
+            if provider:
+                query = query.filter(ModelUsage.provider == provider)
+            
+            # Order by timestamp descending
+            query = query.order_by(ModelUsage.timestamp.desc()).limit(limit)
+            
+            usages = query.all()
+            
+            return [{
+                "usage_id": usage.usage_id,
+                "user_id": usage.user_id,
+                "chat_id": usage.chat_id,
+                "model_name": usage.model_name,
+                "provider": usage.provider,
+                "prompt_tokens": usage.prompt_tokens,
+                "completion_tokens": usage.completion_tokens,
+                "total_tokens": usage.total_tokens,
+                "query_size": usage.query_size,
+                "response_size": usage.response_size,
+                "cost": usage.cost,
+                "timestamp": usage.timestamp.isoformat(),
+                "is_streaming": usage.is_streaming,
+                "request_time_ms": usage.request_time_ms
+            } for usage in usages]
+        
+        except SQLAlchemyError as e:
+            logger.error(f"Error retrieving model usage analytics: {str(e)}")
+            return []
+        finally:
+            session.close()
+
+    def get_usage_summary(self, start_date: Optional[datetime] = None, 
+                          end_date: Optional[datetime] = None) -> Dict[str, Any]:
+        """
+        Get a summary of model usage including total costs, tokens, and usage by model.
+        
+        Args:
+            start_date: Optional start date for the summary period
+            end_date: Optional end date for the summary period
+            
+        Returns:
+            Dictionary containing usage summary
+        """
+        session = self.Session()
+        try:
+            query = session.query(
+                func.sum(ModelUsage.cost).label("total_cost"),
+                func.sum(ModelUsage.prompt_tokens).label("total_prompt_tokens"),
+                func.sum(ModelUsage.completion_tokens).label("total_completion_tokens"),
+                func.sum(ModelUsage.total_tokens).label("total_tokens"),
+                func.count(ModelUsage.usage_id).label("request_count"),
+                func.avg(ModelUsage.request_time_ms).label("avg_request_time")
+            )
+            
+            # Apply date filters
+            if start_date:
+                query = query.filter(ModelUsage.timestamp >= start_date)
+            if end_date:
+                query = query.filter(ModelUsage.timestamp <= end_date)
+            
+            result = query.first()
+            
+            # Get usage breakdown by model
+            model_query = session.query(
+                ModelUsage.model_name,
+                func.sum(ModelUsage.cost).label("model_cost"),
+                func.sum(ModelUsage.total_tokens).label("model_tokens"),
+                func.count(ModelUsage.usage_id).label("model_requests")
+            )
+            
+            if start_date:
+                model_query = model_query.filter(ModelUsage.timestamp >= start_date)
+            if end_date:
+                model_query = model_query.filter(ModelUsage.timestamp <= end_date)
+            
+            model_query = model_query.group_by(ModelUsage.model_name)
+            model_breakdown = model_query.all()
+            
+            # Get usage breakdown by provider
+            provider_query = session.query(
+                ModelUsage.provider,
+                func.sum(ModelUsage.cost).label("provider_cost"),
+                func.sum(ModelUsage.total_tokens).label("provider_tokens"),
+                func.count(ModelUsage.usage_id).label("provider_requests")
+            )
+            
+            if start_date:
+                provider_query = provider_query.filter(ModelUsage.timestamp >= start_date)
+            if end_date:
+                provider_query = provider_query.filter(ModelUsage.timestamp <= end_date)
+            
+            provider_query = provider_query.group_by(ModelUsage.provider)
+            provider_breakdown = provider_query.all()
+            
+            # Get top users by cost
+            user_query = session.query(
+                ModelUsage.user_id,
+                func.sum(ModelUsage.cost).label("user_cost"),
+                func.sum(ModelUsage.total_tokens).label("user_tokens"),
+                func.count(ModelUsage.usage_id).label("user_requests")
+            )
+            
+            if start_date:
+                user_query = user_query.filter(ModelUsage.timestamp >= start_date)
+            if end_date:
+                user_query = user_query.filter(ModelUsage.timestamp <= end_date)
+            
+            user_query = user_query.group_by(ModelUsage.user_id)
+            user_query = user_query.order_by(func.sum(ModelUsage.cost).desc())
+            user_query = user_query.limit(10)
+            user_breakdown = user_query.all()
+            
+            return {
+                "summary": {
+                    "total_cost": float(result.total_cost) if result.total_cost else 0.0,
+                    "total_prompt_tokens": int(result.total_prompt_tokens) if result.total_prompt_tokens else 0,
+                    "total_completion_tokens": int(result.total_completion_tokens) if result.total_completion_tokens else 0,
+                    "total_tokens": int(result.total_tokens) if result.total_tokens else 0,
+                    "request_count": int(result.request_count) if result.request_count else 0,
+                    "avg_request_time_ms": float(result.avg_request_time) if result.avg_request_time else 0.0
+                },
+                "model_breakdown": [
+                    {
+                        "model_name": model.model_name,
+                        "cost": float(model.model_cost) if model.model_cost else 0.0,
+                        "tokens": int(model.model_tokens) if model.model_tokens else 0,
+                        "requests": int(model.model_requests) if model.model_requests else 0
+                    } for model in model_breakdown
+                ],
+                "provider_breakdown": [
+                    {
+                        "provider": provider.provider,
+                        "cost": float(provider.provider_cost) if provider.provider_cost else 0.0,
+                        "tokens": int(provider.provider_tokens) if provider.provider_tokens else 0,
+                        "requests": int(provider.provider_requests) if provider.provider_requests else 0
+                    } for provider in provider_breakdown
+                ],
+                "top_users": [
+                    {
+                        "user_id": user.user_id,
+                        "cost": float(user.user_cost) if user.user_cost else 0.0,
+                        "tokens": int(user.user_tokens) if user.user_tokens else 0,
+                        "requests": int(user.user_requests) if user.user_requests else 0
+                    } for user in user_breakdown
+                ]
+            }
+        
+        except SQLAlchemyError as e:
+            logger.error(f"Error retrieving usage summary: {str(e)}")
+            return {
+                "summary": {
+                    "total_cost": 0.0,
+                    "total_tokens": 0,
+                    "request_count": 0
+                },
+                "model_breakdown": [],
+                "provider_breakdown": [],
+                "top_users": []
+            }
         finally:
             session.close() 

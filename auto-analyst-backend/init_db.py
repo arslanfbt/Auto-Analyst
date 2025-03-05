@@ -1,10 +1,17 @@
-from sqlalchemy import create_engine, Column, Integer, String, ForeignKey, DateTime, Text
+from sqlalchemy import create_engine, Column, Integer, String, ForeignKey, DateTime, Text, Float, Boolean
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from datetime import datetime
 
 # Define the base class for declarative models
 Base = declarative_base()
+
+# Create an SQLite database engine (or connect to an existing one)
+engine = create_engine('sqlite:///chat_database.db')
+
+# Create session factory
+Session = sessionmaker(bind=engine)
+session_factory = Session
 
 # Define the Users table
 class User(Base):
@@ -34,12 +41,43 @@ class Message(Base):
     content = Column(Text, nullable=False)
     timestamp = Column(DateTime, default=datetime.utcnow)
 
+# Define the Model Usage table
+class ModelUsage(Base):
+    """Tracks AI model usage metrics for analytics and billing purposes."""
+    __tablename__ = 'model_usage'
+    
+    usage_id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey('users.user_id'), nullable=True)
+    chat_id = Column(Integer, ForeignKey('chats.chat_id'), nullable=True)
+    model_name = Column(String(100), nullable=False)
+    provider = Column(String(50), nullable=False)
+    prompt_tokens = Column(Integer, default=0)
+    completion_tokens = Column(Integer, default=0)
+    total_tokens = Column(Integer, default=0)
+    query_size = Column(Integer, default=0)  # Size in characters
+    response_size = Column(Integer, default=0)  # Size in characters
+    cost = Column(Float, default=0.0)  # Cost in USD
+    timestamp = Column(DateTime, default=datetime.utcnow)
+    is_streaming = Column(Boolean, default=False)
+    request_time_ms = Column(Integer, default=0)  # Request processing time in milliseconds
+
 # Database initialization function
 def init_db():
-    # Create an SQLite database (or connect to an existing one)
-    engine = create_engine('sqlite:///chat_database.db')
-    Base.metadata.create_all(engine)  # Create all tables
+    # Create all tables
+    Base.metadata.create_all(engine)
     print("Database and tables created successfully.")
+
+# Utility function to get a new session
+def get_session():
+    return Session()
+
+def get_db():
+    db = Session()
+    try:
+        yield db
+    finally:
+        db.close()
+
 
 if __name__ == "__main__":
     init_db() 
