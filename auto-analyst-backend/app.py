@@ -367,6 +367,17 @@ async def chat_with_agent(
     session_id: str = Depends(get_session_id)
 ):
     session_state = app.state.get_session_state(session_id)
+    
+    # Check for chat_id in query parameters
+    chat_id_param = None
+    if "chat_id" in request_obj.query_params:
+        try:
+            chat_id_param = int(request_obj.query_params.get("chat_id"))
+            logger.info(f"Using provided chat_id {chat_id_param} from request")
+            # Update session state with this chat ID
+            session_state["chat_id"] = chat_id_param
+        except (ValueError, TypeError):
+            logger.warning(f"Invalid chat_id in query params: {request_obj.query_params.get('chat_id')}")
 
     if session_state["current_df"] is None:
         raise HTTPException(
@@ -456,10 +467,10 @@ async def chat_with_agent(
             # Calculate cost
             cost = ai_manager.calculate_cost(model_name, prompt_tokens, completion_tokens)
             
-            # Save to DB
+            # Save to DB with the proper chat_id
             ai_manager.save_usage_to_db(
                 user_id=session_state.get("user_id"),
-                chat_id=session_state.get("chat_id"),
+                chat_id=session_state.get("chat_id"),  # This will now be the one from query params
                 model_name=model_name,
                 provider=provider,
                 prompt_tokens=int(prompt_tokens),
@@ -500,11 +511,19 @@ async def chat_with_all(
             user_id = int(request_obj.query_params["user_id"])
             session_state["user_id"] = user_id
         except (ValueError, TypeError):
-            raise HTTPException(
-                status_code=400,
-                detail="Invalid user_id in query params. Please provide a valid integer."
-            )
+            # Error handling...
+            pass
+    chat_id_param = None
+    if "chat_id" in request_obj.query_params:
+        try:
+            chat_id_param = int(request_obj.query_params.get("chat_id"))
+            logger.info(f"Using provided chat_id {chat_id_param} from request for streaming")
+            # Update session state 
+            session_state["chat_id"] = chat_id_param
+        except (ValueError, TypeError):
+            logger.warning(f"Invalid chat_id in query params: {request_obj.query_params.get('chat_id')}")
     
+
     if session_state["current_df"] is None:
         raise HTTPException(
             status_code=400,
@@ -601,7 +620,7 @@ async def chat_with_all(
                     total_tokens=total_tokens,
                     query_size=prompt_size,
                     response_size=len(total_response),
-                    cost=cost,
+                    cost=round(cost, 7),
                     request_time_ms=overall_processing_time_ms,
                     is_streaming=True
                 )
@@ -861,7 +880,6 @@ async def reset_session(
 # Add this line where other routers are included
 app.include_router(chat_router)
 app.include_router(analytics_router)
-
 
 def ensure_user_metadata(session_id: str, session_state: dict, request: Request = None) -> tuple:
     """Ensure a session has user_id and chat_id, creating if necessary"""

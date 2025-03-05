@@ -42,7 +42,7 @@ def test_session_workflow():
     # Step 5: Check analytics data
     print("\n5. Checking analytics data...")
     time.sleep(1)  # Wait a moment for data to be saved
-    admin_key = "admin-api-key-change-me"  # Adjust to your admin key
+    admin_key = "default-admin-key-change-me"  # Adjust to your admin key
 
     # Check general model usage
     analytics_response = requests.get(

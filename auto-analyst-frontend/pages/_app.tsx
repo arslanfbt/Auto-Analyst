@@ -28,7 +28,7 @@ export default function App({ Component, pageProps }: AppProps) {
           
           // Add session ID header
           if (sessionId) {
-            newOptions.headers['X-Session-ID'] = sessionId;
+            (newOptions.headers as Record<string, string>)['X-Session-ID'] = sessionId;
           }
           
           // Call the original fetch with our modified options

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, WebSocket
 from typing import Optional, List, Dict, Any
 from datetime import datetime, timedelta
 from pydantic import BaseModel
@@ -7,8 +7,13 @@ import logging
 from fastapi import Request
 from fastapi.security import APIKeyHeader
 import os
-from init_db import ModelUsage, session_factory
+from init_db import ModelUsage, session_factory, get_db, User, Chat, Message
 import json
+from sqlalchemy.orm import Session
+from sqlalchemy import func, desc, select, and_, extract
+from sqlalchemy.sql import text
+import asyncio
+from collections import defaultdict
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, 
@@ -30,10 +35,6 @@ async def verify_admin_api_key(
     api_key: str = Depends(api_key_header),
     request: Request = None
 ):
-    # For debugging
-    logger.info(f"Received API key: {api_key}")
-    logger.info(f"Expected API key: {ADMIN_API_KEY}")
-    
     # Check header first
     if api_key and api_key == ADMIN_API_KEY:
         return True
@@ -50,380 +51,703 @@ async def verify_admin_api_key(
         detail="Invalid or missing admin API key"
     )
 
-@router.get("/usage/summary")
-async def get_usage_summary(
-    start_date: Optional[str] = None,
-    end_date: Optional[str] = None,
-    _: bool = Depends(verify_admin_api_key),
-    request: Request = None
+# Active WebSocket connections for real-time updates
+active_dashboard_connections = set()
+active_user_connections = set()
+
+# Helper function to parse period parameter
+def get_date_range(period: str):
+    today = datetime.utcnow()
+    if period == '7d':
+        start_date = today - timedelta(days=7)
+    elif period == '30d':
+        start_date = today - timedelta(days=30)
+    elif period == '90d':
+        start_date = today - timedelta(days=90)
+    else:
+        start_date = today - timedelta(days=30)  # Default to 30 days
+    
+    return start_date, today
+
+# Dashboard endpoint - combines summary data for the main dashboard
+@router.get("/dashboard")
+async def get_dashboard_data(
+    period: str = "30d", 
+    db: Session = Depends(get_db),
+    api_key: str = Depends(verify_admin_api_key)
 ):
-    """Get summary of API usage for the dashboard"""
+    start_date, end_date = get_date_range(period)
+    
+    # Get total stats
+    total_stats = db.query(
+        func.sum(ModelUsage.total_tokens).label("total_tokens"),
+        func.sum(ModelUsage.cost).label("total_cost"),
+        func.count().label("total_requests"),
+        func.count(func.distinct(ModelUsage.user_id)).label("total_users")
+    ).filter(ModelUsage.timestamp >= start_date).first()
+    
+    # Get daily usage
+    daily_query = db.query(
+        func.date(ModelUsage.timestamp).label("date"),
+        func.sum(ModelUsage.total_tokens).label("tokens"),
+        func.sum(ModelUsage.cost).label("cost"),
+        func.count().label("requests")
+    ).filter(
+        ModelUsage.timestamp >= start_date,
+        ModelUsage.timestamp <= end_date
+    ).group_by(
+        func.date(ModelUsage.timestamp)
+    ).order_by(
+        func.date(ModelUsage.timestamp)
+    )
+    
+    daily_usage = [
+        {
+            "date": str(day.date),
+            "tokens": int(day.tokens or 0),
+            "cost": float(day.cost or 0),
+            "requests": int(day.requests or 0)
+        }
+        for day in daily_query
+    ]
+    
+    # Get model usage
+    model_query = db.query(
+        ModelUsage.model_name,
+        func.sum(ModelUsage.total_tokens).label("tokens"),
+        func.sum(ModelUsage.cost).label("cost"),
+        func.count().label("requests")
+    ).filter(
+        ModelUsage.timestamp >= start_date,
+        ModelUsage.timestamp <= end_date
+    ).group_by(
+        ModelUsage.model_name
+    ).order_by(
+        desc(func.sum(ModelUsage.total_tokens))
+    )
+    
+    model_usage = [
+        {
+            "model_name": model.model_name,
+            "tokens": int(model.tokens or 0),
+            "cost": float(model.cost or 0),
+            "requests": int(model.requests or 0)
+        }
+        for model in model_query
+    ]
+    
+    # Get top users
+    user_query = db.query(
+        ModelUsage.user_id,
+        func.sum(ModelUsage.total_tokens).label("tokens"),
+        func.sum(ModelUsage.cost).label("cost"),
+        func.count().label("requests")
+    ).filter(
+        ModelUsage.timestamp >= start_date,
+        ModelUsage.timestamp <= end_date,
+        ModelUsage.user_id.isnot(None)
+    ).group_by(
+        ModelUsage.user_id
+    ).order_by(
+        desc(func.sum(ModelUsage.total_tokens))
+    ).limit(10)
+    
+    top_users = [
+        {
+            "user_id": str(user.user_id),
+            "tokens": int(user.tokens or 0),
+            "cost": float(user.cost or 0),
+            "requests": int(user.requests or 0)
+        }
+        for user in user_query
+    ]
+    
+    return {
+        "total_tokens": int(total_stats.total_tokens or 0),
+        "total_cost": float(total_stats.total_cost or 0),
+        "total_requests": int(total_stats.total_requests or 0),
+        "total_users": int(total_stats.total_users or 0),
+        "daily_usage": daily_usage,
+        "model_usage": model_usage,
+        "top_users": top_users,
+        "start_date": start_date.strftime('%Y-%m-%d'),
+        "end_date": end_date.strftime('%Y-%m-%d'),
+    }
+
+# WebSocket endpoint for real-time dashboard updates
+@router.websocket("/dashboard/realtime")
+async def dashboard_realtime(websocket: WebSocket):
+    await websocket.accept()
+    active_dashboard_connections.add(websocket)
+    
     try:
-        # Debug info
-        logger.info(f"Getting usage summary from {start_date} to {end_date}")
-        
-        # Parse dates if provided
-        if start_date:
-            start_date = datetime.fromisoformat(start_date.replace('Z', '+00:00'))
+        while True:
+            # Keep connection alive and wait for potential disconnection
+            await websocket.receive_text()
+    except Exception:
+        # Remove connection when client disconnects
+        active_dashboard_connections.remove(websocket)
+        await websocket.close()
+
+# User analytics endpoints
+@router.get("/users")
+async def get_users(
+    limit: int = 100,
+    offset: int = 0,
+    db: Session = Depends(get_db),
+    api_key: str = Depends(verify_admin_api_key)
+):
+    user_query = db.query(
+        ModelUsage.user_id,
+        func.sum(ModelUsage.total_tokens).label("tokens"),
+        func.sum(ModelUsage.cost).label("cost"),
+        func.count().label("requests"),
+        func.min(ModelUsage.timestamp).label("first_seen"),
+        func.max(ModelUsage.timestamp).label("last_seen")
+    ).filter(
+        ModelUsage.user_id.isnot(None)
+    ).group_by(
+        ModelUsage.user_id
+    ).order_by(
+        desc(func.sum(ModelUsage.total_tokens))
+    ).offset(offset).limit(limit)
+    
+    users = [
+        {
+            "user_id": str(user.user_id),
+            "tokens": int(user.tokens or 0),
+            "cost": float(user.cost or 0),
+            "requests": int(user.requests or 0),
+            "first_seen": user.first_seen.isoformat() if user.first_seen else None,
+            "last_seen": user.last_seen.isoformat() if user.last_seen else None,
+        }
+        for user in user_query
+    ]
+    
+    # Get total users count for pagination
+    total_users = db.query(func.count(func.distinct(ModelUsage.user_id)))\
+        .filter(ModelUsage.user_id.isnot(None))\
+        .scalar() or 0
+    
+    return {
+        "users": users,
+        "total": total_users,
+        "limit": limit,
+        "offset": offset
+    }
+
+@router.get("/users/activity")
+async def get_user_activity(
+    period: str = "30d",
+    db: Session = Depends(get_db),
+    api_key: str = Depends(verify_admin_api_key)
+):
+    start_date, end_date = get_date_range(period)
+    
+    # Get daily activity
+    daily_query = db.query(
+        func.date(ModelUsage.timestamp).label("date"),
+        func.count(func.distinct(ModelUsage.user_id)).label("active_users"),
+        # New users = users whose first usage was on this date
+        func.count(func.distinct(
+            ModelUsage.user_id,
+            func.date(func.min(ModelUsage.timestamp).over(partition_by=ModelUsage.user_id)) == func.date(ModelUsage.timestamp)
+        )).label("new_users"),
+        func.count(func.distinct(ModelUsage.chat_id)).label("sessions")
+    ).filter(
+        ModelUsage.timestamp >= start_date,
+        ModelUsage.timestamp <= end_date,
+        ModelUsage.user_id.isnot(None)
+    ).group_by(
+        func.date(ModelUsage.timestamp)
+    ).order_by(
+        func.date(ModelUsage.timestamp)
+    )
+    
+    activity_data = [
+        {
+            "date": str(day.date),
+            "activeUsers": int(day.active_users or 0),
+            "newUsers": int(day.new_users or 0),
+            "sessions": int(day.sessions or 0)
+        }
+        for day in daily_query
+    ]
+    
+    # Fill in any missing dates with zeros
+    date_range = [(start_date + timedelta(days=i)).strftime('%Y-%m-%d') 
+                  for i in range((end_date - start_date).days + 1)]
+    
+    activity_dict = {item["date"]: item for item in activity_data}
+    
+    filled_activity = []
+    for date in date_range:
+        if date in activity_dict:
+            filled_activity.append(activity_dict[date])
         else:
-            start_date = datetime.utcnow() - timedelta(days=30)
-            
-        if end_date:
-            end_date = datetime.fromisoformat(end_date.replace('Z', '+00:00'))
-        else:
-            end_date = datetime.utcnow()
-        
-        # Query the database directly
-        session = session_factory()
-        try:
-            # For debugging, count records in the model_usage table
-            count_query = session.query(ModelUsage).count()
-            logger.info(f"Total records in model_usage table: {count_query}")
-            
-            # Build the query with date filters
-            query = session.query(ModelUsage)
-            query = query.filter(ModelUsage.timestamp >= start_date)
-            query = query.filter(ModelUsage.timestamp <= end_date)
-            
-            # Execute the query
-            usage_records = query.all()
-            logger.info(f"Found {len(usage_records)} usage records for the time period")
-            
-            # If no records found, return empty data structure
-            if not usage_records:
-                return {
-                    "total_cost": 0.0,
-                    "total_tokens": 0,
-                    "total_requests": 0,
-                    "avg_tokens_per_request": 0,
-                    "avg_cost_per_request": 0.0,
-                    "avg_request_time_ms": 0,
-                    "model_breakdown": [],
-                    "provider_breakdown": [],
-                    "top_users": [],
-                    "daily_usage": []
-                }
-            
-            # Calculate totals
-            total_cost = sum(record.cost for record in usage_records)
-            total_tokens = sum(record.total_tokens for record in usage_records)
-            request_count = len(usage_records)
-            avg_tokens_per_request = total_tokens / request_count if request_count > 0 else 0
-            avg_cost_per_request = total_cost / request_count if request_count > 0 else 0
-            avg_request_time = sum(record.request_time_ms for record in usage_records) / request_count if request_count > 0 else 0
-            
-            # Prepare the summary data
-            summary_data = {
-                "total_cost": total_cost,
-                "total_tokens": total_tokens,
-                "total_requests": request_count,
-                "avg_tokens_per_request": avg_tokens_per_request,
-                "avg_cost_per_request": avg_cost_per_request,
-                "avg_request_time_ms": avg_request_time,
-                
-                # Group by model
-                "model_breakdown": calculate_breakdown(usage_records, 'model_name'),
-                
-                # Group by provider
-                "provider_breakdown": calculate_breakdown(usage_records, 'provider'),
-                
-                # Group by user
-                "top_users": calculate_breakdown(usage_records, 'user_id')[:10],  # Top 10 users
-                
-                # Daily usage will be calculated separately in another endpoint
-                "daily_usage": calculate_daily_usage(usage_records, start_date, end_date)
-            }
-            
-            logger.info(f"Generated summary: {json.dumps(summary_data, default=str)}")
-            
-            return summary_data
-            
-        finally:
-            session.close()
-            
-    except Exception as e:
-        logger.error(f"Error retrieving usage summary: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Error retrieving usage summary: {str(e)}")
-
-def calculate_breakdown(records, group_by_field):
-    """Helper function to calculate breakdown by a specific field"""
-    # Group records by the specified field
-    groups = {}
-    for record in records:
-        key = getattr(record, group_by_field)
-        if key not in groups:
-            groups[key] = {
-                group_by_field: key,
-                "cost": 0.0,
-                "tokens": 0,
-                "requests": 0
-            }
-        
-        groups[key]["cost"] += record.cost
-        groups[key]["tokens"] += record.total_tokens
-        groups[key]["requests"] += 1
-    
-    # Convert to list and sort by cost descending
-    result = list(groups.values())
-    result.sort(key=lambda x: x["cost"], reverse=True)
-    
-    return result
-
-def calculate_daily_usage(records, start_date, end_date):
-    """Calculate usage by day"""
-    # Create a dictionary with dates as keys
-    days = {}
-    current_date = start_date
-    while current_date <= end_date:
-        day_str = current_date.strftime('%Y-%m-%d')
-        days[day_str] = {
-            "date": day_str,
-            "cost": 0.0,
-            "tokens": 0,
-            "requests": 0
-        }
-        current_date += timedelta(days=1)
-    
-    # Sum up usage by day
-    for record in records:
-        day_str = record.timestamp.strftime('%Y-%m-%d')
-        if day_str in days:
-            days[day_str]["cost"] += record.cost
-            days[day_str]["tokens"] += record.total_tokens
-            days[day_str]["requests"] += 1
-    
-    # Convert to list and sort by date
-    result = list(days.values())
-    result.sort(key=lambda x: x["date"])
-    
-    return result
-
-@router.get("/daily")
-async def get_daily_usage(
-    days: int = 30,
-    _: bool = Depends(verify_admin_api_key)
-):
-    """Get daily usage data for the specified number of days"""
-    try:
-        logger.info(f"Getting daily usage for the past {days} days")
-        
-        # Calculate date range
-        end_date = datetime.utcnow()
-        start_date = end_date - timedelta(days=days)
-        
-        # Query the database
-        session = session_factory()
-        try:
-            # Get usage records for the period
-            query = session.query(ModelUsage)
-            query = query.filter(ModelUsage.timestamp >= start_date)
-            query = query.filter(ModelUsage.timestamp <= end_date)
-            usage_records = query.all()
-            
-            logger.info(f"Found {len(usage_records)} records for daily usage chart")
-            
-            # Calculate daily usage
-            daily_data = calculate_daily_usage(usage_records, start_date, end_date)
-            
-            return {
-                "success": True,
-                "days": days,
-                "start_date": start_date.isoformat(),
-                "end_date": end_date.isoformat(),
-                "daily_usage": daily_data
-            }
-            
-        finally:
-            session.close()
-            
-    except Exception as e:
-        logger.error(f"Error retrieving daily usage: {str(e)}")
-        return {
-            "success": False,
-            "error": str(e),
-            "daily_usage": []
-        }
-
-@router.get("/debug/model_usage")
-async def debug_model_usage(_: bool = Depends(verify_admin_api_key)):
-    """Debug endpoint to check the model usage table"""
-    session = session_factory()
-    try:
-        # Count total records
-        total = session.query(ModelUsage).count()
-        
-        # Get a sample of records (limit 5)
-        samples = session.query(ModelUsage).order_by(ModelUsage.usage_id.desc()).limit(5).all()
-        
-        # Format the response
-        sample_records = []
-        for record in samples:
-            sample_records.append({
-                "usage_id": record.usage_id,
-                "user_id": record.user_id,
-                "model_name": record.model_name,
-                "provider": record.provider,
-                "total_tokens": record.total_tokens,
-                "cost": record.cost,
-                "timestamp": record.timestamp.isoformat() if record.timestamp else None
+            filled_activity.append({
+                "date": date,
+                "activeUsers": 0,
+                "newUsers": 0,
+                "sessions": 0
             })
-        
-        return {
-            "total_records": total,
-            "sample_records": sample_records  # Will be an empty list if no records found
-        }
-    except Exception as e:
-        logger.error(f"Error in debug_model_usage: {str(e)}")
-        # Return a consistent structure even when there's an error
-        return {
-            "total_records": 0,
-            "sample_records": [],
-            "error": str(e)
-        }
-    finally:
-        session.close()
+    
+    return {"user_activity": filled_activity}
 
-@router.get("/debug/user_usage/{user_id}")
-async def debug_user_usage(user_id: int, _: bool = Depends(verify_admin_api_key)):
-    """Debug endpoint to check a specific user's model usage"""
-    session = session_factory()
-    try:
-        # Count user's records
-        user_total = session.query(ModelUsage).filter(ModelUsage.user_id == user_id).count()
-        
-        # Get user's most recent records
-        user_records = session.query(ModelUsage).filter(
-            ModelUsage.user_id == user_id
-        ).order_by(ModelUsage.usage_id.desc()).limit(5).all()
-        
-        # Format the response
-        formatted_records = []
-        for record in user_records:
-            formatted_records.append({
-                "usage_id": record.usage_id,
-                "model_name": record.model_name,
-                "provider": record.provider,
-                "total_tokens": record.total_tokens,
-                "cost": record.cost,
-                "timestamp": record.timestamp.isoformat() if record.timestamp else None
-            })
-        
-        return {
-            "user_id": user_id,
-            "total_records": user_total,
-            "recent_records": formatted_records
-        }
-    except Exception as e:
-        logger.error(f"Error in debug_user_usage: {str(e)}")
-        return {
-            "user_id": user_id,
-            "total_records": 0,
-            "recent_records": [],
-            "error": str(e)
-        }
-    finally:
-        session.close()
-
-@router.post("/debug/create_test_usage")
-async def create_test_usage(
-    user_id: int,
-    model_name: str = "test-model", 
-    _: bool = Depends(verify_admin_api_key)
+@router.get("/users/sessions/stats")
+async def get_session_stats(
+    db: Session = Depends(get_db),
+    api_key: str = Depends(verify_admin_api_key)
 ):
-    """Debug endpoint to manually create a test usage record"""
-    session = session_factory()
-    try:
-        # Create a test usage record
-        usage = ModelUsage(
-            user_id=user_id,
-            chat_id=999,  # Test chat ID
-            model_name=model_name,
-            provider="Test",
-            prompt_tokens=100,
-            completion_tokens=200,
-            total_tokens=300,
-            query_size=500,
-            response_size=1000,
-            cost=0.001,
-            request_time_ms=150,
-            is_streaming=False,
-            timestamp=datetime.utcnow()
+    # Total users ever
+    total_users = db.query(func.count(func.distinct(ModelUsage.user_id)))\
+        .filter(ModelUsage.user_id.isnot(None))\
+        .scalar() or 0
+    
+    # Active users today
+    today = datetime.utcnow().date()
+    active_today = db.query(func.count(func.distinct(ModelUsage.user_id)))\
+        .filter(
+            func.date(ModelUsage.timestamp) == today,
+            ModelUsage.user_id.isnot(None)
+        ).scalar() or 0
+    
+    # Average queries per session
+    avg_queries = db.query(
+        func.avg(
+            func.count().over(partition_by=ModelUsage.chat_id)
         )
-        
-        session.add(usage)
-        session.commit()
-        session.refresh(usage)
-        
-        return {
-            "success": True,
-            "message": "Test usage record created",
-            "usage_id": usage.usage_id,
-            "user_id": usage.user_id,
-            "total_tokens": usage.total_tokens
-        }
-    except Exception as e:
-        session.rollback()
-        logger.error(f"Error creating test usage: {str(e)}")
-        return {
-            "success": False,
-            "error": str(e)
-        }
-    finally:
-        session.close()
+    ).filter(ModelUsage.chat_id.isnot(None)).scalar() or 0
+    
+    # Average session time (approximated based on first and last message in each chat)
+    session_times = db.query(
+        ModelUsage.chat_id,
+        func.min(ModelUsage.timestamp).label("start_time"),
+        func.max(ModelUsage.timestamp).label("end_time")
+    ).filter(
+        ModelUsage.chat_id.isnot(None)
+    ).group_by(
+        ModelUsage.chat_id
+    ).all()
+    
+    total_seconds = 0
+    session_count = 0
+    
+    for session in session_times:
+        if session.start_time and session.end_time:
+            duration = (session.end_time - session.start_time).total_seconds()
+            if duration > 0:  # Filter out single-message sessions
+                total_seconds += duration
+                session_count += 1
+    
+    avg_session_time = int(total_seconds / session_count) if session_count > 0 else 0
+    
+    return {
+        "totalUsers": total_users,
+        "activeToday": active_today,
+        "avgQueriesPerSession": round(avg_queries, 1),
+        "avgSessionTime": avg_session_time
+    }
 
+@router.websocket("/realtime")
+async def user_realtime(websocket: WebSocket):
+    await websocket.accept()
+    active_user_connections.add(websocket)
+    
+    try:
+        while True:
+            # Keep connection alive
+            await websocket.receive_text()
+    except Exception:
+        active_user_connections.remove(websocket)
+        await websocket.close()
+
+# Model analytics endpoints
 @router.get("/usage/models")
 async def get_model_usage(
-    start_date: Optional[str] = None,
-    end_date: Optional[str] = None,
-    _: bool = Depends(verify_admin_api_key)
+    period: str = "30d",
+    db: Session = Depends(get_db),
+    api_key: str = Depends(verify_admin_api_key)
 ):
-    """Get usage breakdown by model"""
-    try:
-        logger.info(f"Getting model usage from {start_date} to {end_date}")
-        
-        # Parse dates if provided
-        if start_date:
-            start_date = datetime.fromisoformat(start_date.replace('Z', '+00:00'))
+    start_date, end_date = get_date_range(period)
+    
+    # Get model usage breakdown
+    model_query = db.query(
+        ModelUsage.model_name,
+        func.sum(ModelUsage.total_tokens).label("tokens"),
+        func.sum(ModelUsage.cost).label("cost"),
+        func.count().label("requests"),
+        func.avg(ModelUsage.request_time_ms).label("avg_response_time")
+    ).filter(
+        ModelUsage.timestamp >= start_date,
+        ModelUsage.timestamp <= end_date
+    ).group_by(
+        ModelUsage.model_name
+    ).order_by(
+        desc(func.sum(ModelUsage.total_tokens))
+    )
+    
+    model_usage = [
+        {
+            "model_name": model.model_name,
+            "tokens": int(model.tokens or 0),
+            "cost": float(model.cost or 0),
+            "requests": int(model.requests or 0),
+            "avg_response_time": float(model.avg_response_time or 0) / 1000 if model.avg_response_time else 0
+        }
+        for model in model_query
+    ]
+    
+    return {"model_usage": model_usage}
+
+@router.get("/models/history")
+async def get_model_history(
+    period: str = "30d",
+    db: Session = Depends(get_db),
+    api_key: str = Depends(verify_admin_api_key)
+):
+    start_date, end_date = get_date_range(period)
+    
+    # Get daily usage per model
+    daily_model_query = db.query(
+        func.date(ModelUsage.timestamp).label("date"),
+        ModelUsage.model_name,
+        func.sum(ModelUsage.total_tokens).label("tokens"),
+        func.count().label("requests")
+    ).filter(
+        ModelUsage.timestamp >= start_date,
+        ModelUsage.timestamp <= end_date
+    ).group_by(
+        func.date(ModelUsage.timestamp),
+        ModelUsage.model_name
+    ).order_by(
+        func.date(ModelUsage.timestamp)
+    )
+    
+    # Transform into the format expected by the frontend
+    date_model_data = defaultdict(lambda: {"date": None, "models": []})
+    model_names = set()
+    
+    for record in daily_model_query:
+        date_str = str(record.date)
+        date_model_data[date_str]["date"] = date_str
+        date_model_data[date_str]["models"].append({
+            "name": record.model_name,
+            "tokens": int(record.tokens or 0),
+            "requests": int(record.requests or 0)
+        })
+        model_names.add(record.model_name)
+    
+    # Fill in any missing dates with zeros for all models
+    date_range = [(start_date + timedelta(days=i)).strftime('%Y-%m-%d') 
+                  for i in range((end_date - start_date).days + 1)]
+    
+    model_history = []
+    for date in date_range:
+        if date in date_model_data:
+            # Check if all models are represented
+            existing_models = {m["name"] for m in date_model_data[date]["models"]}
+            for model_name in model_names:
+                if model_name not in existing_models:
+                    date_model_data[date]["models"].append({
+                        "name": model_name,
+                        "tokens": 0,
+                        "requests": 0
+                    })
+            model_history.append(date_model_data[date])
         else:
-            start_date = datetime.utcnow() - timedelta(days=30)
-            
-        if end_date:
-            end_date = datetime.fromisoformat(end_date.replace('Z', '+00:00'))
+            # Create an entry with zeros for all models
+            model_history.append({
+                "date": date,
+                "models": [{"name": model_name, "tokens": 0, "requests": 0} for model_name in model_names]
+            })
+    
+    return {"model_history": model_history}
+
+@router.get("/models/metrics")
+async def get_model_metrics(
+    db: Session = Depends(get_db),
+    api_key: str = Depends(verify_admin_api_key)
+):
+    # Calculate performance metrics for each model
+    metrics_query = db.query(
+        ModelUsage.model_name.label("name"),
+        func.avg(ModelUsage.total_tokens).label("avg_tokens"),
+        func.avg(ModelUsage.request_time_ms).label("avg_response_time"),
+        # Approximate success rate based on whether response has tokens
+        (1 - func.sum(case((ModelUsage.completion_tokens < 1, 1), else_=0)) / func.count()).label("success_rate")
+    ).group_by(
+        ModelUsage.model_name
+    ).order_by(
+        desc(func.avg(ModelUsage.total_tokens))
+    )
+    
+    model_metrics = [
+        {
+            "name": metrics.name,
+            "avg_tokens": float(metrics.avg_tokens or 0),
+            "avg_response_time": float(metrics.avg_response_time or 0) / 1000 if metrics.avg_response_time else 0,
+            "success_rate": float(metrics.success_rate or 0.95)  # Default to 95% if undefined
+        }
+        for metrics in metrics_query
+    ]
+    
+    return {"model_metrics": model_metrics}
+
+# Cost analytics endpoints
+@router.get("/costs/summary")
+async def get_cost_summary(
+    period: str = "30d",
+    db: Session = Depends(get_db),
+    api_key: str = Depends(verify_admin_api_key)
+):
+    start_date, end_date = get_date_range(period)
+    
+    # Get cost summary
+    summary = db.query(
+        func.sum(ModelUsage.cost).label("total_cost"),
+        func.sum(ModelUsage.total_tokens).label("total_tokens"),
+        func.count().label("total_requests")
+    ).filter(
+        ModelUsage.timestamp >= start_date,
+        ModelUsage.timestamp <= end_date
+    ).first()
+    
+    # Calculate average daily costs
+    days = (end_date - start_date).days or 1  # Avoid division by zero
+    
+    return {
+        "totalCost": float(summary.total_cost or 0),
+        "totalTokens": int(summary.total_tokens or 0),
+        "totalRequests": int(summary.total_requests or 0),
+        "avgDailyCost": float(summary.total_cost or 0) / days,
+        "costPerThousandTokens": float(summary.total_cost or 0) / (int(summary.total_tokens or 1) / 1000),
+        "daysInPeriod": days,
+        "startDate": start_date.strftime('%Y-%m-%d'),
+        "endDate": end_date.strftime('%Y-%m-%d')
+    }
+
+@router.get("/costs/daily")
+async def get_daily_costs(
+    period: str = "30d",
+    db: Session = Depends(get_db),
+    api_key: str = Depends(verify_admin_api_key)
+):
+    start_date, end_date = get_date_range(period)
+    
+    # Get daily costs
+    daily_query = db.query(
+        func.date(ModelUsage.timestamp).label("date"),
+        func.sum(ModelUsage.cost).label("cost"),
+        func.sum(ModelUsage.total_tokens).label("tokens")
+    ).filter(
+        ModelUsage.timestamp >= start_date,
+        ModelUsage.timestamp <= end_date
+    ).group_by(
+        func.date(ModelUsage.timestamp)
+    ).order_by(
+        func.date(ModelUsage.timestamp)
+    )
+    
+    daily_costs = [
+        {
+            "date": str(day.date),
+            "cost": float(day.cost or 0),
+            "tokens": int(day.tokens or 0)
+        }
+        for day in daily_query
+    ]
+    
+    # Fill in any missing dates with zeros
+    date_range = [(start_date + timedelta(days=i)).strftime('%Y-%m-%d') 
+                  for i in range((end_date - start_date).days + 1)]
+    
+    costs_dict = {item["date"]: item for item in daily_costs}
+    
+    filled_costs = []
+    for date in date_range:
+        if date in costs_dict:
+            filled_costs.append(costs_dict[date])
         else:
-            end_date = datetime.utcnow()
-        
-        # Query the database
-        session = session_factory()
+            filled_costs.append({
+                "date": date,
+                "cost": 0.0,
+                "tokens": 0
+            })
+    
+    return {"daily_costs": filled_costs}
+
+@router.get("/costs/models")
+async def get_model_costs(
+    period: str = "30d",
+    db: Session = Depends(get_db),
+    api_key: str = Depends(verify_admin_api_key)
+):
+    start_date, end_date = get_date_range(period)
+    
+    # Get costs by model
+    model_query = db.query(
+        ModelUsage.model_name,
+        func.sum(ModelUsage.cost).label("cost"),
+        func.sum(ModelUsage.total_tokens).label("tokens"),
+        func.count().label("requests")
+    ).filter(
+        ModelUsage.timestamp >= start_date,
+        ModelUsage.timestamp <= end_date
+    ).group_by(
+        ModelUsage.model_name
+    ).order_by(
+        desc(func.sum(ModelUsage.cost))
+    )
+    
+    model_costs = [
+        {
+            "model_name": model.model_name,
+            "cost": float(model.cost or 0),
+            "tokens": int(model.tokens or 0),
+            "requests": int(model.requests or 0)
+        }
+        for model in model_query
+    ]
+    
+    return {"model_costs": model_costs}
+
+@router.get("/costs/projections")
+async def get_cost_projections(
+    db: Session = Depends(get_db),
+    api_key: str = Depends(verify_admin_api_key)
+):
+    # Get last 30 days usage as baseline
+    thirty_days_ago = datetime.utcnow() - timedelta(days=30)
+    
+    baseline = db.query(
+        func.sum(ModelUsage.cost).label("total_cost"),
+        func.sum(ModelUsage.total_tokens).label("total_tokens"),
+        func.count().label("days")
+    ).filter(
+        ModelUsage.timestamp >= thirty_days_ago
+    ).first()
+    
+    # Calculate daily averages
+    actual_days = db.query(func.count(func.distinct(func.date(ModelUsage.timestamp))))\
+        .filter(ModelUsage.timestamp >= thirty_days_ago)\
+        .scalar() or 1  # Avoid division by zero
+    
+    daily_cost = float(baseline.total_cost or 0) / actual_days
+    daily_tokens = int(baseline.total_tokens or 0) / actual_days
+    
+    # Project future costs
+    return {
+        "nextMonth": daily_cost * 30,
+        "next3Months": daily_cost * 90,
+        "nextYear": daily_cost * 365,
+        "tokensNextMonth": daily_tokens * 30,
+        "dailyCost": daily_cost,
+        "dailyTokens": daily_tokens,
+        "baselineDays": actual_days
+    }
+
+@router.get("/costs/today")
+async def get_today_costs(
+    db: Session = Depends(get_db),
+    api_key: str = Depends(verify_admin_api_key)
+):
+    today = datetime.utcnow().date()
+    
+    # Get today's costs
+    today_data = db.query(
+        func.sum(ModelUsage.cost).label("cost"),
+        func.sum(ModelUsage.total_tokens).label("tokens"),
+        func.count().label("requests")
+    ).filter(
+        func.date(ModelUsage.timestamp) == today
+    ).first()
+    
+    return {
+        "date": today.strftime('%Y-%m-%d'),
+        "cost": float(today_data.cost or 0),
+        "tokens": int(today_data.tokens or 0),
+        "requests": int(today_data.requests or 0)
+    }
+
+# Debug endpoint for testing admin key
+@router.get("/debug/model_usage")
+async def debug_model_usage(api_key: str = Depends(verify_admin_api_key)):
+    return {"status": "success", "message": "Admin API key validated successfully"}
+
+# Function to broadcast real-time updates to all connected dashboard clients
+async def broadcast_dashboard_update(update_data: Dict[str, Any]):
+    if not active_dashboard_connections:
+        return
+    
+    for connection in active_dashboard_connections.copy():
         try:
-            # Build query with date filters
-            query = session.query(ModelUsage)
-            query = query.filter(ModelUsage.timestamp >= start_date)
-            query = query.filter(ModelUsage.timestamp <= end_date)
-            
-            # Execute query
-            usage_records = query.all()
-            
-            if not usage_records:
-                return {
-                    "success": True,
-                    "model_usage": []
-                }
-            
-            # Group by model
-            model_breakdown = calculate_breakdown(usage_records, 'model_name')
-            
-            return {
-                "success": True,
-                "model_usage": model_breakdown
+            await connection.send_text(json.dumps(update_data))
+        except Exception:
+            active_dashboard_connections.remove(connection)
+
+# Function to broadcast real-time updates to all connected user analytics clients
+async def broadcast_user_update(update_data: Dict[str, Any]):
+    if not active_user_connections:
+        return
+    
+    for connection in active_user_connections.copy():
+        try:
+            await connection.send_text(json.dumps(update_data))
+        except Exception:
+            active_user_connections.remove(connection)
+
+# Usage summary endpoint (to maintain backward compatibility)
+@router.get("/usage/summary")
+async def get_usage_summary(
+    db: Session = Depends(get_db),
+    api_key: str = Depends(verify_admin_api_key)
+):
+    # Call the dashboard endpoint with default period
+    return await get_dashboard_data(period="30d", db=db, api_key=api_key)
+
+# Event handler for new ModelUsage entries
+async def handle_new_model_usage(model_usage: ModelUsage):
+    """
+    Process a new model usage event and broadcast updates to connected clients.
+    This function should be called whenever a new model usage record is created.
+    """
+    date_str = model_usage.timestamp.strftime('%Y-%m-%d')
+    
+    # Create dashboard update
+    dashboard_update = {
+        "type": "usage_update",
+        "date": date_str,
+        "metrics": {
+            "tokens_delta": model_usage.total_tokens,
+            "cost_delta": model_usage.cost,
+            "requests_delta": 1
+        }
+    }
+    
+    # Create model update
+    model_update = {
+        "type": "model_update",
+        "model_name": model_usage.model_name,
+        "metrics": {
+            "tokens": model_usage.total_tokens,
+            "cost": model_usage.cost,
+            "requests": 1
+        }
+    }
+    
+    # Create user activity update if user_id exists
+    if model_usage.user_id:
+        user_update = {
+            "type": "user_activity",
+            "date": date_str,
+            "metrics": {
+                "activeUsers": 1,  # This will be merged with existing data
+                "sessions": 1 if model_usage.chat_id else 0
             }
-            
-        finally:
-            session.close()
-            
-    except Exception as e:
-        logger.error(f"Error retrieving model usage: {str(e)}")
-        return {
-            "success": False,
-            "error": str(e),
-            "model_usage": []
-        } 
+        }
+        await broadcast_user_update(user_update)
+    
+    # Broadcast updates
+    await broadcast_dashboard_update(dashboard_update)
+    await broadcast_dashboard_update(model_update) 

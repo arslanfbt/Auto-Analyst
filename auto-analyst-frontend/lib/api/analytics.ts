@@ -1,5 +1,3 @@
-import { formatISO } from 'date-fns';
-
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
 // Helper function to add admin API key to headers

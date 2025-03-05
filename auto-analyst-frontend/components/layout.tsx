@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react';
+import React, { ReactNode, useEffect, useState } from 'react';
 import { loginUser, getSessionId } from '@/lib/api/auth';
 
-export default function Layout({ children }) {
+export default function Layout({ children }: { children: ReactNode }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 

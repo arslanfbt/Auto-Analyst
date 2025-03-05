@@ -4,6 +4,8 @@ import time
 from init_db import ModelUsage, session_factory
 from datetime import datetime
 import tiktoken
+from analytics_routes import handle_new_model_usage
+import asyncio
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, 
@@ -136,6 +138,9 @@ class AI_Manager:
                        is_streaming=False):
         """Save model usage data to the database"""
         try:
+            # Add debug logging
+            logger.info(f"Saving model usage: user_id={user_id}, chat_id={chat_id}, model={model_name}")
+            
             session = session_factory()
             
             usage = ModelUsage(
@@ -156,11 +161,14 @@ class AI_Manager:
             
             session.add(usage)
             session.commit()
-            logger.info(f"Saved usage data to database: {total_tokens} tokens, ${cost:.6f}")
+            logger.info(f"Saved usage data to database for chat {chat_id}: {total_tokens} tokens, ${cost:.6f}")
+            
+            # Broadcast the event asynchronously
+            asyncio.create_task(handle_new_model_usage(usage))
             
         except Exception as e:
             session.rollback()
-            logger.error(f"Error saving usage data to database: {str(e)}")
+            logger.error(f"Error saving usage data to database for chat {chat_id}: {str(e)}")
         finally:
             session.close()
         

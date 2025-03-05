@@ -3,8 +3,6 @@ import memory_agents as m
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 import os
-# Core DSPy agents for data analysis
-import langwatch
 
 class analytical_planner(dspy.Signature):
     # The planner agent which routes the query to Agent(s)

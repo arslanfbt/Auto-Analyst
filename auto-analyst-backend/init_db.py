@@ -71,6 +71,13 @@ def init_db():
 def get_session():
     return Session()
 
+def get_db():
+    db = Session()
+    try:
+        yield db
+    finally:
+        db.close()
+
 
 if __name__ == "__main__":
     init_db() 
