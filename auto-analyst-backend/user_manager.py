@@ -106,3 +106,17 @@ def create_user(username: str, email: str) -> User:
     
     finally:
         session.close() 
+
+def get_user_by_email(email: str) -> Optional[User]:
+    """Get a user by email"""
+    session = get_session()
+    try:
+        user = session.query(DBUser).filter(DBUser.email == email).first()
+        return User(
+            user_id=user.user_id,
+            username=user.username,
+            email=user.email
+        )
+    except Exception as e:
+        logger.error(f"Error getting user by email: {str(e)}")
+        return None

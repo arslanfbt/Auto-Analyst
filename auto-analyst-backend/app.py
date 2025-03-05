@@ -122,8 +122,22 @@ async def get_session_id(request: Request):
     # Get or create the session state
     session_state = app.state.get_session_state(session_id)
     
-    # Auto-create a guest user if none is associated with this session
-    if session_state.get("user_id") is None:
+    # Check if a user_id was provided in the request
+    user_id_param = request.query_params.get("user_id")
+    if user_id_param:
+        try:
+            user_id = int(user_id_param)
+            # Store in session state if not already there
+            if session_state.get("user_id") != user_id:
+                app.state.set_session_user(session_id=session_id, user_id=user_id)
+                logger.info(f"Associated session {session_id} with provided user_id {user_id}")
+            return session_id
+        except (ValueError, TypeError):
+            logger.warning(f"Invalid user_id in query params: {user_id_param}")
+    
+    # ONLY create a guest user if no user is associated AND no user_id was provided
+    # This prevents creating unnecessary guest users
+    if session_state.get("user_id") is None and not user_id_param:
         try:
             # Create a guest user for this session
             guest_username = f"guest_{session_id[:8]}"
@@ -236,7 +250,7 @@ class AppState:
         return self.ai_manager.calculate_cost(model_name, input_tokens, output_tokens)
     
     def save_usage_to_db(self, user_id, chat_id, model_name, provider, prompt_tokens, completion_tokens, total_tokens, query_size, response_size, cost, request_time_ms, is_streaming=False):
-        return self.ai_manager.save_usage_to_db(user_id, chat_id, model_name, provider, prompt_tokens, completion_tokens, total_tokens, query_size, response_size, cost, request_time_ms, is_streaming)
+        return self.ai_manager.save_usage_to_db(user_id, chat_id, model_name, provider, prompt_tokens, completion_tokens, total_tokens, query_size, response_size, round(cost, 7), request_time_ms, is_streaming)
     
     def get_tokenizer(self):
         return self.ai_manager.tokenizer
@@ -349,21 +363,27 @@ async def upload_dataframe(
 async def chat_with_agent(
     agent_name: str, 
     request: QueryRequest,
+    request_obj: Request,
     session_id: str = Depends(get_session_id)
 ):
     session_state = app.state.get_session_state(session_id)
 
-    # Debug logging
-    logger.info(f"Processing chat request for session {session_id}")
-    logger.info(f"Session user_id: {session_state.get('user_id')}")
-    logger.info(f"Session chat_id: {session_state.get('chat_id')}")
-    
     if session_state["current_df"] is None:
         raise HTTPException(
             status_code=400,
             detail="No dataset is currently loaded. Please link a dataset before proceeding with your analysis."
         )
-    
+
+    if "user_id" in request_obj.query_params:
+        try:
+            user_id = int(request_obj.query_params["user_id"])
+            session_state["user_id"] = user_id
+            logger.info(f"Updated session state with user_id {user_id} from request")
+        except (ValueError, TypeError):
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid user_id in query params. Please provide a valid integer."
+            )
     # For comma-separated agents, verify each agent exists
     if "," in agent_name:
         agent_list = [agent.strip() for agent in agent_name.split(",")]
@@ -407,14 +427,7 @@ async def chat_with_agent(
         # Track model usage directly with AI Manager
         ai_manager = app.state.get_ai_manager()
 
-        # Get session user info with fallback to guest user if needed
-        user_id, chat_id = ensure_user_metadata(session_id, session_state)
-
-        logger.info(f"Tracking usage for user {user_id}, chat {chat_id}")
-
-        if user_id:
-            logger.info(f"Tracking usage for user {user_id}, chat {chat_id}")
-            
+        if session_state.get("user_id"):
             # Calculate processing time
             processing_time_ms = int((time.time() - start_time) * 1000)
             
@@ -423,16 +436,18 @@ async def chat_with_agent(
             response_size = len(formatted_response)
             
             # Get model name and provider
-            model_name = session_state.get("model_config", {}).get("model", "gpt-4o-mini")
+            model_name = app.state.model_config.get("model", "gpt-4o-mini")
             provider = ai_manager.get_provider_for_model(model_name)
             
             # Estimate tokens (actual implementation may vary)
             try:
+                print("[+ ] Actual token estimation")
                 prompt_tokens = len(ai_manager.tokenizer.encode(request.query))
                 completion_tokens = len(ai_manager.tokenizer.encode(formatted_response))
                 total_tokens = prompt_tokens + completion_tokens
             except:
                 # Fallback estimation
+                print("[> ] Fallback estimation")
                 words = len(request.query.split()) + len(formatted_response.split())
                 total_tokens = words * 1.5  # rough estimate
                 prompt_tokens = len(request.query.split()) * 1.5
@@ -443,8 +458,8 @@ async def chat_with_agent(
             
             # Save to DB
             ai_manager.save_usage_to_db(
-                user_id=user_id,
-                chat_id=chat_id,
+                user_id=session_state.get("user_id"),
+                chat_id=session_state.get("chat_id"),
                 model_name=model_name,
                 provider=provider,
                 prompt_tokens=int(prompt_tokens),
@@ -452,7 +467,7 @@ async def chat_with_agent(
                 total_tokens=int(total_tokens),
                 query_size=prompt_size,
                 response_size=response_size,
-                cost=cost,
+                cost=round(cost, 7),
                 request_time_ms=processing_time_ms,
                 is_streaming=False
             )
@@ -474,10 +489,21 @@ async def chat_with_agent(
 @app.post("/chat", response_model=dict)
 async def chat_with_all(
     request: QueryRequest,
+    request_obj: Request,
     session_id: str = Depends(get_session_id)
 ):
     session_state = app.state.get_session_state(session_id)
-
+    
+    # Update session state with user_id from request if provided
+    if "user_id" in request_obj.query_params:
+        try:
+            user_id = int(request_obj.query_params["user_id"])
+            session_state["user_id"] = user_id
+        except (ValueError, TypeError):
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid user_id in query params. Please provide a valid integer."
+            )
     
     if session_state["current_df"] is None:
         raise HTTPException(
@@ -531,15 +557,12 @@ async def chat_with_all(
                     
                     yield json.dumps(response_data) + "\n"
                 except Exception as format_error:
-                    logger.error(f"Error formatting response for {agent_name}: {str(format_error)}")
                     yield json.dumps({
                         "agent": agent_name,
                         "content": f"Error formatting response: {str(format_error)}",
                         "status": "error"
                     }) + "\n"
-            print("--------------------------------")
-            print(f"Session State: {session_state.get('user_id')}")
-            print("--------------------------------")
+
             # After all responses are generated, track the overall usage
             if session_state.get("user_id"):
                 # Calculate overall processing time
@@ -550,14 +573,8 @@ async def chat_with_all(
                 prompt_size = len(request.query)
                 
                 # Get provider
-                print("Model config:")
-                print(app.state.model_config)
                 model_name = app.state.model_config.get("model", "gpt-4o-mini")
                 provider = app.state.ai_manager.get_provider_for_model(model_name)
-                print("--------------------------------")
-                print(f"Provider: {provider}")
-                print("--------------------------------")
-                print(f"Model: {model_name}")   
                 # Estimate tokens
                 try:
                     prompt_tokens = len(app.state.ai_manager.tokenizer.encode(request.query))
@@ -589,8 +606,6 @@ async def chat_with_all(
                     is_streaming=True
                 )
                 
-                logger.info(f"Tracked streaming model usage: {model_name}, {total_tokens} tokens, ${cost:.6f}, input: {prompt_tokens}, output: {completion_tokens}")
-
         except Exception as e:
             logger.error(f"Error in generate_responses: {str(e)}")
             yield json.dumps({
@@ -848,9 +863,27 @@ app.include_router(chat_router)
 app.include_router(analytics_router)
 
 
-def ensure_user_metadata(session_id: str, session_state: dict) -> tuple:
+def ensure_user_metadata(session_id: str, session_state: dict, request: Request = None) -> tuple:
     """Ensure a session has user_id and chat_id, creating if necessary"""
-    user_id = session_state.get('user_id')
+    # First check if user_id was provided as a query parameter
+    user_id = None
+    if request:
+        user_id = request.query_params.get("user_id")
+        if user_id:
+            try:
+                user_id = int(user_id)
+                # Update session state with this user ID
+                session_state["user_id"] = user_id
+                logger.info(f"Using provided user_id {user_id} from request parameters")
+            except (ValueError, TypeError):
+                logger.warning(f"Invalid user_id provided in query params: {user_id}")
+                user_id = None
+    
+    # If no valid user_id from request, check session state
+    if not user_id:
+        user_id = session_state.get('user_id')
+        
+    # If still no user_id, create a guest user
     if not user_id:
         # Create a guest user
         guest_username = f"guest_{session_id[:8]}"

@@ -408,7 +408,7 @@ const ChatInterface: React.FC = () => {
     }
   };
 
-  // Update the processRegularMessage function to save AI responses
+  // Update the processRegularMessage function to include user_id in headers
   const processRegularMessage = async (message: string, controller: AbortController, currentId: number | null) => {
     let accumulatedResponse = ""
     const baseUrl = API_URL
@@ -422,8 +422,19 @@ const ChatInterface: React.FC = () => {
       ...(sessionId && { 'X-Session-ID': sessionId }),
     }
 
+    // Add user_id as a query parameter instead of modifying the headers
+    const queryParams = new URLSearchParams();
+    if (userId) {
+      queryParams.append('user_id', userId.toString());
+    }
+    if (isAdmin) {
+      queryParams.append('is_admin', 'true');
+    }
+    
+    const fullEndpoint = `${endpoint}${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
+
     // Streaming response handling
-    const response = await fetch(endpoint, {
+    const response = await fetch(fullEndpoint, {
       method: 'POST',
       headers,
       body: JSON.stringify({ query: message }),
@@ -506,11 +517,10 @@ const ChatInterface: React.FC = () => {
     }
   }
 
-  // Update the processAgentMessage function
-  const processAgentMessage = async (agentName: string, query: string, controller: AbortController, currentId: number | null) => {
+  // Update the processAgentMessage function to include user_id in headers
+  const processAgentMessage = async (agentName: string, message: string, controller: AbortController, currentId: number | null) => {
     let accumulatedResponse = ""
     const baseUrl = API_URL
-
     const endpoint = `${baseUrl}/chat/${agentName}`
 
     const headers = {
@@ -521,10 +531,22 @@ const ChatInterface: React.FC = () => {
       ...(sessionId && { 'X-Session-ID': sessionId }),
     }
 
-    const response = await fetch(endpoint, {
+    // Add user_id as a query parameter
+    const queryParams = new URLSearchParams();
+    if (userId) {
+      queryParams.append('user_id', userId.toString());
+    }
+    if (isAdmin) {
+      queryParams.append('is_admin', 'true');
+    }
+    
+    const fullEndpoint = `${endpoint}${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
+
+    // Streaming response handling (potentially with SSE)
+    const response = await fetch(fullEndpoint, {
       method: 'POST',
       headers,
-      body: JSON.stringify({ query }),
+      body: JSON.stringify({ query: message }),
       signal: controller.signal,
     })
 
