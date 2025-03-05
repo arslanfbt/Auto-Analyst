@@ -408,7 +408,7 @@ const ChatInterface: React.FC = () => {
     }
   };
 
-  // Update the processRegularMessage function to include user_id in headers
+  // Updated version to use the actual chat ID, not temporary IDs
   const processRegularMessage = async (message: string, controller: AbortController, currentId: number | null) => {
     let accumulatedResponse = ""
     const baseUrl = API_URL
@@ -422,10 +422,14 @@ const ChatInterface: React.FC = () => {
       ...(sessionId && { 'X-Session-ID': sessionId }),
     }
 
-    // Add user_id as a query parameter instead of modifying the headers
+    // Important: Use currentId instead of activeChatId
+    // currentId is the actual database chat ID passed from handleSendMessage
     const queryParams = new URLSearchParams();
     if (userId) {
       queryParams.append('user_id', userId.toString());
+    }
+    if (currentId) { // Use currentId which is the real database ID
+      queryParams.append('chat_id', currentId.toString());
     }
     if (isAdmin) {
       queryParams.append('is_admin', 'true');
@@ -517,7 +521,7 @@ const ChatInterface: React.FC = () => {
     }
   }
 
-  // Update the processAgentMessage function to include user_id in headers
+  // Similarly update processAgentMessage
   const processAgentMessage = async (agentName: string, message: string, controller: AbortController, currentId: number | null) => {
     let accumulatedResponse = ""
     const baseUrl = API_URL
@@ -531,10 +535,13 @@ const ChatInterface: React.FC = () => {
       ...(sessionId && { 'X-Session-ID': sessionId }),
     }
 
-    // Add user_id as a query parameter
+    // Important: Use currentId instead of activeChatId
     const queryParams = new URLSearchParams();
     if (userId) {
       queryParams.append('user_id', userId.toString());
+    }
+    if (currentId) { // Use currentId which is the real database ID
+      queryParams.append('chat_id', currentId.toString());
     }
     if (isAdmin) {
       queryParams.append('is_admin', 'true');

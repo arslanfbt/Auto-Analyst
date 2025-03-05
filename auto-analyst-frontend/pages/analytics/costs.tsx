@@ -30,8 +30,15 @@ const styles = {
   dateRangeButtonActive: 'px-3 py-1 rounded-md border border-[#FF7F7F] bg-[#FFF0F0] text-[#FF7F7F] text-sm',
 };
 
-// Color palette for charts
-const COLORS = ['#FF7F7F', '#FF6666', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899'];
+// Enhanced color palette
+const chartColors = {
+  cost: '#FF7F7F',
+  projected: '#4F46E5',
+  breakdown: ['#FF7F7F', '#4F46E5', '#10B981', '#F59E0B', '#8B5CF6', '#EC4899'],
+  monthlyProjection: '#10B981',
+  quarterlyProjection: '#F59E0B',
+  yearlyProjection: '#8B5CF6',
+};
 
 export default function CostAnalysisPage() {
   const [isLoading, setIsLoading] = useState(true);
@@ -60,62 +67,96 @@ export default function CostAnalysisPage() {
       
       const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
       
-      // Get days based on selected range
-      let days = 30;
-      if (dateRange === '7d') days = 7;
-      if (dateRange === '90d') days = 90;
-      
-      // Fetch daily cost data
-      const dailyRes = await fetch(`${API_BASE_URL}/analytics/daily?days=${days}`, { 
+      // Fetch cost summary with real-time data
+      const summaryRes = await fetch(`${API_BASE_URL}/analytics/costs/summary?period=${dateRange}`, { 
         headers: { 'X-Admin-API-Key': adminKey }
       });
       
-      if (!dailyRes.ok) {
-        throw new Error(`Failed to fetch cost data: ${dailyRes.status}`);
+      if (!summaryRes.ok) {
+        throw new Error(`Failed to fetch cost summary: ${summaryRes.status}`);
       }
       
-      const dailyData = await dailyRes.json();
-      setDailyCosts(dailyData.daily_usage || []);
+      const summaryData = await summaryRes.json();
+      setCostSummary(summaryData);
       
-      // Calculate cost summary from daily data
-      const totalCost = dailyData.daily_usage?.reduce((sum: number, day: any) => sum + day.cost, 0) || 0;
-      const avgDailyCost = totalCost / days;
-      
-      setCostSummary({
-        totalCost,
-        avgDailyCost,
-        daysInPeriod: days,
-        costPerThousandTokens: totalCost / (dailyData.daily_usage?.reduce((sum: number, day: any) => sum + day.tokens, 0) || 1) * 1000,
+      // Fetch daily costs with time parameters
+      const dailyRes = await fetch(`${API_BASE_URL}/analytics/costs/daily?period=${dateRange}`, { 
+        headers: { 'X-Admin-API-Key': adminKey }
       });
       
-      // Fetch model breakdown
-      const modelRes = await fetch(`${API_BASE_URL}/analytics/usage/models`, { 
+      if (dailyRes.ok) {
+        const dailyData = await dailyRes.json();
+        setDailyCosts(dailyData.daily_costs || []);
+      }
+      
+      // Fetch model costs with detailed breakdown
+      const modelRes = await fetch(`${API_BASE_URL}/analytics/costs/models?period=${dateRange}`, { 
         headers: { 'X-Admin-API-Key': adminKey }
       });
       
       if (modelRes.ok) {
         const modelData = await modelRes.json();
-        setModelCosts(modelData.model_usage || []);
+        setModelCosts(modelData.model_costs || []);
       }
       
-      // Calculate projections
-      const tokensPerDay = dailyData.daily_usage?.reduce((sum: number, day: any) => sum + day.tokens, 0) / days || 0;
-      const costPerDay = avgDailyCost;
-      
-      setProjections({
-        nextMonth: costPerDay * 30,
-        next3Months: costPerDay * 90,
-        nextYear: costPerDay * 365,
-        tokensNextMonth: tokensPerDay * 30,
+      // Fetch real cost projections
+      const projectionsRes = await fetch(`${API_BASE_URL}/analytics/costs/projections`, { 
+        headers: { 'X-Admin-API-Key': adminKey }
       });
+      
+      if (projectionsRes.ok) {
+        const projectionsData = await projectionsRes.json();
+        setProjections(projectionsData);
+      }
       
     } catch (err: any) {
       console.error('Error loading cost data:', err);
-      setError(err.message || 'Failed to load cost analysis data');
+      setError(err.message || 'Failed to load cost data');
     } finally {
       setIsLoading(false);
     }
   };
+
+  // Add real-time cost tracker
+  useEffect(() => {
+    const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+    
+    // Set up polling for real-time cost updates
+    const costTrackerInterval = setInterval(async () => {
+      try {
+        const adminKey = localStorage.getItem('adminApiKey');
+        if (!adminKey) return;
+        
+        const todayRes = await fetch(`${API_BASE_URL}/analytics/costs/today`, { 
+          headers: { 'X-Admin-API-Key': adminKey }
+        });
+        
+        if (todayRes.ok) {
+          const todayData = await todayRes.json();
+          
+          // Update the last data point to show real-time costs for today
+          setDailyCosts(current => {
+            const updated = [...current];
+            const todayIndex = updated.findIndex(day => day.date === todayData.date);
+            
+            if (todayIndex >= 0) {
+              updated[todayIndex] = todayData;
+            } else if (updated.length > 0) {
+              updated.push(todayData);
+            }
+            
+            return updated;
+          });
+        }
+      } catch (err) {
+        console.error('Error fetching real-time cost data:', err);
+      }
+    }, 30000); // Update every 30 seconds
+    
+    return () => {
+      clearInterval(costTrackerInterval);
+    };
+  }, []);
 
   return (
     <AnalyticsLayout title="Cost Analysis | Auto-Analyst Analytics">
@@ -207,7 +248,8 @@ export default function CostAnalysisPage() {
                       <Line 
                         type="monotone" 
                         dataKey="cost" 
-                        stroke="#FF7F7F" 
+                        stroke={chartColors.cost}
+                        strokeWidth={2} 
                         name="Daily Cost"
                         activeDot={{ r: 8 }}
                       />
@@ -240,7 +282,7 @@ export default function CostAnalysisPage() {
                           label={({model_name, percent}) => `${model_name}: ${(percent * 100).toFixed(1)}%`}
                         >
                           {modelCosts.map((entry, index) => (
-                            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                            <Cell key={`cell-${index}`} fill={chartColors.breakdown[index % chartColors.breakdown.length]} />
                           ))}
                         </Pie>
                         <Tooltip
@@ -265,7 +307,11 @@ export default function CostAnalysisPage() {
                           formatter={(value) => [`$${Number(value).toFixed(4)}`, 'Cost']}
                         />
                         <Legend />
-                        <Bar dataKey="cost" fill="#FF7F7F" name="Cost" />
+                        <Bar dataKey="cost" name="Cost">
+                          {modelCosts.map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={chartColors.breakdown[index % chartColors.breakdown.length]} />
+                          ))}
+                        </Bar>
                       </RechartsBarChart>
                     </ResponsiveContainer>
                   </div>
@@ -287,19 +333,25 @@ export default function CostAnalysisPage() {
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
                   <div className={styles.statCard}>
                     <p className={styles.statLabel}>Next 30 Days</p>
-                    <p className={styles.statNumber}>${projections?.nextMonth.toFixed(2)}</p>
+                    <p className={styles.statNumber} style={{ color: chartColors.monthlyProjection }}>
+                      ${projections?.nextMonth.toFixed(2)}
+                    </p>
                     <p className={styles.infoText}>{Math.round(projections?.tokensNextMonth).toLocaleString()} tokens</p>
                   </div>
                   
                   <div className={styles.statCard}>
                     <p className={styles.statLabel}>Next 3 Months</p>
-                    <p className={styles.statNumber}>${projections?.next3Months.toFixed(2)}</p>
+                    <p className={styles.statNumber} style={{ color: chartColors.quarterlyProjection }}>
+                      ${projections?.next3Months.toFixed(2)}
+                    </p>
                     <p className={styles.infoText}>{Math.round(projections?.tokensNextMonth * 3).toLocaleString()} tokens</p>
                   </div>
                   
                   <div className={styles.statCard}>
                     <p className={styles.statLabel}>Next 12 Months</p>
-                    <p className={styles.statNumber}>${projections?.nextYear.toFixed(2)}</p>
+                    <p className={styles.statNumber} style={{ color: chartColors.yearlyProjection }}>
+                      ${projections?.nextYear.toFixed(2)}
+                    </p>
                     <p className={styles.infoText}>{Math.round(projections?.tokensNextMonth * 12).toLocaleString()} tokens</p>
                   </div>
                 </div>

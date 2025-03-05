@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
 import { 
@@ -36,6 +36,15 @@ const styles = {
   input: 'w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#FF7F7F]',
 };
 
+// Define a more diverse color palette
+const chartColors = {
+  tokens: '#FF7F7F',
+  cost: '#4F46E5',
+  requests: '#10B981',
+  avgCost: '#F59E0B',
+  pieColors: ['#FF7F7F', '#4F46E5', '#10B981', '#F59E0B', '#8B5CF6', '#EC4899', '#06B6D4', '#84CC16'],
+};
+
 export default function AnalyticsDashboard() {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(true);
@@ -45,6 +54,7 @@ export default function AnalyticsDashboard() {
   const [data, setData] = useState<any>(null);
   const [dailyUsage, setDailyUsage] = useState<any[]>([]);
   const [modelUsage, setModelUsage] = useState<any[]>([]);
+  const realtimeSetupDone = useRef(false);
 
   // On first load, check if admin key exists and try to verify it
   useEffect(() => {
@@ -269,7 +279,8 @@ export default function AnalyticsDashboard() {
                             yAxisId="left"
                             type="monotone"
                             dataKey="tokens"
-                            stroke="#FF7F7F"
+                            stroke={chartColors.tokens}
+                            strokeWidth={2}
                             activeDot={{ r: 8 }}
                             name="Tokens"
                           />
@@ -277,7 +288,8 @@ export default function AnalyticsDashboard() {
                             yAxisId="right"
                             type="monotone"
                             dataKey="cost"
-                            stroke="#FF6666"
+                            stroke={chartColors.cost}
+                            strokeWidth={2}
                             name="Cost"
                           />
                         </RechartsLineChart>
@@ -316,8 +328,8 @@ export default function AnalyticsDashboard() {
                             }}
                           />
                           <Legend />
-                          <Bar dataKey="tokens" fill="#FF7F7F" name="Tokens" />
-                          <Bar dataKey="cost" fill="#FF6666" name="Cost" />
+                          <Bar dataKey="tokens" fill={chartColors.tokens} name="Tokens" />
+                          <Bar dataKey="cost" fill={chartColors.cost} name="Cost" />
                         </RechartsBarChart>
                       </ResponsiveContainer>
                     </div>

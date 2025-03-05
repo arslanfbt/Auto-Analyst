@@ -21,12 +21,22 @@ const styles = {
   tableCell: 'px-6 py-4 whitespace-nowrap text-sm text-gray-500',
   loading: 'flex justify-center items-center h-64 text-gray-500',
   error: 'bg-red-50 text-red-600 p-4 rounded-md mb-4',
-  searchContainer: 'flex gap-4 mb-6',
-  searchInput: 'flex-1 px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#FF7F7F]',
+  searchContainer: 'flex gap-4 mb-6 bg-white', // updated to make the color of the search container white
+  searchInput: 'flex-1 px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#FF7F7F] bg-white text-gray-800', // updated to make the input background white
   searchButton: 'bg-[#FF7F7F] text-white px-4 py-2 rounded-md hover:bg-[#FF6666] transition shadow-md',
-  filters: 'flex flex-wrap gap-4 mb-6',
+  filters: 'flex flex-wrap gap-4 mb-6 text-black',
   filterButton: 'px-3 py-1 rounded-md border border-gray-300 text-sm',
   filterButtonActive: 'px-3 py-1 rounded-md border border-[#FF7F7F] bg-[#FFF0F0] text-[#FF7F7F] text-sm',
+};
+
+// Enhanced color palette for users page
+const chartColors = {
+  activeUsers: '#FF7F7F',
+  newUsers: '#4F46E5',
+  totalUsers: '#10B981',
+  sessionsToday: '#F59E0B',
+  avgSessionTime: '#8B5CF6',
+  avgQueries: '#EC4899',
 };
 
 export default function UserActivityPage() {
@@ -37,11 +47,11 @@ export default function UserActivityPage() {
   const [sessionStats, setSessionStats] = useState<any>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [activeFilter, setActiveFilter] = useState('all');
-
+  const [period, setPeriod] = useState('30d');
 
   useEffect(() => {
     fetchUserData();
-  }, []);
+  }, [period]);
 
   const fetchUserData = async () => {
     setIsLoading(true);
@@ -57,46 +67,94 @@ export default function UserActivityPage() {
       
       const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
       
-      // Fetch analytics summary which should include top users
-      const summaryRes = await fetch(`${API_BASE_URL}/analytics/usage/summary`, { 
+      // Fetch users with pagination support
+      const usersRes = await fetch(`${API_BASE_URL}/analytics/users?limit=100`, { 
         headers: { 'X-Admin-API-Key': adminKey }
       });
       
-      if (!summaryRes.ok) {
-        throw new Error(`Failed to fetch user data: ${summaryRes.status}`);
+      if (!usersRes.ok) {
+        throw new Error(`Failed to fetch user data: ${usersRes.status}`);
       }
       
-      const summaryData = await summaryRes.json();
-      setUsers(summaryData.top_users || []);
+      const userData = await usersRes.json();
+      setUsers(userData.users || []);
       
-      // Simulate user activity over time (would need server endpoint)
-      // This would typically show user engagement metrics over time
-      const lastMonth = Array(30).fill(0).map((_, i) => {
-        const date = new Date();
-        date.setDate(date.getDate() - (29 - i));
-        return {
-          date: date.toISOString().split('T')[0],
-          activeUsers: Math.floor(Math.random() * 15) + 5,
-          newUsers: Math.floor(Math.random() * 3) + 1,
-          sessions: Math.floor(Math.random() * 30) + 20,
-        };
+      // Fetch user activity with real-time data
+      const activityRes = await fetch(`${API_BASE_URL}/analytics/users/activity?period=${period || '30d'}`, { 
+        headers: { 'X-Admin-API-Key': adminKey }
       });
       
-      setUserActivity(lastMonth);
+      if (activityRes.ok) {
+        const activityData = await activityRes.json();
+        setUserActivity(activityData.user_activity || []);
+      }
       
-      // Simulate session statistics
-      setSessionStats({
-        totalUsers: summaryData.total_users || 25,
-        activeToday: Math.floor(Math.random() * 10) + 5,
-        avgSessionTime: Math.floor(Math.random() * 600) + 120,
-        avgQueriesPerSession: Math.floor(Math.random() * 8) + 3,
+      // Fetch session stats with real-time data
+      const statsRes = await fetch(`${API_BASE_URL}/analytics/users/sessions/stats`, { 
+        headers: { 'X-Admin-API-Key': adminKey }
       });
+      
+      if (statsRes.ok) {
+        const statsData = await statsRes.json();
+        setSessionStats(statsData);
+      }
+      
+      // Add real-time updates with WebSocket if available
+      setupRealtimeUpdates();
       
     } catch (err: any) {
       console.error('Error loading user data:', err);
-      setError(err.message || 'Failed to load user activity data');
+      setError(err.message || 'Failed to load user data');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  // Add WebSocket for real-time updates
+  const setupRealtimeUpdates = () => {
+    const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+    const wsUrl = API_BASE_URL.replace('http', 'ws') + '/analytics/realtime';
+    
+    try {
+      const socket = new WebSocket(wsUrl);
+      
+      socket.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+        
+        if (data.type === 'user_activity') {
+          // Update user activity in real-time
+          setUserActivity((current: any[]) => {
+            const updated = [...current];
+            // Find and update the latest data point
+            if (updated.length > 0 && updated[updated.length-1].date === data.date) {
+              updated[updated.length-1] = {...updated[updated.length-1], ...data.metrics};
+            } else {
+              updated.push({date: data.date, ...data.metrics});
+            }
+            return updated;
+          });
+        }
+        
+        if (data.type === 'session_stats') {
+          // Update session stats in real-time
+          setSessionStats((current: any) => ({...current, ...data.stats}));
+        }
+      };
+      
+      socket.onerror = (error) => {
+        console.error('WebSocket error:', error);
+      };
+      
+      socket.onclose = () => {
+        console.log('WebSocket connection closed');
+      };
+      
+      return () => {
+        socket.close();
+      };
+    } catch (err) {
+      console.warn('WebSocket connection not available, falling back to polling');
+      // Implement polling fallback if needed
     }
   };
 
@@ -141,15 +199,24 @@ export default function UserActivityPage() {
                       <Line 
                         type="monotone" 
                         dataKey="activeUsers" 
-                        stroke="#FF7F7F" 
+                        stroke={chartColors.activeUsers}
+                        strokeWidth={2}
                         name="Active Users"
                         activeDot={{ r: 8 }}
                       />
                       <Line 
                         type="monotone" 
                         dataKey="newUsers" 
-                        stroke="#FF6666" 
+                        stroke={chartColors.newUsers}
+                        strokeWidth={2}
                         name="New Users" 
+                      />
+                      <Line 
+                        type="monotone" 
+                        dataKey="sessions" 
+                        stroke={chartColors.sessionsToday}
+                        strokeWidth={2}
+                        name="Sessions" 
                       />
                     </RechartsLineChart>
                   </ResponsiveContainer>
@@ -200,22 +267,30 @@ export default function UserActivityPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
               <div className="bg-white rounded-lg shadow-sm p-6">
                 <p className="text-sm text-gray-500">Total Users</p>
-                <p className="text-2xl font-bold text-blue-600">{sessionStats?.totalUsers}</p>
+                <p className="text-2xl font-bold" style={{ color: chartColors.totalUsers }}>
+                  {sessionStats?.totalUsers}
+                </p>
               </div>
               
               <div className="bg-white rounded-lg shadow-sm p-6">
                 <p className="text-sm text-gray-500">Active Today</p>
-                <p className="text-2xl font-bold text-blue-600">{sessionStats?.activeToday}</p>
+                <p className="text-2xl font-bold" style={{ color: chartColors.activeUsers }}>
+                  {sessionStats?.activeToday}
+                </p>
               </div>
               
               <div className="bg-white rounded-lg shadow-sm p-6">
                 <p className="text-sm text-gray-500">Avg. Session Time</p>
-                <p className="text-2xl font-bold text-blue-600">{Math.floor(sessionStats?.avgSessionTime / 60)}m {sessionStats?.avgSessionTime % 60}s</p>
+                <p className="text-2xl font-bold" style={{ color: chartColors.avgSessionTime }}>
+                  {Math.floor(sessionStats?.avgSessionTime / 60)}m {sessionStats?.avgSessionTime % 60}s
+                </p>
               </div>
               
               <div className="bg-white rounded-lg shadow-sm p-6">
                 <p className="text-sm text-gray-500">Avg. Queries / Session</p>
-                <p className="text-2xl font-bold text-blue-600">{sessionStats?.avgQueriesPerSession}</p>
+                <p className="text-2xl font-bold" style={{ color: chartColors.avgQueries }}>
+                  {sessionStats?.avgQueriesPerSession}
+                </p>
               </div>
             </div>
             

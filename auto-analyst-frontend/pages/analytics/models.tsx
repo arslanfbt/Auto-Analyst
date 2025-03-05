@@ -13,7 +13,7 @@ const styles = {
   header: 'text-2xl font-bold text-gray-800 mb-6',
   sectionTitle: 'text-xl font-semibold text-gray-700 mb-3',
   card: 'bg-white rounded-lg shadow-md overflow-hidden mb-8',
-  cardHeader: 'bg-blue-50 px-4 py-3 border-b border-gray-200',
+  cardHeader: 'bg-[#FFF0F0] px-4 py-3 border-b border-gray-200',
   cardTitle: 'text-lg font-medium text-gray-800',
   cardBody: 'p-6',
   chartContainer: 'h-80',
@@ -29,8 +29,15 @@ const styles = {
   statLabel: 'text-sm text-gray-500',
 };
 
-// Color palette for charts
-const COLORS = ['#FF7F7F', '#FF6666', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899'];
+// Enhanced color palette for models page
+const chartColors = {
+  tokens: '#FF7F7F',
+  cost: '#4F46E5',
+  requests: '#10B981',
+  responseTime: '#F59E0B',
+  successRate: '#8B5CF6',
+  pieColors: ['#FF7F7F', '#4F46E5', '#10B981', '#F59E0B', '#8B5CF6', '#EC4899', '#06B6D4', '#84CC16'],
+};
 
 export default function ModelUsagePage() {
   const [isLoading, setIsLoading] = useState(true);
@@ -69,24 +76,36 @@ export default function ModelUsagePage() {
       const modelData = await modelRes.json();
       setModelData(modelData.model_usage || []);
       
-      // Fetch model history (simulated - this endpoint may need to be implemented)
-      // This would typically show model usage over time
-      const historyRes = await fetch(`${API_BASE_URL}/analytics/daily`, { 
+      // Fetch model history with time-series data
+      const historyRes = await fetch(`${API_BASE_URL}/analytics/models/history`, { 
         headers: { 'X-Admin-API-Key': adminKey }
       });
       
       if (historyRes.ok) {
         const historyData = await historyRes.json();
-        setModelHistory(historyData.daily_usage || []);
+        setModelHistory(historyData.model_history || []);
+      } else {
+        console.warn('Could not fetch model history data');
       }
       
-      // Simulated model metrics data - replace with actual API call when available
-      setModelMetrics([
-        { name: 'gpt-3.5-turbo', avg_tokens: 1250, avg_response_time: 1.5, success_rate: 0.99 },
-        { name: 'gpt-4', avg_tokens: 2800, avg_response_time: 3.2, success_rate: 0.98 },
-        { name: 'claude-instant', avg_tokens: 1500, avg_response_time: 1.8, success_rate: 0.97 },
-        { name: 'claude-3-opus', avg_tokens: 2900, avg_response_time: 2.7, success_rate: 0.99 },
-      ]);
+      // Fetch real model metrics data instead of using simulated data
+      const metricsRes = await fetch(`${API_BASE_URL}/analytics/models/metrics`, {
+        headers: { 'X-Admin-API-Key': adminKey }
+      });
+      
+      if (metricsRes.ok) {
+        const metricsData = await metricsRes.json();
+        setModelMetrics(metricsData.model_metrics || []);
+      } else {
+        console.warn('Could not fetch model metrics, using fallback data');
+        // Fallback to simulated data if the API isn't available yet
+        setModelMetrics([
+          { name: 'gpt-3.5-turbo', avg_tokens: 1250, avg_response_time: 1.5, success_rate: 0.99 },
+          { name: 'gpt-4', avg_tokens: 2800, avg_response_time: 3.2, success_rate: 0.98 },
+          { name: 'claude-instant', avg_tokens: 1500, avg_response_time: 1.8, success_rate: 0.97 },
+          { name: 'claude-3-opus', avg_tokens: 2900, avg_response_time: 2.7, success_rate: 0.99 },
+        ]);
+      }
       
     } catch (err: any) {
       console.error('Error loading model data:', err);
@@ -132,7 +151,7 @@ export default function ModelUsagePage() {
                           label={({model_name, percent}) => `${model_name}: ${(percent * 100).toFixed(0)}%`}
                         >
                           {modelData.map((entry, index) => (
-                            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                            <Cell key={`cell-${index}`} fill={chartColors.pieColors[index % chartColors.pieColors.length]} />
                           ))}
                         </Pie>
                         <Tooltip
@@ -158,7 +177,7 @@ export default function ModelUsagePage() {
                           label={({model_name, percent}) => `${model_name}: ${(percent * 100).toFixed(0)}%`}
                         >
                           {modelData.map((entry, index) => (
-                            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                            <Cell key={`cell-${index}`} fill={chartColors.pieColors[index % chartColors.pieColors.length]} />
                           ))}
                         </Pie>
                         <Tooltip
@@ -207,6 +226,51 @@ export default function ModelUsagePage() {
                 </div>
               </div>
             </div>
+            
+            {/* Model Usage Trends */}
+            {modelHistory.length > 0 && (
+              <>
+                <h2 className={styles.sectionTitle}>Model Usage Trends</h2>
+                <div className={styles.card}>
+                  <div className={styles.cardHeader}>
+                    <h3 className={styles.cardTitle}>Usage Over Time</h3>
+                  </div>
+                  <div className={styles.cardBody}>
+                    <div className={styles.chartContainer}>
+                      <ResponsiveContainer width="100%" height="100%">
+                        <RechartsLineChart
+                          data={modelHistory}
+                          margin={{ top: 10, right: 30, left: 20, bottom: 30 }}
+                        >
+                          <CartesianGrid strokeDasharray="3 3" />
+                          <XAxis dataKey="date" />
+                          <YAxis />
+                          <Tooltip
+                            formatter={(value, name) => {
+                              if (name === 'tokens') return [value.toLocaleString(), 'Tokens'];
+                              if (name === 'requests') return [value.toLocaleString(), 'Requests'];
+                              return [value, name];
+                            }}
+                          />
+                          <Legend />
+                          {modelHistory[0]?.models?.map((model: any, index: number) => (
+                            <Line
+                              key={model.name}
+                              type="monotone"
+                              dataKey={`models[${index}].tokens`}
+                              name={model.name}
+                              stroke={chartColors.pieColors[index % chartColors.pieColors.length]}
+                              strokeWidth={2}
+                              activeDot={{ r: 8 }}
+                            />
+                          ))}
+                        </RechartsLineChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
+                </div>
+              </>
+            )}
             
             {/* Model Performance Metrics */}
             <h2 className={styles.sectionTitle}>Model Performance</h2>
