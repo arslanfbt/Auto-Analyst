@@ -50,50 +50,50 @@ auto-analyst-frontend/
 #### Chat Interface Components
 | Component          | Purpose                                    | Location |
 |-------------------|---------------------------------|------------|
-| `ChatInterface.tsx` | Main container for chat functionality | [View File](/Auto-Analyst-CS/auto-analyst-frontend/components/ChatInterface.tsx) |
-| `ChatInput.tsx`  | User input area for chat          | [View File](/Auto-Analyst-CS/auto-analyst-frontend/components/ChatInput.tsx) |
-| `ChatWindow.tsx` | Display area for chat messages   | [View File](/Auto-Analyst-CS/auto-analyst-frontend/components/ChatWindow.tsx) |
-| `MessageContent.tsx` | Renders individual messages   | [View File](/Auto-Analyst-CS/auto-analyst-frontend/components/chat/MessageContent.tsx) |
-| `CodeBlocker.tsx` | Syntax highlighting for code blocks | [View File](/Auto-Analyst-CS/auto-analyst-frontend/components/chat/CodeBlocker.tsx) |
-| `LoadingIndicator.tsx` | Loading state visualization | [View File](/Auto-Analyst-CS/auto-analyst-frontend/components/chat/LoadingIndicator.tsx) |
-| `AgentHint.tsx` | Agent hint component | [View File](/Auto-Analyst-CS/auto-analyst-frontend/components/chat/AgentHint.tsx) |
-| `FreeTrialOverlay.tsx` | Free trial overlay component | [View File](/Auto-Analyst-CS/auto-analyst-frontend/components/chat/FreeTrialOverlay.tsx) |
-| `WelcomeSection.tsx` | Welcome section for landing page | [View File](/Auto-Analyst-CS/auto-analyst-frontend/components/WelcomeSection.tsx) |
-| `Sidebar.tsx` | Sidebar component | [View File](/Auto-Analyst-CS/auto-analyst-frontend/components/Sidebar.tsx) |
-| `PlotlyChart.tsx` | Plotly chart component | [View File](/Auto-Analyst-CS/auto-analyst-frontend/components/PlotlyChart.tsx) |
+| `ChatInterface.tsx` | Main container for chat functionality | [View File](/auto-analyst-frontend/components/ChatInterface.tsx) |
+| `ChatInput.tsx`  | User input area for chat          | [View File](/auto-analyst-frontend/components/ChatInput.tsx) |
+| `ChatWindow.tsx` | Display area for chat messages   | [View File](/auto-analyst-frontend/components/ChatWindow.tsx) |
+| `MessageContent.tsx` | Renders individual messages   | [View File](/auto-analyst-frontend/components/chat/MessageContent.tsx) |
+| `CodeBlocker.tsx` | Syntax highlighting for code blocks | [View File](/auto-analyst-frontend/components/chat/CodeBlocker.tsx) |
+| `LoadingIndicator.tsx` | Loading state visualization | [View File](/auto-analyst-frontend/components/chat/LoadingIndicator.tsx) |
+| `AgentHint.tsx` | Agent hint component | [View File](/auto-analyst-frontend/components/chat/AgentHint.tsx) |
+| `FreeTrialOverlay.tsx` | Free trial overlay component | [View File](/auto-analyst-frontend/components/chat/FreeTrialOverlay.tsx) |
+| `WelcomeSection.tsx` | Welcome section for landing page | [View File](/auto-analyst-frontend/components/WelcomeSection.tsx) |
+| `Sidebar.tsx` | Sidebar component | [View File](/auto-analyst-frontend/components/Sidebar.tsx) |
+| `PlotlyChart.tsx` | Plotly chart component | [View File](/auto-analyst-frontend/components/PlotlyChart.tsx) |
 
 #### Analytics Dashboard Components
 | Component          | Purpose                                | Location |
 |-------------------|--------------------------------|------------|
-| `AnalyticsLayout.tsx` | Layout wrapper for analytics pages | [View File](/Auto-Analyst-CS/auto-analyst-frontend/components/analytics/AnalyticsLayout.tsx) |
-| `Charts.tsx` | Visualization components  | [View File](/Auto-Analyst-CS/auto-analyst-frontend/components/admin/Charts.tsx) |
-| `UsageTable.tsx` | Tabular data presentation | [View File](/Auto-Analyst-CS/auto-analyst-frontend/components/admin/UsageTable.tsx) |
-| `DateRangePicker.tsx` | Date range selection for filtering | [View File](/Auto-Analyst-CS/auto-analyst-frontend/components/admin/DateRangePicker.tsx) |
+| `AnalyticsLayout.tsx` | Layout wrapper for analytics pages | [View File](/auto-analyst-frontend/components/analytics/AnalyticsLayout.tsx) |
+| `Charts.tsx` | Visualization components  | [View File](/auto-analyst-frontend/components/admin/Charts.tsx) |
+| `UsageTable.tsx` | Tabular data presentation | [View File](/auto-analyst-frontend/components/admin/UsageTable.tsx) |
+| `DateRangePicker.tsx` | Date range selection for filtering | [View File](/auto-analyst-frontend/components/admin/DateRangePicker.tsx) |
 
 #### UI Components
 | Component | Purpose | Location |
 |-----------|---------|----------|
-| `alert.tsx` | Alert component | [View File](/Auto-Analyst-CS/auto-analyst-frontend/components/ui/alert.tsx) |
-| `button.tsx` | Reusable button component | [View File](/Auto-Analyst-CS/auto-analyst-frontend/components/ui/button.tsx) |
-| `calendar.tsx` | Calendar component | [View File](/Auto-Analyst-CS/auto-analyst-frontend/components/ui/calendar.tsx) |
-| `card.tsx` | Card container component | [View File](/Auto-Analyst-CS/auto-analyst-frontend/components/ui/card.tsx) |
-| `CopyButton.tsx` | Copy button component | [View File](/Auto-Analyst-CS/auto-analyst-frontend/components/ui/CopyButton.tsx) |
-| `dialog.tsx` | Modal dialog component | [View File](/Auto-Analyst-CS/auto-analyst-frontend/components/ui/dialog.tsx) |
-| `input.tsx` | Input component | [View File](/Auto-Analyst-CS/auto-analyst-frontend/components/ui/input.tsx) |
-| `popover.tsx` | Popover component | [View File](/Auto-Analyst-CS/auto-analyst-frontend/components/ui/popover.tsx) |
-| `scroll-area.tsx` | Scrollable area component | [View File](/Auto-Analyst-CS/auto-analyst-frontend/components/ui/scroll-area.tsx) |
-| `table.tsx` | Data table component | [View File](/Auto-Analyst-CS/auto-analyst-frontend/components/ui/table.tsx) |
-| `tabs.tsx` | Tab navigation component | [View File](/Auto-Analyst-CS/auto-analyst-frontend/components/ui/tabs.tsx) |
-| `textarea.tsx` | Textarea component | [View File](/Auto-Analyst-CS/auto-analyst-frontend/components/ui/textarea.tsx) |
-| `tooltip.tsx` | Tooltip component | [View File](/Auto-Analyst-CS/auto-analyst-frontend/components/ui/tooltip.tsx) |
+| `alert.tsx` | Alert component | [View File](/auto-analyst-frontend/components/ui/alert.tsx) |
+| `button.tsx` | Reusable button component | [View File](/auto-analyst-frontend/components/ui/button.tsx) |
+| `calendar.tsx` | Calendar component | [View File](/auto-analyst-frontend/components/ui/calendar.tsx) |
+| `card.tsx` | Card container component | [View File](/auto-analyst-frontend/components/ui/card.tsx) |
+| `CopyButton.tsx` | Copy button component | [View File](/auto-analyst-frontend/components/ui/CopyButton.tsx) |
+| `dialog.tsx` | Modal dialog component | [View File](/auto-analyst-frontend/components/ui/dialog.tsx) |
+| `input.tsx` | Input component | [View File](/auto-analyst-frontend/components/ui/input.tsx) |
+| `popover.tsx` | Popover component | [View File](/auto-analyst-frontend/components/ui/popover.tsx) |
+| `scroll-area.tsx` | Scrollable area component | [View File](/auto-analyst-frontend/components/ui/scroll-area.tsx) |
+| `table.tsx` | Data table component | [View File](/auto-analyst-frontend/components/ui/table.tsx) |
+| `tabs.tsx` | Tab navigation component | [View File](/auto-analyst-frontend/components/ui/tabs.tsx) |
+| `textarea.tsx` | Textarea component | [View File](/auto-analyst-frontend/components/ui/textarea.tsx) |
+| `tooltip.tsx` | Tooltip component | [View File](/auto-analyst-frontend/components/ui/tooltip.tsx) |
 
 #### Landing Page Components
 | Component | Purpose | Location |
 |-----------|---------|----------|
-| `LandingPage.tsx` | Main landing page layout | [View File](/Auto-Analyst-CS/auto-analyst-frontend/components/LandingPage.tsx) |
-| `HeroSection.tsx` | Hero section for landing page | [View File](/Auto-Analyst-CS/auto-analyst-frontend/components/HeroSection.tsx) |
-| `FeatureSection.tsx` | Features showcase section | [View File](/Auto-Analyst-CS/auto-analyst-frontend/components/FeatureSection.tsx) |
-| `TestimonialsSection.tsx` | Customer testimonials | [View File](/Auto-Analyst-CS/auto-analyst-frontend/components/TestimonialsSection.tsx) |
+| `LandingPage.tsx` | Main landing page layout | [View File](/auto-analyst-frontend/components/LandingPage.tsx) |
+| `HeroSection.tsx` | Hero section for landing page | [View File](/auto-analyst-frontend/components/HeroSection.tsx) |
+| `FeatureSection.tsx` | Features showcase section | [View File](/auto-analyst-frontend/components/FeatureSection.tsx) |
+| `TestimonialsSection.tsx` | Customer testimonials | [View File](/auto-analyst-frontend/components/TestimonialsSection.tsx) |
 
 ---
 
