@@ -2,10 +2,11 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Body
 from typing import List, Optional, Dict, Any
 from pydantic import BaseModel
 from datetime import datetime
-from chat_manager import ChatManager
+from src.managers.chat_manager import ChatManager
 import logging
-from ai_manager import AI_Manager
-from user_manager import get_current_user, User
+from src.managers.ai_manager import AI_Manager
+from src.managers.user_manager import get_current_user, User
+from src.init_db import session_factory, ModelUsage
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, 
@@ -235,14 +236,14 @@ async def post_chat_message(
         model_name = request.model_name or "gpt-3.5-turbo"
         
         # Generate AI response - This will log and record usage
-        logger.info(f"Calling AI Manager with model {model_name} for chat {chat_id}, user {user_id}")
+        # logger.info(f"Calling AI Manager with model {model_name} for chat {chat_id}, user {user_id}")
         response_text = await ai_manager.generate_response(
             prompt=formatted_prompt,
             model_name=model_name,
             user_id=user_id,
             chat_id=chat_id
         )
-        logger.info(f"Received response from AI Manager: {len(response_text)} characters")
+        # logger.info(f"Received response from AI Manager: {len(response_text)} characters")
         
         # Add the AI response to the chat
         ai_message = chat_manager.add_message(

@@ -15,22 +15,22 @@ from fastapi.security import APIKeyHeader
 from fastapi import Form, UploadFile
 import io
 # Import custom modules and models
-from agents import *
-from retrievers import *
+from src.agents.agents import *
+from src.retrievers import *
 from llama_index.core import Document
 from llama_index.embeddings.openai import OpenAIEmbedding
 from llama_index.core import VectorStoreIndex
-from format_response import format_response_to_markdown, execute_code_from_markdown
+from scripts.format_response import format_response_to_markdown, execute_code_from_markdown
 import json
 import asyncio
 
 
 from dotenv import load_dotenv
-from chat_routes import router as chat_router
-from analytics_routes import router as analytics_router
+from src.routes.chat_routes import router as chat_router
+from src.routes.analytics_routes import router as analytics_router
 import time
-from ai_manager import AI_Manager
-from user_manager import get_current_user, User, create_user
+from src.managers.ai_manager import AI_Manager
+from src.managers.user_manager import get_current_user, User, create_user
 
 load_dotenv()
 
@@ -130,7 +130,7 @@ async def get_session_id(request: Request):
             # Store in session state if not already there
             if session_state.get("user_id") != user_id:
                 app.state.set_session_user(session_id=session_id, user_id=user_id)
-                logger.info(f"Associated session {session_id} with provided user_id {user_id}")
+                # logger.info(f"Associated session {session_id} with provided user_id {user_id}")
             return session_id
         except (ValueError, TypeError):
             logger.warning(f"Invalid user_id in query params: {user_id_param}")
@@ -153,7 +153,7 @@ async def get_session_id(request: Request):
                 user_id=user_id
             )
             
-            logger.info(f"Auto-created guest user {user_id} for session {session_id}")
+            # logger.info(f"Auto-created guest user {user_id} for session {session_id}")
         except Exception as e:
             logger.error(f"Error auto-creating user for session {session_id}: {str(e)}")
     
@@ -286,7 +286,7 @@ class AppState:
         self._sessions[session_id]["chat_id"] = chat_id_to_use
         
         # Make sure this data gets saved
-        logger.info(f"Set session {session_id} with user_id={user_id}, chat_id={chat_id_to_use}")
+        # logger.info(f"Set session {session_id} with user_id={user_id}, chat_id={chat_id_to_use}")
         
         # Return the updated session data
         return self._sessions[session_id]
@@ -373,11 +373,12 @@ async def chat_with_agent(
     if "chat_id" in request_obj.query_params:
         try:
             chat_id_param = int(request_obj.query_params.get("chat_id"))
-            logger.info(f"Using provided chat_id {chat_id_param} from request")
+            # logger.info(f"Using provided chat_id {chat_id_param} from request")
             # Update session state with this chat ID
             session_state["chat_id"] = chat_id_param
         except (ValueError, TypeError):
-            logger.warning(f"Invalid chat_id in query params: {request_obj.query_params.get('chat_id')}")
+            # logger.warning(f"Invalid chat_id in query params: {request_obj.query_params.get('chat_id')}")
+            pass
 
     if session_state["current_df"] is None:
         raise HTTPException(
@@ -389,7 +390,7 @@ async def chat_with_agent(
         try:
             user_id = int(request_obj.query_params["user_id"])
             session_state["user_id"] = user_id
-            logger.info(f"Updated session state with user_id {user_id} from request")
+            # logger.info(f"Updated session state with user_id {user_id} from request")
         except (ValueError, TypeError):
             raise HTTPException(
                 status_code=400,
@@ -483,7 +484,7 @@ async def chat_with_agent(
                 is_streaming=False
             )
             
-            logger.info(f"Tracked model usage: {model_name}, {total_tokens} tokens, ${cost:.6f}")
+            # logger.info(f"Tracked model usage: {model_name}, {total_tokens} tokens, ${cost:.6f}")
         
         return {
             "agent_name": agent_name,
@@ -494,7 +495,7 @@ async def chat_with_agent(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Unexpected error: {str(e)}")
+        # logger.error(f"Unexpected error: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Unexpected error: {str(e)}")
 
 @app.post("/chat", response_model=dict)
@@ -517,7 +518,7 @@ async def chat_with_all(
     if "chat_id" in request_obj.query_params:
         try:
             chat_id_param = int(request_obj.query_params.get("chat_id"))
-            logger.info(f"Using provided chat_id {chat_id_param} from request for streaming")
+            # logger.info(f"Using provided chat_id {chat_id_param} from request for streaming")
             # Update session state 
             session_state["chat_id"] = chat_id_param
         except (ValueError, TypeError):
@@ -892,9 +893,10 @@ def ensure_user_metadata(session_id: str, session_state: dict, request: Request 
                 user_id = int(user_id)
                 # Update session state with this user ID
                 session_state["user_id"] = user_id
-                logger.info(f"Using provided user_id {user_id} from request parameters")
+                # logger.info(f"Using provided user_id {user_id} from request parameters")
             except (ValueError, TypeError):
                 logger.warning(f"Invalid user_id provided in query params: {user_id}")
+                pass
                 user_id = None
     
     # If no valid user_id from request, check session state

@@ -1,7 +1,7 @@
 from sqlalchemy import create_engine, desc, func
 from sqlalchemy.orm import sessionmaker, scoped_session
 from sqlalchemy.exc import SQLAlchemyError
-from init_db import Base, User, Chat, Message, ModelUsage
+from src.init_db import Base, User, Chat, Message, ModelUsage
 import logging
 import requests
 import json
@@ -81,7 +81,7 @@ class ChatManager:
             session.add(chat)
             session.commit()
             
-            logger.info(f"Created new chat {chat.chat_id} for user {user_id}")
+            # logger.info(f"Created new chat {chat.chat_id} for user {user_id}")
             
             return {
                 "chat_id": chat.chat_id,
@@ -206,7 +206,7 @@ class ChatManager:
                     if chat:
                         chat.title = new_title
                         session.commit()
-                        logger.info(f"Updated chat {chat_id} title to '{new_title}'")
+                        # logger.info(f"Updated chat {chat_id} title to '{new_title}'")
                 else:
                     logger.warning(f"Failed to generate title: {response.status_code}")
             except Exception as e:
@@ -471,7 +471,7 @@ class ChatManager:
                 user = User(username=username, email=email)
                 session.add(user)
                 session.commit()
-                logger.info(f"Created new user: {username} ({email})")
+                # logger.info(f"Created new user: {username} ({email})")
             
             return {
                 "user_id": user.user_id,
