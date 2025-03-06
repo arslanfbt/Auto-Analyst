@@ -2,13 +2,13 @@
 
 The **Auto-Analyst** application provides a structured API for data analysis, AI-powered insights, and real-time analytics. The API is categorized into three main sections, each documented separately for better modularity:  
 
-1. **[Core Application Routes](/Auto-Analyst-CS/auto-analyst-backend/docs/routes/core.md)** – Handles data management, session control, and model configurations.  
-2. **[Chat & AI Analysis Routes](/Auto-Analyst-CS/auto-analyst-backend/docs/routes/chats.md)** – Provides AI-driven data insights and supports interaction with multiple specialized AI agents.  
-3. **[Analytics & WebSocket Routes](/Auto-Analyst-CS/auto-analyst-backend/docs/routes/analytics.md)** – Manages real-time updates, tracking, and logging of AI model usage.  
+1. **[Core Application Routes](/auto-analyst-backend/docs/routes/core.md)** – Handles data management, session control, and model configurations.  
+2. **[Chat & AI Analysis Routes](/auto-analyst-backend/docs/routes/chats.md)** – Provides AI-driven data insights and supports interaction with multiple specialized AI agents.  
+3. **[Analytics & WebSocket Routes](/auto-analyst-backend/docs/routes/analytics.md)** – Manages real-time updates, tracking, and logging of AI model usage.  
 
 ---
 
-### **1. Core Application Routes ([auto-analyst-backend/docs/routes/core.md](/Auto-Analyst-CS/auto-analyst-backend/docs/routes/core.md))**  
+### **1. Core Application Routes ([auto-analyst-backend/docs/routes/core.md](/auto-analyst-backend/docs/routes/core.md))**  
 
 These routes handle **data management, session handling, and model settings**.  
 
@@ -28,7 +28,7 @@ These routes handle **data management, session handling, and model settings**.
 
 ---
 
-### **2. Chat & AI Analysis Routes ([auto-analyst-backend/docs/routes/chats.md](/Auto-Analyst-CS/auto-analyst-backend/docs/routes/chats.md))**  
+### **2. Chat & AI Analysis Routes ([auto-analyst-backend/docs/routes/chats.md](/auto-analyst-backend/docs/routes/chats.md))**  
 
 These routes provide **AI-powered insights and query handling** using specialized agents.  
 
@@ -50,7 +50,7 @@ These routes provide **AI-powered insights and query handling** using specialize
 
 ---
 
-### **3. Analytics & WebSocket Routes ([auto-analyst-backend/docs/routes/analytics.md](/Auto-Analyst-CS/auto-analyst-backend/docs/routes/analytics.md))**  
+### **3. Analytics & WebSocket Routes ([auto-analyst-backend/docs/routes/analytics.md](/auto-analyst-backend/docs/routes/analytics.md))**  
 
 These routes handle **real-time updates, logging, and error tracking**.  
 

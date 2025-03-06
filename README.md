@@ -1,11 +1,11 @@
-![Auto Analyst Logo](/Auto-Analyst-CS/auto-analyst-backend/images/auto-analyst%20logo.png)
+![Auto Analyst Logo](/auto-analyst-backend/images/auto-analyst%20logo.png)
 
 ## 📌 Overview  
 Auto-Analyst is an analytics platform featuring a **FastAPI backend** and a **Next.js frontend**. The system provides **AI-driven data analytics**, **interactive visualizations**, and an **admin dashboard** for monitoring key usage metrics. The platform leverages **WebSockets** for real-time updates and integrates enterprise-grade functionalities.  
 
 ### **Tech Stack**  
-- **Frontend:** Next.js / React  (Learn more about the frontend architecture [here](/Auto-Analyst-CS/docs/frontend.md))
-- **Backend:** Python / FastAPI  (Learn more about the api breakdown [here](/Auto-Analyst-CS/docs/backend.md))
+- **Frontend:** Next.js / React  (Learn more about the frontend architecture [here](/docs/frontend.md))
+- **Backend:** Python / FastAPI  (Learn more about the api breakdown [here](/docs/backend.md))
 - **Infrastructure:** Vercel and Hugging Face Spaces (To be deployed on AWS Amplify via Terraform)  
 - **CI/CD:** GitHub Actions  
 
