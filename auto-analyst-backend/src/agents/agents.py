@@ -1,5 +1,5 @@
 import dspy
-import memory_agents as m
+import src.agents.memory_agents as m
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 import os

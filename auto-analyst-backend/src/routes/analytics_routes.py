@@ -2,18 +2,17 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, WebSocket
 from typing import Optional, List, Dict, Any
 from datetime import datetime, timedelta
 from pydantic import BaseModel
-from chat_manager import ChatManager
+from src.managers.chat_manager import ChatManager
 import logging
 from fastapi import Request
 from fastapi.security import APIKeyHeader
 import os
-from init_db import ModelUsage, session_factory, get_db, User, Chat, Message
+from src.init_db import ModelUsage, get_db, get_session
 import json
 from sqlalchemy.orm import Session
-from sqlalchemy import func, desc, select, and_, extract
-from sqlalchemy.sql import text
-import asyncio
+from sqlalchemy import func, desc
 from collections import defaultdict
+from sqlalchemy import case  
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, 
@@ -244,15 +243,20 @@ async def get_user_activity(
 ):
     start_date, end_date = get_date_range(period)
     
-    # Get daily activity
+    # First, get a subquery for the first date each user was seen
+    first_seen_subquery = db.query(
+        ModelUsage.user_id,
+        func.date(func.min(ModelUsage.timestamp)).label("first_date")
+    ).filter(
+        ModelUsage.user_id.isnot(None)
+    ).group_by(
+        ModelUsage.user_id
+    ).subquery()
+    
+    # Get daily activity with normal metrics
     daily_query = db.query(
         func.date(ModelUsage.timestamp).label("date"),
         func.count(func.distinct(ModelUsage.user_id)).label("active_users"),
-        # New users = users whose first usage was on this date
-        func.count(func.distinct(
-            ModelUsage.user_id,
-            func.date(func.min(ModelUsage.timestamp).over(partition_by=ModelUsage.user_id)) == func.date(ModelUsage.timestamp)
-        )).label("new_users"),
         func.count(func.distinct(ModelUsage.chat_id)).label("sessions")
     ).filter(
         ModelUsage.timestamp >= start_date,
@@ -264,15 +268,22 @@ async def get_user_activity(
         func.date(ModelUsage.timestamp)
     )
     
-    activity_data = [
-        {
-            "date": str(day.date),
+    # Process results into expected format
+    activity_data = []
+    for day in daily_query:
+        date_str = str(day.date)
+        
+        # Get new users count for this specific date
+        new_users_count = db.query(func.count()).select_from(first_seen_subquery).filter(
+            first_seen_subquery.c.first_date == day.date
+        ).scalar() or 0
+        
+        activity_data.append({
+            "date": date_str,
             "activeUsers": int(day.active_users or 0),
-            "newUsers": int(day.new_users or 0),
+            "newUsers": int(new_users_count),
             "sessions": int(day.sessions or 0)
-        }
-        for day in daily_query
-    ]
+        })
     
     # Fill in any missing dates with zeros
     date_range = [(start_date + timedelta(days=i)).strftime('%Y-%m-%d') 
@@ -312,12 +323,21 @@ async def get_session_stats(
             ModelUsage.user_id.isnot(None)
         ).scalar() or 0
     
-    # Average queries per session
+    # Average queries per session - rewritten without window functions
+    # First, get count of messages per chat_id
+    chat_message_counts = db.query(
+        ModelUsage.chat_id,
+        func.count().label("msg_count")
+    ).filter(
+        ModelUsage.chat_id.isnot(None)
+    ).group_by(
+        ModelUsage.chat_id
+    ).subquery()
+    
+    # Then calculate the average
     avg_queries = db.query(
-        func.avg(
-            func.count().over(partition_by=ModelUsage.chat_id)
-        )
-    ).filter(ModelUsage.chat_id.isnot(None)).scalar() or 0
+        func.avg(chat_message_counts.c.msg_count)
+    ).scalar() or 0
     
     # Average session time (approximated based on first and last message in each chat)
     session_times = db.query(
@@ -489,7 +509,7 @@ async def get_model_metrics(
             "avg_response_time": float(metrics.avg_response_time or 0) / 1000 if metrics.avg_response_time else 0,
             "success_rate": float(metrics.success_rate or 0.95)  # Default to 95% if undefined
         }
-        for metrics in metrics_query
+        for metrics in metrics_query.all()  # Fetch all results to avoid lazy loading!!!
     ]
     
     return {"model_metrics": model_metrics}
@@ -712,42 +732,48 @@ async def handle_new_model_usage(model_usage: ModelUsage):
     Process a new model usage event and broadcast updates to connected clients.
     This function should be called whenever a new model usage record is created.
     """
-    date_str = model_usage.timestamp.strftime('%Y-%m-%d')
-    
-    # Create dashboard update
-    dashboard_update = {
-        "type": "usage_update",
-        "date": date_str,
-        "metrics": {
-            "tokens_delta": model_usage.total_tokens,
-            "cost_delta": model_usage.cost,
-            "requests_delta": 1
-        }
-    }
-    
-    # Create model update
-    model_update = {
-        "type": "model_update",
-        "model_name": model_usage.model_name,
-        "metrics": {
-            "tokens": model_usage.total_tokens,
-            "cost": model_usage.cost,
-            "requests": 1
-        }
-    }
-    
-    # Create user activity update if user_id exists
-    if model_usage.user_id:
-        user_update = {
-            "type": "user_activity",
+    # Ensure the model_usage instance is refreshed and bound to a session
+    session = get_session()  # Assuming get_session() is a function that provides a new session
+    try:
+        # Refresh the instance to ensure it's bound to the session
+        session.refresh(model_usage)
+        
+        date_str = model_usage.timestamp.strftime('%Y-%m-%d') if model_usage.timestamp else None
+        
+        # Create dashboard update
+        dashboard_update = {
+            "type": "usage_update",
             "date": date_str,
             "metrics": {
-                "activeUsers": 1,  # This will be merged with existing data
-                "sessions": 1 if model_usage.chat_id else 0
+                "tokens_delta": model_usage.total_tokens,
+                "cost_delta": model_usage.cost,
+                "requests_delta": 1
             }
         }
-        await broadcast_user_update(user_update)
-    
-    # Broadcast updates
-    await broadcast_dashboard_update(dashboard_update)
-    await broadcast_dashboard_update(model_update) 
+        # Create model update
+        model_update = {
+            "type": "model_update",
+            "model_name": model_usage.model_name,
+            "metrics": {
+                "tokens": model_usage.total_tokens,
+                "cost": model_usage.cost,
+                "requests": 1
+            }
+        }
+        
+        if model_usage.user_id:
+            user_update = {
+                "type": "user_activity",
+                "date": date_str,
+                "metrics": {
+                    "activeUsers": 1,  # This will be merged with existing data
+                    "sessions": 1 if model_usage.chat_id else 0
+                }
+            }
+            await broadcast_user_update(user_update)
+        
+        # Broadcast updates
+        await broadcast_dashboard_update(dashboard_update)
+        await broadcast_dashboard_update(model_update) 
+    finally:
+        session.close()  # Ensure the session is closed after use

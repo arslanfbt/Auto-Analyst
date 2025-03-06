@@ -1,10 +1,10 @@
 import logging
 from typing import Optional, Dict, Any
 import time
-from init_db import ModelUsage, session_factory
+from src.init_db import ModelUsage, session_factory
 from datetime import datetime
 import tiktoken
-from analytics_routes import handle_new_model_usage
+from src.routes.analytics_routes import handle_new_model_usage
 import asyncio
 
 # Configure logging
@@ -87,7 +87,7 @@ class AI_Manager:
             model_name = "gpt-3.5-turbo"  # Default model
             
         start_time = time.time()
-        logger.info(f"Generating response using {model_name}")
+        # logger.info(f"Generating response using {model_name}")
         
         # For demo purposes, just echo back the prompt with some additions
         # In a real application, you would call an actual AI model API here
@@ -161,7 +161,7 @@ class AI_Manager:
             
             session.add(usage)
             session.commit()
-            logger.info(f"Saved usage data to database for chat {chat_id}: {total_tokens} tokens, ${cost:.6f}")
+            # logger.info(f"Saved usage data to database for chat {chat_id}: {total_tokens} tokens, ${cost:.6f}")
             
             # Broadcast the event asynchronously
             asyncio.create_task(handle_new_model_usage(usage))
@@ -182,7 +182,7 @@ class AI_Manager:
         output_tokens_in_thousands = output_tokens / 1000
         
         # Default cost if model not found
-        logger.info(f"[>] Model: {model_name}, Costs: {costs[self.get_provider_for_model(model_name)][model_name]}")
+        # logger.info(f"[>] Model: {model_name}, Costs: {costs[self.get_provider_for_model(model_name)][model_name]}")
         model_provider = self.get_provider_for_model(model_name)    
         return input_tokens_in_thousands * costs[model_provider][model_name]["input"] + output_tokens_in_thousands * costs[model_provider][model_name]["output"]
 
