@@ -66,7 +66,7 @@ export default function EnterprisePage() {
     name: "",
     email: "",
     company: "",
-    budget: "10000",
+    budget: "",
     message: ""
   })
 
@@ -231,24 +231,14 @@ export default function EnterprisePage() {
                       <label className="block text-sm font-medium text-gray-700 mb-2">
                         Budget (USD)
                       </label>
-                      <div className="space-y-2">
-                        <input
-                          type="range"
-                          min="1000"
-                          max="50000"
-                          step="1000"
-                          value={formData.budget}
-                          onChange={(e) => setFormData({...formData, budget: e.target.value})}
-                          className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-[#FF7F7F] text-black"
-                        />
-                        <div className="flex justify-between text-sm text-gray-600">
-                          <span>$1,000</span>
-                          <span className="text-[#FF7F7F] font-medium">
-                            ${Number(formData.budget).toLocaleString()}
-                          </span>
-                          <span>$50,000+</span>
-                        </div>
-                      </div>
+                      <input
+                        type="text"
+                        required
+                        value={formData.budget}
+                        onChange={(e) => setFormData({...formData, budget: e.target.value})}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#FF7F7F] focus:border-transparent text-black"
+                        placeholder="Enter your budget"
+                      />
                     </div>
 
                     <div>
