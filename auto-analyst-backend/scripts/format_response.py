@@ -98,7 +98,6 @@ def execute_code_from_markdown(code_str, dataframe=None):
 
 
 def format_response_to_markdown(api_response, agent_name = None, dataframe=None):
-    start_time = time.time()
     try:
         markdown = []
         
