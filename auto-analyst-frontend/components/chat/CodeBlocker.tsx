@@ -120,7 +120,7 @@ const CodeBlock: React.FC<CodeBlockProps> = ({ language, value, onExecute, agent
   }
 
   return (
-    <div className="relative rounded-lg overflow-hidden my-4 bg-[#1E1E1E]">
+    <div className="relative rounded-lg overflow-hidden my-4 bg-[#1E1E1E] hover:ring-1 hover:ring-gray-600">
       <div className="flex items-center justify-between px-4 py-2 border-b border-gray-700">
         <div className="flex items-center space-x-2">
           <Code2 className="w-4 h-4 text-gray-400" />
@@ -131,7 +131,7 @@ const CodeBlock: React.FC<CodeBlockProps> = ({ language, value, onExecute, agent
             {language === "python" && !isEditing && (
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Button variant="ghost" size="sm" onClick={handleEdit} className="text-gray-400 hover:text-gray-200">
+                  <Button variant="ghost" size="sm" onClick={handleEdit} className="text-gray-400 hover:bg-gray-400">
                     <Edit2 className="w-4 h-4" />
                   </Button>
                 </TooltipTrigger>
@@ -148,7 +148,7 @@ const CodeBlock: React.FC<CodeBlockProps> = ({ language, value, onExecute, agent
                     size="sm"
                     onClick={handleExecuteAndUpdate}
                     disabled={isExecuting}
-                    className="text-gray-400 hover:text-gray-200"
+                    className="text-gray-400 hover:bg-gray-400"
                   >
                     <Play className="w-4 h-4" />
                   </Button>
@@ -166,7 +166,7 @@ const CodeBlock: React.FC<CodeBlockProps> = ({ language, value, onExecute, agent
                       variant="ghost"
                       size="sm"
                       onClick={handleSave}
-                      className="text-gray-400 hover:text-gray-200"
+                      className="text-gray-400 hover:bg-gray-400"
                     >
                       <Save className="w-4 h-4" />
                     </Button>
@@ -181,7 +181,7 @@ const CodeBlock: React.FC<CodeBlockProps> = ({ language, value, onExecute, agent
                       variant="ghost"
                       size="sm"
                       onClick={handleCancel}
-                      className="text-gray-400 hover:text-gray-200"
+                      className="text-gray-400 hover:bg-gray-400"
                     >
                       <X className="w-4 h-4" />
                     </Button>
@@ -199,13 +199,13 @@ const CodeBlock: React.FC<CodeBlockProps> = ({ language, value, onExecute, agent
                       variant="ghost"
                       size="sm"
                       onClick={() => setIsVisible(!isVisible)}
-                      className="text-gray-400 hover:text-gray-200"
+                      className="text-gray-400 hover:bg-gray-200"
                     >
                       {isVisible ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                     </Button>
                   </TooltipTrigger>
-                  <TooltipContent side="bottom" className="bg-gray-800 text-white px-3 py-1 rounded shadow-lg">
-                    <p className="text-sm">{isVisible ? "collapse" : "expandddd"}</p>
+                  <TooltipContent side="bottom" className="bg-gray-800 text-white px-3 py-1 rounded shadow-lg hover:bg-gray-700">
+                    <p className="text-sm">{isVisible ? "collapse" : "expand"}</p>
                   </TooltipContent>
                 </Tooltip>
               )
@@ -230,7 +230,7 @@ const CodeBlock: React.FC<CodeBlockProps> = ({ language, value, onExecute, agent
                       variant="ghost"
                       size="sm"
                       onClick={copyToClipboard}
-                      className="absolute top-2 right-2 text-gray-400 hover:text-gray-200 z-10"
+                      className="absolute top-2 right-2 text-gray-400 hover:bg-gray-400 z-10"
                     >
                       {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
                     </Button>
@@ -287,4 +287,3 @@ const CodeBlock: React.FC<CodeBlockProps> = ({ language, value, onExecute, agent
 }
 
 export default React.memo(CodeBlock)
-

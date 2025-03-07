@@ -42,10 +42,11 @@ The following areas require attention to improve system stability and performanc
 
 - **WebSocket Connection Handling** – Improved error handling is needed for `active_dashboard_connections` and `active_user_connections` management.  
 - **Error Handling** – Certain API endpoints require more robust exception handling to improve fault tolerance.  
-- **API Documentation** – No formal API documentation is currently available; adding documentation would enhance the developer experience.  
 - **Cost Calculation Precision** – The floating-point precision in cost calculations may need adjustments, particularly for projected estimates.  
 - **Query Performance** – Some database queries could be optimized for efficiency when handling large volumes of data.  
-
+- **Static Query** - Change the Data Viz query to be more around the static dataset of Housing.
+- **User Icon** - Add a user sign up icon in the chat interface.
+- **Code Execution Hover UI** - Fix the hover UI of the code execution.
 ---
 
 ## 🔄 Development Workflow  
@@ -149,3 +150,4 @@ The following areas require attention to improve system stability and performanc
 - Strengthen **real-time capabilities** through enhanced WebSocket handling.  
 - Expand **test coverage** to mitigate regressions.  
 - Improve **documentation** to support development and maintainability.  
+- Deploy the **Database** to be on cloud and persist the data. 

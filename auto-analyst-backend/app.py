@@ -445,7 +445,7 @@ async def chat_with_agent(
             
             # Get prompt and response sizes
             prompt_size = len(request.query)
-            response_size = len(formatted_response)
+            response_size = len(str(response))
             
             # Get model name and provider
             model_name = app.state.model_config.get("model", "gpt-4o-mini")
@@ -455,19 +455,22 @@ async def chat_with_agent(
             try:
                 print("[+ ] Actual token estimation")
                 prompt_tokens = len(ai_manager.tokenizer.encode(request.query))
-                completion_tokens = len(ai_manager.tokenizer.encode(formatted_response))
+                completion_tokens = len(ai_manager.tokenizer.encode(str(response)))
                 total_tokens = prompt_tokens + completion_tokens
             except:
                 # Fallback estimation
                 print("[> ] Fallback estimation")
-                words = len(request.query.split()) + len(formatted_response.split())
+                words = len(request.query.split()) + len(str(response).split())
                 total_tokens = words * 1.5  # rough estimate
                 prompt_tokens = len(request.query.split()) * 1.5
                 completion_tokens = total_tokens - prompt_tokens
             
+            logger.info(f"Prompt tokens: {prompt_tokens}")
+            logger.info(f"Completion tokens: {completion_tokens}")
+            logger.info(f"Total tokens: {total_tokens}")
             # Calculate cost
             cost = ai_manager.calculate_cost(model_name, prompt_tokens, completion_tokens)
-            
+            logger.info(f"Cost: {cost}")
             # Save to DB with the proper chat_id
             ai_manager.save_usage_to_db(
                 user_id=session_state.get("user_id"),
@@ -559,7 +562,7 @@ async def chat_with_all(
                     )
                     
                     # Track the total response for token estimation
-                    total_response += formatted_response if formatted_response else ""
+                    total_response += str(response) if response else ""
                     
                     # Ensure response is not None or empty
                     if formatted_response:

@@ -15,7 +15,7 @@ const sampleQueries = [
     description: "Get comprehensive data analysis and visualizations",
   },
   {
-    text: "@data_viz_agent create a scatter plot of sales vs profit",
+    text: "@data_viz_agent visualize this data",
     icon: <Bot className="w-5 h-5" />,
     description: "Use specialized agents for specific tasks",
   },
