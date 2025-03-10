@@ -482,9 +482,8 @@ class auto_analyst(dspy.Module):
                 yield agent_name, {"error": str(e)}
         # Execute code combiner after all agents complete
         code_list = [result['code'] for _, result in completed_results if 'code' in result]
-        # with dspy.settings.context(lm=dspy.LM(model="anthropic/claude-3-5-sonnet-latest", max_tokens=8000, temperature=1.0)):
-        combiner_result = self.code_combiner_agent(agent_code_list=str(code_list), dataset=dict_['dataset'])
-        # print("combiner_result", str(combiner_result))
+        with dspy.settings.context(lm=dspy.LM(model="anthropic/claude-3-5-sonnet-latest", max_tokens=8000, temperature=1.0)):
+            combiner_result = self.code_combiner_agent(agent_code_list=str(code_list), dataset=dict_['dataset'])
         yield 'code_combiner_agent', dict(combiner_result)
 
 # Agent to make a Chat history name from a query
