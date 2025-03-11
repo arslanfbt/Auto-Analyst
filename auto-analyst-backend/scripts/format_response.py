@@ -142,7 +142,7 @@ def format_response_to_markdown(api_response, agent_name = None, dataframe=None)
                             if len(json_output) > 1000000:  # If JSON is larger than 1MB
                                 logger.warning(f"Large JSON output detected: {len(json_output)} bytes")
                             markdown.append(f"```plotly\n{json_output}\n```\n")
-                        # print("Length of json_outputs: ", len(json_outputs))
+                        print("Length of json_outputs: ", len(json_outputs))
 
             if 'commentary' in content:
                 markdown.append(f"### Commentary\n{content['commentary']}\n")
@@ -155,7 +155,7 @@ def format_response_to_markdown(api_response, agent_name = None, dataframe=None)
                 except Exception as e:
                     logger.error(f"Error in execute_code_from_markdown: {str(e)}")
                     markdown.append(f"**Error**: {str(e)}")
-                    continue
+                    # continue
                 
                 markdown.append(f"### Refined Complete Code\n{format_code_backticked_block(content['refined_complete_code'])}\n")
 
@@ -168,7 +168,7 @@ def format_response_to_markdown(api_response, agent_name = None, dataframe=None)
                     markdown.append("### Plotly JSON Outputs\n")
                     for idx, json_output in enumerate(json_outputs):
                         markdown.append(f"```plotly\n{json_output}\n```\n")
-                # print("Length of json_outputs: ", len(json_outputs))
+                print("Length of json_outputs: ", len(json_outputs))
 
             # if agent_name is not None:  
             #     if f"memory_{agent_name}" in api_response:
@@ -177,9 +177,12 @@ def format_response_to_markdown(api_response, agent_name = None, dataframe=None)
     except Exception as e:
         logger.error(f"Error in format_response_to_markdown: {str(e)}")
         return f"{str(e)}"
+    
+    print("markdown1: ", str(markdown)[:10], len(markdown), type(markdown))
             
     if not markdown or len(markdown) <= 1:
         return "Please provide a valid query..."
+    print("markdown2: ", str(markdown)[:10], len(markdown), type(markdown))
         
     return '\n'.join(markdown)
 

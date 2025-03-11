@@ -467,24 +467,24 @@ class auto_analyst(dspy.Module):
         for agent_name in plan_list:
             inputs = {x:dict_[x] for x in self.agent_inputs[agent_name.strip()]}
             future = self.executor.submit(self.execute_agent, agent_name, inputs)
-            futures.append((agent_name, future))
+            futures.append((agent_name, inputs, future))
         
-        yield "analytical_planner", dict(plan)
+        # yield "analytical_planner",  dict(plan)
 
         # Yield results as they complete
         completed_results = []
-        for agent_name, future in futures:
+        for agent_name, inputs, future in futures:
             try:
                 name, result = await asyncio.get_event_loop().run_in_executor(None, future.result)
                 completed_results.append((name, result))
-                yield name, result
+                yield name, inputs, result
             except Exception as e:
-                yield agent_name, {"error": str(e)}
+                yield agent_name, inputs, {"error": str(e)}
         # Execute code combiner after all agents complete
         code_list = [result['code'] for _, result in completed_results if 'code' in result]
         with dspy.settings.context(lm=dspy.LM(model="anthropic/claude-3-5-sonnet-latest", max_tokens=8000, temperature=1.0)):
             combiner_result = self.code_combiner_agent(agent_code_list=str(code_list), dataset=dict_['dataset'])
-        yield 'code_combiner_agent', dict(combiner_result)
+        yield 'code_combiner_agent', str(code_list), dict(combiner_result)
 
 # Agent to make a Chat history name from a query
 class chat_history_name_agent(dspy.Signature):

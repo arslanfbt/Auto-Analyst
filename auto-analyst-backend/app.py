@@ -522,6 +522,7 @@ async def chat_with_all(
     async def generate_responses():
         overall_start_time = time.time()
         total_response = ""
+        total_inputs = ""
 
         try:
             loop = asyncio.get_event_loop()
@@ -531,13 +532,16 @@ async def chat_with_all(
                 request.query
             )
 
-            async for agent_name, response in session_state["ai_system"].execute_plan(request.query, plan_response):
+            async for agent_name, inputs, response in session_state["ai_system"].execute_plan(request.query, plan_response):
                 formatted_response = format_response_to_markdown(
                     {agent_name: response}, 
                     dataframe=session_state["current_df"]
                 ) or "No response generated"
 
-                total_response += str(response) if response else ""
+                if agent_name != "code_combiner_agent":
+                    total_response += str(response) if response else ""
+                    total_inputs += str(inputs) if inputs else ""
+
                 yield json.dumps({
                     "agent": agent_name,
                     "content": formatted_response,
@@ -548,50 +552,52 @@ async def chat_with_all(
                 overall_processing_time_ms = int((time.time() - overall_start_time) * 1000)
                 prompt_size = len(request.query)
 
+                # Track the code combiner agent response
                 if "refined_complete_code" in response:
                     model_name = "claude-3-5-sonnet-latest"
                     provider = app.state.ai_manager.get_provider_for_model(model_name)
+                    input_tokens = len(app.state.ai_manager.tokenizer.encode(str(inputs)))
                     completion_tokens = len(app.state.ai_manager.tokenizer.encode(str(response)))
-                    code_combiner_cost = app.state.ai_manager.calculate_cost(model_name, 0, completion_tokens)
+                    code_combiner_cost = app.state.ai_manager.calculate_cost(model_name, input_tokens, completion_tokens)
 
                     app.state.ai_manager.save_usage_to_db(
                         user_id=session_state.get("user_id"),
                         chat_id=session_state.get("chat_id"),
                         model_name=model_name,
                         provider=provider,
-                        prompt_tokens=0,
+                        prompt_tokens=int(input_tokens),
                         completion_tokens=int(completion_tokens),
-                        total_tokens=int(completion_tokens),
+                        total_tokens=int(input_tokens + completion_tokens),
                         query_size=prompt_size,
                         response_size=len(total_response),
                         cost=round(code_combiner_cost, 7),
                         request_time_ms=overall_processing_time_ms,
                         is_streaming=True
                     )
-                else:
-                    model_name = app.state.model_config.get("model", "gpt-4o-mini")
-                    provider = app.state.ai_manager.get_provider_for_model(model_name)
-                    prompt_tokens = len(app.state.ai_manager.tokenizer.encode(request.query))
-                    completion_tokens = len(app.state.ai_manager.tokenizer.encode(total_response))
-                    total_tokens = prompt_tokens + completion_tokens
 
-                    cost = app.state.ai_manager.calculate_cost(model_name, prompt_tokens, completion_tokens)
+                model_name = app.state.model_config.get("model", "gpt-4o-mini")
+                provider = app.state.ai_manager.get_provider_for_model(model_name)
+                prompt_tokens = len(app.state.ai_manager.tokenizer.encode(total_inputs)) 
+                completion_tokens = len(app.state.ai_manager.tokenizer.encode(total_response))  
+                total_tokens = prompt_tokens + completion_tokens
 
-                    app.state.ai_manager.save_usage_to_db(
-                        user_id=session_state.get("user_id"),
-                        chat_id=session_state.get("chat_id"),
-                        model_name=model_name,
-                        provider=provider,
-                        prompt_tokens=int(prompt_tokens),
-                        completion_tokens=int(completion_tokens),
-                        total_tokens=int(total_tokens),
-                        query_size=prompt_size,
-                        response_size=len(total_response),
-                        cost=round(cost, 7),
-                        request_time_ms=overall_processing_time_ms,
-                        is_streaming=True
-                    )
+                cost = app.state.ai_manager.calculate_cost(model_name, prompt_tokens, completion_tokens)
 
+                app.state.ai_manager.save_usage_to_db(
+                    user_id=session_state.get("user_id"),
+                    chat_id=session_state.get("chat_id"),
+                    model_name=model_name,
+                    provider=provider,
+                    prompt_tokens=int(prompt_tokens),
+                    completion_tokens=int(completion_tokens),
+                    total_tokens=int(total_tokens),
+                    query_size=prompt_size,
+                    response_size=len(total_response),
+                    cost=round(cost, 7),
+                    request_time_ms=overall_processing_time_ms,
+                    is_streaming=True
+                )
+           
         except Exception as e:
             logger.error(f"Error in generate_responses: {str(e)}")
             yield json.dumps({
@@ -681,12 +687,6 @@ async def update_model_settings(
             "temperature": settings.temperature,
             "max_tokens": settings.max_tokens
         }
-
-        print("settings.api_key: ", settings.api_key)
-        print("settings.model: ", settings.model)
-        print("settings.temperature: ", settings.temperature)
-        print("settings.max_tokens: ", settings.max_tokens)
-        print("settings.provider: ", settings.provider)
 
         # Configure model with temperature and max_tokens
         if settings.provider.lower() == "groq":
