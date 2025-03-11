@@ -28,13 +28,13 @@ export const useChatHistoryStore = create<ChatHistoryStore>()(
       messages: [],
       addMessage: (message) => {
         const id = Math.random().toString(36).substring(7)
-        set((state) => ({
+        set((state: ChatHistoryStore) => ({
           messages: [...state.messages, { ...message, id }],
         }))
         return id
       },
       updateMessage: (id, updatedMessage) => {
-        set((state) => ({
+        set((state: ChatHistoryStore) => ({
           messages: state.messages.map((message) =>
             message.id === id ? { ...message, ...updatedMessage } : message
           ),
