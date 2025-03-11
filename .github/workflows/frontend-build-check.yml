@@ -1,0 +1,39 @@
+name: Frontend Build Check
+
+on:
+  pull_request:
+    branches: [ main, master ]
+    paths:
+      - 'auto-analyst-frontend/**'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    defaults:
+      run:
+        working-directory: ./auto-analyst-frontend
+        
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: ./auto-analyst-frontend/package-lock.json
+          
+      - name: Install dependencies
+        run: npm ci
+        
+      - name: Build frontend
+        run: npm run build
+        
+      - name: Archive build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-output
+          path: ./auto-analyst-frontend/.next
+          retention-days: 5
