@@ -32,8 +32,8 @@ jobs:
         run: npm run build
         
       - name: Archive build artifacts
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v4
         with:
           name: build-output
           path: ./auto-analyst-frontend/.next
-          retention-days: 5 
+          retention-days: 5
