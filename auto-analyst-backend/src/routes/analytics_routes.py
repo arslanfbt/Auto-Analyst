@@ -54,6 +54,75 @@ async def verify_admin_api_key(
 active_dashboard_connections = set()
 active_user_connections = set()
 
+# Model tier definitions
+MODEL_TIERS = {
+    "tier1": {
+        "name": "Basic",
+        "credits": 1,
+        "models": [
+            "llama3-8b-8192",
+            "llama-3.2-1b-preview",
+            "llama-3.2-3b-preview",
+            "llama-3.2-11b-text-preview",
+            "llama-3.2-11b-vision-preview",
+            "llama-3.1-8b-instant",
+            "mixtral-8x7b-32768",
+            "gemma-7b-it",
+            "gemma2-9b-it",
+            "llama3-groq-8b-8192-tool-use-preview"
+        ]
+    },
+    "tier2": {
+        "name": "Standard",
+        "credits": 3,
+        "models": [
+            "gpt-4o-mini",
+            "o1-mini",
+            "o3-mini"
+        ]
+    },
+    "tier3": {
+        "name": "Premium",
+        "credits": 5,
+        "models": [
+            "gpt-3.5-turbo",
+            "gpt-4.5-preview",
+            "gpt-4",
+            "gpt-4o",
+            "o1",
+            "claude-3-opus-latest",
+            "claude-3-7-sonnet-latest",
+            "claude-3-5-sonnet-latest",
+            "claude-3-5-haiku-latest",
+            "deepseek-r1-distill-qwen-32b",
+            "deepseek-r1-distill-llama-70b",
+            "llama-3.3-70b-versatile",
+            "llama-3.3-70b-specdec",
+            "llama2-70b-4096",
+            "llama-3.2-90b-text-preview",
+            "llama-3.2-90b-vision-preview",
+            "llama3-70b-8192",
+            "llama-3.1-70b-versatile",
+            "llama-3.1-405b-reasoning",
+            "llama3-groq-70b-8192-tool-use-preview"
+        ]
+    }
+}
+
+# Helper function to determine model tier
+def get_model_tier(model_name):
+    """Determine which tier a model belongs to based on its name"""
+    model_name = model_name.lower()
+    
+    for tier_id, tier_info in MODEL_TIERS.items():
+        # Check if the model name matches or starts with any of the models in this tier
+        if any(model_name == model.lower() or model_name.startswith(model.lower()) 
+               for model in tier_info["models"]):
+            return tier_id
+    
+    # Default to tier 1 if no match is found
+    return "tier1"
+
 # Helper function to parse period parameter
 def get_date_range(period: str):
     today = datetime.utcnow()
@@ -777,3 +846,208 @@ async def handle_new_model_usage(model_usage: ModelUsage):
         await broadcast_dashboard_update(model_update) 
     finally:
         session.close()  # Ensure the session is closed after use
+
+@router.get("/tiers/usage")
+async def get_tier_usage(
+    period: str = "30d",
+    db: Session = Depends(get_db),
+    api_key: str = Depends(verify_admin_api_key)
+):
+    start_date, end_date = get_date_range(period)
+    
+    # Get all model usage during the period
+    model_query = db.query(
+        ModelUsage.model_name,
+        func.sum(ModelUsage.total_tokens).label("tokens"),
+        func.count().label("requests"),
+        func.sum(ModelUsage.cost).label("cost"),
+        func.avg(ModelUsage.total_tokens).label("avg_tokens_per_query")
+    ).filter(
+        ModelUsage.timestamp >= start_date,
+        ModelUsage.timestamp <= end_date
+    ).group_by(
+        ModelUsage.model_name
+    ).all()
+    
+    # Initialize tier data
+    tier_data = {
+        tier_id: {
+            "name": tier_info["name"],
+            "credits": tier_info["credits"],
+            "total_tokens": 0,
+            "total_requests": 0,
+            "total_cost": 0.0,
+            "avg_tokens_per_query": 0,
+            "cost_per_1k_tokens": 0.0,
+            "models": []
+        }
+        for tier_id, tier_info in MODEL_TIERS.items()
+    }
+    
+    # Aggregate data by tier
+    for model in model_query:
+        tier_id = get_model_tier(model.model_name)
+        
+        # Add model to the appropriate tier
+        tier_data[tier_id]["models"].append({
+            "name": model.model_name,
+            "tokens": int(model.tokens or 0),
+            "requests": int(model.requests or 0),
+            "cost": float(model.cost or 0),
+            "avg_tokens_per_query": float(model.avg_tokens_per_query or 0)
+        })
+        
+        # Update tier totals
+        tier_data[tier_id]["total_tokens"] += int(model.tokens or 0)
+        tier_data[tier_id]["total_requests"] += int(model.requests or 0)
+        tier_data[tier_id]["total_cost"] += float(model.cost or 0)
+    
+    # Calculate averages and costs per 1k tokens for each tier
+    for tier_id, data in tier_data.items():
+        if data["total_requests"] > 0:
+            data["avg_tokens_per_query"] = data["total_tokens"] / data["total_requests"]
+        
+        if data["total_tokens"] > 0:
+            data["cost_per_1k_tokens"] = (data["total_cost"] / data["total_tokens"]) * 1000
+            
+        # Calculate credit cost (what the user is paying in credits)
+        data["total_credit_cost"] = data["total_requests"] * data["credits"]
+        
+        # Calculate effective cost per credit
+        if data["total_credit_cost"] > 0:
+            data["cost_per_credit"] = data["total_cost"] / data["total_credit_cost"]
+        else:
+            data["cost_per_credit"] = 0
+    
+    return {
+        "tier_data": tier_data,
+        "period": period,
+        "start_date": start_date.strftime('%Y-%m-%d'),
+        "end_date": end_date.strftime('%Y-%m-%d')
+    }
+
+@router.get("/tiers/projections")
+async def get_tier_projections(
+    db: Session = Depends(get_db),
+    api_key: str = Depends(verify_admin_api_key)
+):
+    # Get last 30 days usage for baseline
+    tier_usage = await get_tier_usage(period="30d", db=db, api_key=api_key)
+    tier_data = tier_usage["tier_data"]
+    
+    # Calculate daily averages by tier
+    daily_tier_usage = {
+        tier_id: {
+            "name": data["name"],
+            "daily_requests": data["total_requests"] / 30,
+            "daily_tokens": data["total_tokens"] / 30,
+            "daily_cost": data["total_cost"] / 30,
+            "daily_credits": data["total_credit_cost"] / 30
+        }
+        for tier_id, data in tier_data.items()
+    }
+    
+    # Calculate projections
+    projections = {
+        "monthly": {
+            "requests": {},
+            "tokens": {},
+            "cost": {},
+            "credits": {}
+        },
+        "quarterly": {
+            "requests": {},
+            "tokens": {},
+            "cost": {},
+            "credits": {}
+        },
+        "yearly": {
+            "requests": {},
+            "tokens": {},
+            "cost": {},
+            "credits": {}
+        }
+    }
+    
+    # Calculate for each tier
+    for tier_id, data in daily_tier_usage.items():
+        # Monthly projections (30 days)
+        projections["monthly"]["requests"][tier_id] = data["daily_requests"] * 30
+        projections["monthly"]["tokens"][tier_id] = data["daily_tokens"] * 30
+        projections["monthly"]["cost"][tier_id] = data["daily_cost"] * 30
+        projections["monthly"]["credits"][tier_id] = data["daily_credits"] * 30
+        
+        # Quarterly projections (90 days)
+        projections["quarterly"]["requests"][tier_id] = data["daily_requests"] * 90
+        projections["quarterly"]["tokens"][tier_id] = data["daily_tokens"] * 90
+        projections["quarterly"]["cost"][tier_id] = data["daily_cost"] * 90
+        projections["quarterly"]["credits"][tier_id] = data["daily_credits"] * 90
+        
+        # Yearly projections (365 days)
+        projections["yearly"]["requests"][tier_id] = data["daily_requests"] * 365
+        projections["yearly"]["tokens"][tier_id] = data["daily_tokens"] * 365
+        projections["yearly"]["cost"][tier_id] = data["daily_cost"] * 365
+        projections["yearly"]["credits"][tier_id] = data["daily_credits"] * 365
+    
+    # Add totals for each projection period
+    for period in ["monthly", "quarterly", "yearly"]:
+        for metric in ["requests", "tokens", "cost", "credits"]:
+            projections[period][f"total_{metric}"] = sum(projections[period][metric].values())
+    
+    return {
+        "daily_usage": daily_tier_usage,
+        "projections": projections,
+        "tier_definitions": MODEL_TIERS
+    }
+
+@router.get("/tiers/efficiency")
+async def get_tier_efficiency(
+    period: str = "30d",
+    db: Session = Depends(get_db),
+    api_key: str = Depends(verify_admin_api_key)
+):
+    # Get tier usage data
+    tier_usage = await get_tier_usage(period=period, db=db, api_key=api_key)
+    tier_data = tier_usage["tier_data"]
+    
+    # Calculate efficiency metrics
+    efficiency_data = {}
+    
+    for tier_id, data in tier_data.items():
+        tokens_per_credit = data["total_tokens"] / data["total_credit_cost"] if data["total_credit_cost"] > 0 else 0
+        cost_per_credit = data["total_cost"] / data["total_credit_cost"] if data["total_credit_cost"] > 0 else 0
+        
+        efficiency_data[tier_id] = {
+            "name": data["name"],
+            "tokens_per_credit": tokens_per_credit,
+            "cost_per_credit": cost_per_credit,
+            "credit_cost": data["credits"],
+            "cost_per_1k_tokens": data["cost_per_1k_tokens"],
+            "avg_tokens_per_query": data["avg_tokens_per_query"],
+            "total_requests": data["total_requests"],
+            "total_tokens": data["total_tokens"],
+            "total_cost": data["total_cost"]
+        }
+    
+    # Determine most efficient tier based on tokens per credit
+    most_efficient_tier = max(
+        efficiency_data.items(),
+        key=lambda x: x[1]["tokens_per_credit"] if x[1]["tokens_per_credit"] > 0 else 0,
+        default=(None, {})
+    )[0]
+    
+    # Determine best value tier based on cost per credit
+    best_value_tier = min(
+        efficiency_data.items(),
+        key=lambda x: x[1]["cost_per_credit"] if x[1]["cost_per_credit"] > 0 else float('inf'),
+        default=(None, {})
+    )[0]
+    
+    return {
+        "efficiency_data": efficiency_data,
+        "most_efficient_tier": most_efficient_tier,
+        "best_value_tier": best_value_tier,
+        "period": period,
+        "start_date": tier_usage["start_date"],
+        "end_date": tier_usage["end_date"]
+    }

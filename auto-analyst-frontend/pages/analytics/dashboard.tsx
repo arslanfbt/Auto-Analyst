@@ -6,6 +6,7 @@ import {
   Tooltip, Legend, ResponsiveContainer, BarChart as RechartsBarChart, Bar 
 } from 'recharts';
 import AnalyticsLayout from '@/components/analytics/AnalyticsLayout';
+import TierAnalytics from '@/components/analytics/TierAnalytics';
 
 // Styles that match the app's theme
 const styles = {
@@ -375,6 +376,14 @@ export default function AnalyticsDashboard() {
                 </div>
               </section>
             )}
+            
+            {/* Add this clearly separated Tier Analytics section */}
+            <section className="mb-8">
+              <h2 className={styles.sectionTitle}>Model Tier Analysis</h2>
+              <div className="border-t border-gray-200 pt-4 mt-2">
+                <TierAnalytics adminKey={adminKey} />
+              </div>
+            </section>
           </>
         ) : (
           <div className={styles.error}>

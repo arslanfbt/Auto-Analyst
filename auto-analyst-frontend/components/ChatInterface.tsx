@@ -736,7 +736,9 @@ const ChatInterface: React.FC = () => {
       )}
 
       <motion.div
-        animate={{ marginLeft: (session || isAdmin) && isSidebarOpen ? "16rem" : "0rem" }}
+        animate={{ 
+          marginLeft: (session || isAdmin) && isSidebarOpen ? "16rem" : "0rem" 
+        } as any}
         transition={{ type: "tween", duration: 0.3 }}
         className="flex-1 flex flex-col min-w-0 relative"
       >

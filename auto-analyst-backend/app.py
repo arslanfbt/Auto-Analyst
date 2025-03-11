@@ -447,30 +447,22 @@ async def chat_with_agent(
             prompt_size = len(request.query)
             response_size = len(str(response))
             
-            # Get model name and provider
             model_name = app.state.model_config.get("model", "gpt-4o-mini")
             provider = ai_manager.get_provider_for_model(model_name)
-            
-            # Estimate tokens (actual implementation may vary)
+                
+                # Estimate tokens (actual implementation may vary)
             try:
-                print("[+ ] Actual token estimation")
                 prompt_tokens = len(ai_manager.tokenizer.encode(request.query))
                 completion_tokens = len(ai_manager.tokenizer.encode(str(response)))
                 total_tokens = prompt_tokens + completion_tokens
             except:
                 # Fallback estimation
-                print("[> ] Fallback estimation")
                 words = len(request.query.split()) + len(str(response).split())
                 total_tokens = words * 1.5  # rough estimate
                 prompt_tokens = len(request.query.split()) * 1.5
                 completion_tokens = total_tokens - prompt_tokens
             
-            logger.info(f"Prompt tokens: {prompt_tokens}")
-            logger.info(f"Completion tokens: {completion_tokens}")
-            logger.info(f"Total tokens: {total_tokens}")
-            # Calculate cost
             cost = ai_manager.calculate_cost(model_name, prompt_tokens, completion_tokens)
-            logger.info(f"Cost: {cost}")
             # Save to DB with the proper chat_id
             ai_manager.save_usage_to_db(
                 user_id=session_state.get("user_id"),
@@ -500,7 +492,8 @@ async def chat_with_agent(
     except Exception as e:
         # logger.error(f"Unexpected error: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Unexpected error: {str(e)}")
-
+    
+    
 @app.post("/chat", response_model=dict)
 async def chat_with_all(
     request: QueryRequest,
@@ -508,44 +501,29 @@ async def chat_with_all(
     session_id: str = Depends(get_session_id)
 ):
     session_state = app.state.get_session_state(session_id)
-    
-    # Update session state with user_id from request if provided
-    if "user_id" in request_obj.query_params:
-        try:
-            user_id = int(request_obj.query_params["user_id"])
-            session_state["user_id"] = user_id
-        except (ValueError, TypeError):
-            # Error handling...
-            pass
-    chat_id_param = None
-    if "chat_id" in request_obj.query_params:
-        try:
-            chat_id_param = int(request_obj.query_params.get("chat_id"))
-            # logger.info(f"Using provided chat_id {chat_id_param} from request for streaming")
-            # Update session state 
-            session_state["chat_id"] = chat_id_param
-        except (ValueError, TypeError):
-            logger.warning(f"Invalid chat_id in query params: {request_obj.query_params.get('chat_id')}")
-    
+
+    # Update session state with user_id and chat_id from request if provided
+    for param in ["user_id", "chat_id"]:
+        if param in request_obj.query_params:
+            try:
+                session_state[param] = int(request_obj.query_params[param])
+            except (ValueError, TypeError):
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Invalid {param} in query params. Please provide a valid integer."
+                )
 
     if session_state["current_df"] is None:
-        raise HTTPException(
-            status_code=400,
-            detail="No dataset is currently loaded."
-        )
+        raise HTTPException(status_code=400, detail="No dataset is currently loaded.")
     
     if session_state["ai_system"] is None:
-        raise HTTPException(
-            status_code=500,
-            detail="AI system not properly initialized."
-        )
-    
-    # Update the generate_responses function to use session state
+        raise HTTPException(status_code=500, detail="AI system not properly initialized.")
+
     async def generate_responses():
-        # Record start time for the entire operation
         overall_start_time = time.time()
         total_response = ""
-        
+        total_inputs = ""
+
         try:
             loop = asyncio.get_event_loop()
             plan_response = await loop.run_in_executor(
@@ -553,87 +531,78 @@ async def chat_with_all(
                 session_state["ai_system"].get_plan,
                 request.query
             )
-            
-            async for agent_name, response in session_state["ai_system"].execute_plan(request.query, plan_response):
-                try:
-                    formatted_response = format_response_to_markdown(
-                        {agent_name: response}, 
-                        dataframe=session_state["current_df"]
-                    )
-                    
-                    # Track the total response for token estimation
-                    total_response += str(response) if response else ""
-                    
-                    # Ensure response is not None or empty
-                    if formatted_response:
-                        response_data = {
-                            "agent": agent_name, 
-                            "content": formatted_response,
-                            "status": "success"
-                        }
-                    else:
-                        response_data = {
-                            "agent": agent_name,
-                            "content": "No response generated",
-                            "status": "error"
-                        }
-                    
-                    yield json.dumps(response_data) + "\n"
-                except Exception as format_error:
-                    yield json.dumps({
-                        "agent": agent_name,
-                        "content": f"Error formatting response: {str(format_error)}",
-                        "status": "error"
-                    }) + "\n"
 
-            # After all responses are generated, track the overall usage
+            async for agent_name, inputs, response in session_state["ai_system"].execute_plan(request.query, plan_response):
+                formatted_response = format_response_to_markdown(
+                    {agent_name: response}, 
+                    dataframe=session_state["current_df"]
+                ) or "No response generated"
+
+                if agent_name != "code_combiner_agent":
+                    total_response += str(response) if response else ""
+                    total_inputs += str(inputs) if inputs else ""
+
+                yield json.dumps({
+                    "agent": agent_name,
+                    "content": formatted_response,
+                    "status": "success" if response else "error"
+                }) + "\n"
+
             if session_state.get("user_id"):
-                # Calculate overall processing time
                 overall_processing_time_ms = int((time.time() - overall_start_time) * 1000)
-                
-    
-                # Get prompt and total response sizes
                 prompt_size = len(request.query)
-                
-                # Get provider
+
+                # Track the code combiner agent response
+                if "refined_complete_code" in response:
+                    model_name = "claude-3-5-sonnet-latest"
+                    provider = app.state.ai_manager.get_provider_for_model(model_name)
+                    input_tokens = len(app.state.ai_manager.tokenizer.encode(str(inputs)))
+                    completion_tokens = len(app.state.ai_manager.tokenizer.encode(str(response)))
+                    code_combiner_cost = app.state.ai_manager.calculate_cost(model_name, input_tokens, completion_tokens)
+
+                    app.state.ai_manager.save_usage_to_db(
+                        user_id=session_state.get("user_id"),
+                        chat_id=session_state.get("chat_id"),
+                        model_name=model_name,
+                        provider=provider,
+                        prompt_tokens=int(input_tokens),
+                        completion_tokens=int(completion_tokens),
+                        total_tokens=int(input_tokens + completion_tokens),
+                        query_size=prompt_size,
+                        response_size=len(total_response),
+                        cost=round(code_combiner_cost, 7),
+                        request_time_ms=overall_processing_time_ms,
+                        is_streaming=True
+                    )
+
                 model_name = app.state.model_config.get("model", "gpt-4o-mini")
                 provider = app.state.ai_manager.get_provider_for_model(model_name)
-                # Estimate tokens
-                try:
-                    prompt_tokens = len(app.state.ai_manager.tokenizer.encode(request.query))
-                    completion_tokens = len(app.state.ai_manager.tokenizer.encode(total_response))
-                    total_tokens = prompt_tokens + completion_tokens
-                except:
-                    # Fallback estimation
-                    words = len(request.query.split()) + (len(total_response) / 5)  # avg word length
-                    total_tokens = int(words * 1.5)  # rough estimate
-                    prompt_tokens = int(len(request.query.split()) * 1.5)
-                    completion_tokens = total_tokens - prompt_tokens
-                
-                # Calculate cost
+                prompt_tokens = len(app.state.ai_manager.tokenizer.encode(total_inputs)) 
+                completion_tokens = len(app.state.ai_manager.tokenizer.encode(total_response))  
+                total_tokens = prompt_tokens + completion_tokens
+
                 cost = app.state.ai_manager.calculate_cost(model_name, prompt_tokens, completion_tokens)
-                
-                # Save to DB
+
                 app.state.ai_manager.save_usage_to_db(
                     user_id=session_state.get("user_id"),
                     chat_id=session_state.get("chat_id"),
                     model_name=model_name,
                     provider=provider,
-                    prompt_tokens=prompt_tokens,
-                    completion_tokens=completion_tokens,
-                    total_tokens=total_tokens,
+                    prompt_tokens=int(prompt_tokens),
+                    completion_tokens=int(completion_tokens),
+                    total_tokens=int(total_tokens),
                     query_size=prompt_size,
                     response_size=len(total_response),
                     cost=round(cost, 7),
                     request_time_ms=overall_processing_time_ms,
                     is_streaming=True
                 )
-                
+           
         except Exception as e:
             logger.error(f"Error in generate_responses: {str(e)}")
             yield json.dumps({
-                "agent": "system",
-                "content": f"Error: {str(e)}",
+                "agent": "planner",
+                "content": f"Error: An error occurred while generating responses. Please try again! {str(e)}",
                 "status": "error"
             }) + "\n"
 
@@ -645,7 +614,7 @@ async def chat_with_all(
             'Connection': 'keep-alive',
             'Content-Type': 'text/event-stream',
             'Access-Control-Allow-Origin': '*',
-            'X-Accel-Buffering': 'no'  # Disable buffering for nginx
+            'X-Accel-Buffering': 'no'
         }
     )
 
@@ -718,12 +687,6 @@ async def update_model_settings(
             "temperature": settings.temperature,
             "max_tokens": settings.max_tokens
         }
-
-        print("settings.api_key: ", settings.api_key)
-        print("settings.model: ", settings.model)
-        print("settings.temperature: ", settings.temperature)
-        print("settings.max_tokens: ", settings.max_tokens)
-        print("settings.provider: ", settings.provider)
 
         # Configure model with temperature and max_tokens
         if settings.provider.lower() == "groq":

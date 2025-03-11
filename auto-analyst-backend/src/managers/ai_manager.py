@@ -27,7 +27,7 @@ costs = {
             "anthropic": {
                 "claude-3-opus-latest": {"input": 0.015, "output": 0.075},  
                 "claude-3-7-sonnet-latest": {"input": 0.003, "output": 0.015},   
-                "claude-3-5-sonnet-latest": {"input": 0.000003 * 1000, "output": 0.000015 * 1000}, 
+                "claude-3-5-sonnet-latest": {"input": 0.003, "output": 0.015}, 
                 "claude-3-5-haiku-latest": {"input": 0.0008, "output": 0.0004},
             },
             "groq": {
@@ -69,69 +69,6 @@ class AI_Manager:
             logger.warning("Tiktoken not available, using simple tokenizer")
             self.tokenizer = SimpleTokenizer()
             
-    async def generate_response(self, prompt: str, model_name: Optional[str] = None, 
-                               user_id: Optional[int] = None, chat_id: Optional[int] = None) -> str:
-        """
-        Generate a response from an AI model and track usage
-        
-        Args:
-            prompt: The input prompt
-            model_name: The AI model to use (default will be set if None)
-            user_id: Optional user ID for tracking
-            chat_id: Optional chat ID for tracking
-            
-        Returns:
-            The generated response text
-        """
-        if not model_name:
-            model_name = "gpt-3.5-turbo"  # Default model
-            
-        start_time = time.time()
-        # logger.info(f"Generating response using {model_name}")
-        
-        # For demo purposes, just echo back the prompt with some additions
-        # In a real application, you would call an actual AI model API here
-        response = f"This is a simulated response from {model_name}.\n\nYou said: {prompt}\n\nHere's my response..."
-           
-        # Calculate tokens (in a real application, this would come from the API response)
-        prompt_tokens = len(self.tokenizer.encode(prompt))
-        completion_tokens = len(self.tokenizer.encode(response))
-        total_tokens = prompt_tokens + completion_tokens
-        
-        # Calculate query processing time
-        end_time = time.time()
-        processing_time_ms = int((end_time - start_time) * 1000)
-        
-        # Calculate cost based on token usage
-        cost = self.calculate_cost(model_name, total_tokens)
-        
-        # Get the provider for the model
-        provider = self.get_provider_for_model(model_name)
-        print("--------------------------------")
-        print(f"Provider: {provider}")
-        print("--------------------------------")
-        print(f"Model: {model_name}")
-        # Track usage in database
-        self.save_usage_to_db(
-            user_id=user_id,
-            chat_id=chat_id,
-            model_name=model_name,
-            provider=provider,
-            prompt_tokens=prompt_tokens,
-            completion_tokens=completion_tokens,
-            total_tokens=total_tokens,
-            query_size=len(prompt),
-            response_size=len(response),
-            cost=cost,
-            request_time_ms=processing_time_ms,
-            is_streaming=False  # Set based on actual usage
-        )
-        
-        logger.info(f"Generated response with {total_tokens} tokens (prompt: {prompt_tokens}, completion: {completion_tokens})")
-        logger.info(f"Cost: ${cost:.6f}, Processing time: {processing_time_ms}ms")
-        
-        return response
-    
     def save_usage_to_db(self, user_id, chat_id, model_name, provider, 
                        prompt_tokens, completion_tokens, total_tokens,
                        query_size, response_size, cost, request_time_ms, 
