@@ -7,8 +7,6 @@ import logging
 from src.managers.ai_manager import AI_Manager
 from src.managers.user_manager import get_current_user, User
 from src.init_db import session_factory, ModelUsage
-from src.utils.rate_limiter import RateLimiter
-from src.utils.model_tier import get_model_tier
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, 
@@ -23,9 +21,6 @@ chat_manager = ChatManager()
 
 # Initialize AI manager
 ai_manager = AI_Manager()
-
-# Add this rate limiter instance
-route_rate_limiter = RateLimiter()
 
 # Pydantic models for request/response validation
 class MessageCreate(BaseModel):
@@ -228,25 +223,27 @@ async def post_chat_message(
             # Add the current message
             formatted_prompt += f"User: {request.message}\nAssistant:"
         
-        # Get the model name
+        # Add the user message to the chat
+        user_id = current_user.user_id if current_user else None
+        user_message = chat_manager.add_message(
+            chat_id=chat_id,
+            content=request.message,
+            sender="user",
+            user_id=user_id
+        )
+        
+        # Get the model name from the request or use default
         model_name = request.model_name or "gpt-3.5-turbo"
         
-        # Deduct credits for the model
-        user_id = current_user.user_id if current_user else None
-        model_tier = get_model_tier(model_name)
-        credits_needed = route_rate_limiter.tiers.get(model_tier, 1)
-        
-        # Try to deduct credits directly
-        if not deduct_user_credits(user_id, credits_needed):
-            raise HTTPException(status_code=403, detail="Insufficient credits for this operation")
-        
-        # Generate AI response
+        # Generate AI response - This will log and record usage
+        # logger.info(f"Calling AI Manager with model {model_name} for chat {chat_id}, user {user_id}")
         response_text = await ai_manager.generate_response(
             prompt=formatted_prompt,
             model_name=model_name,
             user_id=user_id,
             chat_id=chat_id
         )
+        # logger.info(f"Received response from AI Manager: {len(response_text)} characters")
         
         # Add the AI response to the chat
         ai_message = chat_manager.add_message(
@@ -317,38 +314,5 @@ async def test_model_usage(
         return {
             "success": False,
             "error": str(e)
-        }
-
-# And add this helper function
-def deduct_user_credits(user_id, credits_needed):
-    """Directly deduct credits from a user without using Redis"""
-    if not user_id or credits_needed <= 0:
-        return True
-        
-    try:
-        user_id = int(user_id) if isinstance(user_id, str) else user_id
-        session = session_factory()
-        try:
-            user = session.query(User).filter(User.user_id == user_id).first()
-            if not user:
-                logger.warning(f"User with ID {user_id} not found")
-                return False
-                
-            if user.credits < credits_needed:
-                logger.warning(f"User {user_id} has insufficient credits: {user.credits} < {credits_needed}")
-                return False
-                
-            # Deduct credits
-            user.credits -= credits_needed
-            session.commit()
-            logger.info(f"Deducted {credits_needed} credits from user {user_id}. New balance: {user.credits}")
-            return True
-        except Exception as e:
-            session.rollback()
-            logger.error(f"Database error updating user credits: {str(e)}")
-            return False
-        finally:
-            session.close()
-    except Exception as e:
-        logger.error(f"Error deducting credits: {str(e)}")
-        return False 
+        } 
+    

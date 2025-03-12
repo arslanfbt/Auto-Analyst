@@ -15,13 +15,11 @@ session_factory = Session
 
 # Define the Users table
 class User(Base):
-    """User model for authentication and credit tracking."""
     __tablename__ = 'users'
     
-    user_id = Column(Integer, primary_key=True)
-    username = Column(String, unique=True)
-    email = Column(String)
-    credits = Column(Integer, default=100)  # Add credits field
+    user_id = Column(Integer, primary_key=True, autoincrement=True)
+    username = Column(String, unique=True, nullable=False)
+    email = Column(String, unique=True, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
 
 # Define the Chats table

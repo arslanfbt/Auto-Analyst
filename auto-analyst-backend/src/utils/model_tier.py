@@ -52,57 +52,9 @@ MODEL_TIERS = {
     }
 }
 
-from src.managers.ai_manager import costs
 
 def get_model_tier(model_name):
-    """
-    Determine the pricing tier for a model based on its cost bracket.
-    Returns: 'tier1' (low cost), 'tier2' (medium cost), or 'tier3' (high cost)
-    """
-    if not model_name:
-        return "tier1"  # Default to lowest tier if no model specified
-        
-    model_name = model_name.lower()
-    
-    # Handle comma-separated models by taking the highest tier
-    if "," in model_name:
-        models = [m.strip() for m in model_name.split(",")]
-        tiers = [get_model_tier(m) for m in models]
-        # Extract tier numbers and find max
-        tier_numbers = [int(tier.replace("tier", "")) for tier in tiers]
-        return f"tier{max(tier_numbers)}"
-    
-    # Get provider for this model
-    provider = None
-    model_key = None
-    
-    for prov, models in costs.items():
-        for model in models:
-            if model_name in model.lower():
-                provider = prov
-                model_key = model
-                break
-        if provider:
-            break
-    
-    if not provider or not model_key:
-        return "tier1"  # Default to lowest tier if model not found
-    
-    # Determine tier based on input cost
-    input_cost = costs[provider][model_key]["input"]
-    output_cost = costs[provider][model_key]["output"]
-    total_cost = input_cost + output_cost
-    
-    # tier 1: < $0.0005
-    # tier 2: $0.0005 - $0.001
-    # tier 3: > $0.001
-    if total_cost < 0.0005:
-        return "tier1"  # Low cost models
-    elif total_cost < 0.001:
-        return "tier2"  # Medium cost models
-    else:
-        return "tier3"  # High cost models (like GPT-4, Claude 3 Opus)
-
-
-if __name__=="__main__":
-    print(get_model_tier("gpt-3.5-turbo"))
+    for tier, tier_info in MODEL_TIERS.items():
+        if model_name in tier_info["models"]:
+            return tier
+    return "tier1"

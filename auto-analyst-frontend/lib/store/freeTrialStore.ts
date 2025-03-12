@@ -1,3 +1,4 @@
+import { useCredits } from '@/lib/contexts/credit-context'
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 
@@ -19,7 +20,7 @@ export const useFreeTrialStore = create<FreeTrialStore>()(
         const isAuthenticated = localStorage.getItem('isAdmin') === 'true' || 
                               document.cookie.includes('next-auth.session-token')
         
-        // If authenticated, always return true (unlimited access)
+        // If authenticated, check credits instead of free trial limit
         if (isAuthenticated) {
           return true
         }

@@ -13,7 +13,7 @@ import { useSessionStore } from '@/lib/store/sessionStore'
 import API_URL from '@/config/api'
 import { Button } from "@/components/ui/button"
 import { format } from 'date-fns'
-import CreditsDisplay from './CreditsDisplay'
+import CreditBalance from '@/components/CreditBalance'
 
 // const PREVIEW_API_URL = 'http://localhost:8000';
 const PREVIEW_API_URL = API_URL;
@@ -168,9 +168,6 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, onNewChat, chatHisto
             </button>
           </div>
 
-          {/* Credits Display */}
-          <CreditsDisplay />
-
           {/* New Chat Button */}
           <button
             onClick={handleNewChat}
@@ -228,6 +225,11 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, onNewChat, chatHisto
 
           {/* Bottom Navigation */}
           <div className="border-t border-gray-100 bg-white/50 backdrop-blur-sm">
+            {/* Credit Balance Display */}
+            <div className="p-3 flex justify-center border-b border-gray-200">
+              <CreditBalance />
+            </div>
+            
             <div className="p-4 border-t border-gray-200">
               <div className="flex flex-col space-y-2">
                 {/* New Dashboard Button - Only show for admin users */}
