@@ -13,6 +13,7 @@ import { useSessionStore } from '@/lib/store/sessionStore'
 import API_URL from '@/config/api'
 import { Button } from "@/components/ui/button"
 import { format } from 'date-fns'
+import CreditsDisplay from './CreditsDisplay'
 
 // const PREVIEW_API_URL = 'http://localhost:8000';
 const PREVIEW_API_URL = API_URL;
@@ -166,6 +167,9 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, onNewChat, chatHisto
               <X className="w-5 h-5" />
             </button>
           </div>
+
+          {/* Credits Display */}
+          <CreditsDisplay />
 
           {/* New Chat Button */}
           <button

@@ -24,13 +24,16 @@ from scripts.format_response import format_response_to_markdown, execute_code_fr
 import json
 import asyncio
 
-
+from src.init_db import User as UserDB, session_factory
 from dotenv import load_dotenv
 from src.routes.chat_routes import router as chat_router
 from src.routes.analytics_routes import router as analytics_router
+from src.routes.user_routes import router as user_router, set_app_reference
 import time
 from src.managers.ai_manager import AI_Manager
 from src.managers.user_manager import get_current_user, User, create_user
+from src.utils.rate_limiter import RateLimiter
+from src.utils.model_tier import get_model_tier
 
 load_dotenv()
 
@@ -340,6 +343,12 @@ class UserLoginRequest(BaseModel):
     email: str
     session_id: Optional[str] = None
 
+# Initialize the rate limiter
+rate_limiter = RateLimiter()
+
+# Make sure set_app_reference is called
+set_app_reference(app)
+
 @app.post("/upload_dataframe")
 async def upload_dataframe(
     file: UploadFile = File(...),
@@ -367,7 +376,15 @@ async def chat_with_agent(
     session_id: str = Depends(get_session_id)
 ):
     session_state = app.state.get_session_state(session_id)
+    user_id = session_state.get('user_id')
     
+    # Determine the model tier based on the agent name
+    model_tier = get_model_tier(agent_name)
+    
+    # This is the key part - check if user has enough credits
+    if not rate_limiter.limit(user_id, model_tier):
+        raise HTTPException(status_code=403, detail="Credit limit exceeded for this model.")
+
     # Check for chat_id in query parameters
     chat_id_param = None
     if "chat_id" in request_obj.query_params:
@@ -847,7 +864,39 @@ async def reset_session(
 # Add this line where other routers are included
 app.include_router(chat_router)
 app.include_router(analytics_router)
+app.include_router(user_router)
 
+# Add this function to get or create a user without resetting credits
+def get_or_create_user(username, email):
+    """Get an existing user or create a new one if not found"""
+    session = session_factory()
+    try:
+        # Check if user exists by username
+        user = session.query(UserDB).filter(UserDB.username == username).first()
+        if user:
+            # Return existing user without modifying credits
+            logger.info(f"Found existing user {username} (ID: {user.user_id}) with {user.credits} credits")
+            return user
+            
+        # Create new user with default credits
+        logger.info(f"Creating new user {username}")
+        new_user = UserDB(
+            username=username,
+            email=email,
+            credits=100  # Default credits for new users only
+        )
+        session.add(new_user)
+        session.commit()
+        logger.info(f"Created new user {username} (ID: {new_user.user_id}) with 100 credits")
+        return new_user
+    except Exception as e:
+        session.rollback()
+        logger.error(f"Error in get_or_create_user: {str(e)}")
+        raise e
+    finally:
+        session.close()
+
+# Then update the ensure_user_metadata function
 def ensure_user_metadata(session_id: str, session_state: dict, request: Request = None) -> tuple:
     """Ensure a session has user_id and chat_id, creating if necessary"""
     # First check if user_id was provided as a query parameter
@@ -876,13 +925,14 @@ def ensure_user_metadata(session_id: str, session_state: dict, request: Request 
         guest_email = f"{guest_username}@example.com"
         
         try:
-            user = create_user(username=guest_username, email=guest_email)
+            # Use get_or_create_user instead of create_user to avoid credit resets
+            user = get_or_create_user(username=guest_username, email=guest_email)
             user_id = user.user_id
             # Update session state
             app.state.set_session_user(session_id=session_id, user_id=user_id)
-            logger.info(f"Created guest user {user_id} for session {session_id}")
+            logger.info(f"Using guest user {user_id} for session {session_id}")
         except Exception as e:
-            logger.error(f"Failed to create guest user: {str(e)}")
+            logger.error(f"Failed to get/create guest user: {str(e)}")
             user_id = 1  # Fallback
     
     # Get chat_id, create if missing

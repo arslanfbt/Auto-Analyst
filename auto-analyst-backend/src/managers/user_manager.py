@@ -20,6 +20,7 @@ class User(BaseModel):
     user_id: int
     username: str
     email: str
+    credits: int
 
     class Config:
         orm_mode = True
@@ -60,7 +61,8 @@ async def get_current_user(
             return User(
                 user_id=db_user.user_id,
                 username=db_user.username,
-                email=db_user.email
+                email=db_user.email,
+                credits=db_user.credits
             )
             
         finally:
@@ -71,41 +73,41 @@ async def get_current_user(
         return None
 
 # Function to create a new user
-def create_user(username: str, email: str) -> User:
-    """Create a new user in the database"""
+def create_user(username, email, credits=100):
+    """Create a new user with default credits"""
     session = get_session()
     try:
-        # Check if user with this email already exists
-        existing_user = session.query(DBUser).filter(DBUser.email == email).first()
+        # Check if user already exists
+        existing_user = session.query(DBUser).filter(DBUser.username == username).first()
         if existing_user:
+            # Don't reset credits for existing users
             return User(
                 user_id=existing_user.user_id,
                 username=existing_user.username,
-                email=existing_user.email
+                email=existing_user.email,
+                credits=existing_user.credits  # Use existing credits, not default value
             )
-            
+        
         # Create new user
-        new_user = DBUser(
+        db_user = DBUser(
             username=username,
-            email=email
+            email=email,
+            credits=credits
         )
-        session.add(new_user)
+        session.add(db_user)
         session.commit()
-        session.refresh(new_user)
         
         return User(
-            user_id=new_user.user_id,
-            username=new_user.username,
-            email=new_user.email
+            user_id=db_user.user_id,
+            username=db_user.username,
+            email=db_user.email,
+            credits=db_user.credits
         )
-    
     except Exception as e:
         session.rollback()
-        logger.error(f"Error creating user: {str(e)}")
-        raise
-    
+        raise e
     finally:
-        session.close() 
+        session.close()
 
 def get_user_by_email(email: str) -> Optional[User]:
     """Get a user by email"""
@@ -115,7 +117,8 @@ def get_user_by_email(email: str) -> Optional[User]:
         return User(
             user_id=user.user_id,
             username=user.username,
-            email=user.email
+            email=user.email,
+            credits=user.credits
         )
     except Exception as e:
         logger.error(f"Error getting user by email: {str(e)}")
