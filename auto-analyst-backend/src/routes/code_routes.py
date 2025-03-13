@@ -6,7 +6,7 @@ from pydantic import BaseModel
 
 from scripts.format_response import execute_code_from_markdown
 from src.utils.logger import Logger
-from src.managers.session_manager import get_session_id
+from src.routes.session_routes import get_session_id_dependency
 
 # Initialize router
 router = APIRouter(
@@ -18,25 +18,29 @@ router = APIRouter(
 # Initialize logger
 logger = Logger("code_routes", see_time=True, console_log=True)
 
+# Request body model
+class CodeExecuteRequest(BaseModel):
+    code: str
 
 @router.post("/execute")
 async def execute_code(
-    request_obj: dict,
-    session_id: str = Depends(get_session_id)
+    request_data: CodeExecuteRequest,
+    request: Request,
+    session_id: str = Depends(get_session_id_dependency)
 ):
     """
     Execute code provided in the request against the session's dataframe
     
     Args:
-        request: Dictionary containing code to execute
-        request_obj: FastAPI Request object
+        request_data: Body containing code to execute
+        request: FastAPI Request object
         session_id: Session identifier
         
     Returns:
         Dictionary containing execution output and any plot outputs
     """
     # Access app state via request
-    app_state = request_obj.app.state
+    app_state = request.app.state
     session_state = app_state.get_session_state(session_id)
     
     if session_state["current_df"] is None:
@@ -46,7 +50,7 @@ async def execute_code(
         )
         
     try:
-        code = request.code
+        code = request_data.code
         if not code:
             raise HTTPException(status_code=400, detail="No code provided")
             

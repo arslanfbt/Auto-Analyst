@@ -5,3 +5,7 @@
 2025-03-13 16:10:42,793 - user_manager - ERROR - Error authenticating user: int() argument must be a string, a bytes-like object or a real number, not 'Depends'
 2025-03-13 16:16:42,958 - user_manager - ERROR - Error authenticating user: int() argument must be a string, a bytes-like object or a real number, not 'Depends'
 2025-03-13 16:16:44,668 - user_manager - ERROR - Error authenticating user: int() argument must be a string, a bytes-like object or a real number, not 'Depends'
+2025-03-13 16:30:50,004 - user_manager - ERROR - Error authenticating user: int() argument must be a string, a bytes-like object or a real number, not 'Depends'
+2025-03-13 16:30:57,085 - user_manager - ERROR - Error authenticating user: int() argument must be a string, a bytes-like object or a real number, not 'Depends'
+2025-03-13 16:32:34,788 - user_manager - ERROR - Error authenticating user: int() argument must be a string, a bytes-like object or a real number, not 'Depends'
+2025-03-13 16:32:36,139 - user_manager - ERROR - Error authenticating user: int() argument must be a string, a bytes-like object or a real number, not 'Depends'

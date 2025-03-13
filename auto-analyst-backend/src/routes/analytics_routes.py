@@ -17,14 +17,17 @@ from src.db.schemas.models import ModelUsage
 from src.managers.chat_manager import ChatManager
 
 from typing import Any, Dict, List, Optional
+from src.utils.logger import Logger
 
-# Configure logging
-logging.basicConfig(level=logging.INFO, 
-                    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
+# Initialize logger with console logging disabled
+logger = Logger("analytics_routes", see_time=True, console_log=False)
 
 # Initialize router
 router = APIRouter(prefix="/analytics", tags=["analytics"])
+
+# Disable logging
+if os.getenv("ENVIRONMENT") == "production":
+    logger.disable_logging()
 
 # Initialize chat manager
 chat_manager = ChatManager()
@@ -40,15 +43,18 @@ async def verify_admin_api_key(
 ):
     # Check header first
     if api_key and api_key == ADMIN_API_KEY:
+        logger.log_message("Admin API key successfully verified via header", logging.INFO)
         return True
         
     # If API key wasn't in header or didn't match, check query parameters
     if request:
         api_key_query = request.query_params.get("admin_api_key")
         if api_key_query and api_key_query == ADMIN_API_KEY:
+            logger.log_message("Admin API key successfully verified via query parameter", logging.INFO)
             return True
     
     # If we got here, the API key is invalid
+    logger.log_message("Invalid or missing admin API key attempt", level=logging.WARNING)
     raise HTTPException(
         status_code=403,
         detail="Invalid or missing admin API key"
@@ -148,6 +154,7 @@ async def get_dashboard_data(
     db: Session = Depends(get_db),
     api_key: str = Depends(verify_admin_api_key)
 ):
+    logger.log_message(f"Dashboard data requested for period: {period}", logging.INFO)
     start_date, end_date = get_date_range(period)
     
     # Get total stats
@@ -234,7 +241,7 @@ async def get_dashboard_data(
         for user in user_query
     ]
     
-    return {
+    result = {
         "total_tokens": int(total_stats.total_tokens or 0),
         "total_cost": float(total_stats.total_cost or 0),
         "total_requests": int(total_stats.total_requests or 0),
@@ -245,10 +252,14 @@ async def get_dashboard_data(
         "start_date": start_date.strftime('%Y-%m-%d'),
         "end_date": end_date.strftime('%Y-%m-%d'),
     }
+    logger.log_message(f"Dashboard data retrieved: {len(daily_usage)} days, {len(model_usage)} models, {len(top_users)} top users", logging.INFO)
+    return result
 
 # WebSocket endpoint for real-time dashboard updates
 @router.websocket("/dashboard/realtime")
 async def dashboard_realtime(websocket: WebSocket):
+    client_id = id(websocket)
+    logger.log_message(f"New dashboard realtime connection: {client_id}", logging.INFO)
     await websocket.accept()
     active_dashboard_connections.add(websocket)
     
@@ -256,8 +267,9 @@ async def dashboard_realtime(websocket: WebSocket):
         while True:
             # Keep connection alive and wait for potential disconnection
             await websocket.receive_text()
-    except Exception:
+    except Exception as e:
         # Remove connection when client disconnects
+        logger.log_message(f"Dashboard realtime connection closed: {client_id}, reason: {str(e)}", logging.INFO)
         active_dashboard_connections.remove(websocket)
         await websocket.close()
 
@@ -269,6 +281,7 @@ async def get_users(
     db: Session = Depends(get_db),
     api_key: str = Depends(verify_admin_api_key)
 ):
+    logger.log_message(f"User analytics requested with limit: {limit}, offset: {offset}", logging.INFO)
     user_query = db.query(
         ModelUsage.user_id,
         func.sum(ModelUsage.total_tokens).label("tokens"),
@@ -301,6 +314,7 @@ async def get_users(
         .filter(ModelUsage.user_id.isnot(None))\
         .scalar() or 0
     
+    logger.log_message(f"Retrieved {len(users)} users, total users: {total_users}", logging.INFO)
     return {
         "users": users,
         "total": total_users,
@@ -314,6 +328,7 @@ async def get_user_activity(
     db: Session = Depends(get_db),
     api_key: str = Depends(verify_admin_api_key)
 ):
+    logger.log_message(f"User activity requested for period: {period}", logging.INFO)
     start_date, end_date = get_date_range(period)
     
     # First, get a subquery for the first date each user was seen
@@ -376,6 +391,7 @@ async def get_user_activity(
                 "sessions": 0
             })
     
+    logger.log_message(f"Retrieved user activity data for {len(filled_activity)} days", logging.INFO)
     return {"user_activity": filled_activity}
 
 @router.get("/users/sessions/stats")
@@ -383,6 +399,7 @@ async def get_session_stats(
     db: Session = Depends(get_db),
     api_key: str = Depends(verify_admin_api_key)
 ):
+    logger.log_message("Session statistics requested", logging.INFO)
     # Total users ever
     total_users = db.query(func.count(func.distinct(ModelUsage.user_id)))\
         .filter(ModelUsage.user_id.isnot(None))\
@@ -435,6 +452,7 @@ async def get_session_stats(
     
     avg_session_time = int(total_seconds / session_count) if session_count > 0 else 0
     
+    logger.log_message(f"Session stats retrieved: {total_users} total users, {active_today} active today", logging.INFO)
     return {
         "totalUsers": total_users,
         "activeToday": active_today,
@@ -444,6 +462,8 @@ async def get_session_stats(
 
 @router.websocket("/realtime")
 async def user_realtime(websocket: WebSocket):
+    client_id = id(websocket)
+    logger.log_message(f"New user realtime connection: {client_id}", logging.INFO)
     await websocket.accept()
     active_user_connections.add(websocket)
     
@@ -451,7 +471,8 @@ async def user_realtime(websocket: WebSocket):
         while True:
             # Keep connection alive
             await websocket.receive_text()
-    except Exception:
+    except Exception as e:
+        logger.log_message(f"User realtime connection closed: {client_id}, reason: {str(e)}", logging.INFO)
         active_user_connections.remove(websocket)
         await websocket.close()
 
@@ -462,6 +483,7 @@ async def get_model_usage(
     db: Session = Depends(get_db),
     api_key: str = Depends(verify_admin_api_key)
 ):
+    logger.log_message(f"Model usage requested for period: {period}", logging.INFO)
     start_date, end_date = get_date_range(period)
     
     # Get model usage breakdown
@@ -491,6 +513,7 @@ async def get_model_usage(
         for model in model_query
     ]
     
+    logger.log_message(f"Retrieved model usage for {len(model_usage)} models", logging.INFO)
     return {"model_usage": model_usage}
 
 @router.get("/models/history")
@@ -499,6 +522,7 @@ async def get_model_history(
     db: Session = Depends(get_db),
     api_key: str = Depends(verify_admin_api_key)
 ):
+    logger.log_message(f"Model history requested for period: {period}", logging.INFO)
     start_date, end_date = get_date_range(period)
     
     # Get daily usage per model
@@ -555,6 +579,7 @@ async def get_model_history(
                 "models": [{"name": model_name, "tokens": 0, "requests": 0} for model_name in model_names]
             })
     
+    logger.log_message(f"Retrieved model history for {len(model_history)} days covering {len(model_names)} models", logging.INFO)
     return {"model_history": model_history}
 
 @router.get("/models/metrics")
@@ -562,6 +587,7 @@ async def get_model_metrics(
     db: Session = Depends(get_db),
     api_key: str = Depends(verify_admin_api_key)
 ):
+    logger.log_message("Model metrics requested", logging.INFO)
     # Calculate performance metrics for each model
     metrics_query = db.query(
         ModelUsage.model_name.label("name"),
@@ -585,6 +611,7 @@ async def get_model_metrics(
         for metrics in metrics_query.all()  # Fetch all results to avoid lazy loading!!!
     ]
     
+    logger.log_message(f"Retrieved metrics for {len(model_metrics)} models", logging.INFO)
     return {"model_metrics": model_metrics}
 
 # Cost analytics endpoints
@@ -594,6 +621,7 @@ async def get_cost_summary(
     db: Session = Depends(get_db),
     api_key: str = Depends(verify_admin_api_key)
 ):
+    logger.log_message(f"Cost summary requested for period: {period}", logging.INFO)
     start_date, end_date = get_date_range(period)
     
     # Get cost summary
@@ -609,7 +637,7 @@ async def get_cost_summary(
     # Calculate average daily costs
     days = (end_date - start_date).days or 1  # Avoid division by zero
     
-    return {
+    result = {
         "totalCost": float(summary.total_cost or 0),
         "totalTokens": int(summary.total_tokens or 0),
         "totalRequests": int(summary.total_requests or 0),
@@ -619,6 +647,8 @@ async def get_cost_summary(
         "startDate": start_date.strftime('%Y-%m-%d'),
         "endDate": end_date.strftime('%Y-%m-%d')
     }
+    logger.log_message(f"Cost summary retrieved: ${result['totalCost']:.2f} over {days} days", logging.INFO)
+    return result
 
 @router.get("/costs/daily")
 async def get_daily_costs(
@@ -626,6 +656,7 @@ async def get_daily_costs(
     db: Session = Depends(get_db),
     api_key: str = Depends(verify_admin_api_key)
 ):
+    logger.log_message(f"Daily costs requested for period: {period}", logging.INFO)
     start_date, end_date = get_date_range(period)
     
     # Get daily costs
@@ -668,6 +699,7 @@ async def get_daily_costs(
                 "tokens": 0
             })
     
+    logger.log_message(f"Retrieved daily costs for {len(filled_costs)} days", logging.INFO)
     return {"daily_costs": filled_costs}
 
 @router.get("/costs/models")
@@ -676,6 +708,7 @@ async def get_model_costs(
     db: Session = Depends(get_db),
     api_key: str = Depends(verify_admin_api_key)
 ):
+    logger.log_message(f"Model costs requested for period: {period}", logging.INFO)
     start_date, end_date = get_date_range(period)
     
     # Get costs by model
@@ -703,6 +736,7 @@ async def get_model_costs(
         for model in model_query
     ]
     
+    logger.log_message(f"Retrieved cost data for {len(model_costs)} models", logging.INFO)
     return {"model_costs": model_costs}
 
 @router.get("/costs/projections")
@@ -710,6 +744,7 @@ async def get_cost_projections(
     db: Session = Depends(get_db),
     api_key: str = Depends(verify_admin_api_key)
 ):
+    logger.log_message("Cost projections requested", logging.INFO)
     # Get last 30 days usage as baseline
     thirty_days_ago = datetime.utcnow() - timedelta(days=30)
     
@@ -730,7 +765,7 @@ async def get_cost_projections(
     daily_tokens = int(baseline.total_tokens or 0) / actual_days
     
     # Project future costs
-    return {
+    result = {
         "nextMonth": daily_cost * 30,
         "next3Months": daily_cost * 90,
         "nextYear": daily_cost * 365,
@@ -739,12 +774,15 @@ async def get_cost_projections(
         "dailyTokens": daily_tokens,
         "baselineDays": actual_days
     }
+    logger.log_message(f"Cost projections calculated: ${result['nextMonth']:.2f}/month, ${result['nextYear']:.2f}/year", logging.INFO)
+    return result
 
 @router.get("/costs/today")
 async def get_today_costs(
     db: Session = Depends(get_db),
     api_key: str = Depends(verify_admin_api_key)
 ):
+    logger.log_message("Today's costs requested", logging.INFO)
     today = datetime.utcnow().date()
     
     # Get today's costs
@@ -756,16 +794,19 @@ async def get_today_costs(
         func.date(ModelUsage.timestamp) == today
     ).first()
     
-    return {
+    result = {
         "date": today.strftime('%Y-%m-%d'),
         "cost": float(today_data.cost or 0),
         "tokens": int(today_data.tokens or 0),
         "requests": int(today_data.requests or 0)
     }
+    logger.log_message(f"Today's costs retrieved: ${result['cost']:.2f}, {result['tokens']} tokens", logging.INFO)
+    return result
 
 # Debug endpoint for testing admin key
 @router.get("/debug/model_usage")
 async def debug_model_usage(api_key: str = Depends(verify_admin_api_key)):
+    logger.log_message("Debug model usage endpoint accessed", logging.INFO)
     return {"status": "success", "message": "Admin API key validated successfully"}
 
 # Function to broadcast real-time updates to all connected dashboard clients
@@ -773,10 +814,14 @@ async def broadcast_dashboard_update(update_data: Dict[str, Any]):
     if not active_dashboard_connections:
         return
     
+    connection_count = len(active_dashboard_connections)
+    logger.log_message(f"Broadcasting dashboard update to {connection_count} connections", logging.INFO)
+    
     for connection in active_dashboard_connections.copy():
         try:
             await connection.send_text(json.dumps(update_data))
-        except Exception:
+        except Exception as e:
+            logger.log_message(f"Failed to send dashboard update: {str(e)}", logging.WARNING)
             active_dashboard_connections.remove(connection)
 
 # Function to broadcast real-time updates to all connected user analytics clients
@@ -784,10 +829,14 @@ async def broadcast_user_update(update_data: Dict[str, Any]):
     if not active_user_connections:
         return
     
+    connection_count = len(active_user_connections)
+    logger.log_message(f"Broadcasting user update to {connection_count} connections", logging.INFO)
+    
     for connection in active_user_connections.copy():
         try:
             await connection.send_text(json.dumps(update_data))
-        except Exception:
+        except Exception as e:
+            logger.log_message(f"Failed to send user update: {str(e)}", logging.WARNING)
             active_user_connections.remove(connection)
 
 # Usage summary endpoint (to maintain backward compatibility)
@@ -796,6 +845,7 @@ async def get_usage_summary(
     db: Session = Depends(get_db),
     api_key: str = Depends(verify_admin_api_key)
 ):
+    logger.log_message("Usage summary requested (legacy endpoint)", logging.INFO)
     # Call the dashboard endpoint with default period
     return await get_dashboard_data(period="30d", db=db, api_key=api_key)
 
@@ -805,6 +855,8 @@ async def handle_new_model_usage(model_usage: ModelUsage):
     Process a new model usage event and broadcast updates to connected clients.
     This function should be called whenever a new model usage record is created.
     """
+    logger.log_message(f"Processing new model usage event: {model_usage.model_name}, user: {model_usage.user_id}", logging.INFO)
+    
     # Ensure the model_usage instance is refreshed and bound to a session
     session = get_session()  # Assuming get_session() is a function that provides a new session
     try:
@@ -847,7 +899,10 @@ async def handle_new_model_usage(model_usage: ModelUsage):
         
         # Broadcast updates
         await broadcast_dashboard_update(dashboard_update)
-        await broadcast_dashboard_update(model_update) 
+        await broadcast_dashboard_update(model_update)
+        logger.log_message("Model usage updates broadcasted successfully", logging.INFO)
+    except Exception as e:
+        logger.log_message(f"Error processing model usage event: {str(e)}", logging.ERROR)
     finally:
         session.close()  # Ensure the session is closed after use
 
@@ -857,6 +912,7 @@ async def get_tier_usage(
     db: Session = Depends(get_db),
     api_key: str = Depends(verify_admin_api_key)
 ):
+    logger.log_message(f"Tier usage requested for period: {period}", logging.INFO)
     start_date, end_date = get_date_range(period)
     
     # Get all model usage during the period
@@ -923,6 +979,7 @@ async def get_tier_usage(
         else:
             data["cost_per_credit"] = 0
     
+    logger.log_message(f"Retrieved tier usage data for {len(tier_data)} tiers", logging.INFO)
     return {
         "tier_data": tier_data,
         "period": period,
@@ -935,6 +992,7 @@ async def get_tier_projections(
     db: Session = Depends(get_db),
     api_key: str = Depends(verify_admin_api_key)
 ):
+    logger.log_message("Tier projections requested", logging.INFO)
     # Get last 30 days usage for baseline
     tier_usage = await get_tier_usage(period="30d", db=db, api_key=api_key)
     tier_data = tier_usage["tier_data"]
@@ -998,6 +1056,7 @@ async def get_tier_projections(
         for metric in ["requests", "tokens", "cost", "credits"]:
             projections[period][f"total_{metric}"] = sum(projections[period][metric].values())
     
+    logger.log_message(f"Tier projections calculated for {len(daily_tier_usage)} tiers", logging.INFO)
     return {
         "daily_usage": daily_tier_usage,
         "projections": projections,
@@ -1010,6 +1069,7 @@ async def get_tier_efficiency(
     db: Session = Depends(get_db),
     api_key: str = Depends(verify_admin_api_key)
 ):
+    logger.log_message(f"Tier efficiency requested for period: {period}", logging.INFO)
     # Get tier usage data
     tier_usage = await get_tier_usage(period=period, db=db, api_key=api_key)
     tier_data = tier_usage["tier_data"]
@@ -1047,6 +1107,7 @@ async def get_tier_efficiency(
         default=(None, {})
     )[0]
     
+    logger.log_message(f"Tier efficiency calculated for {len(efficiency_data)} tiers", logging.INFO)
     return {
         "efficiency_data": efficiency_data,
         "most_efficient_tier": most_efficient_tier,

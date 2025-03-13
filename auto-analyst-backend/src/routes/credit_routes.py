@@ -1,3 +1,5 @@
+#### DEPRECATED ####
+
 from fastapi import APIRouter, Depends
 from src.managers.user_manager import get_current_user
 from src.db.schemas.models import User

@@ -31,6 +31,9 @@ class Logger:
         else:
             self.logger.info(message)
 
+    def disable_logging(self):
+        # Disable all logging to avoid IO overhead, for production
+        self.logger.disabled = True
 
 def log_time(func):
     def wrapper(*args, **kwargs):
