@@ -17,6 +17,10 @@ import { useRouter } from "next/navigation"
 import { AwardIcon } from "lucide-react"
 import { useSessionStore } from '@/lib/store/sessionStore'
 import API_URL from '@/config/api'
+import { useCredits } from '@/lib/contexts/credit-context'
+import { getModelCreditCost } from '@/lib/model-tiers'
+import InsufficientCreditsModal from '@/components/InsufficientCreditsModal'
+import CreditBalance from '@/components/CreditBalance'
 
 interface PlotlyMessage {
   type: "plotly"
@@ -69,6 +73,9 @@ const ChatInterface: React.FC = () => {
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   const [userId, setUserId] = useState<number | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
+  const { hasEnoughCredits, deductCredits } = useCredits()
+  const [insufficientCreditsModalOpen, setInsufficientCreditsModalOpen] = useState(false)
+  const [requiredCredits, setRequiredCredits] = useState(0)
 
   useEffect(() => {
     setMounted(true)
@@ -267,6 +274,32 @@ const ChatInterface: React.FC = () => {
     if (session || isAdmin) {
       const existingChat = chatHistories.find(chat => chat.chat_id === currentChatId);
       
+      // CREDIT CHECK: Check if user has enough credits based on model tier
+      // Get the selected model from current settings or use default
+      // We assume the model settings are available - if not, we need to fetch them
+      // This requires the modelSettings state to be added if not already present
+      
+      // You need to fetch the current model settings first
+      let modelName = "gpt-3.5-turbo"; // Default model
+      try {
+        const response = await axios.get(`${API_URL}/api/model-settings`);
+        if (response.data && response.data.model) {
+          modelName = response.data.model;
+        }
+      } catch (error) {
+        console.error("Failed to fetch model settings:", error);
+      }
+      
+      // Calculate credits required for this model
+      const creditCost = getModelCreditCost(modelName);
+      
+      // Check if user has enough credits
+      if (!hasEnoughCredits(creditCost)) {
+        setRequiredCredits(creditCost);
+        setInsufficientCreditsModalOpen(true);
+        return;
+      }
+      
       // If the currentChatId is a temporary one (not in chat histories), create a real chat
       if (!existingChat) {
         isFirstMessage = true;
@@ -368,6 +401,24 @@ const ChatInterface: React.FC = () => {
           const cleanQuery = message.replace(agentRegex, '').trim()
           await processAgentMessage(combinedAgentName, cleanQuery, controller, currentChatId)
         }
+      }
+
+      // DEDUCT CREDITS: After successful response, deduct the credits
+      if (session || isAdmin) {
+        // Get the model that was used for the response
+        let modelName = "gpt-3.5-turbo"; // Default model
+        try {
+          const response = await axios.get(`${API_URL}/api/model-settings`);
+          if (response.data && response.data.model) {
+            modelName = response.data.model;
+          }
+        } catch (error) {
+          console.error("Failed to fetch model settings:", error);
+        }
+        
+        // Calculate and deduct credits
+        const creditCost = getModelCreditCost(modelName);
+        await deductCredits(creditCost);
       }
 
       // After the AI response is generated and saved, update the chat title for new chats
@@ -762,23 +813,29 @@ const ChatInterface: React.FC = () => {
             </div>
           </div>
 
-          {/* Only show sidebar button for signed-in users or admin */}
-          {(session || isAdmin) && (
-            <button
-              onClick={() => setSidebarOpen((prev) => !prev)}
-              className="text-gray-500 hover:text-[#FF7F7F] focus:outline-none transition-colors"
-            >
-              <svg
-                className="w-6 h-6"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-                xmlns="http://www.w3.org/2000/svg"
+          {/* Show credit balance and sidebar button */}
+          <div className="flex items-center gap-3">
+            {/* Only show credit balance for authenticated users */}
+            {(session || isAdmin) && <CreditBalance />}
+            
+            {/* Only show sidebar button for signed-in users or admin */}
+            {(session || isAdmin) && (
+              <button
+                onClick={() => setSidebarOpen((prev) => !prev)}
+                className="text-gray-500 hover:text-[#FF7F7F] focus:outline-none transition-colors"
               >
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-              </svg>
-            </button>
-          )}
+                <svg
+                  className="w-6 h-6"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                  xmlns="http://www.w3.org/2000/svg"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                </svg>
+              </button>
+            )}
+          </div>
         </header>
 
         <div className="flex-1 overflow-hidden">
@@ -796,6 +853,12 @@ const ChatInterface: React.FC = () => {
           disabled={isInputDisabled()} 
           isLoading={isLoading}
           onStopGeneration={handleStopGeneration}
+        />
+
+        <InsufficientCreditsModal
+          isOpen={insufficientCreditsModalOpen}
+          onClose={() => setInsufficientCreditsModalOpen(false)}
+          requiredCredits={requiredCredits}
         />
       </motion.div>
     </div>

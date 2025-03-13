@@ -83,13 +83,11 @@ def execute_code_from_markdown(code_str, dataframe=None):
         modified_code
     )
 
-    # print("modified_code: ", modified_code)
 
     try:
         with stdoutIO() as s:
             exec(modified_code, context)  # Execute the modified code
         output = s.getvalue()
-        # print("output: ", output)
         json_outputs = context.get('json_outputs', [])
 
         return output, json_outputs
@@ -127,10 +125,8 @@ def format_response_to_markdown(api_response, agent_name = None, dataframe=None)
             if 'code' in content:
                 markdown.append(f"### Code Implementation\n{format_code_backticked_block(content['code'])}\n")
                 if agent_name is not None:
-                    # print("agent_name: ", agent_name)
                     # execute the code
                     clean_code = format_code_block(content['code'])
-                    # print("clean_code: ", clean_code)
                     output, json_outputs = execute_code_from_markdown(clean_code, dataframe)
                     if output:
                         markdown.append("### Execution Output\n")
@@ -142,13 +138,11 @@ def format_response_to_markdown(api_response, agent_name = None, dataframe=None)
                             if len(json_output) > 1000000:  # If JSON is larger than 1MB
                                 logger.warning(f"Large JSON output detected: {len(json_output)} bytes")
                             markdown.append(f"```plotly\n{json_output}\n```\n")
-                        print("Length of json_outputs: ", len(json_outputs))
 
             if 'commentary' in content:
                 markdown.append(f"### Commentary\n{content['commentary']}\n")
 
             if 'refined_complete_code' in content:
-                # print("content['refined_complete_code']: ", content['refined_complete_code'])
                 try:
                     clean_code = format_code_block(content['refined_complete_code']) 
                     output, json_outputs = execute_code_from_markdown(clean_code, dataframe)
@@ -162,13 +156,11 @@ def format_response_to_markdown(api_response, agent_name = None, dataframe=None)
                 if output:
                     markdown.append("### Execution Output\n")
                     markdown.append(f"```output\n{output}\n```\n")
-                    # print("output2: ", output)
                     
                 if json_outputs:
                     markdown.append("### Plotly JSON Outputs\n")
                     for idx, json_output in enumerate(json_outputs):
                         markdown.append(f"```plotly\n{json_output}\n```\n")
-                print("Length of json_outputs: ", len(json_outputs))
 
             # if agent_name is not None:  
             #     if f"memory_{agent_name}" in api_response:
@@ -178,11 +170,9 @@ def format_response_to_markdown(api_response, agent_name = None, dataframe=None)
         logger.error(f"Error in format_response_to_markdown: {str(e)}")
         return f"{str(e)}"
     
-    print("markdown1: ", str(markdown)[:10], len(markdown), type(markdown))
             
     if not markdown or len(markdown) <= 1:
         return "Please provide a valid query..."
-    print("markdown2: ", str(markdown)[:10], len(markdown), type(markdown))
         
     return '\n'.join(markdown)
 
@@ -213,5 +203,4 @@ fig2.show()
     }
 
     formatted_md = format_response_to_markdown(sample_response)
-    # print(formatted_md)
 

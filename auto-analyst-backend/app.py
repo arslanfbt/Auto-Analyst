@@ -31,7 +31,6 @@ from src.routes.analytics_routes import router as analytics_router
 import time
 from src.managers.ai_manager import AI_Manager
 from src.managers.user_manager import get_current_user, User, create_user
-
 load_dotenv()
 
 logging.basicConfig(level=logging.INFO)
@@ -109,7 +108,7 @@ async def get_session_id(request: Request):
     """Get the session ID from the request, create/associate a user if needed"""
     # First try to get from query params
     session_id = request.query_params.get("session_id")
-    
+    print("session_id: ", session_id)
     # If not in query params, try to get from headers
     if not session_id:
         session_id = request.headers.get("X-Session-ID")
@@ -117,45 +116,58 @@ async def get_session_id(request: Request):
     # If still not found, generate a new one
     if not session_id:
         session_id = str(uuid.uuid4())
-        logger.info(f"Generated new session ID: {session_id}")
     
     # Get or create the session state
     session_state = app.state.get_session_state(session_id)
     
-    # Check if a user_id was provided in the request
+    # First, check if we already have a user associated with this session
+    if session_state.get("user_id") is not None:
+        return session_id
+    
+    # Next, try to get authenticated user using the API key
+    from src.managers.user_manager import get_current_user
+    current_user = await get_current_user(request)
+    print("current_user: ", current_user)
+    if current_user:
+        # Use the authenticated user instead of creating a guest
+        app.state.set_session_user(
+            session_id=session_id,
+            user_id=current_user.user_id
+        )
+        logger.info(f"Associated session {session_id} with authenticated user_id {current_user.user_id}")
+        return session_id
+    
+    # Check if a user_id was provided in the request params
     user_id_param = request.query_params.get("user_id")
+    print("user_id_param: ", user_id_param)
     if user_id_param:
         try:
             user_id = int(user_id_param)
-            # Store in session state if not already there
-            if session_state.get("user_id") != user_id:
-                app.state.set_session_user(session_id=session_id, user_id=user_id)
-                # logger.info(f"Associated session {session_id} with provided user_id {user_id}")
+            app.state.set_session_user(session_id=session_id, user_id=user_id)
+            logger.info(f"Associated session {session_id} with provided user_id {user_id}")
             return session_id
         except (ValueError, TypeError):
             logger.warning(f"Invalid user_id in query params: {user_id_param}")
     
-    # ONLY create a guest user if no user is associated AND no user_id was provided
-    # This prevents creating unnecessary guest users
-    if session_state.get("user_id") is None and not user_id_param:
-        try:
-            # Create a guest user for this session
-            guest_username = f"guest_{session_id[:8]}"
-            guest_email = f"{guest_username}@example.com"
-            
-            # Create the user
-            user = create_user(username=guest_username, email=guest_email)
-            user_id = user.user_id
-            
-            # Associate the user with this session
-            app.state.set_session_user(
-                session_id=session_id,
-                user_id=user_id
-            )
-            
-            # logger.info(f"Auto-created guest user {user_id} for session {session_id}")
-        except Exception as e:
-            logger.error(f"Error auto-creating user for session {session_id}: {str(e)}")
+    # Only create a guest user if no authenticated user is found
+    try:
+        # Create a guest user for this session
+        guest_username = f"guest_{session_id[:8]}"
+        guest_email = f"{guest_username}@example.com"
+        
+        # Create the user
+        user = create_user(username=guest_username, email=guest_email)
+        user_id = user.user_id
+        
+        logger.info(f"Created guest user {user_id} for session {session_id}")
+        
+        # Associate the user with this session
+        app.state.set_session_user(
+            session_id=session_id,
+            user_id=user_id
+        )
+    except Exception as e:
+        logger.error(f"Error auto-creating user for session {session_id}: {str(e)}")
     
     return session_id
 
@@ -264,6 +276,7 @@ class AppState:
             user_id: The authenticated user ID
             chat_id: Optional chat ID for tracking conversation
         """
+        # Ensure we have a session state for this session ID
         if session_id not in self._sessions:
             self.get_session_state(session_id)  # Initialize with defaults
         
@@ -286,7 +299,7 @@ class AppState:
         self._sessions[session_id]["chat_id"] = chat_id_to_use
         
         # Make sure this data gets saved
-        # logger.info(f"Set session {session_id} with user_id={user_id}, chat_id={chat_id_to_use}")
+        logger.info(f"Associated session {session_id} with user_id={user_id}, chat_id={chat_id_to_use}")
         
         # Return the updated session data
         return self._sessions[session_id]
@@ -373,7 +386,7 @@ async def chat_with_agent(
     if "chat_id" in request_obj.query_params:
         try:
             chat_id_param = int(request_obj.query_params.get("chat_id"))
-            # logger.info(f"Using provided chat_id {chat_id_param} from request")
+            logger.info(f"Using provided chat_id {chat_id_param} from request")
             # Update session state with this chat ID
             session_state["chat_id"] = chat_id_param
         except (ValueError, TypeError):
@@ -390,7 +403,7 @@ async def chat_with_agent(
         try:
             user_id = int(request_obj.query_params["user_id"])
             session_state["user_id"] = user_id
-            # logger.info(f"Updated session state with user_id {user_id} from request")
+            logger.info(f"Updated session state with user_id {user_id} from request")
         except (ValueError, TypeError):
             raise HTTPException(
                 status_code=400,
@@ -479,7 +492,6 @@ async def chat_with_agent(
                 is_streaming=False
             )
             
-            # logger.info(f"Tracked model usage: {model_name}, {total_tokens} tokens, ${cost:.6f}")
         
         return {
             "agent_name": agent_name,
@@ -847,53 +859,6 @@ async def reset_session(
 # Add this line where other routers are included
 app.include_router(chat_router)
 app.include_router(analytics_router)
-
-def ensure_user_metadata(session_id: str, session_state: dict, request: Request = None) -> tuple:
-    """Ensure a session has user_id and chat_id, creating if necessary"""
-    # First check if user_id was provided as a query parameter
-    user_id = None
-    if request:
-        user_id = request.query_params.get("user_id")
-        if user_id:
-            try:
-                user_id = int(user_id)
-                # Update session state with this user ID
-                session_state["user_id"] = user_id
-                # logger.info(f"Using provided user_id {user_id} from request parameters")
-            except (ValueError, TypeError):
-                logger.warning(f"Invalid user_id provided in query params: {user_id}")
-                pass
-                user_id = None
-    
-    # If no valid user_id from request, check session state
-    if not user_id:
-        user_id = session_state.get('user_id')
-        
-    # If still no user_id, create a guest user
-    if not user_id:
-        # Create a guest user
-        guest_username = f"guest_{session_id[:8]}"
-        guest_email = f"{guest_username}@example.com"
-        
-        try:
-            user = create_user(username=guest_username, email=guest_email)
-            user_id = user.user_id
-            # Update session state
-            app.state.set_session_user(session_id=session_id, user_id=user_id)
-            logger.info(f"Created guest user {user_id} for session {session_id}")
-        except Exception as e:
-            logger.error(f"Failed to create guest user: {str(e)}")
-            user_id = 1  # Fallback
-    
-    # Get chat_id, create if missing
-    chat_id = session_state.get('chat_id')
-    if not chat_id:
-        import random
-        chat_id = int(time.time() * 1000) % 1000000 + random.randint(1, 999)
-        session_state["chat_id"] = chat_id
-        logger.info(f"Created chat_id {chat_id} for session {session_id}")
-    
-    return user_id, chat_id
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
