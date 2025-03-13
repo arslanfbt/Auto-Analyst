@@ -1,2 +1,0 @@
-2025-03-13 15:39:06,973 - init_db - INFO - Database and tables created successfully.
-2025-03-13 15:39:06,973 - init_db - INFO - Models: dict_keys(['users', 'chats', 'messages', 'model_usage'])

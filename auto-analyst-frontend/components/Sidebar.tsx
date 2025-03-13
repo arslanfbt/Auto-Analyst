@@ -15,7 +15,6 @@ import { Button } from "@/components/ui/button"
 import { format } from 'date-fns'
 import CreditBalance from '@/components/CreditBalance'
 
-// const PREVIEW_API_URL = 'http://localhost:8000';
 const PREVIEW_API_URL = API_URL;
 
 interface SidebarProps {
@@ -140,6 +139,63 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, onNewChat, chatHisto
     onChatSelect(chatId);
   };
 
+  // Keep the renderUserProfile function for the sidebar itself
+  const renderUserProfile = () => {
+    if (session?.user) {
+      return (
+        <div className="p-3 border-b border-gray-200">
+          <div className="flex items-center gap-3">
+            <div className="relative w-10 h-10 rounded-full overflow-hidden bg-gray-100 flex items-center justify-center">
+              {session.user.image ? (
+                <Image 
+                  src={session.user.image} 
+                  alt="User avatar" 
+                  fill 
+                  className="object-cover"
+                />
+              ) : (
+                <div className="text-gray-500 font-semibold text-lg">
+                  {session.user.name?.charAt(0) || session.user.email?.charAt(0) || '?'}
+                </div>
+              )}
+              {isAdmin && (
+                <div className="absolute bottom-0 right-0 w-4 h-4 bg-[#FF7F7F] rounded-full border-2 border-white flex items-center justify-center">
+                  <span className="text-white text-[8px]">A</span>
+                </div>
+              )}
+            </div>
+            <div className="flex-1 min-w-0">
+              {session.user.name && (
+                <p className="text-sm font-medium text-gray-800 truncate">
+                  {session.user.name}
+                </p>
+              )}
+              <p className="text-xs text-gray-500 truncate">
+                {session.user.email || 'User'}
+              </p>
+            </div>
+          </div>
+        </div>
+      );
+    } else if (isAdmin) {
+      return (
+        <div className="p-3 border-b border-gray-200">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-[#FF7F7F]/10 flex items-center justify-center">
+              <BarChart2 className="h-5 w-5 text-[#FF7F7F]" />
+            </div>
+            <div>
+              <p className="text-sm font-medium text-gray-800">Administrator</p>
+              <p className="text-xs text-gray-500">Admin Mode</p>
+            </div>
+          </div>
+        </div>
+      );
+    }
+    
+    return null;
+  };
+
   return (
     <>
       {/* Backdrop for mobile */}
@@ -158,17 +214,28 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, onNewChat, chatHisto
         className="fixed top-0 left-0 h-full w-64 bg-white shadow-lg z-50 flex flex-col"
       >
         <div className="flex-1 flex flex-col h-full">
-          <div className="flex justify-between items-center p-4 border-b border-gray-100">
-            <h2 className="text-lg font-semibold text-gray-800">Chat History</h2>
+          {/* Header with logo and close button */}
+          <div className="flex justify-between items-center p-4 border-b border-gray-100 bg-white/80 backdrop-blur-sm">
+            <div className="flex items-center gap-2">
+              <div className="w-7 h-7 relative">
+                <Image
+                  src="https://4q2e4qu710mvgubg.public.blob.vercel-storage.com/Auto-analysts%20icon%20small-S682Oi8nbFhOADUHXJSD9d0KtSWKCe.png"
+                  alt="Auto-Analyst Logo"
+                  fill
+                  className="object-contain"
+                />
+              </div>
+              <h2 className="text-lg font-semibold text-gray-800">Chat History</h2>
+            </div>
             <button
               onClick={onClose}
-              className="text-gray-500 hover:text-[#FF7F7F] focus:outline-none"
+              className="text-gray-500 hover:text-[#FF7F7F] focus:outline-none focus:ring-2 focus:ring-[#FF7F7F]/20 rounded-full p-1.5 transition-colors"
+              aria-label="Close sidebar"
             >
               <X className="w-5 h-5" />
             </button>
           </div>
 
-          {/* New Chat Button */}
           <button
             onClick={handleNewChat}
             className="mx-3 mt-4 mb-2 flex items-center gap-3 rounded-xl bg-white px-4 py-3 text-sm font-medium text-gray-700 shadow-sm hover:shadow-md hover:text-[#FF7F7F] border border-gray-100 hover:border-[#FF7F7F]/20 transition-all duration-200"
@@ -177,11 +244,16 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, onNewChat, chatHisto
             <span>New Chat</span>
           </button>
 
-          {/* Chat History */}
-          <div className="flex-1 overflow-y-auto px-3 py-2">
+          {/* Chat History - more minimal with less padding */}
+          <div className="flex-1 overflow-y-auto px-4 py-3 bg-gradient-to-b from-white to-gray-50/30">
+            <div className="mb-2 px-1 flex items-center">
+              <History className="w-4 h-4 text-gray-400 mr-2" />
+              <h3 className="text-xs font-medium uppercase text-gray-500 tracking-wider">Recent Conversations</h3>
+            </div>
+            
             {isLoading ? (
-              <div className="flex justify-center py-4">
-                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-[#FF7F7F]"></div>
+              <div className="flex justify-center py-6">
+                <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-[#FF7F7F]"></div>
               </div>
             ) : chatHistories && chatHistories.length > 0 ? (
               <div className="space-y-1">
@@ -189,15 +261,15 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, onNewChat, chatHisto
                   <motion.div 
                     key={chat.chat_id}
                     onClick={() => handleChatSelect(chat.chat_id)}
-                    className={`flex items-center justify-between p-2 rounded-lg cursor-pointer group ${
+                    className={`flex items-center justify-between p-2.5 rounded-lg cursor-pointer group transition-all ${
                       activeChatId === chat.chat_id 
                         ? 'bg-[#FF7F7F]/10 text-[#FF7F7F]' 
                         : 'hover:bg-gray-100 text-gray-700'
                     }`}
-                    initial={{ opacity: 0, scale: 0.9 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    exit={{ opacity: 0, scale: 0.9 }}
-                    transition={{ duration: 0.2 }}
+                    initial={{ opacity: 0, y: 5 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -5 }}
+                    transition={{ duration: 0.15 }}
                   >
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium truncate">{chat.title}</p>
@@ -205,68 +277,49 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, onNewChat, chatHisto
                     </div>
                     <button
                       onClick={(e) => handleDeleteChat(chat.chat_id, e)}
-                      className={`opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500 focus:outline-none transition-opacity ${
-                        activeChatId === chat.chat_id ? 'opacity-100' : ''
+                      className={`opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500 hover:bg-red-50 p-1.5 rounded-full focus:outline-none focus:ring-2 focus:ring-red-200 transition-all ${
+                        activeChatId === chat.chat_id ? 'opacity-70' : ''
                       }`}
+                      aria-label="Delete chat"
                     >
-                      <Trash2 className="w-4 h-4" />
+                      <Trash2 className="w-3.5 h-3.5" />
                     </button>
                   </motion.div>
                 ))}
               </div>
             ) : (
-              <div className="text-center py-8 text-gray-500">
-                <History className="w-12 h-12 mx-auto mb-2 opacity-30" />
-                <p className="text-sm">No chat history yet</p>
-                <p className="text-xs mt-1">Start a new conversation</p>
+              <div className="text-center py-8 px-2">
+                <div className="bg-gray-50 rounded-lg p-4 shadow-sm">
+                  <History className="w-8 h-8 mx-auto mb-2 text-gray-300" />
+                  <p className="text-sm text-gray-600 mb-1">No conversations yet</p>
+                  <p className="text-xs text-gray-500">Your chats will appear here</p>
+                </div>
               </div>
             )}
           </div>
 
-          {/* Bottom Navigation */}
-          <div className="border-t border-gray-100 bg-white/50 backdrop-blur-sm">
-            {/* Credit Balance Display */}
-            <div className="p-3 flex justify-center border-b border-gray-200">
-              <CreditBalance />
-            </div>
+          {/* Bottom Navigation - more minimal and consistent with profile popup */}
+          <div className="border-t border-gray-100 bg-white/90 backdrop-blur-sm">
+            {/* User Profile */}
+            {renderUserProfile()}
             
-            <div className="p-4 border-t border-gray-200">
-              <div className="flex flex-col space-y-2">
-                {/* New Dashboard Button - Only show for admin users */}
-                {isAdmin && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="flex items-center justify-start text-gray-600 hover:text-gray-900 hover:bg-gray-100"
-                    onClick={() => window.location.href = '/analytics/dashboard'}
-                  >
-                    <BarChart2 className="h-4 w-4 mr-2" />
-                    <span>Analytics Dashboard</span>
-                  </Button>
-                )}
-                
-                {/* Existing buttons for Settings, etc. */}
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="flex items-center justify-start text-gray-600 hover:text-gray-900 hover:bg-gray-100"
-                  onClick={() => setIsSettingsOpen(true)}
-                >
-                  <Settings className="h-4 w-4 mr-2" />
-                  <span>Settings</span>
-                </Button>
-                
-                {/* Sign Out Button */}
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="flex items-center justify-start text-gray-600 hover:text-gray-900 hover:bg-gray-100"
-                  onClick={handleSignOut}
-                >
-                  <LogOut className="h-4 w-4 mr-2" />
-                  <span>Sign out</span>
-                </Button>
-              </div>
+            {/* Actions - simplified buttons */}
+            <div className="p-3 grid grid-cols-2 gap-2">
+              <button
+                onClick={() => setIsSettingsOpen(true)}
+                className="flex items-center justify-center gap-1.5 rounded-md py-2 text-xs font-medium text-gray-600 hover:bg-gray-100 transition-colors"
+              >
+                <Settings className="w-3.5 h-3.5" />
+                <span>Settings</span>
+              </button>
+              
+              <button
+                onClick={handleSignOut}
+                className="flex items-center justify-center gap-1.5 rounded-md py-2 text-xs font-medium text-red-600 hover:bg-red-50 transition-colors"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+                <span>Sign out</span>
+              </button>
             </div>
           </div>
         </div>
@@ -279,38 +332,38 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, onNewChat, chatHisto
       />
 
       {isDeleteModalOpen && (
-        <>
-          {/* Modal backdrop */}
-          <div 
-            className="fixed inset-0 bg-black/30 z-[60] flex items-center justify-center"
-            onClick={() => setIsDeleteModalOpen(false)}
+        <div 
+          className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[60] flex items-center justify-center"
+          onClick={() => setIsDeleteModalOpen(false)}
+        >
+          <motion.div 
+            className="bg-white rounded-xl shadow-xl p-5 max-w-sm w-[90%] mx-4 z-[70]"
+            onClick={e => e.stopPropagation()}
+            initial={{ scale: 0.9, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            exit={{ scale: 0.9, opacity: 0 }}
+            transition={{ type: "spring", damping: 20, stiffness: 300 }}
           >
-            {/* Modal content */}
-            <div 
-              className="bg-white rounded-xl shadow-lg p-6 max-w-md w-[90%] mx-4 z-[70]"
-              onClick={e => e.stopPropagation()}
-            >
-              <h3 className="text-lg font-semibold text-gray-800 mb-2">Delete Chat</h3>
-              <p className="text-gray-600 mb-6">
-                Are you sure you want to delete this chat? This action cannot be undone.
-              </p>
-              <div className="flex justify-end gap-3">
-                <button
-                  onClick={() => setIsDeleteModalOpen(false)}
-                  className="px-4 py-2 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={confirmDeleteChat}
-                  className="px-4 py-2 rounded-lg bg-[#FF7F7F] text-white hover:bg-[#FF7F7F]/90 transition-colors"
-                >
-                  Delete
-                </button>
-              </div>
+            <h3 className="text-lg font-semibold text-gray-800 mb-2">Delete Chat</h3>
+            <p className="text-sm text-gray-600 mb-4">
+              Are you sure you want to delete this chat? This action cannot be undone.
+            </p>
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setIsDeleteModalOpen(false)}
+                className="px-3 py-1.5 text-sm rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDeleteChat}
+                className="px-3 py-1.5 text-sm rounded-lg bg-red-500 text-white hover:bg-red-600 transition-colors"
+              >
+                Delete
+              </button>
             </div>
-          </div>
-        </>
+          </motion.div>
+        </div>
       )}
     </>
   )

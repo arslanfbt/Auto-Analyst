@@ -14,13 +14,16 @@ import FreeTrialOverlay from "./chat/FreeTrialOverlay"
 import { useChatHistoryStore } from "@/lib/store/chatHistoryStore"
 import { useCookieConsentStore } from "@/lib/store/cookieConsentStore"
 import { useRouter } from "next/navigation"
-import { AwardIcon } from "lucide-react"
+import { AwardIcon, User, Menu } from "lucide-react"
 import { useSessionStore } from '@/lib/store/sessionStore'
 import API_URL from '@/config/api'
 import { useCredits } from '@/lib/contexts/credit-context'
 import { getModelCreditCost } from '@/lib/model-tiers'
 import InsufficientCreditsModal from '@/components/InsufficientCreditsModal'
 import CreditBalance from '@/components/CreditBalance'
+import { Avatar } from '@/components/ui/avatar'
+import UserProfilePopup from './UserProfilePopup'
+import SettingsPopup from './SettingsPopup'
 
 interface PlotlyMessage {
   type: "plotly"
@@ -76,6 +79,16 @@ const ChatInterface: React.FC = () => {
   const { hasEnoughCredits, deductCredits } = useCredits()
   const [insufficientCreditsModalOpen, setInsufficientCreditsModalOpen] = useState(false)
   const [requiredCredits, setRequiredCredits] = useState(0)
+  const [isUserProfileOpen, setIsUserProfileOpen] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [modelSettings, setModelSettings] = useState({
+    provider: '',
+    model: '',
+    hasCustomKey: false,
+    apiKey: '',
+    temperature: 0.7,
+    maxTokens: 2000
+  });
 
   useEffect(() => {
     setMounted(true)
@@ -765,6 +778,22 @@ const ChatInterface: React.FC = () => {
     });
   }, [activeChatId, chatHistories, clearMessages, createNewChat, loadChat, userId, sessionId]);
 
+  // Fetch model settings when settings popup is opened
+  useEffect(() => {
+    if (isSettingsOpen) {
+      const fetchModelSettings = async () => {
+        try {
+          const response = await axios.get(`${API_URL}/api/model-settings`);
+          setModelSettings(response.data);
+        } catch (error) {
+          console.error('Failed to fetch model settings:', error);
+        }
+      };
+      
+      fetchModelSettings();
+    }
+  }, [isSettingsOpen]);
+
   // Don't render anything until mounted to prevent hydration mismatch
   if (!mounted) {
     return null
@@ -774,16 +803,16 @@ const ChatInterface: React.FC = () => {
     <div className="flex h-screen bg-gradient-to-br from-gray-50 to-white text-gray-900">
       {/* Include sidebar for signed-in users or admin */}
       {(session || isAdmin) && (
-      <Sidebar 
-        isOpen={isSidebarOpen} 
-        onClose={() => setSidebarOpen(false)} 
-        onNewChat={handleNewChat}
+        <Sidebar 
+          isOpen={isSidebarOpen} 
+          onClose={() => setSidebarOpen(false)} 
+          onNewChat={handleNewChat}
           chatHistories={chatHistories}
           activeChatId={activeChatId}
           onChatSelect={loadChat}
           isLoading={isLoadingHistory}
           onDeleteChat={handleChatDelete}
-      />
+        />
       )}
 
       <motion.div
@@ -796,8 +825,18 @@ const ChatInterface: React.FC = () => {
         {mounted && !session && !hasFreeTrial() && <FreeTrialOverlay />}
         
         <header className="bg-white/70 backdrop-blur-sm p-4 flex justify-between items-center border-b border-gray-200">
-          <div className="flex items-center">
-            <div className="flex items-center gap-4 cursor-pointer" onClick={() => router.push("/")}>
+          <div className="flex items-center gap-4">
+            {(session || isAdmin) && !isSidebarOpen && (
+              <button
+                onClick={() => setSidebarOpen(true)}
+                className="p-2 rounded-full text-gray-500 hover:text-[#FF7F7F] hover:bg-[#FF7F7F]/5 focus:outline-none transition-colors"
+                aria-label="Toggle sidebar"
+              >
+                <Menu className="h-5 w-5" />
+              </button>
+            )}
+            
+            <div className="flex items-center cursor-pointer" onClick={() => router.push("/")}>
               <div className="w-8 h-8 relative">
                 <Image
                   src="https://4q2e4qu710mvgubg.public.blob.vercel-storage.com/Auto-analysts%20icon%20small-S682Oi8nbFhOADUHXJSD9d0KtSWKCe.png"
@@ -807,33 +846,45 @@ const ChatInterface: React.FC = () => {
                   priority
                 />
               </div>
-              <h1 className="text-xl font-semibold text-gray-900">
+              <h1 className="text-xl font-semibold text-gray-900 ml-3">
                 Auto-Analyst
               </h1>
             </div>
           </div>
 
-          {/* Show credit balance and sidebar button */}
+          {/* Show credit balance and user profile */}
           <div className="flex items-center gap-3">
-            {/* Only show credit balance for authenticated users */}
             {(session || isAdmin) && <CreditBalance />}
             
-            {/* Only show sidebar button for signed-in users or admin */}
             {(session || isAdmin) && (
-              <button
-                onClick={() => setSidebarOpen((prev) => !prev)}
-                className="text-gray-500 hover:text-[#FF7F7F] focus:outline-none transition-colors"
-              >
-                <svg
-                  className="w-6 h-6"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                  xmlns="http://www.w3.org/2000/svg"
+              <div className="relative">
+                <div 
+                  onClick={() => setIsUserProfileOpen(prev => !prev)}
+                  className="cursor-pointer"
                 >
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-                </svg>
-              </button>
+                  {session?.user?.image ? (
+                    <Avatar className="h-8 w-8">
+                      <img src={session.user.image} alt={session.user.name || "User"} />
+                    </Avatar>
+                  ) : (
+                    <Avatar className="h-8 w-8 bg-gray-100">
+                      <User className="h-5 w-5 text-gray-600" />
+                    </Avatar>
+                  )}
+                </div>
+                
+                <div className="relative">
+                  <UserProfilePopup 
+                    isOpen={isUserProfileOpen}
+                    onClose={() => setIsUserProfileOpen(false)}
+                    onSettingsOpen={() => {
+                      setIsUserProfileOpen(false);
+                      setIsSettingsOpen(true);
+                    }}
+                    isAdmin={isAdmin}
+                  />
+                </div>
+              </div>
             )}
           </div>
         </header>
@@ -855,6 +906,12 @@ const ChatInterface: React.FC = () => {
           onStopGeneration={handleStopGeneration}
         />
 
+        <SettingsPopup 
+          isOpen={isSettingsOpen}
+          onClose={() => setIsSettingsOpen(false)}
+          initialSettings={modelSettings}
+        />
+        
         <InsufficientCreditsModal
           isOpen={insufficientCreditsModalOpen}
           onClose={() => setInsufficientCreditsModalOpen(false)}

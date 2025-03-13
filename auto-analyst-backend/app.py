@@ -171,7 +171,6 @@ app.add_middleware(
 
 # DSPy Configuration
 import dspy
-# dspy.configure(lm=dspy.LM(model="gpt-4o-mini", api_key=os.getenv("OPENAI_API_KEY"), temperature=0, max_tokens=3000))
 
 # Available agents
 AVAILABLE_AGENTS = {
