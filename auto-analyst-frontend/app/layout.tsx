@@ -1,6 +1,6 @@
 import "./globals.css"
 import type { Metadata } from "next"
-import { Inter } from "next/font/google"
+import { Inter } from "next/font/google" // The Inter font is free to use for commercial purposes!
 import { Providers } from './providers'
 import { CreditProvider } from '@/lib/contexts/credit-context'
 import { AuthProvider } from '@/components/AuthProvider'

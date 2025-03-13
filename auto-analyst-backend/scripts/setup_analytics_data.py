@@ -6,7 +6,8 @@ import sqlite3
 # Add parent directory to path so we can import modules
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from src.init_db import ModelUsage, User, session_factory, init_db
+from src.db.schemas.models import ModelUsage, User
+from src.db.init_db import session_factory, init_db
 from scripts.generate_test_data import generate_test_data
 from scripts.create_test_user import create_test_users
 

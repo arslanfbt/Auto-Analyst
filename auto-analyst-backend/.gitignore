@@ -12,3 +12,5 @@ venv/
 try*
 
 chat_database_temp.db
+
+logs/

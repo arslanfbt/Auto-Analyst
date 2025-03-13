@@ -1,40 +1,48 @@
-import groq
-from fastapi import FastAPI, HTTPException, File, UploadFile, Request, Depends
-from fastapi.responses import JSONResponse, StreamingResponse
-from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
-import pandas as pd
-import os
-from typing import List, Optional
-import uvicorn
-import logging
-from io import StringIO
-import uuid
-from fastapi.security import APIKeyHeader
-
-from fastapi import Form, UploadFile
-import io
-# Import custom modules and models
-from src.agents.agents import *
-from src.retrievers import *
-from llama_index.core import Document
-from llama_index.embeddings.openai import OpenAIEmbedding
-from llama_index.core import VectorStoreIndex
-from scripts.format_response import format_response_to_markdown, execute_code_from_markdown
-import json
+# Standard library imports
 import asyncio
-
-
-from dotenv import load_dotenv
-from src.routes.chat_routes import router as chat_router
-from src.routes.analytics_routes import router as analytics_router
+import json
+import logging
+import os
 import time
-from src.managers.ai_manager import AI_Manager
-from src.managers.user_manager import get_current_user, User, create_user
-load_dotenv()
+import uuid
+from io import StringIO
+from typing import List, Optional
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+# Third-party imports
+import groq
+import pandas as pd
+import uvicorn
+from dotenv import load_dotenv
+from fastapi import (
+    Depends, 
+    FastAPI, 
+    File, 
+    Form, 
+    HTTPException, 
+    Request, 
+    UploadFile
+)
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.security import APIKeyHeader
+from llama_index.core import Document, VectorStoreIndex
+from pydantic import BaseModel
+
+# Local application imports
+from scripts.format_response import format_response_to_markdown
+from src.agents.agents import *
+from src.agents.retrievers.retrievers import *
+from src.managers.ai_manager import AI_Manager
+from src.managers.session_manager import SessionManager
+from src.routes.analytics_routes import router as analytics_router
+from src.routes.chat_routes import router as chat_router
+from src.routes.code_routes import router as code_router
+from src.routes.session_routes import router as session_router, get_session_id_dependency
+from src.schemas.query_schemas import QueryRequest
+from src.utils.logger import Logger
+
+logger = Logger("app", see_time=True, console_log=True)
+load_dotenv()
 
 # Add styling_instructions at the top level
 styling_instructions = [
@@ -47,11 +55,11 @@ styling_instructions = [
 
 # Add near the top of the file, after imports
 DEFAULT_MODEL_CONFIG = {
-    "provider": "openai",
-    "model": "o1-mini",
+    "provider": os.getenv("MODEL_PROVIDER", "openai"),
+    "model": os.getenv("MODEL_NAME", "gpt-4o-mini"),
     "api_key": os.getenv("OPENAI_API_KEY"),
-    "temperature": 1.0,
-    "max_tokens": 6000
+    "temperature": float(os.getenv("TEMPERATURE", 1.0)),
+    "max_tokens": int(os.getenv("MAX_TOKENS", 6000))
 }
 
 # Initialize DSPy with default model
@@ -79,7 +87,7 @@ def initialize_retrievers(styling_instructions: List[str], doc: List[str]):
         data_index = VectorStoreIndex.from_documents([Document(text=x) for x in doc])
         return {"style_index": style_index, "dataframe_index": data_index}
     except Exception as e:
-        logger.error(f"Error initializing retrievers: {str(e)}")
+        logger.log_message(f"Error initializing retrievers: {str(e)}", level=logging.ERROR)
         raise e
 
 # clear console
@@ -90,7 +98,7 @@ def clear_console():
 # Check for Housing.csv
 housing_csv_path = "Housing.csv"
 if not os.path.exists(housing_csv_path):
-    logger.error(f"Housing.csv not found at {os.path.abspath(housing_csv_path)}")
+    logger.log_message(f"Housing.csv not found at {os.path.abspath(housing_csv_path)}", level=logging.ERROR)
     raise FileNotFoundError(f"Housing.csv not found at {os.path.abspath(housing_csv_path)}")
 
 AVAILABLE_AGENTS = {
@@ -103,156 +111,35 @@ AVAILABLE_AGENTS = {
 # Add session header
 X_SESSION_ID = APIKeyHeader(name="X-Session-ID", auto_error=False)
 
-# Update the get_session_id dependency to include user creation
-async def get_session_id(request: Request):
-    """Get the session ID from the request, create/associate a user if needed"""
-    # First try to get from query params
-    session_id = request.query_params.get("session_id")
-    print("session_id: ", session_id)
-    # If not in query params, try to get from headers
-    if not session_id:
-        session_id = request.headers.get("X-Session-ID")
-    
-    # If still not found, generate a new one
-    if not session_id:
-        session_id = str(uuid.uuid4())
-    
-    # Get or create the session state
-    session_state = app.state.get_session_state(session_id)
-    
-    # First, check if we already have a user associated with this session
-    if session_state.get("user_id") is not None:
-        return session_id
-    
-    # Next, try to get authenticated user using the API key
-    from src.managers.user_manager import get_current_user
-    current_user = await get_current_user(request)
-    print("current_user: ", current_user)
-    if current_user:
-        # Use the authenticated user instead of creating a guest
-        app.state.set_session_user(
-            session_id=session_id,
-            user_id=current_user.user_id
-        )
-        logger.info(f"Associated session {session_id} with authenticated user_id {current_user.user_id}")
-        return session_id
-    
-    # Check if a user_id was provided in the request params
-    user_id_param = request.query_params.get("user_id")
-    print("user_id_param: ", user_id_param)
-    if user_id_param:
-        try:
-            user_id = int(user_id_param)
-            app.state.set_session_user(session_id=session_id, user_id=user_id)
-            logger.info(f"Associated session {session_id} with provided user_id {user_id}")
-            return session_id
-        except (ValueError, TypeError):
-            logger.warning(f"Invalid user_id in query params: {user_id_param}")
-    
-    # Only create a guest user if no authenticated user is found
-    try:
-        # Create a guest user for this session
-        guest_username = f"guest_{session_id[:8]}"
-        guest_email = f"{guest_username}@example.com"
-        
-        # Create the user
-        user = create_user(username=guest_username, email=guest_email)
-        user_id = user.user_id
-        
-        logger.info(f"Created guest user {user_id} for session {session_id}")
-        
-        # Associate the user with this session
-        app.state.set_session_user(
-            session_id=session_id,
-            user_id=user_id
-        )
-    except Exception as e:
-        logger.error(f"Error auto-creating user for session {session_id}: {str(e)}")
-    
-    return session_id
-
-# Update the AppState class to handle session-specific state
+# Update AppState class to use SessionManager
 class AppState:
     def __init__(self):
-        self._sessions = {}  # Store session-specific states
-        self._default_df = None
-        self._default_retrievers = None
-        self._default_ai_system = None
+        self._session_manager = SessionManager(styling_instructions, AVAILABLE_AGENTS)
         self.model_config = DEFAULT_MODEL_CONFIG
-        if not hasattr(app, "state"):
-            app.state = type("AppState", (), {})()
         self.ai_manager = AI_Manager()
-
-        if not hasattr(self, "model_config"):
-            self.model_config = DEFAULT_MODEL_CONFIG
-
-        self.initialize_default_dataset()
     
-    def initialize_default_dataset(self):
-        """Initialize the default dataset and store it"""
-        try:
-            self._default_df = pd.read_csv("Housing.csv")
-            desc = "Housing Dataset"
-            data_dict = make_data(self._default_df, desc)
-            self._default_retrievers = initialize_retrievers(styling_instructions, [str(data_dict)])
-            self._default_ai_system = auto_analyst(agents=list(AVAILABLE_AGENTS.values()), retrievers=self._default_retrievers)
-        except Exception as e:
-            logger.error(f"Error initializing default dataset: {str(e)}")
-            raise e
-
     def get_session_state(self, session_id: str):
-        """Get or create session-specific state"""
-        if session_id not in self._sessions:
-            # Initialize with default state
-            self._sessions[session_id] = {
-                "current_df": self._default_df,
-                "retrievers": self._default_retrievers,
-                "ai_system": self._default_ai_system
-            }
-        return self._sessions[session_id]
+        """Get or create session-specific state using the SessionManager"""
+        return self._session_manager.get_session_state(session_id)
 
     def clear_session_state(self, session_id: str):
-        """Clear session-specific state"""
-        if session_id in self._sessions:
-            del self._sessions[session_id]
+        """Clear session-specific state using the SessionManager"""
+        self._session_manager.clear_session_state(session_id)
 
     def update_session_dataset(self, session_id: str, df, desc):
-        """Update dataset for a specific session"""
-        try:
-            data_dict = make_data(df, desc)
-            retrievers = initialize_retrievers(styling_instructions, [str(data_dict)])
-            ai_system = auto_analyst(agents=list(AVAILABLE_AGENTS.values()), retrievers=retrievers)
-            
-            self._sessions[session_id] = {
-                "current_df": df,
-                "retrievers": retrievers,
-                "ai_system": ai_system
-            }
-        except Exception as e:
-            logger.error(f"Error updating dataset for session {session_id}: {str(e)}")
-            # Revert to default state
-            self.clear_session_state(session_id)
+        """Update dataset for a specific session using the SessionManager"""
+        self._session_manager.update_session_dataset(session_id, df, desc)
 
     def reset_session_to_default(self, session_id: str):
-        """Reset a session to use the default dataset"""
-        try:
-            # First clear any existing session
-            self.clear_session_state(session_id)
-            
-            # Then initialize with default state
-            self._sessions[session_id] = {
-                "current_df": self._default_df.copy(),  # Create a copy to ensure isolation
-                "retrievers": self._default_retrievers,
-                "ai_system": self._default_ai_system
-            }
-        except Exception as e:
-            logger.error(f"Error resetting session {session_id}: {str(e)}")
-            raise e
+        """Reset a session to use the default dataset using the SessionManager"""
+        self._session_manager.reset_session_to_default(session_id)
+    
+    def set_session_user(self, session_id: str, user_id: int, chat_id: int = None):
+        """Associate a user with a session using the SessionManager"""
+        return self._session_manager.set_session_user(session_id, user_id, chat_id)
     
     def get_ai_manager(self):
         """Get the AI Manager instance"""
-        if not hasattr(self, 'ai_manager'):
-            self.ai_manager = AI_Manager()
         return self.ai_manager
     
     def get_provider_for_model(self, model_name):
@@ -266,50 +153,12 @@ class AppState:
     
     def get_tokenizer(self):
         return self.ai_manager.tokenizer
-    
-    def set_session_user(self, session_id: str, user_id: int, chat_id: int = None):
-        """
-        Associate a user with a session
-        
-        Args:
-            session_id: The session identifier
-            user_id: The authenticated user ID
-            chat_id: Optional chat ID for tracking conversation
-        """
-        # Ensure we have a session state for this session ID
-        if session_id not in self._sessions:
-            self.get_session_state(session_id)  # Initialize with defaults
-        
-        # Store user ID
-        self._sessions[session_id]["user_id"] = user_id
-        
-        # Generate or use chat ID
-        if chat_id:
-            chat_id_to_use = chat_id
-        else:
-            # Check if chat_id already exists
-            if "chat_id" not in self._sessions[session_id] or not self._sessions[session_id]["chat_id"]:
-                # Use current timestamp + random number to generate a more readable ID
-                import random
-                chat_id_to_use = int(time.time() * 1000) % 1000000 + random.randint(1, 999)
-            else:
-                chat_id_to_use = self._sessions[session_id]["chat_id"]
-        
-        # Store chat ID
-        self._sessions[session_id]["chat_id"] = chat_id_to_use
-        
-        # Make sure this data gets saved
-        logger.info(f"Associated session {session_id} with user_id={user_id}, chat_id={chat_id_to_use}")
-        
-        # Return the updated session data
-        return self._sessions[session_id]
 
 # Initialize FastAPI app with state
 app = FastAPI(title="AI Analytics API", version="1.0")
 app.state = AppState()
 
 # Configure middleware
-
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -321,7 +170,6 @@ app.add_middleware(
 
 # DSPy Configuration
 import dspy
-# dspy.configure(lm=dspy.LM(model="gpt-4o-mini", api_key=os.getenv("OPENAI_API_KEY"), temperature=0, max_tokens=3000))
 
 # Available agents
 AVAILABLE_AGENTS = {
@@ -331,53 +179,13 @@ AVAILABLE_AGENTS = {
     "preprocessing_agent": preprocessing_agent,
 }
 
-# Pydantic models for validation
-class QueryRequest(BaseModel):
-    query: str
-
-class DataFrameRequest(BaseModel):
-    styling_instructions: List[str]
-    file: str
-    name: str
-    description: str
-
-class ModelSettings(BaseModel):
-    provider: str
-    model: str
-    api_key: str = ""
-    temperature: float = 0
-    max_tokens: int = 1000
-
-class UserLoginRequest(BaseModel):
-    username: str
-    email: str
-    session_id: Optional[str] = None
-
-@app.post("/upload_dataframe")
-async def upload_dataframe(
-    file: UploadFile = File(...),
-    name: str = Form(...),
-    description: str = Form(...),
-    session_id: str = Depends(get_session_id)
-):
-    try:
-        contents = await file.read()
-        new_df = pd.read_csv(io.BytesIO(contents))
-        desc = f"{name} Dataset: {description}"
-        
-        app.state.update_session_dataset(session_id, new_df, desc)
-        
-        return {"message": "Dataframe uploaded successfully", "session_id": session_id}
-    except Exception as e:
-        logger.error(f"Error in upload_dataframe: {str(e)}")
-        raise HTTPException(status_code=400, detail=str(e))
 
 @app.post("/chat/{agent_name}", response_model=dict)
 async def chat_with_agent(
     agent_name: str, 
     request: QueryRequest,
     request_obj: Request,
-    session_id: str = Depends(get_session_id)
+    session_id: str = Depends(get_session_id_dependency)
 ):
     session_state = app.state.get_session_state(session_id)
     
@@ -386,7 +194,7 @@ async def chat_with_agent(
     if "chat_id" in request_obj.query_params:
         try:
             chat_id_param = int(request_obj.query_params.get("chat_id"))
-            logger.info(f"Using provided chat_id {chat_id_param} from request")
+            logger.log_message(f"Using provided chat_id {chat_id_param} from request", level=logging.INFO)
             # Update session state with this chat ID
             session_state["chat_id"] = chat_id_param
         except (ValueError, TypeError):
@@ -403,7 +211,7 @@ async def chat_with_agent(
         try:
             user_id = int(request_obj.query_params["user_id"])
             session_state["user_id"] = user_id
-            logger.info(f"Updated session state with user_id {user_id} from request")
+            logger.log_message(f"Updated session state with user_id {user_id} from request", level=logging.INFO)
         except (ValueError, TypeError):
             raise HTTPException(
                 status_code=400,
@@ -502,7 +310,7 @@ async def chat_with_agent(
     except HTTPException:
         raise
     except Exception as e:
-        # logger.error(f"Unexpected error: {str(e)}")
+        logger.log_message(f"Unexpected error: {str(e)}", level=logging.ERROR)
         raise HTTPException(status_code=500, detail=f"Unexpected error: {str(e)}")
     
     
@@ -510,7 +318,7 @@ async def chat_with_agent(
 async def chat_with_all(
     request: QueryRequest,
     request_obj: Request,
-    session_id: str = Depends(get_session_id)
+    session_id: str = Depends(get_session_id_dependency)
 ):
     session_state = app.state.get_session_state(session_id)
 
@@ -611,7 +419,7 @@ async def chat_with_all(
                 )
            
         except Exception as e:
-            logger.error(f"Error in generate_responses: {str(e)}")
+            logger.log_message(f"Error in generate_responses: {str(e)}", level=logging.ERROR)
             yield json.dumps({
                 "agent": "planner",
                 "content": f"Error: An error occurred while generating responses. Please try again! {str(e)}",
@@ -630,126 +438,6 @@ async def chat_with_all(
         }
     )
 
-@app.post("/execute_code")
-async def execute_code(
-    request: dict,
-    session_id: str = Depends(get_session_id)
-):
-    session_state = app.state.get_session_state(session_id)
-    
-    if session_state["current_df"] is None:
-        raise HTTPException(
-            status_code=400,
-            detail="No dataset is currently loaded. Please link a dataset before executing code."
-        )
-        
-    try:
-        code = request.get("code")
-        if not code:
-            raise HTTPException(status_code=400, detail="No code provided")
-        output, json_outputs = execute_code_from_markdown(code, session_state["current_df"])
-        json_outputs = [f"```plotly\n{json_output}\n```\n" for json_output in json_outputs]
-        return {
-            "output": output,
-            "plotly_outputs": json_outputs if json_outputs else None
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.get("/api/model-settings")
-async def get_model_settings():
-    """Get current model settings"""
-    return {
-        "provider": DEFAULT_MODEL_CONFIG["provider"],
-        "model": DEFAULT_MODEL_CONFIG["model"],
-        "hasCustomKey": bool(os.getenv("CUSTOM_API_KEY")),
-        "temperature": DEFAULT_MODEL_CONFIG["temperature"],
-        "maxTokens": DEFAULT_MODEL_CONFIG["max_tokens"]
-    }
-
-@app.post("/settings/model")
-async def update_model_settings(
-    settings: ModelSettings,
-    session_id: str = Depends(get_session_id)
-):
-    try:
-        # If no API key provided, use default
-        if not settings.api_key:
-            if settings.provider.lower() == "groq":
-                settings.api_key = os.getenv("GROQ_API_KEY")
-            elif settings.provider.lower() == "openai":
-                settings.api_key = os.getenv("OPENAI_API_KEY")
-            elif settings.provider.lower() == "anthropic":
-                settings.api_key = os.getenv("ANTHROPIC_API_KEY")
-        
-        # update session state
-        session_state = app.state.get_session_state(session_id)
-        session_state["model_config"] = {
-            "provider": settings.provider,
-            "model": settings.model,
-            "api_key": settings.api_key,
-            "temperature": settings.temperature,
-            "max_tokens": settings.max_tokens
-        }
-
-        # Update app state model config too, for tracking in streaming chat
-        app.state.model_config = {
-            "provider": settings.provider,
-            "model": settings.model,
-            "temperature": settings.temperature,
-            "max_tokens": settings.max_tokens
-        }
-
-        # Configure model with temperature and max_tokens
-        if settings.provider.lower() == "groq":
-            lm = dspy.GROQ(
-                model=settings.model,
-                api_key=settings.api_key,
-                temperature=settings.temperature,
-                max_tokens=settings.max_tokens
-            )
-        elif settings.provider.lower() == "anthropic":
-            lm = dspy.LM(
-                model=settings.model,
-                api_key=settings.api_key,
-                temperature=settings.temperature,
-                max_tokens=settings.max_tokens
-            )
-        else:  # OpenAI is the default
-            lm = dspy.LM(
-                model=settings.model,
-                api_key=settings.api_key,
-                temperature=settings.temperature,
-                max_tokens=settings.max_tokens
-            )
-
-        # Test the model configuration
-        try:
-            lm("Hello, are you working?")
-            dspy.configure(lm=lm)
-            return {"message": "Model settings updated successfully"}
-        except Exception as model_error:
-            if "auth" in str(model_error).lower() or "api" in str(model_error).lower():
-                raise HTTPException(
-                    status_code=401,
-                    detail=f"Invalid API key for {settings.model}. Please check your API key and try again."
-                )
-            elif "model" in str(model_error).lower():
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Invalid model selection: {settings.model}. Please check if you have access to this model. {model_error}"
-                )
-            else:
-                raise HTTPException(
-                    status_code=500,
-                    detail=f"Error configuring model: {str(model_error)}"
-                )
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Unexpected error: {str(e)}. Please check your model selection and API key."
-        )
-
 # Add an endpoint to list available agents
 @app.get("/agents", response_model=dict)
 async def list_agents():
@@ -766,36 +454,22 @@ async def health():
 async def index():
     return {
         "title": "Welcome to the AI Analytics API",
-        "message": "This API provides advanced analytics and visualization tools.",
+        "message": "Explore our API for advanced analytics and visualization tools designed to empower your data-driven decisions.",
+        "description": "Utilize our powerful agents and models to gain insights from your data effortlessly.",
         "colors": {
             "primary": "#007bff",
             "secondary": "#6c757d",
             "success": "#28a745",
             "danger": "#dc3545",
         },
+        "features": [
+            "Real-time data processing",
+            "Customizable visualizations",
+            "Seamless integration with various data sources",
+            "User-friendly interface for easy navigation",
+            "Custom Analytics",
+        ],
     }
-
-@app.post("/api/preview-csv")
-async def preview_csv(file: UploadFile = File(...)):
-    if not file.filename.endswith('.csv'):
-        raise HTTPException(status_code=400, detail="File must be a CSV")
-    
-    content = await file.read()
-    try:
-        # Read CSV content
-        df = pd.read_csv(StringIO(content.decode('utf-8')))
-        
-        # Replace NaN values with None (which becomes null in JSON)
-        df = df.where(pd.notna(df), None)
-        
-        # Get first 10 rows and convert to dict
-        preview_data = {
-            "headers": df.columns.tolist(),
-            "rows": df.head(10).values.tolist()
-        }
-        return preview_data
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
 
 @app.post("/chat_history_name")
 async def chat_history_name(request: dict):
@@ -803,62 +477,11 @@ async def chat_history_name(request: dict):
     name = dspy.ChainOfThought(chat_history_name_agent)(query=query)
     return {"name": name.name}
 
-@app.get("/api/default-dataset")
-async def get_default_dataset(session_id: str = Depends(get_session_id)):
-    """Get default dataset and ensure session is using it"""
-    try:
-        # First ensure the session is reset to default
-        app.state.reset_session_to_default(session_id)
-        
-        # Get the session state to ensure we're using the default dataset
-        session_state = app.state.get_session_state(session_id)
-        df = session_state["current_df"]
-        
-        # Replace NaN values with None (which becomes null in JSON)
-        df = df.where(pd.notna(df), None)
-        
-        preview_data = {
-            "headers": df.columns.tolist(),
-            "rows": df.head(10).values.tolist(),
-            "name": "Housing Dataset",
-            "description": "A comprehensive dataset containing housing information including price, area, bedrooms, and other relevant features."
-        }
-        return preview_data
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-@app.post("/reset-session")
-async def reset_session(
-    session_id: str = Depends(get_session_id),
-    name: str = None,
-    description: str = None
-):
-    """Reset session to use default dataset with optional new description"""
-    try:
-        app.state.reset_session_to_default(session_id)
-        
-        # If name and description are provided, update the dataset description
-        if name and description:
-            session_state = app.state.get_session_state(session_id)
-            desc = f"{name} Dataset: {description}"
-            data_dict = make_data(session_state["current_df"], desc)
-            session_state["retrievers"] = initialize_retrievers(styling_instructions, [str(data_dict)])
-            session_state["ai_system"] = auto_analyst(agents=list(AVAILABLE_AGENTS.values()), retrievers=session_state["retrievers"])
-        
-        return {
-            "message": "Session reset to default dataset",
-            "session_id": session_id,
-            "dataset": "Housing.csv"
-        }
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to reset session: {str(e)}"
-        )
-
-# Add this line where other routers are included
+# In the section where routers are included, add the session_router
 app.include_router(chat_router)
 app.include_router(analytics_router)
+app.include_router(code_router)
+app.include_router(session_router)
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)

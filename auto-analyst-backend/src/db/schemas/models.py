@@ -6,13 +6,6 @@ from datetime import datetime
 # Define the base class for declarative models
 Base = declarative_base()
 
-# Create an SQLite database engine (or connect to an existing one)
-engine = create_engine('sqlite:///chat_database.db')
-
-# Create session factory
-Session = sessionmaker(bind=engine)
-session_factory = Session
-
 # Define the Users table
 class User(Base):
     __tablename__ = 'users'
@@ -60,24 +53,3 @@ class ModelUsage(Base):
     timestamp = Column(DateTime, default=datetime.utcnow)
     is_streaming = Column(Boolean, default=False)
     request_time_ms = Column(Integer, default=0)  # Request processing time in milliseconds
-
-# Database initialization function
-def init_db():
-    # Create all tables
-    Base.metadata.create_all(engine)
-    print("Database and tables created successfully.")
-
-# Utility function to get a new session
-def get_session():
-    return Session()
-
-def get_db():
-    db = Session()
-    try:
-        yield db
-    finally:
-        db.close()
-
-
-if __name__ == "__main__":
-    init_db() 

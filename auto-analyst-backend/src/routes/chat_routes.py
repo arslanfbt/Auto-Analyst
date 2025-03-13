@@ -1,17 +1,18 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, Body
-from typing import List, Optional, Dict, Any
-from pydantic import BaseModel
 from datetime import datetime
-from src.managers.chat_manager import ChatManager
 import logging
+from fastapi import APIRouter, Depends, HTTPException, Query, Body
+from pydantic import BaseModel
+from typing import List, Optional, Dict, Any
+from src.db.init_db import session_factory
+from src.db.schemas.models import ModelUsage
 from src.managers.ai_manager import AI_Manager
+from src.managers.chat_manager import ChatManager
 from src.managers.user_manager import get_current_user, User
-from src.init_db import session_factory, ModelUsage
+from src.schemas.chat_schemas import *
+from src.utils.logger import Logger
 
-# Configure logging
-logging.basicConfig(level=logging.INFO, 
-                    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
+# Initialize logger with console logging disabled
+logger = Logger("chat_routes", see_time=True, console_log=False)
 
 # Initialize router
 router = APIRouter(prefix="/chats", tags=["chats"])
@@ -22,50 +23,6 @@ chat_manager = ChatManager()
 # Initialize AI manager
 ai_manager = AI_Manager()
 
-# Pydantic models for request/response validation
-class MessageCreate(BaseModel):
-    content: str
-    sender: str
-
-class ChatResponse(BaseModel):
-    chat_id: int
-    title: str
-    created_at: str
-    user_id: Optional[int] = None
-    
-class MessageResponse(BaseModel):
-    message_id: int
-    chat_id: int
-    content: str
-    sender: str
-    timestamp: str
-
-class ChatDetailResponse(BaseModel):
-    chat_id: int
-    title: str
-    created_at: str
-    user_id: Optional[int] = None
-    messages: List[MessageResponse]
-
-class UserInfo(BaseModel):
-    username: str
-    email: str
-
-# Add this class to define the request model
-class ChatCreate(BaseModel):
-    user_id: Optional[int] = None
-    is_admin: Optional[bool] = False
-
-class ChatUpdate(BaseModel):
-    title: Optional[str] = None
-    user_id: Optional[int] = None
-
-class ChatMessageCreate(BaseModel):
-    """Model for creating a new chat message with AI response"""
-    message: str
-    model_name: Optional[str] = None
-    system_prompt: Optional[str] = None
-    formatted_prompt: Optional[str] = None
 
 # Routes
 @router.post("/", response_model=ChatResponse)
@@ -75,7 +32,7 @@ async def create_chat(chat_create: ChatCreate):
         chat = chat_manager.create_chat(chat_create.user_id)
         return chat
     except Exception as e:
-        logger.error(f"Error creating chat: {str(e)}")
+        logger.log_message(f"Error creating chat: {str(e)}", level=logging.ERROR)
         raise HTTPException(status_code=500, detail=f"Failed to create chat: {str(e)}")
 
 @router.post("/{chat_id}/messages", response_model=MessageResponse)
@@ -87,7 +44,7 @@ async def add_message(chat_id: int, message: MessageCreate, user_id: Optional[in
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
-        logger.error(f"Error adding message: {str(e)}")
+        logger.log_message(f"Error adding message: {str(e)}", level=logging.ERROR)
         raise HTTPException(status_code=500, detail=f"Failed to add message: {str(e)}")
 
 @router.get("/{chat_id}", response_model=ChatDetailResponse)
@@ -99,7 +56,7 @@ async def get_chat(chat_id: int, user_id: Optional[int] = None):
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
-        logger.error(f"Error retrieving chat: {str(e)}")
+        logger.log_message(f"Error retrieving chat: {str(e)}", level=logging.ERROR)
         raise HTTPException(status_code=500, detail=f"Failed to retrieve chat: {str(e)}")
 
 @router.get("/", response_model=List[ChatResponse])
@@ -113,7 +70,7 @@ async def get_chats(
         chats = chat_manager.get_user_chats(user_id, limit, offset)
         return chats
     except Exception as e:
-        logger.error(f"Error retrieving chats: {str(e)}")
+        logger.log_message(f"Error retrieving chats: {str(e)}", level=logging.ERROR)
         raise HTTPException(status_code=500, detail=f"Failed to retrieve chats: {str(e)}")
 
 @router.delete("/{chat_id}")
@@ -127,7 +84,7 @@ async def delete_chat(chat_id: int, user_id: Optional[int] = None):
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error deleting chat: {str(e)}")
+        logger.log_message(f"Error deleting chat: {str(e)}", level=logging.ERROR)
         raise HTTPException(status_code=500, detail=f"Failed to delete chat: {str(e)}")
 
 @router.get("/search/", response_model=List[ChatResponse])
@@ -141,7 +98,7 @@ async def search_chats(
         chats = chat_manager.search_chats(query, user_id, limit)
         return chats
     except Exception as e:
-        logger.error(f"Error searching chats: {str(e)}")
+        logger.log_message(f"Error searching chats: {str(e)}", level=logging.ERROR)
         raise HTTPException(status_code=500, detail=f"Failed to search chats: {str(e)}")
 
 @router.post("/users", response_model=dict)
@@ -154,7 +111,7 @@ async def create_or_get_user(user_info: UserInfo):
         )
         return user
     except Exception as e:
-        logger.error(f"Error creating/getting user: {str(e)}")
+        logger.log_message(f"Error creating/getting user: {str(e)}", level=logging.ERROR)
         raise HTTPException(status_code=500, detail=f"Failed to process user: {str(e)}")
 
 @router.put("/{chat_id}", response_model=ChatResponse)
@@ -170,7 +127,7 @@ async def update_chat(chat_id: int, chat_update: ChatUpdate):
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
-        logger.error(f"Error updating chat: {str(e)}")
+        logger.log_message(f"Error updating chat: {str(e)}", level=logging.ERROR)
         raise HTTPException(status_code=500, detail=f"Failed to update chat: {str(e)}")
 
 @router.post("/cleanup-empty", response_model=dict)
@@ -180,7 +137,7 @@ async def cleanup_empty_chats(request: ChatCreate):
         deleted_count = chat_manager.delete_empty_chats(request.user_id, request.is_admin)
         return {"message": f"Deleted {deleted_count} empty chats"}
     except Exception as e:
-        logger.error(f"Error cleaning up empty chats: {str(e)}")
+        logger.log_message(f"Error cleaning up empty chats: {str(e)}", level=logging.ERROR)
         raise HTTPException(status_code=500, detail=f"Failed to clean up empty chats: {str(e)}")
 
 @router.post("/chat/{chat_id}/message")
@@ -236,14 +193,14 @@ async def post_chat_message(
         model_name = request.model_name or "gpt-3.5-turbo"
         
         # Generate AI response - This will log and record usage
-        # logger.info(f"Calling AI Manager with model {model_name} for chat {chat_id}, user {user_id}")
+        logger.log_message(f"Calling AI Manager with model {model_name} for chat {chat_id}, user {user_id}", level=logging.INFO)
         response_text = await ai_manager.generate_response(
             prompt=formatted_prompt,
             model_name=model_name,
             user_id=user_id,
             chat_id=chat_id
         )
-        # logger.info(f"Received response from AI Manager: {len(response_text)} characters")
+        logger.log_message(f"Received response from AI Manager: {len(response_text)} characters", level=logging.INFO)
         
         # Add the AI response to the chat
         ai_message = chat_manager.add_message(
@@ -265,10 +222,10 @@ async def post_chat_message(
         }
         
     except ValueError as e:
-        logger.error(f"ValueError in post_chat_message: {str(e)}")
+        logger.log_message(f"ValueError in post_chat_message: {str(e)}", level=logging.ERROR)
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
-        logger.error(f"Error processing chat message: {str(e)}")
+        logger.log_message(f"Error processing chat message: {str(e)}", level=logging.ERROR)
         raise HTTPException(status_code=500, detail=f"Failed to process message: {str(e)}")
 
 @router.post("/debug/test-model-usage")
@@ -310,7 +267,7 @@ async def test_model_usage(
             session.close()
             
     except Exception as e:
-        logger.error(f"Error in test-model-usage: {str(e)}")
+        logger.log_message(f"Error in test-model-usage: {str(e)}", level=logging.ERROR)
         return {
             "success": False,
             "error": str(e)

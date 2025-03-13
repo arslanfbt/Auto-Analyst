@@ -53,7 +53,7 @@ const CodeBlock: React.FC<CodeBlockProps> = ({ language, value, onExecute, agent
 
     try {
       const BASE_URL = API_URL
-      const response = await axios.post(`${BASE_URL}/execute_code`, {
+      const response = await axios.post(`${BASE_URL}/code/execute`, {
         code: editedCode,
         session_id: sessionId,
       }, {
