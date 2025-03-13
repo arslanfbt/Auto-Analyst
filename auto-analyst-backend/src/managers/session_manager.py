@@ -13,7 +13,7 @@ from src.agents.agents import auto_analyst, auto_analyst_ind
 from src.agents.retrievers.retrievers import make_data
 
 # Initialize logger
-logger = Logger("session_manager", see_time=True, console_log=True)
+logger = Logger("session_manager", see_time=True, console_log=False)
 
 class SessionManager:
     """

@@ -13,7 +13,7 @@ from src.managers.session_manager import get_session_id
 from src.schemas.model_settings import ModelSettings
 from src.utils.logger import Logger
 
-logger = Logger("session_routes", see_time=True, console_log=True)
+logger = Logger("session_routes", see_time=True, console_log=False)
 
 # Add session header for dependency
 X_SESSION_ID = APIKeyHeader(name="X-Session-ID", auto_error=False)

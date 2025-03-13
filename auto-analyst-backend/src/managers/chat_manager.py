@@ -9,11 +9,10 @@ from typing import List, Dict, Optional, Tuple, Any
 from datetime import datetime
 import time
 import tiktoken
+from src.utils.logger import Logger
 
-# Configure logging
-logging.basicConfig(level=logging.INFO, 
-                    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
+logger = Logger("chat_manager", see_time=True, console_log=False)
+
 
 class ChatManager:
     """
@@ -81,7 +80,7 @@ class ChatManager:
             session.add(chat)
             session.commit()
             
-            # logger.info(f"Created new chat {chat.chat_id} for user {user_id}")
+            logger.log_message(f"Created new chat {chat.chat_id} for user {user_id}", level=logging.INFO)
             
             return {
                 "chat_id": chat.chat_id,
@@ -471,7 +470,7 @@ class ChatManager:
                 user = User(username=username, email=email)
                 session.add(user)
                 session.commit()
-                # logger.info(f"Created new user: {username} ({email})")
+                logger.log_message(f"Created new user: {username} ({email})", level=logging.INFO)
             
             return {
                 "user_id": user.user_id,
@@ -688,7 +687,7 @@ class ChatManager:
                     prompt_tokens = len(encoding.encode(prompt)) if prompt_tokens is None else prompt_tokens
                     completion_tokens = len(encoding.encode(response)) if completion_tokens is None else completion_tokens
                 except Exception as e:
-                    logger.warning(f"Error calculating tokens: {str(e)}")
+                    logger.log_message(f"Error calculating tokens: {str(e)}", level=logging.ERROR)
                     # Fallback to character-based estimation
                     prompt_tokens = len(prompt) // 4
                     completion_tokens = len(response) // 4

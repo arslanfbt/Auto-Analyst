@@ -258,7 +258,7 @@ export default function UserActivityPage() {
                 className={activeFilter === 'lowUsage' ? styles.filterButtonActive : styles.filterButton}
                 onClick={() => setActiveFilter('lowUsage')}
               >
-                Low Usage (&leq;10K tokens)
+                Low Usage (&le;10K tokens)
               </button>
             </div>
             

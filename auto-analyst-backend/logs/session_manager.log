@@ -18,3 +18,17 @@
 2025-03-13 16:32:34,806 - session_manager - INFO - Associated session 4bb0d1ab-5c2d-4015-8b82-c9c072a00550 with user_id=2, chat_id=554882
 2025-03-13 16:32:36,139 - session_manager - INFO - Associated session 4bb0d1ab-5c2d-4015-8b82-c9c072a00550 with user_id=1, chat_id=556499
 2025-03-13 16:32:36,139 - session_manager - INFO - Associated session 4bb0d1ab-5c2d-4015-8b82-c9c072a00550 with provided user_id 1
+2025-03-13 16:58:59,881 - session_manager - INFO - Created guest user 2 for session 4bb0d1ab-5c2d-4015-8b82-c9c072a00550
+2025-03-13 16:58:59,886 - session_manager - INFO - Associated session 4bb0d1ab-5c2d-4015-8b82-c9c072a00550 with user_id=2, chat_id=140069
+2025-03-13 16:59:02,802 - session_manager - INFO - Associated session 4bb0d1ab-5c2d-4015-8b82-c9c072a00550 with user_id=1, chat_id=142838
+2025-03-13 16:59:02,803 - session_manager - INFO - Associated session 4bb0d1ab-5c2d-4015-8b82-c9c072a00550 with provided user_id 1
+2025-03-13 17:00:22,263 - session_manager - INFO - Created guest user 2 for session 4bb0d1ab-5c2d-4015-8b82-c9c072a00550
+2025-03-13 17:00:22,263 - session_manager - INFO - Associated session 4bb0d1ab-5c2d-4015-8b82-c9c072a00550 with user_id=2, chat_id=222586
+2025-03-13 17:00:24,120 - session_manager - INFO - Associated session 4bb0d1ab-5c2d-4015-8b82-c9c072a00550 with user_id=1, chat_id=224454
+2025-03-13 17:00:24,120 - session_manager - INFO - Associated session 4bb0d1ab-5c2d-4015-8b82-c9c072a00550 with provided user_id 1
+2025-03-13 17:00:43,510 - session_manager - INFO - Created guest user 2 for session 4bb0d1ab-5c2d-4015-8b82-c9c072a00550
+2025-03-13 17:00:43,512 - session_manager - INFO - Associated session 4bb0d1ab-5c2d-4015-8b82-c9c072a00550 with user_id=2, chat_id=244298
+2025-03-13 17:01:30,249 - session_manager - INFO - Created guest user 2 for session 4bb0d1ab-5c2d-4015-8b82-c9c072a00550
+2025-03-13 17:01:30,251 - session_manager - INFO - Associated session 4bb0d1ab-5c2d-4015-8b82-c9c072a00550 with user_id=2, chat_id=290404
+2025-03-13 17:01:50,869 - session_manager - INFO - Associated session 4bb0d1ab-5c2d-4015-8b82-c9c072a00550 with user_id=1, chat_id=311650
+2025-03-13 17:01:50,869 - session_manager - INFO - Associated session 4bb0d1ab-5c2d-4015-8b82-c9c072a00550 with provided user_id 1

@@ -855,8 +855,7 @@ async def handle_new_model_usage(model_usage: ModelUsage):
     Process a new model usage event and broadcast updates to connected clients.
     This function should be called whenever a new model usage record is created.
     """
-    logger.log_message(f"Processing new model usage event: {model_usage.model_name}, user: {model_usage.user_id}", logging.INFO)
-    
+    logger.log_message(f"Processing new model usage event: {model_usage.model_name}, user: {model_usage.user_id}", level=logging.INFO)
     # Ensure the model_usage instance is refreshed and bound to a session
     session = get_session()  # Assuming get_session() is a function that provides a new session
     try:

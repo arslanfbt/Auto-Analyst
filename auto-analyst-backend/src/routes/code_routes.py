@@ -16,7 +16,7 @@ router = APIRouter(
 )
 
 # Initialize logger
-logger = Logger("code_routes", see_time=True, console_log=True)
+logger = Logger("code_routes", see_time=True, console_log=False)
 
 # Request body model
 class CodeExecuteRequest(BaseModel):

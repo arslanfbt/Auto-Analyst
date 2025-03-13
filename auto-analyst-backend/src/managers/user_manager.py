@@ -10,7 +10,7 @@ from src.db.schemas.models import User as DBUser
 from src.schemas.user_schemas import User
 from src.utils.logger import Logger
 
-logger = Logger("user_manager", see_time=True, console_log=True)
+logger = Logger("user_manager", see_time=True, console_log=False)
 
 # Define API key header for authentication
 API_KEY_NAME = "X-API-Key"
@@ -41,13 +41,21 @@ async def get_current_user(
             # Simplified example: assume API key is the user_id for demonstration
             # In a real app, you'd do a secure lookup
             try:
-                user_id = int(api_key)
-                db_user = session.query(DBUser).filter(DBUser.user_id == user_id).first()
+                # Check if api_key is actually a string before converting to int
+                if isinstance(api_key, str):
+                    user_id = int(api_key)
+                    db_user = session.query(DBUser).filter(DBUser.user_id == user_id).first()
+                else:
+                    # Handle the case where api_key is not a string (like Depends object)
+                    logger.log_message("API key is not a string", level=logging.ERROR)
+                    return None
             except ValueError:
                 # If api_key isn't a number, maybe check by username or something else
+                logger.log_message(f"API key is not a number: {api_key}", level=logging.ERROR)
                 db_user = session.query(DBUser).filter(DBUser.username == api_key).first()
             
             if not db_user:
+                logger.log_message("User not found", level=logging.ERROR)
                 return None
                 
             return User(
@@ -60,7 +68,7 @@ async def get_current_user(
             session.close()
             
     except Exception as e:
-        logger.log_message(f"Error authenticating user: {str(e)}", logging.ERROR)
+        logger.log_message(f"Error authenticating user: {str(e)}", level=logging.ERROR)
         return None
 
 # Function to create a new user

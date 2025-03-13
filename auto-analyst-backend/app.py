@@ -1,5 +1,5 @@
+# Standard library imports
 import asyncio
-import groq
 import json
 import logging
 import os
@@ -8,28 +8,39 @@ import uuid
 from io import StringIO
 from typing import List, Optional
 
+# Third-party imports
+import groq
 import pandas as pd
 import uvicorn
 from dotenv import load_dotenv
-from fastapi import (Depends, FastAPI, File, Form, HTTPException, Request, 
-                    UploadFile)
+from fastapi import (
+    Depends, 
+    FastAPI, 
+    File, 
+    Form, 
+    HTTPException, 
+    Request, 
+    UploadFile
+)
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.security import APIKeyHeader
+from llama_index.core import Document, VectorStoreIndex
 from pydantic import BaseModel
 
-from llama_index.core import Document, VectorStoreIndex
+# Local application imports
 from scripts.format_response import execute_code_from_markdown, format_response_to_markdown
 from src.agents.agents import *
-from src.managers.ai_manager import AI_Manager
-from src.managers.user_manager import create_user, get_current_user, User
 from src.agents.retrievers.retrievers import *
+from src.managers.ai_manager import AI_Manager
+from src.managers.session_manager import SessionManager, get_session_id
+from src.managers.user_manager import create_user, get_current_user, User
 from src.routes.analytics_routes import router as analytics_router
 from src.routes.chat_routes import router as chat_router
 from src.routes.code_routes import router as code_router
 from src.routes.session_routes import router as session_router, get_session_id_dependency
+from src.schemas.query_schemas import QueryRequest
 from src.utils.logger import Logger
-from src.managers.session_manager import SessionManager, get_session_id
 
 logger = Logger("app", see_time=True, console_log=True)
 load_dotenv()
@@ -45,11 +56,11 @@ styling_instructions = [
 
 # Add near the top of the file, after imports
 DEFAULT_MODEL_CONFIG = {
-    "provider": "openai",
-    "model": "o1-mini",
+    "provider": os.getenv("MODEL_PROVIDER", "openai"),
+    "model": os.getenv("MODEL_NAME", "gpt-4o-mini"),
     "api_key": os.getenv("OPENAI_API_KEY"),
-    "temperature": 1.0,
-    "max_tokens": 6000
+    "temperature": float(os.getenv("TEMPERATURE", 1.0)),
+    "max_tokens": int(os.getenv("MAX_TOKENS", 6000))
 }
 
 # Initialize DSPy with default model
@@ -170,27 +181,6 @@ AVAILABLE_AGENTS = {
     "preprocessing_agent": preprocessing_agent,
 }
 
-# Pydantic models for validation
-class QueryRequest(BaseModel):
-    query: str
-
-class DataFrameRequest(BaseModel):
-    styling_instructions: List[str]
-    file: str
-    name: str
-    description: str
-
-class ModelSettings(BaseModel):
-    provider: str
-    model: str
-    api_key: str = ""
-    temperature: float = 0
-    max_tokens: int = 1000
-
-class UserLoginRequest(BaseModel):
-    username: str
-    email: str
-    session_id: Optional[str] = None
 
 @app.post("/chat/{agent_name}", response_model=dict)
 async def chat_with_agent(
