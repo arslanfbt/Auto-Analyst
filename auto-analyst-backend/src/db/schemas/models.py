@@ -6,7 +6,6 @@ from datetime import datetime
 # Define the base class for declarative models
 Base = declarative_base()
 
-
 # Define the Users table
 class User(Base):
     __tablename__ = 'users'

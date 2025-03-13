@@ -29,12 +29,11 @@ from llama_index.core import Document, VectorStoreIndex
 from pydantic import BaseModel
 
 # Local application imports
-from scripts.format_response import execute_code_from_markdown, format_response_to_markdown
+from scripts.format_response import format_response_to_markdown
 from src.agents.agents import *
 from src.agents.retrievers.retrievers import *
 from src.managers.ai_manager import AI_Manager
-from src.managers.session_manager import SessionManager, get_session_id
-from src.managers.user_manager import create_user, get_current_user, User
+from src.managers.session_manager import SessionManager
 from src.routes.analytics_routes import router as analytics_router
 from src.routes.chat_routes import router as chat_router
 from src.routes.code_routes import router as code_router

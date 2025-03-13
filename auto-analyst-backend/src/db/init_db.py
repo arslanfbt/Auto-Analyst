@@ -10,8 +10,7 @@ logger = Logger("init_db", see_time=True, console_log=True)
 load_dotenv()
 
 # Create an SQLite database engine (or connect to an existing one)
-DATABASE_URL = os.getenv("DATABASE_URL")
-engine = create_engine(DATABASE_URL)
+engine = create_engine("sqlite:///chat_database.db")
 
 # Create session factory
 Session = sessionmaker(bind=engine)
