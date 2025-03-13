@@ -1,7 +1,7 @@
 from sqlalchemy import create_engine, desc, func
 from sqlalchemy.orm import sessionmaker, scoped_session
 from sqlalchemy.exc import SQLAlchemyError
-from src.init_db import Base, User, Chat, Message, ModelUsage
+from src.db.schemas.models import Base, User, Chat, Message, ModelUsage
 import logging
 import requests
 import json

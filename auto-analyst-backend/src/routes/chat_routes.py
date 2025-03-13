@@ -6,12 +6,12 @@ from src.managers.chat_manager import ChatManager
 import logging
 from src.managers.ai_manager import AI_Manager
 from src.managers.user_manager import get_current_user, User
-from src.init_db import session_factory, ModelUsage
+from src.db.init_db import session_factory
+from src.db.schemas.models import ModelUsage
+from src.utils.logger import Logger
 
-# Configure logging
-logging.basicConfig(level=logging.INFO, 
-                    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
+# Initialize logger
+logger = Logger("chat_routes", see_time=True, console_log=True)
 
 # Initialize router
 router = APIRouter(prefix="/chats", tags=["chats"])

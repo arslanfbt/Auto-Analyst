@@ -1,28 +1,21 @@
-from fastapi import Depends, HTTPException, status, Request
-from fastapi.security import APIKeyHeader
-from typing import Optional
-from pydantic import BaseModel
-import os
-from src.init_db import User as DBUser, get_session
 import logging
+import os
+from typing import Optional
 
-# Configure logging
-logging.basicConfig(level=logging.INFO, 
-                    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
+from fastapi import Depends, HTTPException, Request, status
+from fastapi.security import APIKeyHeader
+
+from src.db.init_db import get_session
+from src.db.schemas.models import User as DBUser
+from src.schemas.user_schemas import User
+from src.utils.logger import Logger
+
+logger = Logger("user_manager", see_time=True, console_log=True)
 
 # Define API key header for authentication
 API_KEY_NAME = "X-API-Key"
 api_key_header = APIKeyHeader(name=API_KEY_NAME, auto_error=False)
 
-# User model for API responses
-class User(BaseModel):
-    user_id: int
-    username: str
-    email: str
-
-    class Config:
-        orm_mode = True
 
 async def get_current_user(
     request: Request,
@@ -67,7 +60,7 @@ async def get_current_user(
             session.close()
             
     except Exception as e:
-        logger.error(f"Error authenticating user: {str(e)}")
+        logger.log_message(f"Error authenticating user: {str(e)}", logging.ERROR)
         return None
 
 # Function to create a new user
@@ -101,7 +94,7 @@ def create_user(username: str, email: str) -> User:
     
     except Exception as e:
         session.rollback()
-        logger.error(f"Error creating user: {str(e)}")
+        logger.log_message(f"Error creating user: {str(e)}", logging.ERROR)
         raise
     
     finally:
@@ -118,5 +111,5 @@ def get_user_by_email(email: str) -> Optional[User]:
             email=user.email
         )
     except Exception as e:
-        logger.error(f"Error getting user by email: {str(e)}")
+        logger.log_message(f"Error getting user by email: {str(e)}", logging.ERROR)
         return None

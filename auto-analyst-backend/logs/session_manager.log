@@ -1,0 +1,12 @@
+2025-03-13 16:00:53,254 - session_manager - INFO - Associated session 4bb0d1ab-5c2d-4015-8b82-c9c072a00550 with user_id=1, chat_id=654121
+2025-03-13 16:00:53,254 - session_manager - INFO - Associated session 4bb0d1ab-5c2d-4015-8b82-c9c072a00550 with provided user_id 1
+2025-03-13 16:08:26,768 - session_manager - INFO - Associated session 4bb0d1ab-5c2d-4015-8b82-c9c072a00550 with user_id=1, chat_id=107312
+2025-03-13 16:08:26,768 - session_manager - INFO - Associated session 4bb0d1ab-5c2d-4015-8b82-c9c072a00550 with provided user_id 1
+2025-03-13 16:10:41,168 - session_manager - INFO - Created guest user 2 for session 4bb0d1ab-5c2d-4015-8b82-c9c072a00550
+2025-03-13 16:10:41,168 - session_manager - INFO - Associated session 4bb0d1ab-5c2d-4015-8b82-c9c072a00550 with user_id=2, chat_id=241690
+2025-03-13 16:10:42,796 - session_manager - INFO - Associated session 4bb0d1ab-5c2d-4015-8b82-c9c072a00550 with user_id=1, chat_id=243431
+2025-03-13 16:10:42,796 - session_manager - INFO - Associated session 4bb0d1ab-5c2d-4015-8b82-c9c072a00550 with provided user_id 1
+2025-03-13 16:16:42,978 - session_manager - INFO - Created guest user 2 for session 4bb0d1ab-5c2d-4015-8b82-c9c072a00550
+2025-03-13 16:16:42,987 - session_manager - INFO - Associated session 4bb0d1ab-5c2d-4015-8b82-c9c072a00550 with user_id=2, chat_id=603029
+2025-03-13 16:16:44,668 - session_manager - INFO - Associated session 4bb0d1ab-5c2d-4015-8b82-c9c072a00550 with user_id=1, chat_id=605491
+2025-03-13 16:16:44,668 - session_manager - INFO - Associated session 4bb0d1ab-5c2d-4015-8b82-c9c072a00550 with provided user_id 1

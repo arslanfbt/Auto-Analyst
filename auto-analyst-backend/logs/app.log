@@ -1,0 +1,4 @@
+2025-03-13 16:10:42,796 - app - INFO - Using provided chat_id 2 from request
+2025-03-13 16:10:42,798 - app - INFO - Updated session state with user_id 1 from request
+2025-03-13 16:16:44,668 - app - INFO - Using provided chat_id 3 from request
+2025-03-13 16:16:44,672 - app - INFO - Updated session state with user_id 1 from request

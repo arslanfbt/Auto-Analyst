@@ -1,18 +1,22 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, WebSocket
-from typing import Optional, List, Dict, Any
-from datetime import datetime, timedelta
-from pydantic import BaseModel
-from src.managers.chat_manager import ChatManager
-import logging
-from fastapi import Request
-from fastapi.security import APIKeyHeader
-import os
-from src.init_db import ModelUsage, get_db, get_session
 import json
-from sqlalchemy.orm import Session
-from sqlalchemy import func, desc
+import logging
+import os
 from collections import defaultdict
-from sqlalchemy import case  
+from datetime import datetime, timedelta
+
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, WebSocket
+from fastapi.security import APIKeyHeader
+
+from pydantic import BaseModel
+
+from sqlalchemy import case, desc, func
+from sqlalchemy.orm import Session
+
+from src.db.init_db import get_db, get_session
+from src.db.schemas.models import ModelUsage
+from src.managers.chat_manager import ChatManager
+
+from typing import Any, Dict, List, Optional
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, 
