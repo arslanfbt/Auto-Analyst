@@ -1,35 +1,50 @@
 'use client'
 
+import React, { useState } from 'react'
 import { useCredits } from '@/lib/contexts/credit-context'
-import { BadgeDollarSign, RefreshCw } from 'lucide-react'
-import { Button } from '@/components/ui/button'
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './ui/tooltip'
+import Link from 'next/link'
+import { ChevronUp, CreditCard } from 'lucide-react'
 
-export default function CreditBalance() {
-  const { remainingCredits, isLoading, checkCredits } = useCredits()
-
+const CreditBalance = () => {
+  const { remainingCredits } = useCredits()
+  const [isHovering, setIsHovering] = useState(false)
+  
   return (
     <TooltipProvider>
-      <Tooltip>
+      <Tooltip delayDuration={300}>
         <TooltipTrigger asChild>
-          <div className="flex items-center gap-1 px-3 py-1 bg-gray-100 rounded-full text-sm font-medium">
-            <BadgeDollarSign className="h-4 w-4 text-[#FF7F7F]" />
-            <span>{isLoading ? '...' : remainingCredits}</span>
-            <Button 
-              variant="ghost" 
-              size="icon" 
-              className="h-5 w-5 ml-1 hover:bg-gray-200 rounded-full"
-              onClick={() => checkCredits()}
-              disabled={isLoading}
-            >
-              <RefreshCw className="h-3 w-3" />
-            </Button>
-          </div>
+          <Link 
+            href="/pricing" 
+            className={`flex items-center gap-1 p-1 rounded-md transition-all duration-200 ${
+              isHovering ? 'bg-[#FF7F7F]/10 text-[#FF7F7F]' : 'bg-gray-100 text-gray-700'
+            }`}
+            onMouseEnter={() => setIsHovering(true)}
+            onMouseLeave={() => setIsHovering(false)}
+          >
+            <span className={`flex items-center px-2 py-1 rounded-md text-sm ${
+              isHovering ? 'font-medium' : ''
+            }`}>
+              <span>{remainingCredits.toLocaleString()}</span>
+              <span className="ml-1">tokens</span>
+            </span>
+            
+            {isHovering ? (
+              <span className="flex items-center text-[#FF7F7F] pr-1">
+                <ChevronUp className="h-3 w-3 mr-1" />
+                <span className="text-xs font-medium">Upgrade</span>
+              </span>
+            ) : (
+              <CreditCard className="h-3.5 w-3.5 mr-1 opacity-70" />
+            )}
+          </Link>
         </TooltipTrigger>
-        <TooltipContent>
-          <p>You have {remainingCredits} credits remaining this month</p>
+        <TooltipContent side="bottom">
+          <p className="text-sm font-medium">Get more tokens with a plan upgrade</p>
         </TooltipContent>
       </Tooltip>
     </TooltipProvider>
   )
-} 
+}
+
+export default CreditBalance 
