@@ -51,7 +51,7 @@ export const creditUtils = {
   },
 
   // Set initial credits for a user
-  async initializeCredits(userId: string, credits: number = 100): Promise<void> {
+  async initializeCredits(userId: string, credits: number = parseInt(process.env.NEXT_PUBLIC_CREDITS_INITIAL_AMOUNT || '100')): Promise<void> {
     try {
       await redis.set(`${CREDIT_KEY_PREFIX}${userId}`, credits);
     } catch (error) {

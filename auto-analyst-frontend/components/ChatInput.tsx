@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef, forwardRef, useImperativeHandle } from "react"
 import { motion, AnimatePresence } from "framer-motion"
-import { Send, Paperclip, X, Square, Loader2, CheckCircle2, XCircle, Eye } from 'lucide-react'
+import { Send, Paperclip, X, Square, Loader2, CheckCircle2, XCircle, Eye, CreditCard } from 'lucide-react'
 import AgentHint from './chat/AgentHint'
 import { Button } from "./ui/button"
 import { Textarea } from "./ui/textarea"
@@ -18,7 +18,9 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { useSessionStore } from '@/lib/store/sessionStore'
+import { useCredits } from '@/lib/contexts/credit-context'
 import API_URL from '@/config/api'
+import Link from 'next/link'
 
 // const PREVIEW_API_URL = 'http://localhost:8000';
 const PREVIEW_API_URL = API_URL;
@@ -75,6 +77,8 @@ const ChatInput = forwardRef<
   });
   const [uploadSuccess, setUploadSuccess] = useState(false);
   const { sessionId, setSessionId } = useSessionStore()
+  const { remainingCredits, isChatBlocked } = useCredits()
+  const [showCreditInfo, setShowCreditInfo] = useState(false)
 
   // Expose handlePreviewDefaultDataset to parent
   useImperativeHandle(ref, () => ({
@@ -273,6 +277,7 @@ const ChatInput = forwardRef<
 
   const getPlaceholderText = () => {
     if (isLoading) return "Please wait..."
+    if (isChatBlocked) return "You've used all your tokens for this month"
     if (disabled) return "Free trial used. Please sign in to continue."
     return "Type your message here..."
   }
@@ -393,6 +398,22 @@ const ChatInput = forwardRef<
     }
   }
 
+  // Helper function to determine if input should be fully disabled
+  const isInputDisabled = () => {
+    return disabled || isLoading || isChatBlocked
+  }
+
+  // Calculate reset date (first day of next month)
+  const getResetDate = () => {
+    const now = new Date()
+    const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1)
+    return nextMonth.toLocaleDateString('en-US', { 
+      year: 'numeric', 
+      month: 'long', 
+      day: 'numeric' 
+    })
+  }
+
   return (
     <>
       <div className="relative">
@@ -474,6 +495,36 @@ const ChatInput = forwardRef<
                 </div>
               )}
 
+              {/* Credit exhaustion message with reset date */}
+              {isChatBlocked && (
+                <div className="max-w-3xl mx-auto mb-4">
+                  <div className="bg-orange-50 border border-orange-200 rounded-md p-4 flex flex-col gap-3">
+                    <div className="flex items-center gap-2">
+                      <AlertCircle className="w-5 h-5 text-orange-500" />
+                      <span className="text-orange-700 font-medium">You've used all your tokens for this month</span>
+                    </div>
+                    <p className="text-sm text-orange-600 ml-7">
+                      Upgrade your plan to get more tokens immediately, or wait until <strong>{getResetDate()}</strong> when your free tokens will reset.
+                    </p>
+                    <div className="flex gap-3 ml-7">
+                      <Link href="/pricing" passHref>
+                        <Button className="bg-[#FF7F7F] hover:bg-[#FF6666] text-white">
+                          <CreditCard className="w-4 h-4 mr-2" />
+                          Upgrade Plan
+                        </Button>
+                      </Link>
+                      <Button 
+                        variant="outline" 
+                        className="text-gray-700" 
+                        onClick={() => setShowCreditInfo(true)}
+                      >
+                        Learn More
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               <form onSubmit={handleSubmit} className="max-w-3xl mx-auto">
                 <div className="flex items-center space-x-2">
                   <div className="relative flex-1">
@@ -492,10 +543,10 @@ const ChatInput = forwardRef<
                           setConsent(true)
                         }
                       }}
-                      disabled={disabled || isLoading}
+                      disabled={isInputDisabled()}
                       placeholder={getPlaceholderText()}
                       className={`w-full bg-gray-100 text-gray-900 placeholder-gray-500 border-0 rounded-lg py-3 px-4 pr-12 focus:outline-none focus:ring-2 focus:ring-[#FF7F7F] focus:bg-white transition-colors resize-none ${
-                        (disabled || isLoading) ? 'bg-gray-100 text-gray-500 cursor-not-allowed' : ''
+                        isInputDisabled() ? 'bg-gray-100 text-gray-500 cursor-not-allowed' : ''
                       }`}
                       rows={1}
                     />
@@ -548,7 +599,7 @@ const ChatInput = forwardRef<
                     className={`${
                       isLoading 
                         ? 'bg-red-500 hover:bg-red-600 cursor-pointer' 
-                        : disabled || !message.trim()
+                        : isInputDisabled() || !message.trim()
                           ? 'bg-gray-400 cursor-not-allowed'
                           : 'bg-[#FF7F7F] hover:bg-[#FF6666]'
                     } text-white p-3 rounded-full transition-colors`}
@@ -659,7 +710,7 @@ const ChatInput = forwardRef<
                 <div className="flex justify-end gap-3 mt-4">
                   <button
                     onClick={() => setShowPreview(false)}
-                    className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-[#FF7F7F] focus:border-transparent transition-colors hover:border-[#FF7F7F]"
+                    className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-[#FF7F7F] focus:border-transparent transition-colors hover:border-[#FF7F7F] text-white"
                   >
                     Close
                   </button>
@@ -669,6 +720,39 @@ const ChatInput = forwardRef<
           </Dialog>
         )}
       </AnimatePresence>
+      
+      {/* Credit info dialog */}
+      <Dialog open={showCreditInfo} onOpenChange={setShowCreditInfo}>
+        <DialogContent className="sm:max-w-lg text-gray-800">
+          <DialogHeader>
+            <DialogTitle className="text-gray-800">About Credits and Monthly Reset</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-3 text-gray-800">
+            <p>Free accounts receive a monthly allocation of tokens to use with Auto-Analyst.</p>
+            
+            <div className="bg-gray-50 p-4 rounded-md">
+              <h4 className="font-medium mb-2 text-gray-800">How credits work:</h4>
+              <ul className="list-disc pl-5 space-y-1 text-gray-800">
+                <li>Each interaction with our AI uses a certain number of tokens</li>
+                <li>More complex queries or larger datasets use more tokens</li>
+                <li>Your free token allocation resets on the 1st day of each month</li>
+                <li>Upgrade to a paid plan for unlimited tokens and additional features</li>
+              </ul>
+            </div>
+            
+            <div className="flex justify-end">
+              <Link href="/pricing" passHref>
+                <Button className="bg-[#FF7F7F] hover:bg-[#FF6666] text-white mr-2">
+                  View Pricing Plans
+                </Button>
+              </Link>
+              <Button variant="outline" onClick={() => setShowCreditInfo(false)}>
+                Close
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </>
   )
 })
