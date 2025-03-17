@@ -1,9 +1,13 @@
 "use client"
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useRouter } from 'next/router'
 import { useSession } from 'next-auth/react'
-import { CardElement, useStripe, useElements } from '@stripe/react-stripe-js'
+import {
+  PaymentElement,
+  useStripe,
+  useElements
+} from '@stripe/react-stripe-js'
 import { motion } from 'framer-motion'
 import { Loader2, CheckCircle, AlertCircle } from 'lucide-react'
 import { Button } from './ui/button'
@@ -12,91 +16,49 @@ interface CheckoutFormProps {
   planName: string
   amount: number
   interval: 'month' | 'year'
-  priceId: string
+  clientSecret: string
 }
 
-export default function CheckoutForm({ planName, amount, interval, priceId }: CheckoutFormProps) {
+export default function CheckoutForm({ planName, amount, interval, clientSecret }: CheckoutFormProps) {
   const router = useRouter()
   const { data: session } = useSession()
   const stripe = useStripe()
   const elements = useElements()
   
   const [error, setError] = useState<string | null>(null)
-  const [cardComplete, setCardComplete] = useState(false)
   const [processing, setProcessing] = useState(false)
   const [succeeded, setSucceeded] = useState(false)
-  const [clientSecret, setClientSecret] = useState('')
   
-  useEffect(() => {
-    // Create PaymentIntent as soon as the page loads
-    if (!priceId) return
-    
-    fetch('/api/create-checkout-session', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ 
-        priceId,
-        userId: session?.user?.id || 'guest',
-        email: session?.user?.email,
-      }),
-    })
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.error) {
-          setError(data.error)
-          return
-        }
-        setClientSecret(data.clientSecret)
-      })
-      .catch((err) => {
-        setError('Something went wrong with the payment setup. Please try again.')
-        console.error(err)
-      })
-  }, [priceId, session])
-
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
 
     if (!stripe || !elements) {
-      // Stripe.js has not loaded yet
-      return
-    }
-
-    if (error) {
-      elements.getElement(CardElement)!.focus()
-      return
-    }
-
-    if (!cardComplete) {
-      setError('Please complete your card details')
+      setError('Stripe.js has not loaded yet')
       return
     }
 
     setProcessing(true)
-
-    const payload = await stripe.confirmCardPayment(clientSecret, {
-      payment_method: {
-        card: elements.getElement(CardElement)!,
-        billing_details: {
-          name: session?.user?.name || 'Guest User',
-          email: session?.user?.email,
-        },
+    
+    // Use the PaymentElement instead of CardElement
+    const { error: submitError, paymentIntent } = await stripe.confirmPayment({
+      elements,
+      confirmParams: {
+        return_url: `${window.location.origin}/checkout/success`,
       },
+      redirect: 'if_required',
     })
 
     setProcessing(false)
 
-    if (payload.error) {
-      setError(`Payment failed: ${payload.error.message}`)
-    } else {
+    if (submitError) {
+      setError(submitError.message || 'An error occurred when processing your payment')
+    } else if (paymentIntent && paymentIntent.status === 'succeeded') {
       setError(null)
       setSucceeded(true)
       
       // Show success animation for a second before redirecting
       setTimeout(() => {
-        router.push('/checkout/success?session_id=' + payload.paymentIntent.id)
+        router.push(`/checkout/success?payment_intent=${paymentIntent.id}`)
       }, 1500)
     }
   }
@@ -116,29 +78,10 @@ export default function CheckoutForm({ planName, amount, interval, priceId }: Ch
         
         <div className="mb-6">
           <label className="block text-sm font-medium text-gray-700 mb-2">
-            Card Details
+            Payment Details
           </label>
           <div className="p-4 border border-gray-300 rounded-md focus-within:ring-2 focus-within:ring-[#FF7F7F] focus-within:border-[#FF7F7F] transition-all">
-            <CardElement
-              options={{
-                style: {
-                  base: {
-                    fontSize: '16px',
-                    color: '#424770',
-                    '::placeholder': {
-                      color: '#aab7c4',
-                    },
-                  },
-                  invalid: {
-                    color: '#9e2146',
-                  },
-                },
-              }}
-              onChange={(e) => {
-                setError(e.error ? e.error.message : null)
-                setCardComplete(e.complete)
-              }}
-            />
+            <PaymentElement />
           </div>
         </div>
         

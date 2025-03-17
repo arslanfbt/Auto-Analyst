@@ -1,6 +1,6 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { getToken } from 'next-auth/jwt';
 import Stripe from 'stripe';
+import { getSession } from 'next-auth/react';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
   apiVersion: '2025-02-24.acacia',
@@ -11,20 +11,21 @@ export default async function handler(
   res: NextApiResponse
 ) {
   if (req.method !== 'POST') {
-    return res.status(405).json({ errorj: 'Method not allowed' });
+    return res.status(405).json({ error: 'Method not allowed' });
   }
 
   try {
-    // Get user from session
-    const token = await getToken({ req });
-    if (!token) {
-      return res.status(401).json({ error: 'Not authenticated' });
+    const { priceId } = req.body;
+    
+    // Get user session
+    const session = await getSession({ req });
+    
+    if (!session) {
+      return res.status(401).json({ error: 'You must be logged in to subscribe' });
     }
 
-    const { priceId, userId } = req.body;
-
-    // Create Checkout Session
-    const session = await stripe.checkout.sessions.create({
+    // Create Stripe checkout session
+    const checkoutSession = await stripe.checkout.sessions.create({
       payment_method_types: ['card'],
       line_items: [
         {
@@ -33,25 +34,17 @@ export default async function handler(
         },
       ],
       mode: 'subscription',
-      success_url: `${req.headers.origin}/dashboard?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${req.headers.origin}/pricing`,
+      success_url: `${process.env.NEXT_PUBLIC_BASE_URL}/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${process.env.NEXT_PUBLIC_BASE_URL}/pricing`,
+      customer_email: session.user?.email || undefined,
       metadata: {
-        userId: userId || token.email,
-      },
-      subscription_data: {
-        metadata: {
-          userId: userId || token.email,
-        },
+        userId: session.user?.id || 'unknown',
       },
     });
 
-    res.status(200).json({ sessionId: session.id });
+    res.status(200).json({ url: checkoutSession.url });
   } catch (error: any) {
     console.error('Error creating checkout session:', error);
-    res.status(500).json({
-      error: {
-        message: error.message || 'An error occurred with the payment system',
-      },
-    });
+    res.status(500).json({ error: error.message || 'An error occurred with the checkout process' });
   }
 } 

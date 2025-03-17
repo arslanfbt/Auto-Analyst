@@ -25,6 +25,11 @@ export default function CheckoutPage() {
     priceId: '',
   })
   
+  // Add state for payment intent
+  const [clientSecret, setClientSecret] = useState('')
+  const [paymentLoading, setPaymentLoading] = useState(false)
+  const [paymentError, setPaymentError] = useState('')
+  
   useEffect(() => {
     if (!plan || !cycle || status === 'loading') {
       return
@@ -65,21 +70,54 @@ export default function CheckoutPage() {
     
     if (selectedPlan) {
       const billing = cycle === 'yearly' ? 'yearly' : 'monthly'
-      setPlanDetails({
+      const planData = {
         name: selectedPlan.name,
         amount: selectedPlan[billing].price,
         cycle: billing === 'yearly' ? 'year' : 'month',
         priceId: selectedPlan[billing].priceId || '',
-      })
+      }
+      
+      setPlanDetails(planData)
+      
+      // Create payment intent when plan is selected
+      if (planData.priceId && session) {
+        setPaymentLoading(true)
+        
+        fetch('/api/create-payment-intent', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            amount: planData.amount,
+            priceId: planData.priceId,
+            email: session.user?.email,
+          }),
+        })
+          .then(res => res.json())
+          .then(data => {
+            if (data.error) {
+              setPaymentError(data.error)
+            } else {
+              setClientSecret(data.clientSecret)
+            }
+            setPaymentLoading(false)
+          })
+          .catch(err => {
+            console.error('Error creating payment intent:', err)
+            setPaymentError('Failed to set up payment. Please try again.')
+            setPaymentLoading(false)
+          })
+      }
     } else {
       // Plan not found, redirect to pricing
       router.push('/pricing')
     }
     
     setLoadingPlan(false)
-  }, [plan, cycle, router, status])
+  }, [plan, cycle, router, status, session])
   
-  if (status === 'loading' || loadingPlan) {
+  if (status === 'loading' || loadingPlan || paymentLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center">
         <motion.div
@@ -123,16 +161,24 @@ export default function CheckoutPage() {
               You're subscribing to the {planDetails.name} plan
             </p>
             
+            {paymentError && (
+              <div className="mb-6 p-4 bg-red-50 text-red-600 rounded-md">
+                {paymentError}
+              </div>
+            )}
+            
             <div className="grid gap-10 lg:grid-cols-5">
               <div className="lg:col-span-3">
-                <Elements stripe={stripePromise}>
-                  <CheckoutForm 
-                    planName={planDetails.name}
-                    amount={planDetails.amount}
-                    interval={planDetails.cycle as 'month' | 'year'}
-                    priceId={planDetails.priceId}
-                  />
-                </Elements>
+                {clientSecret && (
+                  <Elements stripe={stripePromise} options={{ clientSecret }}>
+                    <CheckoutForm 
+                      planName={planDetails.name}
+                      amount={planDetails.amount}
+                      interval={planDetails.cycle as 'month' | 'year'}
+                      clientSecret={clientSecret}
+                    />
+                  </Elements>
+                )}
               </div>
               
               <div className="lg:col-span-2">

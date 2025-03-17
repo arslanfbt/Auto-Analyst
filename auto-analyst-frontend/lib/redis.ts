@@ -1,38 +1,12 @@
 import { Redis } from '@upstash/redis'
 
-// Initialize Redis client with better error handling
-let redis: Redis;
+// Initialize Redis client with Upstash credentials
+const redis = new Redis({
+  url: process.env.UPSTASH_REDIS_REST_URL || '',
+  token: process.env.UPSTASH_REDIS_REST_TOKEN || '',
+})
 
-// Check if we're in a browser environment before initializing
-if (typeof window === 'undefined') {
-  // Server-side execution
-  const url = process.env.UPSTASH_REDIS_REST_URL;
-  const token = process.env.UPSTASH_REDIS_REST_TOKEN;
-  
-  if (!url || !token) {
-    console.error('Redis credentials missing. Set UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN in your .env file');
-  }
-  
-  redis = new Redis({
-    url: url,
-    token: token,
-  });
-} else {
-  // Client-side execution
-  const url = process.env.NEXT_PUBLIC_UPSTASH_REDIS_REST_URL;
-  const token = process.env.NEXT_PUBLIC_UPSTASH_REDIS_REST_TOKEN;
-  
-  if (!url || !token) {
-    console.warn('Redis credentials missing in client. Fallback mode enabled.');
-  }
-  
-  redis = new Redis({
-    url: url,
-    token: token,
-  });
-}
-
-export { redis };
+export default redis
 
 // Key prefix for better organization
 const CREDIT_KEY_PREFIX = 'user_credits:';
