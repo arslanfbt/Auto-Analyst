@@ -1,133 +1,184 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import Stripe from 'stripe';
 import { buffer } from 'micro';
-import axios from 'axios';
+import redis from '@/lib/redis';
+import { creditUtils, KEYS } from '@/lib/redis';
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: '2025-02-24.acacia',
-});
-
-// Disable body parser for webhooks
+// Disable the default body parser to access the raw request body
 export const config = {
   api: {
     bodyParser: false,
   },
 };
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
+  apiVersion: '2025-02-24.acacia',
+});
 
-export default async function handler(
-  req: NextApiRequest,
-  res: NextApiResponse
-) {
+const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET!;
+
+// Helper function to update a user's subscription information
+async function updateUserSubscription(userId: string, session: Stripe.Checkout.Session) {
+  try {
+    // Retrieve the complete line items to get product details
+    const lineItems = await stripe.checkout.sessions.listLineItems(session.id);
+    if (!lineItems.data.length) return;
+
+    // Get the price ID from the line item
+    const priceId = lineItems.data[0].price?.id;
+    if (!priceId) return;
+
+    // Retrieve price to get recurring interval and product ID
+    const price = await stripe.prices.retrieve(priceId);
+    
+    // Retrieve product details
+    const product = await stripe.products.retrieve(price.product as string);
+
+    // Extract subscription details
+    const planName = product.name;
+    const interval = price.recurring?.interval || 'month';
+    const amount = price.unit_amount! / 100; // Convert from cents to dollars
+    
+    // Calculate next renewal date
+    const now = new Date();
+    let renewalDate = new Date();
+    if (interval === 'month') {
+      renewalDate.setMonth(now.getMonth() + 1);
+    } else if (interval === 'year') {
+      renewalDate.setFullYear(now.getFullYear() + 1);
+    }
+    
+    // Determine credits to assign based on plan
+    let newCreditTotal = 1000; // Default
+    if (planName.includes('Pro')) {
+      newCreditTotal = 999999; // "Unlimited" for Pro plan
+    } else if (planName.includes('Standard')) {
+      newCreditTotal = 5000; // Standard plan credits
+    } else if (planName.includes('Basic')) {
+      newCreditTotal = 2000; // Basic plan credits
+    }
+    
+    // Get reset date
+    const resetDate = interval === 'month' 
+      ? creditUtils.getNextMonthFirstDay()
+      : creditUtils.getNextYearFirstDay();
+    
+    // Update user subscription using the new hash-based approach
+    await redis.hset(KEYS.USER_SUBSCRIPTION(userId), {
+      plan: planName,
+      status: 'active',
+      amount: amount.toString(),
+      interval: interval,
+      renewalDate: renewalDate.toISOString().split('T')[0],
+      lastUpdated: new Date().toISOString()
+    });
+    
+    // Update user credits using the new hash-based approach
+    await redis.hset(KEYS.USER_CREDITS(userId), {
+      total: newCreditTotal.toString(),
+      used: '0',
+      resetDate: resetDate,
+      lastUpdate: new Date().toISOString()
+    });
+    
+    // For backward compatibility, also update individual keys
+    await redis.set(`${KEYS.LEGACY_PREFIX}${userId}:planName`, planName);
+    await redis.set(`${KEYS.LEGACY_PREFIX}${userId}:planStatus`, 'active');
+    await redis.set(`${KEYS.LEGACY_PREFIX}${userId}:planAmount`, amount.toString());
+    await redis.set(`${KEYS.LEGACY_PREFIX}${userId}:planInterval`, interval);
+    await redis.set(`${KEYS.LEGACY_PREFIX}${userId}:planRenewalDate`, renewalDate.toISOString().split('T')[0]);
+    await redis.set(`${KEYS.LEGACY_PREFIX}${userId}:creditsTotal`, newCreditTotal.toString());
+    await redis.set(`${KEYS.LEGACY_PREFIX}${userId}:creditsUsed`, '0');
+    await redis.set(`${KEYS.LEGACY_PREFIX}${userId}:creditsLastUpdate`, new Date().toISOString());
+    await redis.set(`${KEYS.LEGACY_PREFIX}${userId}:creditsResetDate`, resetDate);
+    
+    // Also set in the legacy format
+    await redis.set(KEYS.LEGACY_CREDITS(userId), newCreditTotal);
+    
+    console.log(`Updated subscription for user ${userId} to ${planName} (${interval})`);
+    
+    return true;
+  } catch (error) {
+    console.error('Error updating user subscription:', error);
+    return false;
+  }
+}
+
+export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') {
-    return res.status(405).end('Method Not Allowed');
+    return res.status(405).json({ error: 'Method not allowed' });
   }
-
-  const buf = await buffer(req);
-  const sig = req.headers['stripe-signature'] as string;
-  const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
-
-  if (!webhookSecret) {
-    return res.status(500).json({ error: 'Webhook secret not configured' });
-  }
-
-  let event: Stripe.Event;
 
   try {
-    event = stripe.webhooks.constructEvent(
-      buf.toString(),
-      sig,
-      webhookSecret
-    );
-  } catch (err: any) {
-    console.error(`Webhook Error: ${err.message}`);
-    return res.status(400).json(`Webhook Error: ${err.message}`);
-  }
+    const rawBody = await buffer(req);
+    const signature = req.headers['stripe-signature'] as string;
 
-  // Handle specific events
-  try {
+    if (!signature) {
+      return res.status(400).json({ error: 'Missing Stripe signature' });
+    }
+
+    let event: Stripe.Event;
+
+    try {
+      event = stripe.webhooks.constructEvent(
+        rawBody.toString(),
+        signature,
+        webhookSecret
+      );
+    } catch (err: any) {
+      console.error(`Webhook signature verification failed: ${err.message}`);
+      return res.status(400).json({ error: err.message });
+    }
+
+    console.log(`Processing Stripe webhook event: ${event.type}`);
+
+    // Handle the event based on its type
     switch (event.type) {
       case 'checkout.session.completed': {
         const session = event.data.object as Stripe.Checkout.Session;
-        const userId = session.metadata?.userId;
         
-        if (userId) {
-          // Add credits to user account
-          await processSubscriptionPurchase(session);
+        // Extract the user ID from metadata
+        const userId = session.metadata?.userId;
+
+        if (!userId) {
+          console.error('No user ID found in session metadata');
+          return res.status(400).json({ error: 'No user ID found' });
+        }
+
+        // Update the user's subscription
+        const success = await updateUserSubscription(userId, session);
+        
+        if (success) {
+          console.log(`Successfully processed checkout for user ${userId}`);
+        } else {
+          console.error(`Failed to process checkout for user ${userId}`);
         }
         break;
       }
-      
-      case 'customer.subscription.updated':
-      case 'customer.subscription.deleted': {
+        
+      case 'customer.subscription.updated': {
         const subscription = event.data.object as Stripe.Subscription;
-        await updateSubscriptionStatus(subscription);
+        // Handle subscription update logic
+        console.log('Subscription updated event received, but not fully implemented');
         break;
       }
+        
+      case 'customer.subscription.deleted': {
+        const subscription = event.data.object as Stripe.Subscription;
+        // Handle subscription cancellation/deletion
+        console.log('Subscription deleted event received, but not fully implemented');
+        break;
+      }
+        
+      // Add more event types as needed
+      
+      default:
+        console.log(`Unhandled event type: ${event.type}`);
     }
-    
-    res.status(200).json({ received: true });
-  } catch (error) {
-    console.error('Error processing webhook:', error);
-    res.status(500).json({ error: 'Failed to process webhook' });
-  }
-}
 
-async function processSubscriptionPurchase(session: Stripe.Checkout.Session) {
-  // Get subscription info to determine tier
-  if (!session.subscription) return;
-  
-  const subscription = await stripe.subscriptions.retrieve(
-    session.subscription as string
-  );
-  
-  const priceId = subscription.items.data[0].price.id;
-  const userId = session.metadata?.userId;
-  
-  if (!userId) return;
-  
-  // Map price ID to credit amount - you'll need to customize this based on your tiers
-  const creditMapping: Record<string, number> = {
-    [process.env.NEXT_PUBLIC_STRIPE_BASIC_PRICE_ID!]: 500,
-    [process.env.NEXT_PUBLIC_STRIPE_STANDARD_PRICE_ID!]: 2000,
-    [process.env.NEXT_PUBLIC_STRIPE_PREMIUM_PRICE_ID!]: 5000,
-  };
-  
-  const credits = creditMapping[priceId] || 0;
-  
-  // Call your backend API to add credits
-  try {
-    await axios.post(`${API_URL}/users/credits/add`, {
-      user_id: userId,
-      credits: credits,
-      source: 'subscription',
-      subscription_id: subscription.id,
-    });
-    
-    console.log(`Added ${credits} credits to user ${userId}`);
-  } catch (error) {
-    console.error('Failed to add credits:', error);
-    throw error;
-  }
-}
-
-async function updateSubscriptionStatus(subscription: Stripe.Subscription) {
-  const userId = subscription.metadata?.userId;
-  
-  if (!userId) return;
-  
-  try {
-    await axios.post(`${API_URL}/users/subscription/update`, {
-      user_id: userId,
-      subscription_id: subscription.id,
-      status: subscription.status,
-      current_period_end: subscription.current_period_end,
-    });
-    
-    console.log(`Updated subscription status for user ${userId}`);
-  } catch (error) {
-    console.error('Failed to update subscription status:', error);
-    throw error;
+    return res.status(200).json({ received: true });
+  } catch (error: any) {
+    console.error('Webhook error:', error);
+    return res.status(500).json({ error: error.message || 'Webhook handler failed' });
   }
 } 

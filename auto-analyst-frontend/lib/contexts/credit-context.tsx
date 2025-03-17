@@ -1,6 +1,6 @@
 'use client'
 
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react'
+import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react'
 import { useSession } from 'next-auth/react'
 import { creditUtils } from '../redis'
 
@@ -20,6 +20,16 @@ export function CreditProvider({ children }: { children: ReactNode }) {
   const [remainingCredits, setRemainingCredits] = useState<number>(0)
   const [isLoading, setIsLoading] = useState<boolean>(true)
   const [isChatBlocked, setIsChatBlocked] = useState<boolean>(false)
+  const [creditsState, setCreditsState] = useState({
+    total: 0,
+    used: 0,
+    remaining: 0,
+    resetDate: '',
+    lastUpdate: '',
+    plan: 'Free Plan',
+    subscription: null
+  })
+  const [error, setError] = useState<string | null>(null)
 
   // Get a unique identifier for the current user
   const getUserId = (): string => {
@@ -141,6 +151,39 @@ export function CreditProvider({ children }: { children: ReactNode }) {
     
     return () => clearInterval(intervalId)
   }, [session])
+
+  const fetchCredits = useCallback(async () => {
+    setIsLoading(true);
+    
+    try {
+      // Fetch from the user/data endpoint to get comprehensive data
+      const response = await fetch('/api/user/data');
+      
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || 'Failed to fetch credits');
+      }
+      
+      const data = await response.json();
+      
+      // Update context with new data structure
+      setCreditsState({
+        total: data.credits.total,
+        used: data.credits.used,
+        remaining: data.credits.total - data.credits.used,
+        resetDate: data.credits.resetDate,
+        lastUpdate: data.credits.lastUpdate,
+        plan: data.subscription?.plan || 'Free Plan',
+        subscription: data.subscription
+      });
+      setError(null);
+    } catch (err: any) {
+      console.error('Error fetching credits:', err);
+      setError(err.message || 'Failed to fetch credit data');
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
 
   return (
     <CreditContext.Provider value={{ 

@@ -151,6 +151,7 @@ export default function Layout({ children }: LayoutProps) {
 
       <main className="flex-grow bg-gray-50">
         {children}
+        
       </main>
 
       <Footer />

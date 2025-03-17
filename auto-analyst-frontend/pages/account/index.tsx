@@ -15,6 +15,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Progress } from '@/components/ui/progress'
 import { signOut } from 'next-auth/react'
 import Link from 'next/link'
+import { useToast } from '@/components/ui/use-toast'
 
 interface UserProfile {
   name: string;
@@ -55,6 +56,7 @@ export default function AccountPage() {
   const [credits, setCredits] = useState<CreditUsage | null>(null)
   const [error, setError] = useState('')
   const [refreshing, setRefreshing] = useState(false)
+  const { toast } = useToast()
 
   // Main heading styles
   const mainHeadingStyle = "text-2xl font-bold text-gray-900 mb-2"
@@ -83,24 +85,58 @@ export default function AccountPage() {
     }
   }
 
-  const refreshUsageData = async () => {
-    setRefreshing(true)
+  const refreshCredits = async () => {
+    setRefreshing(true);
+    setError('');
+    
     try {
-      const response = await fetch('/api/user/credits')
+      // Fetch from the user/data endpoint instead to get full user info
+      const response = await fetch('/api/user/data');
       if (!response.ok) {
-        throw new Error('Failed to refresh usage data')
+        throw new Error('Failed to fetch user data');
       }
       
-      const data = await response.json()
-      setCredits(data)
+      const data = await response.json();
+      
+      // Update all user information
+      if (data.subscription) {
+        setSubscription({
+          plan: data.subscription.plan,
+          status: data.subscription.status,
+          renewalDate: data.subscription.renewalDate,
+          amount: data.subscription.amount,
+          interval: data.subscription.interval
+        });
+      }
+      
+      setCredits({
+        used: data.credits.used,
+        total: data.credits.total,
+        resetDate: data.credits.resetDate,
+        lastUpdate: data.credits.lastUpdate
+      });
+      
+      // Show success toast
+      toast({
+        title: 'Usage data refreshed',
+        description: 'Your account information has been updated.',
+        variant: 'default',
+      });
       
     } catch (err: any) {
-      console.error('Error refreshing credit data:', err)
-      setError(err.message || 'Failed to refresh credit data')
+      console.error('Error refreshing user data:', err);
+      setError(err.message || 'Failed to refresh user data');
+      
+      // Show error toast
+      toast({
+        title: 'Error refreshing data',
+        description: err.message || 'Failed to refresh user data',
+        variant: 'destructive',
+      });
     } finally {
-      setRefreshing(false)
+      setRefreshing(false);
     }
-  }
+  };
 
   useEffect(() => {
     if (status === 'unauthenticated') {
@@ -129,6 +165,35 @@ export default function AccountPage() {
       document.head.removeChild(style);
     };
   }, []);
+
+  const getSubscriptionStatusDisplay = (status: string) => {
+    switch (status?.toLowerCase()) {
+      case 'active':
+        return (
+          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+            <svg className="mr-1.5 h-2 w-2 text-green-400" fill="currentColor" viewBox="0 0 8 8">
+              <circle cx="4" cy="4" r="3" />
+            </svg>
+            Active
+          </span>
+        );
+      case 'inactive':
+        return (
+          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+            <svg className="mr-1.5 h-2 w-2 text-yellow-400" fill="currentColor" viewBox="0 0 8 8">
+              <circle cx="4" cy="4" r="3" />
+            </svg>
+            Inactive
+          </span>
+        );
+      default:
+        return (
+          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+            {status || 'Unknown'}
+          </span>
+        );
+    }
+  };
 
   if (status === 'loading' || loading) {
     return (
@@ -187,10 +252,7 @@ export default function AccountPage() {
                     </div>
                     <div className="flex justify-between py-1">
                       <span>Status:</span>
-                      <span className="text-green-600 flex items-center gap-1">
-                        <CheckCircle size={12} />
-                        Active
-                      </span>
+                      {getSubscriptionStatusDisplay(profile?.role || 'inactive')}
                     </div>
                   </div>
                   
@@ -265,10 +327,7 @@ export default function AccountPage() {
                             </div>
                             <div className="flex justify-between mb-2">
                               <span className="text-gray-600">Status:</span>
-                              <span className={`font-medium flex items-center gap-1 ${subscription?.status === 'active' ? 'text-green-600' : 'text-amber-600'}`}>
-                                {subscription?.status === 'active' ? <CheckCircle size={14} /> : <AlertCircle size={14} />}
-                                {subscription?.status === 'active' ? 'Active' : 'Inactive'}
-                              </span>
+                              {getSubscriptionStatusDisplay(subscription?.status || 'inactive')}
                             </div>
                             <div className="flex justify-between mb-2">
                               <span className="text-gray-600">Price:</span>
@@ -322,7 +381,7 @@ export default function AccountPage() {
                           <Button
                             variant="outline"
                             className="mt-4 w-full flex items-center justify-center gap-2 text-gray-700 bg-white hover:bg-[#FFB3B3] hover:text-gray-900"
-                            onClick={refreshUsageData}
+                            onClick={refreshCredits}
                             disabled={refreshing}
                           >
                             {refreshing ? (

@@ -1,11 +1,6 @@
 import { NextApiRequest, NextApiResponse } from 'next'
 import { getToken } from 'next-auth/jwt'
-import redis from '@/lib/redis'
-import Stripe from 'stripe'
-
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: '2025-02-24.acacia',
-})
+import redis, { KEYS } from '@/lib/redis'
 
 export default async function handler(
   req: NextApiRequest,
@@ -23,84 +18,94 @@ export default async function handler(
     }
 
     const userId = token.sub
-    const userEmail = token.email || 'user@example.com'
-    const userName = token.name || 'User'
     
-    // Get user profile data
-    // For real implementation, retrieve from database
-    const profile = {
-      name: userName,
-      email: userEmail,
-      joinedDate: await redis.get(`user:${userId}:joinDate`) || new Date().toISOString().split('T')[0],
-      role: await redis.get(`user:${userId}:role`) || 'Member',
-    }
-
-    // Get user subscription data from Stripe
-    // This is a simplified example - actual implementation depends on your Stripe setup
-    let subscription = null
-    try {
-      const stripeCustomerId = await redis.get(`user:${userId}:stripeCustomerId`)
+    // Load user profile information
+    const email = token.email || 'user@example.com'
+    const name = token.name || 'User'
+    const image = token.picture || undefined
+    
+    // Get user join date or use current date
+    const joinedDate = await redis.get(`user:${userId}:joinDate`) || new Date().toISOString().split('T')[0]
+    // Store join date if it doesn't exist
+    if (!await redis.exists(`user:${userId}:joinDate`)) {
+      await redis.set(`user:${userId}:joinDate`, joinedDate)
       
-      if (stripeCustomerId) {
-        // Fetch customer subscriptions
-        const subscriptions = await stripe.subscriptions.list({
-          customer: stripeCustomerId,
-          status: 'active',
-          limit: 1,
-        })
-        
-        if (subscriptions.data.length > 0) {
-          const sub = subscriptions.data[0]
-          const product = await stripe.products.retrieve(sub.items.data[0].price.product as string)
-          const price = sub.items.data[0].price
-          
-          subscription = {
-            plan: product.name,
-            status: sub.status,
-            renewalDate: new Date(sub.current_period_end * 1000).toISOString().split('T')[0],
-            amount: price.unit_amount ? price.unit_amount / 100 : 0,
-            interval: price.recurring?.interval || 'month',
-          }
-        }
-      }
-    } catch (error) {
-      console.error('Error fetching subscription data:', error)
-      // If Stripe fetch fails, use a fallback from Redis
-      const planName = await redis.get(`user:${userId}:planName`) || 'Free Plan'
-      if (planName !== 'Free Plan') {
-        subscription = {
-          plan: planName,
-          status: 'active',
-          renewalDate: await redis.get(`user:${userId}:renewalDate`) || 
-            new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-          amount: parseFloat(await redis.get(`user:${userId}:planAmount`) || '0'),
-          interval: await redis.get(`user:${userId}:planInterval`) || 'month',
-        }
-      }
+      // Also store in new hash format
+      await redis.hset(KEYS.USER_PROFILE(userId), {
+        name,
+        email,
+        joinDate: joinedDate,
+        role: 'user'
+      });
     }
-
-    // Get credit usage data
-    const creditsUsed = parseInt(await redis.get(`user:${userId}:creditsUsed`) || '0')
-    const creditsTotal = parseInt(await redis.get(`user:${userId}:creditsTotal`) || 
-      subscription?.plan === 'Pro Plan' ? '999999' : '1000')
-    const resetDate = await redis.get(`user:${userId}:creditsResetDate`) || 
-      new Date(new Date().getFullYear(), new Date().getMonth() + 1, 1).toISOString().split('T')[0]
-    const lastUpdate = await redis.get(`user:${userId}:creditsLastUpdate`) || new Date().toISOString()
     
-    const credits = {
-      used: creditsUsed,
-      total: creditsTotal === 999999 ? Infinity : creditsTotal, // Use Infinity for unlimited plans
-      resetDate,
-      lastUpdate,
+    // Try to get data from the new hash-based format
+    const subscriptionHash = await redis.hgetall(KEYS.USER_SUBSCRIPTION(userId));
+    const creditsHash = await redis.hgetall(KEYS.USER_CREDITS(userId));
+    
+    // Use hash data if available, otherwise fall back to individual keys
+    let planName, planStatus, planAmount, planInterval, planRenewalDate;
+    let creditsUsed, creditsTotal, creditsResetDate, creditsLastUpdate;
+    
+    // Get subscription data
+    if (subscriptionHash && subscriptionHash.plan) {
+      planName = subscriptionHash.plan;
+      planStatus = subscriptionHash.status || 'inactive';
+      planAmount = parseFloat(subscriptionHash.amount as string || '0');
+      planInterval = subscriptionHash.interval || 'month';
+      planRenewalDate = subscriptionHash.renewalDate || 'N/A';
+    } else {
+      // Fall back to legacy keys
+      planName = await redis.get(`user:${userId}:planName`) || 'Free Plan';
+      planStatus = await redis.get(`user:${userId}:planStatus`) || 'inactive';
+      planAmount = parseFloat(await redis.get(`user:${userId}:planAmount`) || '0');
+      planInterval = await redis.get(`user:${userId}:planInterval`) || 'month';
+      planRenewalDate = await redis.get(`user:${userId}:planRenewalDate`) || 'N/A';
     }
-
-    res.status(200).json({
-      profile,
-      subscription,
-      credits,
-    })
+    
+    // Get credit usage data
+    if (creditsHash && creditsHash.total) {
+      creditsTotal = parseInt(creditsHash.total as string);
+      creditsUsed = parseInt(creditsHash.used as string || '0');
+      creditsResetDate = creditsHash.resetDate || new Date(new Date().getFullYear(), new Date().getMonth() + 1, 1).toISOString().split('T')[0];
+      creditsLastUpdate = creditsHash.lastUpdate || new Date().toISOString();
+    } else {
+      // Fall back to legacy keys
+      creditsUsed = parseInt(await redis.get(`user:${userId}:creditsUsed`) || '0');
+      creditsTotal = parseInt(await redis.get(`user:${userId}:creditsTotal`) || 
+        planName === 'Pro Plan' ? '999999' : '100');
+      creditsResetDate = await redis.get(`user:${userId}:creditsResetDate`) || 
+        new Date(new Date().getFullYear(), new Date().getMonth() + 1, 1).toISOString().split('T')[0];
+      creditsLastUpdate = await redis.get(`user:${userId}:creditsLastUpdate`) || new Date().toISOString();
+    }
+    
+    // Prepare response object
+    const userData = {
+      profile: {
+        name,
+        email,
+        image,
+        joinedDate,
+        role: 'user',
+      },
+      subscription: planName === 'Free Plan' && planStatus === 'inactive' ? null : {
+        plan: planName,
+        status: planStatus,
+        renewalDate: planRenewalDate,
+        amount: planAmount,
+        interval: planInterval,
+      },
+      credits: {
+        used: creditsUsed,
+        total: creditsTotal === 999999 ? Infinity : creditsTotal,
+        resetDate: creditsResetDate,
+        lastUpdate: creditsLastUpdate,
+      }
+    }
+    
+    res.status(200).json(userData)
   } catch (error: any) {
     console.error('API error:', error)
-    res.status(500).json({ error: error.message || 'Internal server error' })
+    res.status(500).json({ error: error.message || 'Failed to load user data' })
   }
 } 
