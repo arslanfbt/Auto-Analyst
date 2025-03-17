@@ -9,10 +9,11 @@ interface UserProfilePopupProps {
   isOpen: boolean;
   onClose: () => void;
   onSettingsOpen: () => void;
+  onAccountOpen: () => void;
   isAdmin: boolean;
 }
 
-const UserProfilePopup: FC<UserProfilePopupProps> = ({ isOpen, onClose, onSettingsOpen, isAdmin }) => {
+const UserProfilePopup: FC<UserProfilePopupProps> = ({ isOpen, onClose, onSettingsOpen, onAccountOpen, isAdmin }) => {
   const { data: session } = useSession();
   const popupRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
@@ -123,9 +124,15 @@ const UserProfilePopup: FC<UserProfilePopupProps> = ({ isOpen, onClose, onSettin
         )}
         
         <button
-          onClick={() => {
-            onSettingsOpen();
-          }}
+          onClick={onAccountOpen}
+          className="w-full flex items-center gap-2 p-2 text-sm text-gray-700 hover:bg-gray-50 rounded-lg transition-colors"
+        >
+          <User className="h-4 w-4 text-gray-500" />
+          <span>My Account</span>
+        </button>
+        
+        <button
+          onClick={onSettingsOpen}
           className="w-full flex items-center gap-2 p-2 text-sm text-gray-700 hover:bg-gray-50 rounded-lg transition-colors"
         >
           <Settings className="h-4 w-4 text-gray-500" />

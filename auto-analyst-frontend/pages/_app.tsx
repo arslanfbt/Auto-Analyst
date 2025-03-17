@@ -4,13 +4,14 @@ import type { AppProps } from 'next/app';
 import '@/styles/globals.css';
 import { useEffect } from 'react';
 import { loginUser, getSessionId } from '@/lib/api/auth';
+import { SessionProvider } from "next-auth/react";
 
 const inter = Inter({ 
   subsets: ['latin'],
   variable: '--font-inter',
 });
 
-export default function App({ Component, pageProps }: AppProps) {
+export default function App({ Component, pageProps: { session, ...pageProps } }: AppProps) {
   useEffect(() => {
     async function initUser() {
       try {
@@ -49,10 +50,12 @@ export default function App({ Component, pageProps }: AppProps) {
   }, []);
 
   return (
-    <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
-      <div className={`${inter.variable} font-sans`}>
-        <Component {...pageProps} />
-      </div>
-    </ThemeProvider>
+    <SessionProvider session={session}>
+      <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+        <div className={`${inter.variable} font-sans`}>
+          <Component {...pageProps} />
+        </div>
+      </ThemeProvider>
+    </SessionProvider>
   );
 }

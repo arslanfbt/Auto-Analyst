@@ -794,6 +794,11 @@ const ChatInterface: React.FC = () => {
     }
   }, [isSettingsOpen]);
 
+  const handleNavigateToAccount = useCallback(() => {
+    router.push('/account');
+    setIsUserProfileOpen(false);
+  }, [router, setIsUserProfileOpen]);
+
   // Don't render anything until mounted to prevent hydration mismatch
   if (!mounted) {
     return null
@@ -881,6 +886,7 @@ const ChatInterface: React.FC = () => {
                       setIsUserProfileOpen(false);
                       setIsSettingsOpen(true);
                     }}
+                    onAccountOpen={handleNavigateToAccount}
                     isAdmin={isAdmin}
                   />
                 </div>
