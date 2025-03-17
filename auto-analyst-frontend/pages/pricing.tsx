@@ -6,6 +6,8 @@ import { CheckCircle, X, Check } from 'lucide-react';
 import Link from 'next/link';
 import getStripe from '../utils/get-stripejs';
 import { Infinity as InfinityIcon } from 'lucide-react';
+import { MODEL_TIERS } from '../lib/model-tiers';
+import { useRouter } from 'next/router';
 
 // Define pricing tiers with both monthly and yearly options
 const pricingTiers = [
@@ -27,7 +29,7 @@ const pricingTiers = [
       'Basic data analysis',
       'Standard models only',
       'Community support',
-      'Limited token usage',
+      'Limited credit usage',
     ],
     highlight: false,
   },
@@ -58,13 +60,13 @@ const pricingTiers = [
   {
     name: 'Pro',
     monthly: {
-      price: 8,
+      price: 29,
       priceId: process.env.NEXT_PUBLIC_STRIPE_PRO_PRICE_ID,
     },
     yearly: {
-      price: 67.20, // $8 * 12 months = $96, with 30% discount = $67.20
+      price: 243.60, // $29 * 12 months = $348, with 30% discount = $243.60
       priceId: process.env.NEXT_PUBLIC_STRIPE_PRO_YEARLY_PRICE_ID,
-      savings: 28.80, // $96 - $67.20 = $28.80 savings
+      savings: 104.40, // $348 - $243.60 = $104.40 savings
     },
     credits: {
       monthly: 'Unlimited',
@@ -72,19 +74,22 @@ const pricingTiers = [
     },
     features: [
       'Everything in Standard',
-      'Unlimited tokens',
+      'Unlimited credits',
       'Dedicated support',
-      'Bring your own API key',
+      'Team collaboration',
+      'Priority processing',
+      'Custom integrations',
     ],
     highlight: false,
-  },
+  }
 ];
 
 export default function PricingPage() {
   const { data: session } = useSession();
   const [selectedTier, setSelectedTier] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
-  const [billingCycle, setBillingCycle] = useState<'monthly' | 'yearly'>('monthly');
+  const [billingCycle, setBillingCycle] = useState<'monthly' | 'yearly'>('yearly');
+  const router = useRouter();
   
   // Handle subscription checkout
   const handleCheckout = async (priceId: string | null | undefined, tierName: string) => {
@@ -124,6 +129,20 @@ export default function PricingPage() {
     }
   };
 
+  const handleSubscribe = (plan: string, cycle: string) => {
+    if (plan === 'free') {
+      router.push('/chat');
+      return;
+    }
+    
+    if (!session) {
+      router.push('/login?redirect=/pricing');
+      return;
+    }
+    
+    router.push(`/checkout?plan=${plan}&cycle=${cycle}`);
+  };
+
   return (
     <div className="min-h-screen bg-gray-50 py-24">
       <Head>
@@ -141,8 +160,13 @@ export default function PricingPage() {
           </p>
         </div>
         
-        {/* Billing cycle toggle */}
-        <div className="mt-12 flex justify-center">
+        {/* Billing cycle toggle with enhanced 30% discount visibility */}
+        <div className="mt-12 flex flex-col items-center">
+          <div className="mb-2 text-center">
+            <span className="inline-block bg-[#FF7F7F] text-white font-bold py-1 px-3 rounded-full mb-3 animate-pulse">
+              SAVE 30% WITH YEARLY BILLING
+            </span>
+          </div>
           <div className="relative bg-white p-0.5 rounded-lg shadow-sm flex">
             <button
               onClick={() => setBillingCycle('monthly')}
@@ -204,7 +228,7 @@ export default function PricingPage() {
                 </div>
                 
                 {billingCycle === 'yearly' && tier.yearly.savings && (
-                  <p className="mt-2 text-sm text-green-600">
+                  <p className="mt-2 text-sm text-green-600 font-medium">
                     Save ${tier.yearly.savings.toFixed(2)} per year
                   </p>
                 )}
@@ -212,7 +236,7 @@ export default function PricingPage() {
                 <p className="mt-4 text-lg text-gray-500">
                   {typeof tier.credits[billingCycle] === 'string' 
                     ? tier.credits[billingCycle] 
-                    : <>{tier.credits[billingCycle].toLocaleString()} tokens</>}
+                    : <>{tier.credits[billingCycle].toLocaleString()} credits</>}
                 </p>
                 
                 <ul className="mt-6 space-y-4">
@@ -227,28 +251,15 @@ export default function PricingPage() {
               
               <div className="p-6 bg-gray-50 border-t border-gray-100">
                 <button
-                  onClick={() => handleCheckout(
-                    billingCycle === 'monthly' 
-                      ? tier.monthly.priceId
-                      : tier.yearly.priceId, 
-                    tier.name
-                  )}
-                  disabled={isLoading && selectedTier === tier.name || (!session && tier.name !== 'Free')}
-                  className={`w-full py-3 px-4 rounded-md text-white font-medium shadow-md transition-colors ${
-                    tier.monthly.price === 0
-                      ? 'bg-gray-800 hover:bg-gray-700'
-                      : tier.highlight
-                        ? 'bg-[#FF7F7F] hover:bg-[#FF6666]'
-                        : 'bg-gray-800 hover:bg-gray-700'
+                  onClick={() => handleSubscribe(tier.name.toLowerCase(), billingCycle)}
+                  className={`w-full py-3 px-6 rounded-lg font-medium transition-colors ${
+                    tier.highlight
+                      ? 'bg-[#FF7F7F] hover:bg-[#FF6666] text-white'
+                      : 'bg-white text-gray-900 border border-gray-300 hover:bg-gray-50'
                   }`}
+                  disabled={!session && tier.name !== 'Free'}
                 >
-                  {isLoading && selectedTier === tier.name
-                    ? 'Processing...'
-                    : tier.monthly.price === 0
-                    ? 'Get Started Free'
-                    : session
-                    ? 'Subscribe Now'
-                    : 'Sign In to Subscribe'}
+                  {tier.name === 'Free' ? 'Get Started' : session ? 'Subscribe' : 'Sign in to Subscribe'}
                 </button>
               </div>
             </motion.div>
@@ -272,7 +283,7 @@ export default function PricingPage() {
               </thead>
               <tbody>
                 <tr>
-                  <td className="py-4 px-6 border-b text-gray-700 font-medium">Tokens</td>
+                  <td className="py-4 px-6 border-b text-gray-700 font-medium">Credits</td>
                   {pricingTiers.map((tier) => (
                     <td key={`${tier.name}-credits`} className="py-4 px-6 border-b text-center">
                       {typeof tier.credits[billingCycle] === 'string' 
@@ -282,24 +293,18 @@ export default function PricingPage() {
                   ))}
                 </tr>
                 <tr>
-                  <td className="py-4 px-6 border-b text-gray-700 font-medium">Custom API Integration</td>
-                  <td className="py-4 px-6 border-b text-center">
-                    <X className="h-5 w-5 text-red-500 mx-auto" />
-                  </td>
+                  <td className="py-4 px-6 border-b text-gray-700 font-medium">Data Analysis</td>
+                  <td className="py-4 px-6 border-b text-center">Basic</td>
+                  <td className="py-4 px-6 border-b text-center">Advanced</td>
+                  <td className="py-4 px-6 border-b text-center">Advanced</td>
+                </tr>
+                <tr>
+                  <td className="py-4 px-6 border-b text-gray-700 font-medium">API Access</td>
                   <td className="py-4 px-6 border-b text-center">
                     <X className="h-5 w-5 text-red-500 mx-auto" />
                   </td>
                   <td className="py-4 px-6 border-b text-center">
                     <Check className="h-5 w-5 text-green-500 mx-auto" />
-                  </td>
-                </tr>
-                <tr>
-                  <td className="py-4 px-6 border-b text-gray-700 font-medium">Bring Your Own API Key</td>
-                  <td className="py-4 px-6 border-b text-center">
-                    <X className="h-5 w-5 text-red-500 mx-auto" />
-                  </td>
-                  <td className="py-4 px-6 border-b text-center">
-                    <X className="h-5 w-5 text-red-500 mx-auto" />
                   </td>
                   <td className="py-4 px-6 border-b text-center">
                     <Check className="h-5 w-5 text-green-500 mx-auto" />
@@ -307,6 +312,18 @@ export default function PricingPage() {
                 </tr>
                 <tr>
                   <td className="py-4 px-6 border-b text-gray-700 font-medium">Team Collaboration</td>
+                  <td className="py-4 px-6 border-b text-center">
+                    <X className="h-5 w-5 text-red-500 mx-auto" />
+                  </td>
+                  <td className="py-4 px-6 border-b text-center">
+                    <X className="h-5 w-5 text-red-500 mx-auto" />
+                  </td>
+                  <td className="py-4 px-6 border-b text-center">
+                    <Check className="h-5 w-5 text-green-500 mx-auto" />
+                  </td>
+                </tr>
+                <tr>
+                  <td className="py-4 px-6 border-b text-gray-700 font-medium">Custom Integrations</td>
                   <td className="py-4 px-6 border-b text-center">
                     <X className="h-5 w-5 text-red-500 mx-auto" />
                   </td>
@@ -328,6 +345,88 @@ export default function PricingPage() {
           </div>
         </div>
         
+        <div className="mt-24">
+          <h2 className="text-2xl font-bold text-center mb-8">How Model Credits Work</h2>
+          <p className="text-lg text-center text-gray-700 mb-8 max-w-3xl mx-auto">
+            Different AI models require different amounts of computational resources. We use a credit system to balance usage across our model offerings.
+          </p>
+          
+          <div className="max-w-4xl mx-auto bg-white rounded-lg shadow-md overflow-hidden">
+            <table className="min-w-full">
+              <thead>
+                <tr className="bg-gray-50">
+                  <th className="py-3 px-6 text-left font-medium text-gray-700">Model Tier</th>
+                  <th className="py-3 px-6 text-left font-medium text-gray-700">Credits Per Query</th>
+                  <th className="py-3 px-6 text-left font-medium text-gray-700">Available Models</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-200">
+                <tr className="hover:bg-gray-50">
+                  <td className="py-4 px-6 text-gray-700">
+                    <span className="font-medium">{MODEL_TIERS.tier1.name}</span>
+                  </td>
+                  <td className="py-4 px-6 text-gray-700">{MODEL_TIERS.tier1.credits}</td>
+                  <td className="py-4 px-6 text-gray-700">
+                    <div className="flex flex-wrap gap-1">
+                      {MODEL_TIERS.tier1.models.slice(0, 3).map(model => (
+                        <span key={model} className="inline-flex bg-gray-100 text-gray-700 rounded-full px-2 py-1 text-xs">
+                          {model}
+                        </span>
+                      ))}
+                      <span className="inline-flex bg-gray-100 text-gray-700 rounded-full px-2 py-1 text-xs">
+                        +{MODEL_TIERS.tier1.models.length - 3} more
+                      </span>
+                    </div>
+                  </td>
+                </tr>
+                <tr className="hover:bg-gray-50">
+                  <td className="py-4 px-6 text-gray-700">
+                    <span className="font-medium">{MODEL_TIERS.tier2.name}</span>
+                  </td>
+                  <td className="py-4 px-6 text-gray-700">{MODEL_TIERS.tier2.credits}</td>
+                  <td className="py-4 px-6 text-gray-700">
+                    <div className="flex flex-wrap gap-1">
+                      {MODEL_TIERS.tier2.models.map(model => (
+                        <span key={model} className="inline-flex bg-gray-100 text-gray-700 rounded-full px-2 py-1 text-xs">
+                          {model}
+                        </span>
+                      ))}
+                    </div>
+                  </td>
+                </tr>
+                <tr className="hover:bg-gray-50">
+                  <td className="py-4 px-6 text-gray-700">
+                    <span className="font-medium">{MODEL_TIERS.tier3.name}</span>
+                  </td>
+                  <td className="py-4 px-6 text-gray-700">{MODEL_TIERS.tier3.credits}</td>
+                  <td className="py-4 px-6 text-gray-700">
+                    <div className="flex flex-wrap gap-1">
+                      {MODEL_TIERS.tier3.models.slice(0, 3).map(model => (
+                        <span key={model} className="inline-flex bg-gray-100 text-gray-700 rounded-full px-2 py-1 text-xs">
+                          {model}
+                        </span>
+                      ))}
+                      <span className="inline-flex bg-gray-100 text-gray-700 rounded-full px-2 py-1 text-xs">
+                        +{MODEL_TIERS.tier3.models.length - 3} more
+                      </span>
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          
+          <div className="mt-6 max-w-3xl mx-auto text-center text-gray-600">
+            <p className="text-sm">
+              Example: If you have 100 credits and use a Premium tier model that costs 5 credits per query, 
+              you can make 20 queries. Using a Basic tier model at 1 credit per query would allow for 100 queries.
+            </p>
+            <p className="text-sm mt-2">
+              <span className="font-medium">Pro plan users</span> have unlimited access to all models regardless of tier.
+            </p>
+          </div>
+        </div>
+        
         <div className="mt-16 text-center">
           <h2 className="text-2xl font-bold text-gray-900 mb-4">Need a custom plan?</h2>
           <p className="text-lg text-gray-700 mb-6">
@@ -345,20 +444,20 @@ export default function PricingPage() {
           <h2 className="text-2xl font-bold text-center mb-8">Frequently Asked Questions</h2>
           <div className="max-w-3xl mx-auto divide-y divide-gray-200">
             <div className="py-6">
-              <h3 className="text-lg font-medium text-gray-900">What are tokens?</h3>
-              <p className="mt-2 text-gray-600">Tokens are used to process your requests. Each request consumes a certain number of tokens based on complexity and model used.</p>
+              <h3 className="text-lg font-medium text-gray-900">What are credits?</h3>
+              <p className="mt-2 text-gray-600">Credits are used to process your requests. Each request consumes a certain number of credits based on complexity and model used.</p>
             </div>
             <div className="py-6">
-              <h3 className="text-lg font-medium text-gray-900">How does the Pro plan's unlimited tokens work?</h3>
-              <p className="mt-2 text-gray-600">With the Pro plan, you can use as many tokens as you need without worrying about limits. This is ideal for high-volume users or teams.</p>
+              <h3 className="text-lg font-medium text-gray-900">How does the Pro plan's unlimited credits work?</h3>
+              <p className="mt-2 text-gray-600">With the Pro plan, you can use as many credits as you need without worrying about limits. This is ideal for high-volume users or teams.</p>
             </div>
             <div className="py-6">
               <h3 className="text-lg font-medium text-gray-900">Can I upgrade or downgrade my plan?</h3>
               <p className="mt-2 text-gray-600">Yes, you can change your plan at any time. Changes will be reflected in your next billing cycle.</p>
             </div>
             <div className="py-6">
-              <h3 className="text-lg font-medium text-gray-900">What does "bring your own API key" mean?</h3>
-              <p className="mt-2 text-gray-600">Pro plan users can use their own API keys from supported LLM providers, potentially reducing costs and providing more control over the models used.</p>
+              <h3 className="text-lg font-medium text-gray-900">Do unused credits roll over?</h3>
+              <p className="mt-2 text-gray-600">No, credits reset at the beginning of each billing cycle. This ensures you always start fresh with your full allocation.</p>
             </div>
           </div>
         </div>
