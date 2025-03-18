@@ -53,61 +53,39 @@ export function CreditProvider({ children }: { children: ReactNode }) {
       setIsLoading(true)
       const userId = getUserId()
       
-      // First, check if we have cached credits in localStorage
+      // Always check local storage first as fallback
       const cachedCredits = localStorage.getItem(`user_credits_${userId}`)
       const lastCreditUpdate = localStorage.getItem(`user_credits_updated_${userId}`)
       
-      // Get actual credits from Redis
-      const currentCredits = await creditUtils.getRemainingCredits(userId)
-      console.log(`[Credits] Redis credits for ${userId}: ${currentCredits}`)
+      let currentCredits = 100; // Default
+      let redisSuccess = false;
       
-      // Determine if this is a new user that needs initial credits
-      const hasInitializedCredits = localStorage.getItem(`credits_initialized_${userId}`)
-      const isNewUser = !hasInitializedCredits && currentCredits === 0
-      
-      if (isNewUser) {
-        // Only initialize credits for brand new users
-        const initialAmount = process.env.NEXT_PUBLIC_CREDITS_INITIAL_AMOUNT || '100'
-        console.log(`[Credits] Initializing new user ${userId} with ${initialAmount} credits`)
-        
-        await creditUtils.initializeCredits(userId, parseInt(initialAmount))
-        setRemainingCredits(parseInt(initialAmount))
-        setIsChatBlocked(false)
-        
-        // Mark this user as having initialized credits with timestamp
-        localStorage.setItem(`credits_initialized_${userId}`, 'true')
-        localStorage.setItem(`user_credits_${userId}`, initialAmount)
-        localStorage.setItem(`user_credits_updated_${userId}`, Date.now().toString())
-      } else {
-        // For existing users, use the higher of Redis vs localStorage credits
-        // This protects against cases where Redis might reset but localStorage still has the value
-        let finalCredits = currentCredits
-        
-        if (cachedCredits && parseInt(cachedCredits) > currentCredits) {
-          // If localStorage has more credits than Redis, update Redis
-        } else if (currentCredits > 0) {
-          // Update localStorage with latest Redis value
-          localStorage.setItem(`user_credits_${userId}`, currentCredits.toString())
-          localStorage.setItem(`user_credits_updated_${userId}`, Date.now().toString())
+      try {
+        // Try to get credits from Redis
+        currentCredits = await creditUtils.getRemainingCredits(userId)
+        console.log(`[Credits] Redis credits for ${userId}: ${currentCredits}`)
+        redisSuccess = true;
+      } catch (redisError) {
+        console.error('[Credits] Redis error, using fallback:', redisError);
+        // Use cached credits if available
+        if (cachedCredits) {
+          currentCredits = parseInt(cachedCredits)
         }
-        
-        setRemainingCredits(finalCredits)
-        setIsChatBlocked(finalCredits <= 0)
       }
+      
+      // Update local storage with current credits (from Redis or fallback)
+      localStorage.setItem(`user_credits_${userId}`, currentCredits.toString())
+      localStorage.setItem(`user_credits_updated_${userId}`, Date.now().toString())
+      
+      // Update state
+      setRemainingCredits(currentCredits)
+      setIsChatBlocked(currentCredits <= 0)
+      
     } catch (error) {
       console.error('Error checking credits:', error)
-      
-      // Fallback to localStorage if Redis is unavailable
-      const userId = getUserId()
-      const cachedCredits = localStorage.getItem(`user_credits_${userId}`)
-      
-      if (cachedCredits) {
-        console.log(`[Credits] Redis error, using cached credits: ${cachedCredits}`)
-        setRemainingCredits(parseInt(cachedCredits))
-        setIsChatBlocked(parseInt(cachedCredits) <= 0)
-      } else {
-        setIsChatBlocked(true)
-      }
+      // Ultimate fallback
+      setRemainingCredits(100)
+      setIsChatBlocked(false)
     } finally {
       setIsLoading(false)
     }
@@ -121,26 +99,47 @@ export function CreditProvider({ children }: { children: ReactNode }) {
   // Deduct credits for an operation
   const deductCredits = async (amount: number): Promise<boolean> => {
     try {
-      const userId = getUserId()
-      const success = await creditUtils.deductCredits(userId, amount)
+      console.log(`[CREDIT-CONTEXT] Attempting to deduct ${amount} credits`);
+      const userId = getUserId();
       
-      if (success) {
-        // Update local state to reflect new balance
-        const newBalance = remainingCredits - amount
-        setRemainingCredits(newBalance)
-        setIsChatBlocked(newBalance <= 0)
-        
-        // Keep localStorage in sync
-        localStorage.setItem(`user_credits_${userId}`, newBalance.toString())
-        localStorage.setItem(`user_credits_updated_${userId}`, Date.now().toString())
+      // First check if we have enough credits locally
+      if (remainingCredits < amount) {
+        console.log(`[CREDIT-CONTEXT] Insufficient credits locally: ${remainingCredits} < ${amount}`);
+        setIsChatBlocked(true);
+        return false;
       }
       
-      return success
+      let success = false;
+      
+      try {
+        // Try to deduct from Redis
+        success = await creditUtils.deductCredits(userId, amount);
+        console.log(`[CREDIT-CONTEXT] Redis deduction result: ${success}`);
+      } catch (redisError) {
+        console.error('[CREDIT-CONTEXT] Redis deduction error:', redisError);
+        // Fall back to local storage if Redis fails
+        success = true;
+      }
+      
+      if (success) {
+        // Always update local state regardless of Redis result
+        const newBalance = remainingCredits - amount;
+        console.log(`[CREDIT-CONTEXT] Updating local credits: ${remainingCredits} -> ${newBalance}`);
+        
+        setRemainingCredits(newBalance);
+        setIsChatBlocked(newBalance <= 0);
+        
+        // Always keep localStorage in sync
+        localStorage.setItem(`user_credits_${userId}`, newBalance.toString());
+        localStorage.setItem(`user_credits_updated_${userId}`, Date.now().toString());
+      }
+      
+      return success;
     } catch (error) {
-      console.error('Error deducting credits:', error)
-      return false
+      console.error('[CREDIT-CONTEXT] Error in deductCredits:', error);
+      return false;
     }
-  }
+  };
 
   // Initialize credits on component mount or when session changes
   useEffect(() => {

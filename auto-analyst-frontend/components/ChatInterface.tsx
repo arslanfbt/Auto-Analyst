@@ -415,34 +415,22 @@ const ChatInterface: React.FC = () => {
         }
       }
 
-      // Only deduct credits if the last AI message contains meaningful content
-      const lastAiMessage = storedMessages.filter(msg => msg.sender === 'ai').pop();
-      const messageHasContent = lastAiMessage && 
-        typeof lastAiMessage.text === 'string' && 
-        lastAiMessage.text.trim() !== "" &&
-        !lastAiMessage.text.includes("Error") &&
-        lastAiMessage.text.split(' ').length > 50;
-        
-      if (messageHasContent) {
-        // DEDUCT CREDITS: After successful response, deduct the credits
-        if (session || isAdmin) {
-          // Get the model that was used for the response
-          let modelName = "gpt-3.5-turbo"; // Default model
-          try {
-            const response = await axios.get(`${API_URL}/api/model-settings`);
-            if (response.data && response.data.model) {
-              modelName = response.data.model;
-            }
-          } catch (error) {
-            console.error("Failed to fetch model settings:", error);
+      // DEDUCT CREDITS: After successful response, deduct the credits
+      if (session || isAdmin) {
+        // Get the model that was used for the response
+        let modelName = "gpt-3.5-turbo"; // Default model
+        try {
+          const response = await axios.get(`${API_URL}/api/model-settings`);
+          if (response.data && response.data.model) {
+            modelName = response.data.model;
           }
-          
-          // Calculate and deduct credits
-          const creditCost = getModelCreditCost(modelName);
-          await deductCredits(creditCost);
+        } catch (error) {
+          console.error("Failed to fetch model settings:", error);
         }
-      } else {
-        console.log("No credits deducted - response was empty or contained an error");
+        
+        // Calculate and deduct credits
+        const creditCost = getModelCreditCost(modelName);
+        await deductCredits(creditCost);
       }
 
       // After the AI response is generated and saved, update the chat title for new chats
@@ -472,13 +460,11 @@ const ChatInterface: React.FC = () => {
     } catch (error) {
       console.error("Error sending message:", error);
       
-      // Add error message with clarification about no credit deduction
+      // Add error message
       addMessage({
-        text: "Sorry, there was an error processing your request. Please try again. No credits have been deducted for this attempt.",
+        text: "Sorry, there was an error processing your request. Please try again.",
         sender: "ai"
       });
-      
-      // No need to deduct credits here since the request failed
     } finally {
       setIsLoading(false);
       setAbortController(null);

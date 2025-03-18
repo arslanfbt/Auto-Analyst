@@ -2,8 +2,8 @@ import { Redis } from '@upstash/redis'
 
 // Initialize Redis client with Upstash credentials
 const redis = new Redis({
-  url: process.env.UPSTASH_REDIS_REST_URL || '',
-  token: process.env.UPSTASH_REDIS_REST_TOKEN || '',
+  url: process.env.NEXT_PUBLIC_UPSTASH_REDIS_REST_URL || '',
+  token: process.env.NEXT_PUBLIC_UPSTASH_REDIS_REST_TOKEN || '',
 })
 
 // Test connection and log status
@@ -176,10 +176,7 @@ export const creditUtils = {
   async resetUserCredits(userId: string): Promise<boolean> {
     try {
       // Get subscription to determine plan
-      const sub = await redis.hgetall<{
-        plan?: string;
-        interval?: string;
-      }>(KEYS.USER_SUBSCRIPTION(userId));
+      const sub = await redis.hgetall(KEYS.USER_SUBSCRIPTION(userId));
       
       if (!sub || !sub.plan) {
         // No subscription found, fallback to basic
@@ -188,11 +185,11 @@ export const creditUtils = {
       
       // Determine credit amount based on plan
       let creditAmount = 100; // Default
-      if (sub.plan.includes('Pro')) {
+      if ((sub.plan as string).includes('Pro')) {
         creditAmount = 999999;
-      } else if (sub.plan.includes('Standard')) {
+      } else if ((sub.plan as string).includes('Standard')) {
         creditAmount = 5000;
-      } else if (sub.plan.includes('Basic')) {
+      } else if ((sub.plan as string).includes('Basic')) {
         creditAmount = 1000;
       }
       
@@ -215,4 +212,4 @@ export const creditUtils = {
       return false;
     }
   }
-}; 
+};

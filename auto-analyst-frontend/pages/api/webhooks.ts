@@ -1,8 +1,7 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import Stripe from 'stripe';
 import { buffer } from 'micro';
-import redis from '@/lib/redis';
-import { creditUtils, KEYS } from '@/lib/redis';
+import redis, { creditUtils, KEYS } from '@/lib/redis';
 
 // Disable the default body parser to access the raw request body
 export const config = {
