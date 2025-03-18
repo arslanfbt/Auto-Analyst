@@ -19,16 +19,26 @@ export default async function handler(
   try {
     const userEmail = token.email
     
-    // Fetch credit information from Redis
-    const creditKey = `user:${userEmail}:credits`
-    const remainingCredits = await redis.get(creditKey) || 0
+    // Use correct key format from Upstash screenshot
+    const creditKey = `user_credits:${userEmail}`
+    let remainingCredits = await redis.get(creditKey) || 0
     
-    // Calculate total credits based on user's plan
+    // Directly fetch used credits instead of calculating
+    const creditsUsedKey = `user:${userEmail}:creditsUsed`
+    let creditsUsed = await redis.get(creditsUsedKey) || 0
+
+    // Total credits for the user's plan
     const totalCredits = 100 // Default for free plan
     
     // Get timestamp of last credit update
-    const lastUpdateKey = `user:${userEmail}:credits:lastUpdate`
+    // This uses userId format as seen in screenshot
+    const userId = token.sub || "anonymous"
+    const lastUpdateKey = `user:${userId}:creditsLastUpdate`
     const lastUpdate = await redis.get(lastUpdateKey) || new Date().toISOString()
+    
+    // Get user join date if available
+    const joinDateKey = `user:${userId}:joinDate`
+    const joinDate = await redis.get(joinDateKey) || '2023-01-01'
 
     // Calculate reset date
     const resetDate = calculateResetDate()
@@ -38,7 +48,7 @@ export default async function handler(
         name: token.name || 'User',
         email: userEmail,
         image: token.picture,
-        joinedDate: '2023-01-01',
+        joinedDate: joinDate,
         role: 'Free'
       },
       subscription: {
@@ -49,7 +59,7 @@ export default async function handler(
         interval: 'month'
       },
       credits: {
-        used: totalCredits - Number(remainingCredits),
+        used: Number(creditsUsed),
         total: totalCredits,
         resetDate: resetDate,
         lastUpdate: lastUpdate
