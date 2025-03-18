@@ -82,12 +82,12 @@ const ChatInterface: React.FC = () => {
   const [isUserProfileOpen, setIsUserProfileOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [modelSettings, setModelSettings] = useState({
-    provider: '',
-    model: '',
+    provider: process.env.NEXT_PUBLIC_DEFAULT_MODEL_PROVIDER || 'openai',
+    model: process.env.NEXT_PUBLIC_DEFAULT_MODEL || 'gpt-4o-mini',
     hasCustomKey: false,
-    apiKey: '',
-    temperature: 0.7,
-    maxTokens: 2000
+    apiKey: process.env.NEXT_PUBLIC_OPENAI_API_KEY || '',
+    temperature: process.env.NEXT_PUBLIC_DEFAULT_TEMPERATURE || 0.7,
+    maxTokens: process.env.NEXT_PUBLIC_DEFAULT_MAX_TOKENS || 6000
   });
 
   useEffect(() => {
@@ -291,9 +291,8 @@ const ChatInterface: React.FC = () => {
       // Get the selected model from current settings or use default
       // We assume the model settings are available - if not, we need to fetch them
       // This requires the modelSettings state to be added if not already present
-      
-      // You need to fetch the current model settings first
-      let modelName = "gpt-3.5-turbo"; // Default model
+        
+      let modelName = process.env.NEXT_PUBLIC_DEFAULT_MODEL || "gpt-4o-mini"; // Default model
       try {
         const response = await axios.get(`${API_URL}/api/model-settings`);
         if (response.data && response.data.model) {
@@ -416,22 +415,34 @@ const ChatInterface: React.FC = () => {
         }
       }
 
-      // DEDUCT CREDITS: After successful response, deduct the credits
-      if (session || isAdmin) {
-        // Get the model that was used for the response
-        let modelName = "gpt-3.5-turbo"; // Default model
-        try {
-          const response = await axios.get(`${API_URL}/api/model-settings`);
-          if (response.data && response.data.model) {
-            modelName = response.data.model;
-          }
-        } catch (error) {
-          console.error("Failed to fetch model settings:", error);
-        }
+      // Only deduct credits if the last AI message contains meaningful content
+      const lastAiMessage = storedMessages.filter(msg => msg.sender === 'ai').pop();
+      const messageHasContent = lastAiMessage && 
+        typeof lastAiMessage.text === 'string' && 
+        lastAiMessage.text.trim() !== "" &&
+        !lastAiMessage.text.includes("Error") &&
+        lastAiMessage.text.split(' ').length > 50;
         
-        // Calculate and deduct credits
-        const creditCost = getModelCreditCost(modelName);
-        await deductCredits(creditCost);
+      if (messageHasContent) {
+        // DEDUCT CREDITS: After successful response, deduct the credits
+        if (session || isAdmin) {
+          // Get the model that was used for the response
+          let modelName = "gpt-3.5-turbo"; // Default model
+          try {
+            const response = await axios.get(`${API_URL}/api/model-settings`);
+            if (response.data && response.data.model) {
+              modelName = response.data.model;
+            }
+          } catch (error) {
+            console.error("Failed to fetch model settings:", error);
+          }
+          
+          // Calculate and deduct credits
+          const creditCost = getModelCreditCost(modelName);
+          await deductCredits(creditCost);
+        }
+      } else {
+        console.log("No credits deducted - response was empty or contained an error");
       }
 
       // After the AI response is generated and saved, update the chat title for new chats
@@ -461,11 +472,13 @@ const ChatInterface: React.FC = () => {
     } catch (error) {
       console.error("Error sending message:", error);
       
-      // Add error message
+      // Add error message with clarification about no credit deduction
       addMessage({
-        text: "Sorry, there was an error processing your request. Please try again.",
+        text: "Sorry, there was an error processing your request. Please try again. No credits have been deducted for this attempt.",
         sender: "ai"
       });
+      
+      // No need to deduct credits here since the request failed
     } finally {
       setIsLoading(false);
       setAbortController(null);
@@ -915,7 +928,7 @@ const ChatInterface: React.FC = () => {
         <SettingsPopup 
           isOpen={isSettingsOpen}
           onClose={() => setIsSettingsOpen(false)}
-          initialSettings={modelSettings}
+          initialSettings={modelSettings as any}
         />
         
         <InsufficientCreditsModal

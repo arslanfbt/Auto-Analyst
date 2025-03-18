@@ -80,16 +80,31 @@ const SettingsPopup: React.FC<SettingsPopupProps> = ({ isOpen, onClose, initialS
   const [apiKey, setApiKey] = useState(initialSettings?.apiKey || '');
   const [notification, setNotification] = useState<{type: 'success' | 'error', message: string} | null>(null);
   const [showAdvanced, setShowAdvanced] = useState(false);
-  const [temperature, setTemperature] = useState(initialSettings?.temperature || 0);
-  const [maxTokens, setMaxTokens] = useState(initialSettings?.maxTokens || 1000);
+  
+  // Convert string to number for temperature if needed
+  const [temperature, setTemperature] = useState(() => {
+    const defaultTemp = initialSettings?.temperature || 0;
+    return typeof defaultTemp === 'string' ? parseFloat(defaultTemp) : defaultTemp;
+  });
+  
+  // Convert string to number for maxTokens if needed
+  const [maxTokens, setMaxTokens] = useState(() => {
+    const defaultTokens = initialSettings?.maxTokens || 1000;
+    return typeof defaultTokens === 'string' ? parseInt(defaultTokens) : defaultTokens;
+  });
 
   // Update selected model when provider changes
   useEffect(() => {
     const provider = MODEL_PROVIDERS.find(p => p.name === selectedProvider);
     if (provider) {
-      setSelectedModel(provider.models[0].id);
+      // Find if the current model exists in the new provider
+      const modelExists = provider.models.some(m => m.id === selectedModel);
+      // If not, set the first model of the new provider
+      if (!modelExists) {
+        setSelectedModel(provider.models[0].id);
+      }
     }
-  }, [selectedProvider]);
+  }, [selectedProvider, selectedModel]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

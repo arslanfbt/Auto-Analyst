@@ -39,12 +39,12 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, onNewChat, chatHisto
   const router = useRouter()
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
   const [modelSettings, setModelSettings] = useState({
-    provider: '',
-    model: '',
+    provider: process.env.NEXT_PUBLIC_DEFAULT_MODEL_PROVIDER || 'openai',
+    model: process.env.NEXT_PUBLIC_DEFAULT_MODEL || 'gpt-4o-mini',
     hasCustomKey: false,
-    apiKey: '',
-    temperature: 0.7,
-    maxTokens: 2000
+    apiKey: process.env.NEXT_PUBLIC_OPENAI_API_KEY || '',
+    temperature: process.env.NEXT_PUBLIC_DEFAULT_TEMPERATURE || 0.7,
+    maxTokens: process.env.NEXT_PUBLIC_DEFAULT_MAX_TOKENS || 6000
   });
   const { sessionId } = useSessionStore()
   const [isAdmin, setIsAdmin] = useState(false)
@@ -328,7 +328,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, onNewChat, chatHisto
       <SettingsPopup 
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
-        initialSettings={modelSettings}
+        initialSettings={modelSettings as any}
       />
 
       {isDeleteModalOpen && (
