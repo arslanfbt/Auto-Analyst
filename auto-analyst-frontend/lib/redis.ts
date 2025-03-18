@@ -2,8 +2,8 @@ import { Redis } from '@upstash/redis'
 
 // Initialize Redis client with Upstash credentials
 const redis = new Redis({
-  url: process.env.NEXT_PUBLIC_UPSTASH_REDIS_REST_URL || '',
-  token: process.env.NEXT_PUBLIC_UPSTASH_REDIS_REST_TOKEN || '',
+  url: process.env.UPSTASH_REDIS_REST_URL || '',
+  token: process.env.UPSTASH_REDIS_REST_TOKEN || '',
 })
 
 // Test connection and log status
