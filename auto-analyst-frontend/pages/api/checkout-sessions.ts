@@ -1,9 +1,9 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import Stripe from 'stripe';
-import { getSession } from 'next-auth/react';
 
+// Initialize Stripe with the secret key
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: '2025-02-24.acacia',
+  apiVersion: '2025-02-24.acacia', // Use the latest API version
 });
 
 export default async function handler(
@@ -11,22 +11,21 @@ export default async function handler(
   res: NextApiResponse
 ) {
   if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
+    return res.status(405).json({ message: 'Method not allowed' });
   }
 
   try {
-    const { priceId } = req.body;
+    const { priceId, userId } = req.body;
     
-    // Get user session
-    const session = await getSession({ req });
-    
-    if (!session) {
-      return res.status(401).json({ error: 'You must be logged in to subscribe' });
+    if (!priceId) {
+      return res.status(400).json({ message: 'Price ID is required' });
     }
 
-    // Create Stripe checkout session
-    const checkoutSession = await stripe.checkout.sessions.create({
+    // Create Checkout Sessions with expanded configuration
+    const session = await stripe.checkout.sessions.create({
       payment_method_types: ['card'],
+      billing_address_collection: 'auto',
+      customer_email: userId, // Use the email directly as customer_email
       line_items: [
         {
           price: priceId,
@@ -34,17 +33,22 @@ export default async function handler(
         },
       ],
       mode: 'subscription',
-      success_url: `${process.env.NEXT_PUBLIC_BASE_URL}/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${process.env.NEXT_PUBLIC_BASE_URL}/pricing`,
-      customer_email: session.user?.email || undefined,
+      ui_mode: 'hosted', // Explicitly set to hosted mode
+      success_url: `${req.headers.origin}/account?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${req.headers.origin}/pricing`,
       metadata: {
-        userId: session.user?.id || 'unknown',
+        userId: userId || 'anonymous',
       },
+      // Include tax collection if needed
+      automatic_tax: { enabled: true },
+      // Allow promotion codes
+      allow_promotion_codes: true,
     });
 
-    res.status(200).json({ url: checkoutSession.url });
-  } catch (error: any) {
-    console.error('Error creating checkout session:', error);
-    res.status(500).json({ error: error.message || 'An error occurred with the checkout process' });
+    res.status(200).json({ sessionId: session.id });
+  } catch (error) {
+    console.error('Stripe error:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+    res.status(500).json({ message: `Stripe error: ${errorMessage}` });
   }
 } 

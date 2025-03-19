@@ -4,6 +4,7 @@ import { useState } from "react"
 import { motion } from "framer-motion"
 import Image from "next/image"
 import { useRouter } from "next/navigation"
+import Link from "next/link"
 import { 
   Database, 
   Bot, 
@@ -15,7 +16,8 @@ import {
   Linkedin,
   LineChart,
   Chrome,
-  Loader2
+  Loader2,
+  ArrowLeft
 } from "lucide-react"
 
 const features = [
@@ -100,6 +102,16 @@ export default function EnterprisePage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-white">
+      {/* Back to Home Button */}
+      <div className="container mx-auto px-4 pt-6">
+        <Link href="/" passHref>
+          <button className="flex items-center text-gray-700 hover:text-[#FF7F7F] transition-colors">
+            <ArrowLeft className="h-5 w-5 mr-2" />
+            Back to Home
+          </button>
+        </Link>
+      </div>
+      
       {/* Hero Section */}
       <section className="pt-20 pb-16">
         <div className="container mx-auto px-4">

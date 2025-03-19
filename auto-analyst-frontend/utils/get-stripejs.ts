@@ -4,7 +4,12 @@ let stripePromise: Promise<Stripe | null>;
 
 const getStripe = () => {
   if (!stripePromise) {
-    stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!);
+    const key = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY;
+    if (!key) {
+      console.error('Stripe publishable key is missing');
+      return Promise.resolve(null);
+    }
+    stripePromise = loadStripe(key);
   }
   return stripePromise;
 };
