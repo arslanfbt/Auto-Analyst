@@ -46,7 +46,9 @@ export default async function handler(
     const userEmail = token.email
     const userId = token.sub || "anonymous"
     
-    console.log(`Fetching user data for ${userEmail} (${userId})`)
+    // Get force flag to bypass caching
+    const forceRefresh = req.query.force === 'true'
+    console.log(`Fetching user data for ${userEmail} (${userId}) with force=${forceRefresh}`)
     
     // Get timestamp query param (for cache busting)
     const timestamp = req.query._t || Date.now()
@@ -101,11 +103,91 @@ export default async function handler(
     const stripeCustomerId = subscriptionData.stripeCustomerId || ''
     const stripeSubscriptionId = subscriptionData.stripeSubscriptionId || ''
     
-    // Check credit data in Redis
-    console.log(`Checking credit data in Redis...`)
+    // Check credit data in Redis with special handling for force refresh
+    console.log(`Checking credit data in Redis for user ${userId}...`)
     const creditsKey = KEYS.USER_CREDITS(userId)
+    console.log('Credit key to check:', creditsKey)
+    
+    // Try both key formats
     const creditsData = await redis.hgetall(creditsKey) || {}
-    console.log('Credits data from Redis:', creditsData)
+    console.log('Credits data from Redis hash:', creditsData)
+    
+    // Also check direct keys for backup
+    const singleCreditsKey = `user_credits:${userEmail}`
+    const directCredits = await redis.get(singleCreditsKey)
+    console.log('Direct credits key check:', singleCreditsKey, directCredits)
+    
+    const creditsUsedKey = `user:${userEmail}:creditsUsed`
+    const directCreditsUsed = await redis.get(creditsUsedKey)
+    console.log('Direct credits used key check:', creditsUsedKey, directCreditsUsed)
+    
+    // If we're forcing a refresh or if plan has changed, make sure we get the right credit total
+    if (forceRefresh || Object.keys(creditsData).length === 0 || 
+        (subscriptionData.plan && subscriptionData.planUpdateTime && 
+         ((creditsData.planUpdateTime && parseInt(subscriptionData.planUpdateTime as string) > parseInt(creditsData.planUpdateTime as string)) || 
+          !creditsData.planUpdateTime))) {
+      console.log('Forcing credit refresh or handling plan change...')
+      
+      // If we have subscription data but no matching credit data, this might be a plan change
+      // Let's create a proper credit object with the right total for the plan
+      const total = planDetails.totalCredits
+      
+      // Keep the existing used credits if available
+      const used = creditsData.used ? parseInt(creditsData.used as string) : 
+                  directCreditsUsed !== null ? parseInt(directCreditsUsed as string) : 0
+      
+      const now = new Date().toISOString()
+      
+      // Update the credits in Redis with plan-specific totals
+      const updatedCreditsData = {
+        total: total.toString(),
+        used: used.toString(),
+        resetDate: creditsData.resetDate || new Date(new Date().getFullYear(), new Date().getMonth() + 1, 1).toISOString().split('T')[0],
+        lastUpdate: now,
+        planUpdateTime: Date.now().toString()
+      }
+      
+      console.log('Updating credits with plan-specific data:', updatedCreditsData)
+      await redis.hset(creditsKey, updatedCreditsData)
+      
+      // Use the updated data for our response
+      return res.status(200).json({
+        profile: {
+          name: token.name || 'User',
+          email: userEmail,
+          image: token.picture,
+          joinedDate: subscriptionData.purchaseDate ? 
+            (subscriptionData.purchaseDate as string).split('T')[0] : 
+            new Date().toISOString().split('T')[0],
+          role: planDetails.name
+        },
+        subscription: {
+          plan: planDetails.name,
+          status: status,
+          renewalDate: renewalDate,
+          amount: parseFloat(subscriptionData.amount as string) || amount,
+          interval: subscriptionData.interval || interval,
+          stripeCustomerId: stripeCustomerId,
+          stripeSubscriptionId: stripeSubscriptionId
+        },
+        credits: {
+          total: total,
+          used: used,
+          resetDate: updatedCreditsData.resetDate,
+          lastUpdate: now
+        },
+        debug: {
+          userId,
+          planKey,
+          forced: forceRefresh,
+          planChanged: true,
+          rawCreditsData: creditsData,
+          updatedCreditsData,
+          rawSubscriptionData: subscriptionData,
+          timestamp: Date.now()
+        }
+      })
+    }
     
     // Parse credit usage numbers
     let creditsTotal = creditsData.total ? parseInt(creditsData.total as string) : planDetails.totalCredits

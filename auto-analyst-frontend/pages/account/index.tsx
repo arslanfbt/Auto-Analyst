@@ -68,7 +68,10 @@ export default function AccountPage() {
   const fetchUserData = async () => {
     try {
       console.log('Fetching user data from API')
-      const response = await fetch('/api/user/data')
+      setIsRefreshing(true)
+      
+      // Add cache-busting parameter and force flag to ensure fresh data
+      const response = await fetch('/api/user/data?_=' + new Date().getTime() + '&force=true')
       if (!response.ok) {
         throw new Error('Failed to fetch user data')
       }
@@ -78,8 +81,39 @@ export default function AccountPage() {
       
       setProfile(data.profile)
       setSubscription(data.subscription)
-      setCredits(data.credits)
+      
+      // Enhanced credits handling with special attention to plan changes
+      console.log('Credits data:', data.credits)
+      
+      if (data.credits) {
+        // Determine plan-specific default total
+        let planDefaultTotal = 100; // Free plan default
+        if (data.subscription?.plan) {
+          const planName = data.subscription.plan.toLowerCase();
+          if (planName.includes('pro')) {
+            planDefaultTotal = 999999;
+          } else if (planName.includes('standard')) {
+            planDefaultTotal = 500;
+          }
+        }
+        
+        // First ensure all values are properly parsed with plan-aware defaults
+        const formattedCredits = {
+          ...data.credits,
+          used: typeof data.credits.used === 'number' ? 
+                 data.credits.used : 
+                 parseInt(String(data.credits.used || '0')),
+          total: typeof data.credits.total === 'number' ? 
+                  data.credits.total : 
+                  parseInt(String(data.credits.total || planDefaultTotal))
+        };
+        
+        console.log('Formatted credits with plan-specific defaults:', formattedCredits);
+        setCredits(formattedCredits);
+      }
+      
       setLoading(false)
+      setLastUpdated(new Date())
       
       return data
     } catch (err: any) {
@@ -87,6 +121,8 @@ export default function AccountPage() {
       setError(err.message || 'Failed to load user data')
       setLoading(false)
       return null
+    } finally {
+      setIsRefreshing(false)
     }
   }
 
@@ -189,6 +225,98 @@ export default function AccountPage() {
           </span>
         );
     }
+  };
+
+  const renderCreditsOverview = () => {
+    if (!credits) {
+      return (
+        <div className="text-center py-4">
+          <Loader2 className="h-6 w-6 mx-auto animate-spin text-[#FF7F7F]" />
+          <p className="mt-2 text-sm text-gray-600">Loading credit information...</p>
+        </div>
+      );
+    }
+    
+    // Ensure all values are numbers with proper fallbacks
+    const used = typeof credits.used === 'number' ? 
+                  credits.used : 
+                  parseInt(String(credits.used || '0'));
+    const total_remaining = typeof credits.total === 'number' ? 
+                   credits.total : 
+                   parseInt(String(credits.total || '100'));
+    
+    const remaining = Math.max(0, total_remaining - used);
+    const usagePercentage = total_remaining > 0 ? Math.min(100, (used / total_remaining) * 100) : 0;
+    
+    return (
+      <div className="space-y-4">
+        <div className="flex justify-between items-center">
+          <span className="text-gray-700">Credits used this month</span>
+          <span className="font-medium">{used} / {total_remaining}</span>
+        </div>
+        <Progress value={usagePercentage} className="h-2" />
+        <div className="flex justify-between items-center text-sm">
+          <span className="text-gray-600">
+            {remaining} credits remaining
+          </span>
+          <span className="text-gray-600">
+            Resets on {credits.resetDate ? new Date(credits.resetDate).toLocaleDateString() : "Not set"}
+          </span>
+        </div>
+        <div className="text-xs text-gray-500 mt-1">
+          Last updated: {credits.lastUpdate ? new Date(credits.lastUpdate).toLocaleString() : "Never"}
+        </div>
+      </div>
+    );
+  };
+
+  const renderDebugInfo = () => {
+    if (process.env.NODE_ENV !== 'development') return null;
+    
+    return (
+      <div className="mt-8 p-4 border border-gray-200 rounded-md bg-gray-50">
+        <h3 className="text-sm font-semibold mb-2 text-gray-900">Debug Info</h3>
+        <div className="flex space-x-2">
+          <Button 
+            variant="outline" 
+            size="sm" 
+            className="bg-[#FF7F7F] hover:bg-[#FF6666] text-white"
+            onClick={async () => {
+              try {
+                const res = await fetch('/api/debug/redis-check');
+                const data = await res.json();
+                console.log('Redis debug data:', data);
+                toast({
+                  title: 'Redis data logged',
+                  description: 'Check the console for details',
+                });
+              } catch (err) {
+                console.error('Error fetching debug data:', err);
+              }
+            }}
+          >
+            Check Redis Data
+          </Button>
+          
+          <Button 
+            variant="outline" 
+            size="sm" 
+            className="bg-[#FF7F7F] hover:bg-[#FF6666] text-white"
+            onClick={refreshUserData}
+          >
+            Force Refresh
+          </Button>
+        </div>
+        
+        <div className="mt-4 text-xs font-mono overflow-x-auto text-gray-500">
+          <p>Session User ID: {session?.user?.id || 'Unknown'}</p>
+          <p>Email: {session?.user?.email || 'Unknown'}</p>
+          <p>Loaded Credits: {JSON.stringify(credits)}</p>
+          <p>Loaded Subscription: {JSON.stringify(subscription)}</p>
+          <p>Last Updated: {lastUpdated.toLocaleString()}</p>
+        </div>
+      </div>
+    );
   };
 
   if (status === 'loading' || loading) {
@@ -328,7 +456,7 @@ export default function AccountPage() {
                             <div className="flex justify-between mb-2">
                               <span className="text-gray-600">Price:</span>
                               <span className="font-medium text-gray-900">
-                                ${subscription?.amount || '15.00'}/{subscription?.interval || 'month'}
+                                ${subscription?.amount || '0.00'}/{subscription?.interval || 'month'}
                               </span>
                             </div>
                             <div className="flex justify-between">
@@ -344,32 +472,7 @@ export default function AccountPage() {
                             Credits Usage
                           </h3>
                           <div className="bg-gray-50 p-4 rounded-lg text-gray-800 flex-grow">
-                            <div className="mb-2">
-                              <div className="flex justify-between mb-1">
-                                <span className="text-gray-600">Used:</span>
-                                <span className="font-medium text-gray-900">{credits?.used || 0} / {credits?.total || 500}</span>
-                              </div>
-                              <Progress 
-                                value={credits ? (credits.used / credits.total) * 100 : 0} 
-                                className="h-2 bg-gray-200"
-                                style={{ 
-                                  backgroundColor: '#F3F4F6', 
-                                }}
-                              />
-                            </div>
-                            <div className="flex justify-between mb-2">
-                              <span className="text-gray-600">Reset date:</span>
-                              <span className="font-medium flex items-center gap-1 text-gray-900">
-                                <Calendar size={14} className="text-gray-500" />
-                                {credits?.resetDate || '2025-04-19'}
-                              </span>
-                            </div>
-                            <div className="flex justify-between">
-                              <span className="text-gray-600">Last updated:</span>
-                              <span className="text-sm text-gray-500">
-                                {credits?.lastUpdate ? new Date(credits.lastUpdate).toLocaleString() : '3/19/2025, 6:00:57 PM'}
-                              </span>
-                            </div>
+                            {renderCreditsOverview()}
                           </div>
                         </div>
                       </div>
@@ -670,37 +773,7 @@ export default function AccountPage() {
             </div>
           </div>
 
-          {process.env.NODE_ENV === 'development' && (
-            <div className="mt-8 p-4 border border-gray-200 rounded-md bg-gray-50">
-              <h3 className="text-sm font-semibold mb-2 text-gray-900">Debug Info</h3>
-              <Button 
-                variant="outline" 
-                size="sm" 
-                className="bg-[#FF7F7F] hover:bg-[#FF6666] text-white"
-                onClick={async () => {
-                  try {
-                    const res = await fetch('/api/debug/redis-check');
-                    const data = await res.json();
-                    console.log('Redis debug data:', data);
-                    toast({
-                      title: 'Redis data logged',
-                      description: 'Check the console for details',
-                    });
-                  } catch (err) {
-                    console.error('Error fetching debug data:', err);
-                  }
-                }}
-              >
-                Check Redis Data
-              </Button>
-              
-              <div className="mt-4 text-xs font-mono overflow-x-auto text-gray-500">
-                <p>Session User ID: {session?.user?.id || 'Unknown'}</p>
-                <p>Loaded Credits: {JSON.stringify(credits)}</p>
-                <p>Loaded Subscription: {JSON.stringify(subscription)}</p>
-              </div>
-            </div>
-          )}
+          {renderDebugInfo()}
         </div>
       </Layout>
     </>
