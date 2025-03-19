@@ -15,6 +15,14 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Progress } from '@/components/ui/progress'
 import { signOut } from 'next-auth/react'
 import { useToast } from '@/components/ui/use-toast'
+import { 
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 
 interface UserProfile {
   name: string;
@@ -57,6 +65,9 @@ export default function AccountPage() {
   const { toast } = useToast()
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [lastUpdated, setLastUpdated] = useState<Date>(new Date())
+  const [showDowngradeDialog, setShowDowngradeDialog] = useState(false)
+  const [targetPlan, setTargetPlan] = useState<string>('')
+  const [isDowngrading, setIsDowngrading] = useState(false)
 
   // Main heading styles - Updated for consistency
   const mainHeadingStyle = "text-2xl font-bold text-gray-900 mb-2"
@@ -226,6 +237,64 @@ export default function AccountPage() {
         );
     }
   };
+
+  const handlePlanChange = () => {
+    // If they're on Pro or Standard, show downgrade confirmation
+    if (subscription?.plan && (
+      subscription.plan.toLowerCase().includes('pro') || 
+      subscription.plan.toLowerCase().includes('standard')
+    )) {
+      setShowDowngradeDialog(true)
+      // Set target plan based on current plan
+      if (subscription.plan.toLowerCase().includes('pro')) {
+        setTargetPlan('Standard Plan')
+      } else if (subscription.plan.toLowerCase().includes('standard')) {
+        setTargetPlan('Free Plan')
+      }
+    } else {
+      // For upgrades, just redirect to pricing page
+      router.push('/pricing')
+    }
+  }
+
+  const handleDowngradePlan = async () => {
+    setIsDowngrading(true)
+    try {
+      const response = await fetch('/api/user/downgrade-plan', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ targetPlan })
+      })
+      
+      if (!response.ok) {
+        throw new Error('Failed to downgrade plan')
+      }
+      
+      const data = await response.json()
+      
+      // Refresh user data to show updated plan
+      await refreshUserData()
+      
+      toast({
+        title: 'Plan Downgraded',
+        description: `Your plan has been downgraded to ${targetPlan}`,
+        variant: 'default'
+      })
+      
+      setShowDowngradeDialog(false)
+    } catch (error) {
+      console.error('Error downgrading plan:', error)
+      toast({
+        title: 'Downgrade Failed',
+        description: 'Unable to downgrade your plan. Please try again later.',
+        variant: 'destructive'
+      })
+    } finally {
+      setIsDowngrading(false)
+    }
+  }
 
   const renderCreditsOverview = () => {
     if (!credits) {
@@ -479,8 +548,8 @@ export default function AccountPage() {
 
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
                         <Button
-                          className="w-full bg-[#FF7F7F] hover:bg-[#FF6666] text-white"
-                          onClick={() => router.push('/pricing')}
+                          className="bg-[#FF7F7F] hover:bg-[#FF6666] text-white"
+                          onClick={handlePlanChange}
                         >
                           {subscription?.status === 'active' ? 'Change Plan' : 'Upgrade Now'}
                         </Button>
@@ -604,7 +673,7 @@ export default function AccountPage() {
                         <div className="flex flex-wrap gap-3">
                           <Button
                             className="bg-[#FF7F7F] hover:bg-[#FF6666] text-white"
-                            onClick={() => router.push('/pricing')}
+                            onClick={handlePlanChange}
                           >
                             Change Plan
                           </Button>
@@ -776,6 +845,58 @@ export default function AccountPage() {
           {renderDebugInfo()}
         </div>
       </Layout>
+
+      {showDowngradeDialog && (
+        <Dialog open={showDowngradeDialog} onOpenChange={setShowDowngradeDialog}>
+          <DialogContent className="sm:max-w-[425px] bg-white">
+            <DialogHeader>
+              <DialogTitle className="text-black">Confirm Plan Downgrade</DialogTitle>
+              <DialogDescription className="text-gray-600">
+                Are you sure you want to downgrade to the {targetPlan}? 
+                {targetPlan === 'Free Plan' 
+                  ? ' You will be limited to 100 credits per month.'
+                  : ' You will be limited to 500 credits per month.'}
+              </DialogDescription>
+            </DialogHeader>
+            <div className="py-4">
+              <div className="rounded-md bg-amber-50 p-4 mb-4">
+                <div className="flex">
+                  <AlertCircle className="h-5 w-5 text-amber-400" />
+                  <div className="ml-3 text-sm text-amber-700">
+                    <h3 className="font-medium text-black">Important</h3>
+                    <div className="text-gray-600">
+                      <p>Your downgrade will take effect immediately.</p>
+                      <p className="mt-1">Any unused credits exceeding your new plan's limit will be lost.</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button 
+                variant="outline" 
+                onClick={() => setShowDowngradeDialog(false)}
+              >
+                Cancel
+              </Button>
+              <Button 
+                className="bg-[#FF7F7F] hover:bg-[#FF6666] text-white"
+                onClick={handleDowngradePlan}
+                disabled={isDowngrading}
+              >
+                {isDowngrading ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Downgrading...
+                  </>
+                ) : (
+                  'Confirm Downgrade'
+                )}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
     </>
   )
 } 
