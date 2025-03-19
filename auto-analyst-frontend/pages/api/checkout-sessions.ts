@@ -34,7 +34,7 @@ export default async function handler(
       ],
       mode: 'subscription',
       ui_mode: 'hosted', // Explicitly set to hosted mode
-      success_url: `${req.headers.origin}/account?session_id={CHECKOUT_SESSION_ID}`,
+      success_url: `${req.headers.origin}/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${req.headers.origin}/pricing`,
       metadata: {
         userId: userId || 'anonymous',
