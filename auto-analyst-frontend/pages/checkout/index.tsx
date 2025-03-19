@@ -79,25 +79,27 @@ export default function CheckoutPage() {
       
       setPlanDetails(planData)
       
-      // Create payment intent when plan is selected
+      // Create checkout session when plan is selected
       if (planData.priceId && session) {
         setPaymentLoading(true)
         
-        fetch('/api/create-payment-intent', {
+        fetch('/api/checkout-sessions', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            amount: planData.amount,
             priceId: planData.priceId,
-            email: session.user?.email,
+            userId: session.user?.email,
+            planName: planData.name,
+            amount: planData.amount,
+            interval: planData.cycle,
           }),
         })
           .then(res => res.json())
           .then(data => {
-            if (data.error) {
-              setPaymentError(data.error)
+            if (data.message) {
+              setPaymentError(data.message)
             } else {
               setClientSecret(data.clientSecret)
             }
