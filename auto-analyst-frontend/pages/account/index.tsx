@@ -15,14 +15,16 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Progress } from '@/components/ui/progress'
 import { signOut } from 'next-auth/react'
 import { useToast } from '@/components/ui/use-toast'
-import { 
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 
 interface UserProfile {
   name: string;
@@ -65,9 +67,8 @@ export default function AccountPage() {
   const { toast } = useToast()
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [lastUpdated, setLastUpdated] = useState<Date>(new Date())
-  const [showDowngradeDialog, setShowDowngradeDialog] = useState(false)
-  const [targetPlan, setTargetPlan] = useState<string>('')
-  const [isDowngrading, setIsDowngrading] = useState(false)
+  const [confirmDowngradeOpen, setConfirmDowngradeOpen] = useState(false)
+  const [targetPlan, setTargetPlan] = useState<string>('free')
 
   // Main heading styles - Updated for consistency
   const mainHeadingStyle = "text-2xl font-bold text-gray-900 mb-2"
@@ -138,44 +139,39 @@ export default function AccountPage() {
   }
 
   const refreshUserData = async () => {
-    setIsRefreshing(true);
+    setIsRefreshing(true)
     try {
-      // Add cache-busting timestamp and force parameter
-      const timestamp = new Date().getTime();
-      console.log('Refreshing user data with force refresh...');
-      const response = await fetch(`/api/user/data?_t=${timestamp}&force=true`);
-      
+      // Add a timestamp parameter to bypass cache
+      const timestamp = new Date().getTime()
+      console.log('Refreshing user data...')
+      const response = await fetch(`/api/user/data?_t=${timestamp}`)
       if (!response.ok) {
-        throw new Error('Failed to refresh user data');
+        throw new Error('Failed to refresh user data')
       }
       
-      const freshData = await response.json();
-      console.log('Received fresh user data after plan change:', freshData);
+      const freshData = await response.json()
+      console.log('Received fresh user data:', freshData)
       
-      // Update all state variables
-      setProfile(freshData.profile);
-      setSubscription(freshData.subscription);
-      setCredits(freshData.credits);
-      setLastUpdated(new Date());
-      
-      // Clear any cached data
-      localStorage.removeItem(`user_credits_${freshData.profile?.id}`);
+      setProfile(freshData.profile)
+      setSubscription(freshData.subscription)
+      setCredits(freshData.credits)
+      setLastUpdated(new Date())
       
       toast({
         title: 'Data refreshed',
         description: 'Your account information has been updated',
-      });
+      })
     } catch (error) {
-      console.error('Error refreshing user data:', error);
+      console.error('Error refreshing user data:', error)
       toast({
         title: 'Could not refresh data',
         description: 'Please try again later',
         variant: 'destructive'
-      });
+      })
     } finally {
-      setIsRefreshing(false);
+      setIsRefreshing(false)
     }
-  };
+  }
 
   useEffect(() => {
     if (status === 'unauthenticated') {
@@ -242,64 +238,6 @@ export default function AccountPage() {
         );
     }
   };
-
-  const handlePlanChange = () => {
-    // If they're on Pro or Standard, show downgrade confirmation
-    if (subscription?.plan && (
-      subscription.plan.toLowerCase().includes('pro') || 
-      subscription.plan.toLowerCase().includes('standard')
-    )) {
-      setShowDowngradeDialog(true)
-      // Set target plan based on current plan
-      if (subscription.plan.toLowerCase().includes('pro')) {
-        setTargetPlan('Standard Plan')
-      } else if (subscription.plan.toLowerCase().includes('standard')) {
-        setTargetPlan('Free Plan')
-      }
-    } else {
-      // For upgrades, just redirect to pricing page
-      router.push('/pricing')
-    }
-  }
-
-  const handleDowngradePlan = async () => {
-    setIsDowngrading(true)
-    try {
-      const response = await fetch('/api/user/downgrade-plan', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ targetPlan })
-      })
-      
-      if (!response.ok) {
-        throw new Error('Failed to downgrade plan')
-      }
-      
-      const data = await response.json()
-      
-      // Refresh user data to show updated plan
-      await refreshUserData()
-      
-      toast({
-        title: 'Plan Downgraded',
-        description: `Your plan has been downgraded to ${targetPlan}`,
-        variant: 'default'
-      })
-      
-      setShowDowngradeDialog(false)
-    } catch (error) {
-      console.error('Error downgrading plan:', error)
-      toast({
-        title: 'Downgrade Failed',
-        description: 'Unable to downgrade your plan. Please try again later.',
-        variant: 'destructive'
-      })
-    } finally {
-      setIsDowngrading(false)
-    }
-  }
 
   const renderCreditsOverview = () => {
     if (!credits) {
@@ -392,6 +330,69 @@ export default function AccountPage() {
       </div>
     );
   };
+
+  // Add a function to handle plan downgrade
+  const handlePlanDowngrade = async (targetPlan: string) => {
+    // Set the target plan and open confirmation dialog
+    setTargetPlan(targetPlan)
+    setConfirmDowngradeOpen(true)
+  }
+  
+  // Add function to execute the downgrade after confirmation
+  const executeDowngrade = async () => {
+    setIsRefreshing(true)
+    try {
+      const response = await fetch('/api/user/downgrade-plan', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ targetPlan }),
+      })
+      
+      if (!response.ok) {
+        throw new Error('Failed to downgrade plan')
+      }
+      
+      const result = await response.json()
+      console.log('Plan downgrade result:', result)
+      
+      // Refresh user data to reflect the changes
+      await refreshUserData()
+      
+      toast({
+        title: 'Plan downgraded successfully',
+        description: `Your subscription has been changed to ${result.subscription.plan}`,
+      })
+    } catch (error) {
+      console.error('Error downgrading plan:', error)
+      toast({
+        title: 'Failed to downgrade plan',
+        description: 'Please try again later or contact support',
+        variant: 'destructive',
+      })
+    } finally {
+      setIsRefreshing(false)
+      setConfirmDowngradeOpen(false)
+    }
+  }
+  
+  // Helper to determine if current plan can be downgraded
+  const canDowngrade = () => {
+    if (!subscription) return false
+    const planName = subscription.plan.toLowerCase()
+    return planName.includes('pro') || planName.includes('standard')
+  }
+  
+  // Helper to get the next lower plan
+  const getDowngradePlanName = () => {
+    if (!subscription) return 'Free'
+    const planName = subscription.plan.toLowerCase()
+    
+    if (planName.includes('pro')) return 'Standard'
+    if (planName.includes('standard')) return 'Free'
+    return 'Free'
+  }
 
   if (status === 'loading' || loading) {
     return (
@@ -553,8 +554,8 @@ export default function AccountPage() {
 
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
                         <Button
-                          className="bg-[#FF7F7F] hover:bg-[#FF6666] text-white"
-                          onClick={handlePlanChange}
+                          className="w-full bg-[#FF7F7F] hover:bg-[#FF6666] text-white"
+                          onClick={() => router.push('/pricing')}
                         >
                           {subscription?.status === 'active' ? 'Change Plan' : 'Upgrade Now'}
                         </Button>
@@ -678,7 +679,7 @@ export default function AccountPage() {
                         <div className="flex flex-wrap gap-3">
                           <Button
                             className="bg-[#FF7F7F] hover:bg-[#FF6666] text-white"
-                            onClick={handlePlanChange}
+                            onClick={() => router.push('/pricing')}
                           >
                             Change Plan
                           </Button>
@@ -687,6 +688,19 @@ export default function AccountPage() {
                           >
                             Update Payment Method
                           </Button>
+                          {canDowngrade() && (
+                            <Button
+                              variant="default"
+                              className="bg-[#FF7F7F] hover:bg-[#FF6666] text-white"
+                              onClick={() => handlePlanDowngrade(getDowngradePlanName().toLowerCase())}
+                              disabled={isRefreshing}
+                            >
+                              {isRefreshing ? (
+                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                              ) : null}
+                              Downgrade to {getDowngradePlanName()}
+                            </Button>
+                          )}
                           <Button
                             variant="ghost"
                             className="text-white bg-[#FF7F7F] hover:bg-[#FF6666]"
@@ -849,59 +863,50 @@ export default function AccountPage() {
 
           {renderDebugInfo()}
         </div>
-      </Layout>
 
-      {showDowngradeDialog && (
-        <Dialog open={showDowngradeDialog} onOpenChange={setShowDowngradeDialog}>
-          <DialogContent className="sm:max-w-[425px] bg-white">
-            <DialogHeader>
-              <DialogTitle className="text-black">Confirm Plan Downgrade</DialogTitle>
-              <DialogDescription className="text-gray-600">
-                Are you sure you want to downgrade to the {targetPlan}? 
-                {targetPlan === 'Free Plan' 
-                  ? ' You will be limited to 100 credits per month.'
-                  : ' You will be limited to 500 credits per month.'}
-              </DialogDescription>
-            </DialogHeader>
-            <div className="py-4">
-              <div className="rounded-md bg-amber-50 p-4 mb-4">
-                <div className="flex">
-                  <AlertCircle className="h-5 w-5 text-amber-400" />
-                  <div className="ml-3 text-sm text-amber-700">
-                    <h3 className="font-medium text-black">Important</h3>
-                    <div className="text-gray-600">
-                      <p>Your downgrade will take effect immediately.</p>
-                      <p className="mt-1">Any unused credits exceeding your new plan's limit will be lost.</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-            <DialogFooter>
-              <Button 
-                variant="outline" 
-                onClick={() => setShowDowngradeDialog(false)}
-              >
-                Cancel
-              </Button>
-              <Button 
+        {/* Add the downgrade confirmation dialog */}
+        <AlertDialog open={confirmDowngradeOpen} onOpenChange={setConfirmDowngradeOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Confirm Subscription Downgrade</AlertDialogTitle>
+              <AlertDialogDescription>
+                You are about to downgrade from {subscription?.plan || 'your current plan'} to {targetPlan === 'standard' ? 'Standard Plan' : 'Free Plan'}.
+                {targetPlan === 'free' ? (
+                  <p className="mt-2 text-red-600 font-medium">
+                    This will cancel your paid subscription and reduce your available credits to 100.
+                  </p>
+                ) : (
+                  <p className="mt-2">
+                    Your credits will be adjusted to 500 and your monthly payment will be reduced.
+                  </p>
+                )}
+                <p className="mt-2">
+                  Are you sure you want to continue?
+                </p>
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={isRefreshing}>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={executeDowngrade}
+                disabled={isRefreshing}
                 className="bg-[#FF7F7F] hover:bg-[#FF6666] text-white"
-                onClick={handleDowngradePlan}
-                disabled={isDowngrading}
               >
-                {isDowngrading ? (
+                {isRefreshing ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Downgrading...
+                    Please wait...
                   </>
                 ) : (
-                  'Confirm Downgrade'
+                  <>
+                    Confirm Downgrade
+                  </>
                 )}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-      )}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      </Layout>
     </>
   )
 } 
