@@ -188,9 +188,9 @@ export const creditUtils = {
       if ((sub.plan as string).includes('Pro')) {
         creditAmount = 999999;
       } else if ((sub.plan as string).includes('Standard')) {
-        creditAmount = 5000;
+        creditAmount = 500;
       } else if ((sub.plan as string).includes('Basic')) {
-        creditAmount = 1000;
+        creditAmount = 100;
       }
       
       // Update credits hash
@@ -278,30 +278,209 @@ export const subscriptionUtils = {
     }
   },
   
-  // Use this to quickly check if a user can use credits (for real-time chat)
+  // Check if a user has an active subscription
+  async isSubscriptionActive(userId: string): Promise<boolean> {
+    try {
+      const subscriptionData = await redis.hgetall(KEYS.USER_SUBSCRIPTION(userId));
+      if (!subscriptionData || !subscriptionData.status) {
+        return false;
+      }
+      
+      // Check if subscription is active and not expired
+      if (subscriptionData.status === 'active') {
+        // Check if subscription has expired
+        if (subscriptionData.renewalDate) {
+          const renewalDate = new Date(subscriptionData.renewalDate as string);
+          const now = new Date();
+          if (renewalDate < now) {
+            // Subscription has expired, downgrade to free plan
+            console.log(`Subscription expired for user ${userId}. Downgrading to Free plan.`);
+            await this.downgradeToFreePlan(userId);
+            return false;
+          }
+        }
+        return true;
+      }
+      
+      return false;
+    } catch (error) {
+      console.error('Error checking subscription status:', error);
+      return false;
+    }
+  },
+  
+  // Check if a user can use credits based on their subscription
   async canUseCredits(userId: string): Promise<boolean> {
     try {
-      // Fast check for Pro users first (they always have credits)
-      const isPro = await this.isProUser(userId);
-      if (isPro) return true;
+      // First check if subscription is active
+      const isActive = await this.isSubscriptionActive(userId);
+      if (!isActive) {
+        // Check remaining credits for free users
+        const remainingCredits = await creditUtils.getRemainingCredits(userId);
+        return remainingCredits > 0;
+      }
       
-      // Check remaining credits for non-Pro users
-      const credits = await creditUtils.getRemainingCredits(userId);
-      return credits > 0;
+      // Paid users may have monthly renewal of credits
+      // Check if credits need to be refreshed based on last update
+      await this.refreshCreditsIfNeeded(userId);
+      
+      // Check remaining credits
+      const remainingCredits = await creditUtils.getRemainingCredits(userId);
+      return remainingCredits > 0;
     } catch (error) {
       console.error('Error checking if user can use credits:', error);
       return false;
     }
   },
   
-  // Fast check if user is on Pro plan
-  async isProUser(userId: string): Promise<boolean> {
+  // Refresh credits if needed (for yearly subscriptions)
+  async refreshCreditsIfNeeded(userId: string): Promise<boolean> {
     try {
-      const plan = await redis.hget(KEYS.USER_SUBSCRIPTION(userId), 'plan');
-      return plan ? plan.toString().toUpperCase().includes('PRO') : false;
-    } catch (error) {
-      console.error('Error checking if user is Pro:', error);
+      const subscriptionData = await redis.hgetall(KEYS.USER_SUBSCRIPTION(userId));
+      const creditsData = await redis.hgetall(KEYS.USER_CREDITS(userId));
+      
+      if (!subscriptionData || !creditsData) {
+        return false;
+      }
+      
+      // Only proceed if subscription is active and yearly
+      if (subscriptionData.status === 'active' && subscriptionData.interval === 'year') {
+        const now = new Date();
+        const lastUpdate = creditsData.lastUpdate ? new Date(creditsData.lastUpdate as string) : null;
+        
+        // Get plan information
+        const planName = subscriptionData.plan as string;
+        const planType = subscriptionData.planType as string;
+        
+        // Determine credit amount based on plan type
+        let creditAmount = 100; // Default free plan
+        if (planType === 'STANDARD') {
+          creditAmount = 500;
+        } else if (planType === 'PRO') {
+          creditAmount = 999999; // Effectively unlimited
+        }
+        
+        // If last update was more than a month ago or is missing, refresh credits
+        if (!lastUpdate || this.isMonthDifference(lastUpdate, now)) {
+          console.log(`Refreshing monthly credits for yearly subscriber ${userId}`);
+          
+          // Calculate next reset date - one month from now
+          const resetDate = new Date(now);
+          resetDate.setMonth(resetDate.getMonth() + 1);
+          
+          // Update credits data
+          const newCreditData = {
+            total: creditAmount.toString(),
+            used: '0',
+            resetDate: resetDate.toISOString().split('T')[0],
+            lastUpdate: now.toISOString()
+          };
+          
+          // Save to Redis
+          await redis.hset(KEYS.USER_CREDITS(userId), newCreditData);
+          
+          // Update legacy keys if email available
+          const userEmail = await redis.hget(KEYS.USER_PROFILE(userId), 'email');
+          if (userEmail) {
+            await redis.set(`user_credits:${userEmail}`, creditAmount);
+            await redis.set(`user:${userEmail}:creditsUsed`, 0);
+          }
+          
+          return true;
+        }
+      }
+      
       return false;
+    } catch (error) {
+      console.error('Error refreshing credits:', error);
+      return false;
+    }
+  },
+  
+  // Helper to check if two dates are at least one month apart
+  isMonthDifference(date1: Date, date2: Date): boolean {
+    // Get difference in months
+    const months = (date2.getFullYear() - date1.getFullYear()) * 12 + 
+                 (date2.getMonth() - date1.getMonth());
+    
+    // If months difference is at least 1
+    if (months >= 1) {
+      return true;
+    }
+    
+    // If same month but day is same or later in the next period
+    if (months === 0 && date2.getDate() >= date1.getDate()) {
+      return true;
+    }
+    
+    return false;
+  },
+  
+  // Downgrade a user to the free plan
+  async downgradeToFreePlan(userId: string): Promise<boolean> {
+    try {
+      const now = new Date();
+      
+      // Update subscription data
+      const subscriptionData = {
+        plan: 'Free Plan',
+        planType: 'FREE',
+        status: 'active',
+        amount: '0',
+        interval: 'month',
+        purchaseDate: now.toISOString(),
+        renewalDate: '',
+        lastUpdated: now.toISOString(),
+        stripeCustomerId: '',
+        stripeSubscriptionId: ''
+      };
+      
+      // Set free credits (100)
+      const creditData = {
+        total: '100',
+        used: '0',
+        resetDate: '',
+        lastUpdate: now.toISOString()
+      };
+      
+      // Save to Redis
+      await redis.hset(KEYS.USER_SUBSCRIPTION(userId), subscriptionData);
+      await redis.hset(KEYS.USER_CREDITS(userId), creditData);
+      
+      // Update legacy keys if email available
+      const userEmail = await redis.hget(KEYS.USER_PROFILE(userId), 'email');
+      if (userEmail) {
+        await redis.set(`user_credits:${userEmail}`, 100);
+        await redis.set(`user:${userEmail}:creditsUsed`, 0);
+        await redis.set(`user:${userEmail}:planName`, 'Free Plan');
+      }
+      
+      console.log(`Successfully downgraded user ${userId} to the Free plan`);
+      return true;
+    } catch (error) {
+      console.error('Error downgrading to free plan:', error);
+      return false;
+    }
+  },
+  
+  // Scheduled task to check for expired subscriptions
+  // This should be called periodically (via a cron job or similar)
+  async checkExpiredSubscriptions(): Promise<void> {
+    try {
+      // This is a simplified version - in production you'd want to use a queue
+      // Get all subscription keys
+      const subscriptionKeys = await redis.keys('user:*:subscription');
+      
+      // Check each subscription
+      for (const key of subscriptionKeys) {
+        // Extract user ID from the key
+        const userId = key.split(':')[1];
+        
+        // Check if subscription is active
+        await this.isSubscriptionActive(userId);
+      }
+    } catch (error) {
+      console.error('Error checking expired subscriptions:', error);
     }
   }
 };

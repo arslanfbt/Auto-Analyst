@@ -106,7 +106,7 @@ export default async function handler(
         // Standard monthly plan ($15/month)
         planName = 'Standard Plan' 
         planType = 'STANDARD'
-        creditAmount = 5000
+        creditAmount = 500
       } else if (amount >= 30 && amount <= 50) {
         // Pro monthly plan ($39/month)
         planName = 'Pro Plan'
@@ -116,7 +116,7 @@ export default async function handler(
         // Standard yearly plan ($165/year)
         planName = 'Standard Plan (Yearly)'
         planType = 'STANDARD'
-        creditAmount = 5000
+        creditAmount = 500
       } else if (amount >= 350 && amount <= 500) {
         // Pro yearly plan ($399/year)
         planName = 'Pro Plan (Yearly)'
@@ -239,7 +239,7 @@ async function updateUserSubscriptionFromSession(userId: string, session: Stripe
     // Map plan name to our internal constants
     if (planNameUpper.includes('STANDARD')) {
       planType = 'STANDARD'
-      creditAmount = 5000
+      creditAmount = 500
     } else if (planNameUpper.includes('PRO')) {
       planType = 'PRO'
       creditAmount = 999999 // Unlimited

@@ -34,7 +34,7 @@ export default async function handler(
     
     // Determine credits
     let credits = 100
-    if (plan.toString().toUpperCase().includes('STANDARD')) credits = 5000
+    if (plan.toString().toUpperCase().includes('STANDARD')) credits = 500
     if (plan.toString().toUpperCase().includes('PRO')) credits = 999999
     
     // Create a planType for easy mapping

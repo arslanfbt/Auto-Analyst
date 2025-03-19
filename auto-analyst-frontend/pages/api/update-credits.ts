@@ -10,11 +10,8 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
 // Credit amounts based on plan level
 const PLAN_CREDITS = {
   'Free Plan': 100,
-  'Standard Plan': 5000,
+  'Standard Plan': 500,
   'Pro Plan': 999999, // Effectively unlimited
-  'Starter Plan': 1000,
-  'Business Plan': 15000,
-  // Add other plans as needed
 }
 
 export default async function handler(
