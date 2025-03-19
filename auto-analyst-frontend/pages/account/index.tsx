@@ -57,6 +57,8 @@ export default function AccountPage() {
   const [error, setError] = useState('')
   const [refreshing, setRefreshing] = useState(false)
   const { toast } = useToast()
+  const [isRefreshing, setIsRefreshing] = useState(false)
+  const [lastUpdated, setLastUpdated] = useState<Date>(new Date())
 
   // Main heading styles
   const mainHeadingStyle = "text-2xl font-bold text-gray-900 mb-2"
@@ -67,76 +69,63 @@ export default function AccountPage() {
 
   const fetchUserData = async () => {
     try {
+      console.log('Fetching user data from API')
       const response = await fetch('/api/user/data')
       if (!response.ok) {
         throw new Error('Failed to fetch user data')
       }
       
       const data: UserDataResponse = await response.json()
+      console.log('Received user data:', data)
+      
       setProfile(data.profile)
       setSubscription(data.subscription)
       setCredits(data.credits)
       setLoading(false)
       
+      return data
     } catch (err: any) {
       console.error('Error fetching user data:', err)
       setError(err.message || 'Failed to load user data')
       setLoading(false)
+      return null
     }
   }
 
-  const refreshCredits = async () => {
-    setRefreshing(true);
-    setError('');
-    
+  const refreshUserData = async () => {
+    setIsRefreshing(true)
     try {
-      // Fetch from the user/data endpoint instead to get full user info
-      const response = await fetch('/api/user/data');
+      // Add a timestamp parameter to bypass cache
+      const timestamp = new Date().getTime()
+      console.log('Refreshing user data...')
+      const response = await fetch(`/api/user/data?_t=${timestamp}`)
       if (!response.ok) {
-        throw new Error('Failed to fetch user data');
+        throw new Error('Failed to refresh user data')
       }
       
-      const data = await response.json();
+      const freshData = await response.json()
+      console.log('Received fresh user data:', freshData)
       
-      // Update all user information
-      if (data.subscription) {
-        setSubscription({
-          plan: data.subscription.plan,
-          status: data.subscription.status,
-          renewalDate: data.subscription.renewalDate,
-          amount: data.subscription.amount,
-          interval: data.subscription.interval
-        });
-      }
+      setProfile(freshData.profile)
+      setSubscription(freshData.subscription)
+      setCredits(freshData.credits)
+      setLastUpdated(new Date())
       
-      setCredits({
-        used: data.credits.used,
-        total: data.credits.total,
-        resetDate: data.credits.resetDate,
-        lastUpdate: data.credits.lastUpdate
-      });
-      
-      // Show success toast
       toast({
-        title: 'Usage data refreshed',
-        description: 'Your account information has been updated.',
-        variant: 'default',
-      });
-      
-    } catch (err: any) {
-      console.error('Error refreshing user data:', err);
-      setError(err.message || 'Failed to refresh user data');
-      
-      // Show error toast
+        title: 'Data refreshed',
+        description: 'Your account information has been updated',
+      })
+    } catch (error) {
+      console.error('Error refreshing user data:', error)
       toast({
-        title: 'Error refreshing data',
-        description: err.message || 'Failed to refresh user data',
-        variant: 'destructive',
-      });
+        title: 'Could not refresh data',
+        description: 'Please try again later',
+        variant: 'destructive'
+      })
     } finally {
-      setRefreshing(false);
+      setIsRefreshing(false)
     }
-  };
+  }
 
   useEffect(() => {
     if (status === 'unauthenticated') {
@@ -147,6 +136,15 @@ export default function AccountPage() {
       fetchUserData()
     }
   }, [status, session, router])
+
+  useEffect(() => {
+    // Check if we're returning from checkout success
+    if (router.query.refresh === 'true' || router.query.from === 'checkout') {
+      refreshUserData()
+      // Remove the query param to prevent unnecessary refreshes
+      router.replace('/account', undefined, { shallow: true })
+    }
+  }, [router.query])
 
   useEffect(() => {
     // Add CSS for custom toggle switches
@@ -380,16 +378,22 @@ export default function AccountPage() {
                           </div>
                           <Button
                             variant="outline"
-                            className="mt-4 w-full flex items-center justify-center gap-2 text-gray-700 bg-white hover:bg-[#FFB3B3] hover:text-gray-900"
-                            onClick={refreshCredits}
-                            disabled={refreshing}
+                            size="sm"
+                            onClick={refreshUserData}
+                            disabled={isRefreshing}
+                            className="ml-2"
                           >
-                            {refreshing ? (
-                              <Loader2 size={14} className="animate-spin" />
+                            {isRefreshing ? (
+                              <>
+                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                Refreshing...
+                              </>
                             ) : (
-                              <RefreshCw size={14} />
+                              <>
+                                <RefreshCw className="mr-2 h-4 w-4" />
+                                Refresh
+                              </>
                             )}
-                            {refreshing ? 'Refreshing...' : 'Refresh Usage Data'}
                           </Button>
                         </div>
                       </div>
@@ -433,6 +437,30 @@ export default function AccountPage() {
                     </CardHeader>
                     <CardContent className={cardContentStyle}>
                       <div className="space-y-6">
+                        <div className="flex items-center justify-between mb-4">
+                          <h3 className={sectionHeadingStyle}>
+                            <CreditCard size={20} className="text-[#FF7F7F]" />
+                            Subscription Details
+                          </h3>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={refreshUserData}
+                            disabled={isRefreshing}
+                          >
+                            {isRefreshing ? (
+                              <>
+                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                Refreshing...
+                              </>
+                            ) : (
+                              <>
+                                <RefreshCw className="mr-2 h-4 w-4" />
+                                Force Refresh
+                              </>
+                            )}
+                          </Button>
+                        </div>
                         <div className="bg-gray-50 p-5 rounded-lg">
                           <div className="flex justify-between items-center">
                             <div>
@@ -623,6 +651,37 @@ export default function AccountPage() {
               )}
             </div>
           </div>
+
+          {process.env.NODE_ENV === 'development' && (
+            <div className="mt-8 p-4 border border-gray-200 rounded-md bg-gray-50">
+              <h3 className="text-sm font-semibold mb-2">Debug Info</h3>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={async () => {
+                  try {
+                    const res = await fetch('/api/debug/redis-check');
+                    const data = await res.json();
+                    console.log('Redis debug data:', data);
+                    toast({
+                      title: 'Redis data logged',
+                      description: 'Check the console for details',
+                    });
+                  } catch (err) {
+                    console.error('Error fetching debug data:', err);
+                  }
+                }}
+              >
+                Check Redis Data
+              </Button>
+              
+              <div className="mt-4 text-xs font-mono overflow-x-auto">
+                <p>Session User ID: {session?.user?.id || 'Unknown'}</p>
+                <p>Loaded Credits: {JSON.stringify(credits)}</p>
+                <p>Loaded Subscription: {JSON.stringify(subscription)}</p>
+              </div>
+            </div>
+          )}
         </div>
       </Layout>
     </>

@@ -213,3 +213,95 @@ export const creditUtils = {
     }
   }
 };
+
+// Subscription utilities for efficiently accessing user plan data
+export const subscriptionUtils = {
+  // Get complete user subscription data efficiently
+  async getUserSubscriptionData(userId: string): Promise<{
+    plan: string;
+    credits: {
+      used: number;
+      total: number | 'Unlimited';
+      remaining: number | 'Unlimited';
+    };
+    isPro: boolean;
+  }> {
+    try {
+      // Get subscription from hash (most efficient approach)
+      const subData = await redis.hgetall(KEYS.USER_SUBSCRIPTION(userId));
+      const creditsData = await redis.hgetall(KEYS.USER_CREDITS(userId));
+      
+      // Default values if no data found
+      let plan = 'Free';
+      let isPro = false;
+      let creditsTotal = 100;
+      let creditsUsed = 0;
+      
+      // Parse subscription data if found
+      if (subData && subData.plan) {
+        plan = subData.plan as string;
+        isPro = plan.toUpperCase().includes('PRO');
+      }
+      
+      // Parse credits data if found
+      if (creditsData) {
+        creditsTotal = parseInt(creditsData.total as string || '100');
+        creditsUsed = parseInt(creditsData.used as string || '0');
+      } 
+      
+      // Format the response with the right types for unlimited credits
+      const isUnlimited = isPro || creditsTotal >= 999999;
+      const formattedTotal = isUnlimited ? 'Unlimited' : creditsTotal;
+      const remaining = isUnlimited ? 'Unlimited' : Math.max(0, creditsTotal - creditsUsed);
+      
+      return {
+        plan,
+        credits: {
+          used: creditsUsed,
+          total: formattedTotal,
+          remaining
+        },
+        isPro
+      };
+    } catch (error) {
+      console.error('Error getting user subscription data:', error);
+      // Return fallback defaults if there's an error
+      return {
+        plan: 'Free',
+        credits: {
+          used: 0,
+          total: 100, 
+          remaining: 100
+        },
+        isPro: false
+      };
+    }
+  },
+  
+  // Use this to quickly check if a user can use credits (for real-time chat)
+  async canUseCredits(userId: string): Promise<boolean> {
+    try {
+      // Fast check for Pro users first (they always have credits)
+      const isPro = await this.isProUser(userId);
+      if (isPro) return true;
+      
+      // Check remaining credits for non-Pro users
+      const credits = await creditUtils.getRemainingCredits(userId);
+      return credits > 0;
+    } catch (error) {
+      console.error('Error checking if user can use credits:', error);
+      return false;
+    }
+  },
+  
+  // Fast check if user is on Pro plan
+  async isProUser(userId: string): Promise<boolean> {
+    try {
+      const plan = await redis.hget(KEYS.USER_SUBSCRIPTION(userId), 'plan');
+      return plan ? plan.toString().toUpperCase().includes('PRO') : false;
+    } catch (error) {
+      console.error('Error checking if user is Pro:', error);
+      return false;
+    }
+  }
+};

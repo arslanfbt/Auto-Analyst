@@ -36,13 +36,13 @@ export default function App({ Component, pageProps: { session, ...pageProps } }:
           return originalFetch(url, newOptions);
         };
         
-        // Auto-login a guest user
-        const username = `guest_${sessionId.substring(0, 8)}`;
-        const email = `${username}@example.com`;
-        await loginUser(username, email, sessionId);
-        console.log(`User initialized with session ID: ${sessionId}`);
-      } catch (error) {
-        console.error('Failed to initialize user:', error);
+      //   // Auto-login a guest user
+      //   const username = `guest_${sessionId.substring(0, 8)}`;
+      //   const email = `${username}@example.com`;
+      //   await loginUser(username, email, sessionId);
+      //   console.log(`User initialized with session ID: ${sessionId}`);
+      } catch (error) { 
+        console.error('Failed to initialize user');
       }
     }
     

@@ -14,7 +14,7 @@ export default function NavigationBar() {
             <div className="flex-shrink-0 flex items-center">
               <Link href="/">
                 <div className="flex items-center">
-                  <span className="text-[#FF7F7F] font-bold text-xl mr-2">Auto-Analyst</span>
+                  <span className="text-black font-bold text-xl mr-2">Auto-Analyst</span>
                   {/* You can add an actual logo image here */}
                   {/* <Image src="/logo.png" alt="Auto-Analyst" width={32} height={32} /> */}
                 </div>

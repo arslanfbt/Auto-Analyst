@@ -1,153 +1,171 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/router'
-import { useSession } from 'next-auth/react'
-import Head from 'next/head'
+import { Loader2, CheckCircle, ShieldAlert } from 'lucide-react'
 import Layout from '@/components/layout'
-import { CheckCircle, ChevronRight, Loader } from 'lucide-react'
-import Link from 'next/link'
+import { useSession } from 'next-auth/react'
 import { useToast } from '@/components/ui/use-toast'
 
-interface PaymentDetails {
-  plan: string;
-  amount: number;
-  interval: string;
-  status: string;
-}
-
-export default function CheckoutSuccessPage() {
+export default function CheckoutSuccess() {
   const router = useRouter()
   const { data: session } = useSession()
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [paymentDetails, setPaymentDetails] = useState<PaymentDetails | null>(null)
   const { toast } = useToast()
+  const [isProcessing, setIsProcessing] = useState(true)
+  const [isRedirecting, setIsRedirecting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [retryCount, setRetryCount] = useState(0)
+  const [debugInfo, setDebugInfo] = useState<any>(null)
 
   useEffect(() => {
-    const { session_id } = router.query
+    if (!router.isReady || !session) return;
     
-    if (!session_id) return
+    // Extract payment_intent from URL
+    const { payment_intent } = router.query;
     
-    const fetchPaymentDetails = async () => {
-      try {
-        // Fetch payment details
-        const response = await fetch(`/api/payment-details?session_id=${session_id}`)
-        
-        if (!response.ok) {
-          throw new Error('Failed to fetch payment details')
+    if (payment_intent) {
+      const processPayment = async () => {
+        try {
+          console.log(`Processing payment intent: ${payment_intent}`)
+          
+          // Send payment intent to our verification API
+          const response = await fetch('/api/verify-payment', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+              payment_intent,
+              // Include timestamp to prevent caching issues
+              timestamp: new Date().getTime() 
+            }),
+          });
+          
+          const data = await response.json();
+          
+          if (!response.ok) {
+            setDebugInfo(data);
+            throw new Error(data.error || 'Payment verification failed');
+          }
+          
+          console.log('Payment verification successful:', data);
+          
+          // Check if it was already processed
+          if (data.alreadyProcessed) {
+            console.log('Payment was already processed');
+          }
+          
+          // Success! Show toast and redirect
+          toast({
+            title: 'Subscription Activated!',
+            description: 'Your plan has been successfully activated.',
+          });
+          
+          // Wait 1 second before redirecting to account page
+          setTimeout(() => {
+            setIsProcessing(false);
+            setIsRedirecting(true);
+            // Add special parameter to force account page refresh
+            setTimeout(() => {
+              router.push(`/account?refresh=${Date.now()}`);
+            }, 1500);
+          }, 1000);
+        } catch (error: any) {
+          console.error('Payment verification error:', error);
+          
+          // If we haven't tried too many times, retry
+          if (retryCount < 3) {
+            setRetryCount(prev => prev + 1);
+            console.log(`Retrying payment verification (${retryCount + 1}/3)...`);
+            
+            // Wait 2 seconds before retrying
+            setTimeout(() => {
+              processPayment();
+            }, 2000);
+          } else {
+            setIsProcessing(false);
+            setError(error.message || 'Failed to process payment');
+          }
         }
-        
-        const data = await response.json()
-        setPaymentDetails(data)
-        
-        // Update user credits to reflect the new plan
-        await fetch('/api/update-credits', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ session_id }),
-        })
-        
-        toast({
-          title: "Subscription activated",
-          description: `Your ${data.plan} has been activated successfully.`,
-          variant: "default",
-        })
-      } catch (err: any) {
-        console.error('Error fetching payment details:', err)
-        setError(err.message || 'An error occurred')
-        
-        toast({
-          title: "Error processing subscription",
-          description: err.message || "Please contact support if this persists.",
-          variant: "destructive",
-        })
-      } finally {
-        setLoading(false)
-      }
+      };
+      
+      processPayment();
+    } else {
+      setIsProcessing(false);
+      setError('No payment information found');
     }
-    
-    fetchPaymentDetails()
-  }, [router.query, toast])
-  
+  }, [router.isReady, session, router.query, retryCount]);
+
+  // Force refresh account data when coming back from payment
+  useEffect(() => {
+    if (session) {
+      // Invalidate any cached subscription data
+      fetch('/api/user/data?_t=' + Date.now());
+    }
+  }, [session]);
+
   return (
     <Layout>
-      <Head>
-        <title>Checkout Successful | Auto-Analyst</title>
-      </Head>
-      
-      <div className="max-w-3xl mx-auto px-4 py-12">
-        {loading ? (
-          <div className="text-center py-12">
-            <Loader className="w-12 h-12 mx-auto mb-4 animate-spin text-[#FF7F7F]" />
-            <h2 className="text-2xl font-bold mb-2">Processing your subscription...</h2>
-            <p className="text-gray-600">Just a moment while we activate your plan.</p>
-          </div>
-        ) : error ? (
-          <div className="text-center py-12 bg-red-50 rounded-lg p-6">
-            <h2 className="text-2xl font-bold text-red-600 mb-4">Oops! Something went wrong</h2>
-            <p className="text-gray-700 mb-6">{error}</p>
-            <Link 
-              href="/account" 
-              className="inline-flex items-center px-4 py-2 bg-[#FF7F7F] text-white rounded-md hover:bg-[#FF6666]"
-            >
-              Go to my account <ChevronRight className="ml-2 h-4 w-4" />
-            </Link>
-          </div>
-        ) : (
-          <div className="bg-white rounded-lg shadow-md p-8 text-center">
-            <div className="mb-6">
-              <div className="w-20 h-20 mx-auto bg-green-100 rounded-full flex items-center justify-center">
-                <CheckCircle className="h-12 w-12 text-green-600" />
-              </div>
+      <div className="flex flex-col items-center justify-center min-h-[60vh] p-4">
+        <div className="w-full max-w-md p-8 space-y-6 bg-white rounded-lg shadow-md">
+          {isProcessing && (
+            <div className="text-center">
+              <Loader2 className="w-16 h-16 mx-auto text-[#FF7F7F] animate-spin" />
+              <h1 className="mt-6 text-2xl font-bold text-gray-900">
+                Activating Your Subscription
+              </h1>
+              <p className="mt-2 text-gray-600">
+                Please wait while we set up your new plan...
+              </p>
+              {retryCount > 0 && (
+                <p className="mt-2 text-amber-600">
+                  Retry attempt {retryCount}/3
+                </p>
+              )}
             </div>
-            
-            <h1 className="text-3xl font-bold text-gray-900 mb-4">Thank You for Your Order!</h1>
-            <p className="text-xl text-gray-700 mb-8">
-              Your subscription has been processed successfully.
-            </p>
-            
-            {paymentDetails && (
-              <div className="bg-gray-50 rounded-lg p-6 mb-8">
-                <h3 className="text-lg font-medium text-gray-900 mb-4">Subscription Details</h3>
-                <div className="space-y-2 text-left">
-                  <div className="flex justify-between py-2 border-b border-gray-200">
-                    <span className="text-gray-600">Plan:</span>
-                    <span className="font-medium">{paymentDetails.plan}</span>
-                  </div>
-                  <div className="flex justify-between py-2 border-b border-gray-200">
-                    <span className="text-gray-600">Billing:</span>
-                    <span className="font-medium">
-                      ${paymentDetails.amount}/{paymentDetails.interval}
-                    </span>
-                  </div>
-                  <div className="flex justify-between py-2 border-b border-gray-200">
-                    <span className="text-gray-600">Status:</span>
-                    <span className="font-medium text-green-600 capitalize">
-                      {paymentDetails.status}
-                    </span>
-                  </div>
+          )}
+          
+          {isRedirecting && (
+            <div className="text-center">
+              <CheckCircle className="w-16 h-16 mx-auto text-green-500" />
+              <h1 className="mt-6 text-2xl font-bold text-gray-900">
+                Success!
+              </h1>
+              <p className="mt-2 text-gray-600">
+                Your subscription has been activated. Taking you to your account...
+              </p>
+            </div>
+          )}
+          
+          {error && (
+            <div className="text-center">
+              <ShieldAlert className="w-16 h-16 mx-auto text-red-500" />
+              <h1 className="text-2xl font-bold text-red-600">
+                Subscription Activation Issue
+              </h1>
+              <p className="mt-2 text-gray-600">
+                {error}
+              </p>
+              <p className="mt-2 text-sm text-gray-500">
+                Don't worry! If your payment was successful, your subscription
+                will be activated automatically. Please go to your account page.
+              </p>
+              <button
+                onClick={() => router.push('/account')}
+                className="mt-4 px-4 py-2 bg-[#FF7F7F] text-white rounded hover:bg-[#FF6666]"
+              >
+                Go to my account
+              </button>
+              
+              {/* Debug information - only in development */}
+              {process.env.NODE_ENV === 'development' && debugInfo && (
+                <div className="mt-4 p-3 bg-gray-100 rounded text-left">
+                  <p className="text-xs font-mono">Debug Info:</p>
+                  <pre className="text-xs overflow-auto max-h-32">
+                    {JSON.stringify(debugInfo, null, 2)}
+                  </pre>
                 </div>
-              </div>
-            )}
-            
-            <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <Link 
-                href="/chat" 
-                className="px-6 py-3 bg-[#FF7F7F] text-white font-medium rounded-md hover:bg-[#FF6666] transition-colors"
-              >
-                Start Analyzing
-              </Link>
-              <Link 
-                href="/account" 
-                className="px-6 py-3 bg-white text-gray-700 font-medium rounded-md border border-gray-300 hover:bg-gray-50 transition-colors"
-              >
-                View My Account
-              </Link>
+              )}
             </div>
-          </div>
-        )}
+          )}
+        </div>
       </div>
     </Layout>
-  )
+  );
 } 
