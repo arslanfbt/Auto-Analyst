@@ -4,11 +4,11 @@ import React, { useState } from 'react'
 import { useCredits } from '@/lib/contexts/credit-context'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './ui/tooltip'
 import Link from 'next/link'
-import { ChevronUp, CreditCard } from 'lucide-react'
+import { ChevronUp, CreditCard, Coins } from 'lucide-react'
 import { motion } from 'framer-motion'
 
 const CreditBalance = () => {
-  const { remainingCredits } = useCredits()
+  const { remainingCredits, isLoading, checkCredits } = useCredits()
   const [isHovering, setIsHovering] = useState(false)
   
   return (
@@ -40,8 +40,8 @@ const CreditBalance = () => {
                 }}
                 transition={{ duration: 0.2 }}
               >
-                <span>{remainingCredits.toLocaleString()}</span>
-                <span className="ml-1">tokens</span>
+                <Coins className="h-4 w-4 text-[#FF7F7F]" />
+                <span className="ml-1">{isLoading ? '...' : remainingCredits.toLocaleString()}</span>
               </motion.span>
             </motion.div>
             

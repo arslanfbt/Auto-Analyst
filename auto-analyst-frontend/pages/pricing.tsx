@@ -1,8 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Head from 'next/head';
 import { useSession } from 'next-auth/react';
 import { motion } from 'framer-motion';
-import { CheckCircle, X, Check } from 'lucide-react';
+import { CheckCircle, X, Check, ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
 import getStripe from '../utils/get-stripejs';
 import { Infinity as InfinityIcon } from 'lucide-react';
@@ -90,13 +90,47 @@ export default function PricingPage() {
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [billingCycle, setBillingCycle] = useState<'monthly' | 'yearly'>('yearly');
   const router = useRouter();
+  const [referringPage, setReferringPage] = useState<string>('home');
   
-  // Handle subscription checkout
+  useEffect(() => {
+    // Get the referring page from the query parameters or localStorage
+    const referrer = router.query.from as string || localStorage.getItem('referringPage') || 'home';
+    setReferringPage(referrer);
+    
+    // Store the current page as the referring page for future navigation
+    localStorage.setItem('referringPage', 'pricing');
+  }, [router.query]);
+  
+  const getBackButtonText = () => {
+    switch (referringPage) {
+      case 'chat':
+        return 'Back to Chat';
+      case 'account':
+        return 'Back to Account';
+      case 'home':
+      default:
+        return 'Back to Home';
+    }
+  };
+  
+  const getBackButtonUrl = () => {
+    switch (referringPage) {
+      case 'chat':
+        return '/chat';
+      case 'account':
+        return '/account';
+      case 'home':
+      default:
+        return '/';
+    }
+  };
+  
+  // Updated handleCheckout function with better error handling
   const handleCheckout = async (priceId: string | null | undefined, tierName: string) => {
     if (!priceId) {
       if (tierName === 'Free') {
         // Redirect free users to the chat page
-        window.location.href = '/chat';
+        router.push('/chat');
         return;
       }
       return;
@@ -106,6 +140,8 @@ export default function PricingPage() {
     setIsLoading(true);
     
     try {
+      console.log('Creating checkout session for price ID:', priceId);
+      
       // Call backend API to create Checkout session
       const response = await fetch('/api/checkout-sessions', {
         method: 'POST',
@@ -118,13 +154,32 @@ export default function PricingPage() {
         }),
       });
       
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(`Failed to create checkout session: ${errorData.message || response.statusText}`);
+      }
+      
       const { sessionId } = await response.json();
+      console.log('Checkout session created:', sessionId);
+      
+      if (!sessionId) {
+        throw new Error('No session ID returned from API');
+      }
       
       // Redirect to Stripe Checkout
       const stripe = await getStripe();
-      await stripe?.redirectToCheckout({ sessionId });
+      if (!stripe) {
+        throw new Error('Failed to initialize Stripe');
+      }
+      
+      const { error } = await stripe.redirectToCheckout({ sessionId });
+      
+      if (error) {
+        throw new Error(error.message);
+      }
     } catch (error) {
       console.error('Error during checkout:', error);
+      alert(`Checkout error: ${error instanceof Error ? error.message : 'Unknown error'}`);
       setIsLoading(false);
     }
   };
@@ -151,6 +206,16 @@ export default function PricingPage() {
       </Head>
       
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        {/* Back button */}
+        <div className="absolute top-8 left-8">
+          <Link href={getBackButtonUrl()} passHref>
+            <button className="flex items-center text-gray-700 hover:text-[#FF7F7F] transition-colors">
+              <ArrowLeft className="h-5 w-5 mr-2" />
+              {getBackButtonText()}
+            </button>
+          </Link>
+        </div>
+        
         <div className="text-center">
           <h1 className="text-4xl font-extrabold text-gray-900 sm:text-5xl sm:tracking-tight lg:text-6xl">
             Simple, Transparent Pricing
