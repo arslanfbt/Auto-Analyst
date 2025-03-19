@@ -138,39 +138,44 @@ export default function AccountPage() {
   }
 
   const refreshUserData = async () => {
-    setIsRefreshing(true)
+    setIsRefreshing(true);
     try {
-      // Add a timestamp parameter to bypass cache
-      const timestamp = new Date().getTime()
-      console.log('Refreshing user data...')
-      const response = await fetch(`/api/user/data?_t=${timestamp}`)
+      // Add cache-busting timestamp and force parameter
+      const timestamp = new Date().getTime();
+      console.log('Refreshing user data with force refresh...');
+      const response = await fetch(`/api/user/data?_t=${timestamp}&force=true`);
+      
       if (!response.ok) {
-        throw new Error('Failed to refresh user data')
+        throw new Error('Failed to refresh user data');
       }
       
-      const freshData = await response.json()
-      console.log('Received fresh user data:', freshData)
+      const freshData = await response.json();
+      console.log('Received fresh user data after plan change:', freshData);
       
-      setProfile(freshData.profile)
-      setSubscription(freshData.subscription)
-      setCredits(freshData.credits)
-      setLastUpdated(new Date())
+      // Update all state variables
+      setProfile(freshData.profile);
+      setSubscription(freshData.subscription);
+      setCredits(freshData.credits);
+      setLastUpdated(new Date());
+      
+      // Clear any cached data
+      localStorage.removeItem(`user_credits_${freshData.profile?.id}`);
       
       toast({
         title: 'Data refreshed',
         description: 'Your account information has been updated',
-      })
+      });
     } catch (error) {
-      console.error('Error refreshing user data:', error)
+      console.error('Error refreshing user data:', error);
       toast({
         title: 'Could not refresh data',
         description: 'Please try again later',
         variant: 'destructive'
-      })
+      });
     } finally {
-      setIsRefreshing(false)
+      setIsRefreshing(false);
     }
-  }
+  };
 
   useEffect(() => {
     if (status === 'unauthenticated') {

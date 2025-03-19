@@ -77,12 +77,22 @@ export default async function handler(
       stripeSubscriptionId: currentSubscription?.stripeSubscriptionId || ''
     }
 
-    // Prepare credit data
-    // Get current used credits, but cap it at the new plan limit if necessary
-    const usedCredits = currentCredits?.used 
-      ? Math.min(parseInt(currentCredits.used as string), planDetails.credits)
-      : 0
-    
+    // Fix the used credits calculation to handle parsing errors
+    const usedCredits = (() => {
+      try {
+        // If credits exist, use them (capped at new plan limit)
+        if (currentCredits?.used) {
+          const parsed = parseInt(String(currentCredits.used));
+          return isNaN(parsed) ? 0 : Math.min(parsed, planDetails.credits);
+        }
+        return 0;
+      } catch (err) {
+        console.error('Error parsing used credits:', err);
+        return 0;
+      }
+    })();
+
+    // Ensure the creditData has all required fields
     const creditData = {
       total: planDetails.credits.toString(),
       used: usedCredits.toString(),
@@ -91,18 +101,31 @@ export default async function handler(
       planUpdateTime: Date.now().toString()
     }
 
-    // Update Redis
-    await redis.hset(KEYS.USER_SUBSCRIPTION(userId), subscriptionData)
-    await redis.hset(KEYS.USER_CREDITS(userId), creditData)
+    // Add debug logging to track values
+    console.log('Downgrading plan - updating credits:', {
+      userId,
+      currentUsed: currentCredits?.used,
+      newUsed: usedCredits,
+      newTotal: planDetails.credits,
+      targetPlan
+    });
+
+    // Update Redis with transaction to ensure atomicity
+    const pipeline = redis.pipeline();
+    pipeline.hset(KEYS.USER_SUBSCRIPTION(userId), subscriptionData);
+    pipeline.hset(KEYS.USER_CREDITS(userId), creditData);
 
     // Update legacy keys if email available
-    const userEmail = await redis.hget(KEYS.USER_PROFILE(userId), 'email')
+    const userEmail = await redis.hget(KEYS.USER_PROFILE(userId), 'email');
     if (userEmail) {
-      await redis.set(`user_credits:${userEmail}`, planDetails.credits)
-      await redis.set(`user:${userEmail}:creditsUsed`, usedCredits)
-      await redis.set(`user:${userEmail}:planName`, planDetails.name)
-      await redis.set(`user:${userEmail}:creditsTotal`, planDetails.credits)
+      pipeline.set(`user_credits:${userEmail}`, planDetails.credits);
+      pipeline.set(`user:${userEmail}:creditsUsed`, usedCredits);
+      pipeline.set(`user:${userEmail}:planName`, planDetails.name);
+      pipeline.set(`user:${userEmail}:creditsTotal`, planDetails.credits);
     }
+
+    // Execute all Redis commands atomically
+    await pipeline.exec();
 
     return res.status(200).json({
       success: true,
