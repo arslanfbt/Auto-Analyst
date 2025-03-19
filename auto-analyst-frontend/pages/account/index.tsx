@@ -14,7 +14,6 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'
 import { signOut } from 'next-auth/react'
-import Link from 'next/link'
 import { useToast } from '@/components/ui/use-toast'
 
 interface UserProfile {
@@ -55,88 +54,76 @@ export default function AccountPage() {
   const [subscription, setSubscription] = useState<Subscription | null>(null)
   const [credits, setCredits] = useState<CreditUsage | null>(null)
   const [error, setError] = useState('')
-  const [refreshing, setRefreshing] = useState(false)
   const { toast } = useToast()
+  const [isRefreshing, setIsRefreshing] = useState(false)
+  const [lastUpdated, setLastUpdated] = useState<Date>(new Date())
 
-  // Main heading styles
+  // Main heading styles - Updated for consistency
   const mainHeadingStyle = "text-2xl font-bold text-gray-900 mb-2"
   const sectionHeadingStyle = "text-lg font-medium text-gray-900 mb-2 flex items-center gap-2"
-  const cardBgStyle = "bg-white border border-gray-200 rounded-lg" 
+  const cardBgStyle = "bg-white border border-gray-200 rounded-lg shadow-sm" 
   const cardHeaderStyle = "border-b border-gray-100 bg-white text-gray-900"
   const cardContentStyle = "bg-white text-gray-800"
 
   const fetchUserData = async () => {
     try {
+      console.log('Fetching user data from API')
       const response = await fetch('/api/user/data')
       if (!response.ok) {
         throw new Error('Failed to fetch user data')
       }
       
       const data: UserDataResponse = await response.json()
+      console.log('Received user data:', data)
+      
       setProfile(data.profile)
       setSubscription(data.subscription)
       setCredits(data.credits)
       setLoading(false)
       
+      return data
     } catch (err: any) {
       console.error('Error fetching user data:', err)
       setError(err.message || 'Failed to load user data')
       setLoading(false)
+      return null
     }
   }
 
-  const refreshCredits = async () => {
-    setRefreshing(true);
-    setError('');
-    
+  const refreshUserData = async () => {
+    setIsRefreshing(true)
     try {
-      // Fetch from the user/data endpoint instead to get full user info
-      const response = await fetch('/api/user/data');
+      // Add a timestamp parameter to bypass cache
+      const timestamp = new Date().getTime()
+      console.log('Refreshing user data...')
+      const response = await fetch(`/api/user/data?_t=${timestamp}`)
       if (!response.ok) {
-        throw new Error('Failed to fetch user data');
+        throw new Error('Failed to refresh user data')
       }
       
-      const data = await response.json();
+      const freshData = await response.json()
+      console.log('Received fresh user data:', freshData)
       
-      // Update all user information
-      if (data.subscription) {
-        setSubscription({
-          plan: data.subscription.plan,
-          status: data.subscription.status,
-          renewalDate: data.subscription.renewalDate,
-          amount: data.subscription.amount,
-          interval: data.subscription.interval
-        });
-      }
+      setProfile(freshData.profile)
+      setSubscription(freshData.subscription)
+      setCredits(freshData.credits)
+      setLastUpdated(new Date())
       
-      setCredits({
-        used: data.credits.used,
-        total: data.credits.total,
-        resetDate: data.credits.resetDate,
-        lastUpdate: data.credits.lastUpdate
-      });
-      
-      // Show success toast
       toast({
-        title: 'Usage data refreshed',
-        description: 'Your account information has been updated.',
-        variant: 'default',
-      });
-      
-    } catch (err: any) {
-      console.error('Error refreshing user data:', err);
-      setError(err.message || 'Failed to refresh user data');
-      
-      // Show error toast
+        title: 'Data refreshed',
+        description: 'Your account information has been updated',
+      })
+    } catch (error) {
+      console.error('Error refreshing user data:', error)
       toast({
-        title: 'Error refreshing data',
-        description: err.message || 'Failed to refresh user data',
-        variant: 'destructive',
-      });
+        title: 'Could not refresh data',
+        description: 'Please try again later',
+        variant: 'destructive'
+      })
     } finally {
-      setRefreshing(false);
+      setIsRefreshing(false)
     }
-  };
+  }
 
   useEffect(() => {
     if (status === 'unauthenticated') {
@@ -147,6 +134,15 @@ export default function AccountPage() {
       fetchUserData()
     }
   }, [status, session, router])
+
+  useEffect(() => {
+    // Check if we're returning from checkout success
+    if (router.query.refresh === 'true' || router.query.from === 'checkout') {
+      refreshUserData()
+      // Remove the query param to prevent unnecessary refreshes
+      router.replace('/account', undefined, { shallow: true })
+    }
+  }, [router.query])
 
   useEffect(() => {
     // Add CSS for custom toggle switches
@@ -233,11 +229,11 @@ export default function AccountPage() {
               <Card className="bg-white border border-gray-200 shadow-sm">
                 <CardHeader className="text-center pb-2 bg-white border-b border-gray-100">
                   <div className="flex flex-col items-center">
-                    <div className="w-20 h-20 bg-gray-200 rounded-full flex items-center justify-center mb-4 overflow-hidden">
+                    <div className="w-20 h-20 bg-[#FFE5E5] rounded-full flex items-center justify-center mb-4 overflow-hidden">
                       {profile?.image ? (
                         <img src={profile.image} alt={profile.name} className="w-full h-full object-cover" />
                       ) : (
-                        <User size={40} className="text-gray-600" />
+                        <User size={40} className="text-[#FF7F7F]" />
                       )}
                     </div>
                     <CardTitle className="text-gray-900">{profile?.name || 'User'}</CardTitle>
@@ -260,7 +256,7 @@ export default function AccountPage() {
                     <Button 
                       variant="outline"
                       className={`w-full justify-start text-left ${
-                        activeTab === 'overview' ? "bg-[#FF7F7F] text-white" : "bg-white text-gray-700 hover:bg-[#FFB3B3] hover:text-gray-900"
+                        activeTab === 'overview' ? "bg-[#FF7F7F] text-white hover:bg-[#FF6666]" : "bg-white text-gray-700 hover:bg-[#FFE5E5] hover:text-gray-900"
                       }`}
                       onClick={() => setActiveTab('overview')}
                     >
@@ -270,7 +266,7 @@ export default function AccountPage() {
                     <Button 
                       variant="outline"
                       className={`w-full justify-start text-left ${
-                        activeTab === 'subscription' ? "bg-[#FF7F7F] text-white" : "bg-white text-gray-700 hover:bg-[#FFB3B3] hover:text-gray-900"
+                        activeTab === 'subscription' ? "bg-[#FF7F7F] text-white hover:bg-[#FF6666]" : "bg-white text-gray-700 hover:bg-[#FFE5E5] hover:text-gray-900"
                       }`}
                       onClick={() => setActiveTab('subscription')}
                     >
@@ -280,16 +276,16 @@ export default function AccountPage() {
                     <Button 
                       variant="outline"
                       className={`w-full justify-start text-left ${
-                        activeTab === 'settings' ? "bg-[#FF7F7F] text-white" : "bg-white text-gray-700 hover:bg-[#FFB3B3] hover:text-gray-900"
+                        activeTab === 'settings' ? "bg-[#FF7F7F] text-white hover:bg-[#FF6666]" : "bg-white text-gray-700 hover:bg-[#FFE5E5] hover:text-gray-900"
                       }`}
                       onClick={() => setActiveTab('settings')}
                     >
                       <Settings size={16} className="mr-2" />
                       Settings
                     </Button>
-                    <Button 
-                      variant="outline"
-                      className="w-full justify-start text-left text-red-500 hover:text-red-600 hover:bg-red-100"
+                    <Button
+                      variant="ghost"
+                      className="mt-4 w-full justify-start text-left text-[#FF5252] hover:text-white hover:bg-[#FF5252]"
                       onClick={() => signOut({ callbackUrl: '/' })}
                     >
                       <LogOut size={16} className="mr-2" />
@@ -315,83 +311,94 @@ export default function AccountPage() {
                     </CardHeader>
                     <CardContent className={cardContentStyle}>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div>
+                        <div className="flex flex-col h-full">
                           <h3 className={sectionHeadingStyle}>
                             <CreditCard size={20} className="text-[#FF7F7F]" />
                             Current Plan
                           </h3>
-                          <div className="bg-gray-50 p-4 rounded-lg text-gray-800">
+                          <div className="bg-gray-50 p-4 rounded-lg text-gray-800 flex-grow">
                             <div className="flex justify-between mb-2">
                               <span className="text-gray-600">Plan:</span>
-                              <span className="font-medium text-gray-900">{subscription?.plan || 'Free'}</span>
+                              <span className="font-medium text-gray-900">{subscription?.plan || 'Standard'}</span>
                             </div>
                             <div className="flex justify-between mb-2">
                               <span className="text-gray-600">Status:</span>
-                              {getSubscriptionStatusDisplay(subscription?.status || 'inactive')}
+                              {getSubscriptionStatusDisplay(subscription?.status || 'active')}
                             </div>
                             <div className="flex justify-between mb-2">
                               <span className="text-gray-600">Price:</span>
                               <span className="font-medium text-gray-900">
-                                ${subscription?.amount || '0.00'}/{subscription?.interval || 'month'}
+                                ${subscription?.amount || '15.00'}/{subscription?.interval || 'month'}
                               </span>
                             </div>
                             <div className="flex justify-between">
                               <span className="text-gray-600">Next billing:</span>
-                              <span className="font-medium text-gray-900">{subscription?.renewalDate || 'N/A'}</span>
+                              <span className="font-medium text-gray-900">{subscription?.renewalDate || '2025-04-19'}</span>
                             </div>
                           </div>
-                          <Button
-                            className="mt-4 w-full bg-[#FF7F7F] hover:bg-[#FF6666] text-white"
-                            onClick={() => router.push('/pricing')}
-                          >
-                            {subscription?.status === 'active' ? 'Change Plan' : 'Upgrade Now'}
-                          </Button>
                         </div>
 
-                        <div>
+                        <div className="flex flex-col h-full">
                           <h3 className={sectionHeadingStyle}>
                             <BarChart3 size={20} className="text-[#FF7F7F]" />
                             Credits Usage
                           </h3>
-                          <div className="bg-gray-50 p-4 rounded-lg text-gray-800">
+                          <div className="bg-gray-50 p-4 rounded-lg text-gray-800 flex-grow">
                             <div className="mb-2">
                               <div className="flex justify-between mb-1">
                                 <span className="text-gray-600">Used:</span>
-                                <span className="font-medium text-gray-900">{credits?.used || 0} / {credits?.total || 0}</span>
+                                <span className="font-medium text-gray-900">{credits?.used || 0} / {credits?.total || 500}</span>
                               </div>
                               <Progress 
                                 value={credits ? (credits.used / credits.total) * 100 : 0} 
                                 className="h-2 bg-gray-200"
+                                style={{ 
+                                  backgroundColor: '#F3F4F6', 
+                                }}
                               />
                             </div>
                             <div className="flex justify-between mb-2">
                               <span className="text-gray-600">Reset date:</span>
                               <span className="font-medium flex items-center gap-1 text-gray-900">
                                 <Calendar size={14} className="text-gray-500" />
-                                {credits?.resetDate || 'N/A'}
+                                {credits?.resetDate || '2025-04-19'}
                               </span>
                             </div>
                             <div className="flex justify-between">
                               <span className="text-gray-600">Last updated:</span>
                               <span className="text-sm text-gray-500">
-                                {credits?.lastUpdate ? new Date(credits.lastUpdate).toLocaleString() : 'N/A'}
+                                {credits?.lastUpdate ? new Date(credits.lastUpdate).toLocaleString() : '3/19/2025, 6:00:57 PM'}
                               </span>
                             </div>
                           </div>
-                          <Button
-                            variant="outline"
-                            className="mt-4 w-full flex items-center justify-center gap-2 text-gray-700 bg-white hover:bg-[#FFB3B3] hover:text-gray-900"
-                            onClick={refreshCredits}
-                            disabled={refreshing}
-                          >
-                            {refreshing ? (
-                              <Loader2 size={14} className="animate-spin" />
-                            ) : (
-                              <RefreshCw size={14} />
-                            )}
-                            {refreshing ? 'Refreshing...' : 'Refresh Usage Data'}
-                          </Button>
                         </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
+                        <Button
+                          className="w-full bg-[#FF7F7F] hover:bg-[#FF6666] text-white"
+                          onClick={() => router.push('/pricing')}
+                        >
+                          {subscription?.status === 'active' ? 'Change Plan' : 'Upgrade Now'}
+                        </Button>
+
+                        <Button
+                          onClick={refreshUserData}
+                          disabled={isRefreshing}
+                          className="w-full bg-[#FF7F7F] hover:bg-[#FF6666] text-white"
+                        >
+                          {isRefreshing ? (
+                            <>
+                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                              Refreshing...
+                            </>
+                          ) : (
+                            <>
+                              <RefreshCw className="mr-2 h-4 w-4" />
+                              Refresh
+                            </>
+                          )}
+                        </Button>
                       </div>
                     </CardContent>
                   </Card>
@@ -410,7 +417,7 @@ export default function AccountPage() {
                     </CardContent>
                     <CardFooter className="flex justify-center bg-white border-t border-gray-100">
                       <Button 
-                        className="bg-[#FF7F7F] hover:bg-[#FF6666] text-white"
+                        className="w-full bg-[#FF7F7F] hover:bg-[#FF6666] text-white"
                         onClick={() => router.push('/chat')}
                       >
                         Start Analyzing
@@ -433,12 +440,37 @@ export default function AccountPage() {
                     </CardHeader>
                     <CardContent className={cardContentStyle}>
                       <div className="space-y-6">
+                        <div className="flex items-center justify-between mb-4">
+                          <h3 className={sectionHeadingStyle}>
+                            <CreditCard size={20} className="text-[#FF7F7F]" />
+                            Subscription Details
+                          </h3>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={refreshUserData}
+                            disabled={isRefreshing}
+                            className="bg-[#FF7F7F] hover:bg-[#FF6666] text-white border-[#FF7F7F]"
+                          >
+                            {isRefreshing ? (
+                              <>
+                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                Refreshing...
+                              </>
+                            ) : (
+                              <>
+                                <RefreshCw className="mr-2 h-4 w-4" />
+                                 Force Refresh 
+                              </>
+                            )}
+                          </Button>
+                        </div>
                         <div className="bg-gray-50 p-5 rounded-lg">
                           <div className="flex justify-between items-center">
                             <div>
-                              <h3 className="text-xl font-medium text-gray-900">{subscription?.plan || 'Free Plan'}</h3>
+                              <h3 className="text-xl font-medium text-gray-900">{subscription?.plan || 'Standard Plan'}</h3>
                               <p className="text-gray-600 mt-1">
-                                ${subscription?.amount || '0.00'}/{subscription?.interval || 'month'}
+                                ${subscription?.amount || '15.00'}/{subscription?.interval || 'month'}
                               </p>
                             </div>
                             <div className={`px-3 py-1 rounded-full text-sm font-medium ${
@@ -457,7 +489,7 @@ export default function AccountPage() {
                             </div>
                             <div className="flex justify-between mb-2">
                               <span className="text-gray-600">Next billing date:</span>
-                              <span className="text-gray-900">{subscription?.renewalDate || 'N/A'}</span>
+                              <span className="text-gray-900">{subscription?.renewalDate || '2025-04-19'}</span>
                             </div>
                             <div className="flex justify-between mb-2">
                               <span className="text-gray-600">Payment method:</span>
@@ -474,14 +506,13 @@ export default function AccountPage() {
                             Change Plan
                           </Button>
                           <Button
-                            variant="outline"
-                            className="bg-white text-gray-700 border-gray-300 hover:bg-[#FFB3B3] hover:text-gray-900"
+                            className="text-white bg-[#FF7F7F] hover:bg-[#FF6666]"
                           >
                             Update Payment Method
                           </Button>
                           <Button
-                            variant="outline"
-                            className="bg-white text-red-500 hover:bg-red-50 hover:text-red-600 border-red-200"
+                            variant="ghost"
+                            className="text-white bg-[#FF7F7F] hover:bg-[#FF6666]"
                           >
                             Cancel Subscription
                           </Button>
@@ -558,11 +589,15 @@ export default function AccountPage() {
                                   type="checkbox" 
                                   id="email-notifications" 
                                   defaultChecked 
+                                  onChange={() => {
+                                    // TODO: Add email notification logic
+                                    console.log('Email notifications toggled');
+                                  }}
                                   className="sr-only"
                                 />
                                 <label
                                   htmlFor="email-notifications"
-                                  className="block overflow-hidden h-6 w-12 rounded-full bg-gray-300 cursor-pointer"
+                                  className="block overflow-hidden h-6 w-12 rounded-full bg-gray-300 cursor-pointer transition-colors duration-200 ease-in-out"
                                 >
                                   <span className="dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform duration-300 ease-in-out" />
                                 </label>
@@ -580,10 +615,14 @@ export default function AccountPage() {
                                   id="usage-alerts" 
                                   defaultChecked 
                                   className="sr-only"
+                                  onChange={() => {
+                                    // TODO: Add usage alert logic
+                                    console.log('Usage alerts toggled');
+                                  }}
                                 />
                                 <label
                                   htmlFor="usage-alerts"
-                                  className="block overflow-hidden h-6 w-12 rounded-full bg-gray-300 cursor-pointer"
+                                  className="block overflow-hidden h-6 w-12 rounded-full bg-gray-300 cursor-pointer transition-colors duration-200 ease-in-out"
                                 >
                                   <span className="dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform duration-300 ease-in-out" />
                                 </label>
@@ -596,14 +635,21 @@ export default function AccountPage() {
                           <h3 className={sectionHeadingStyle}>Security</h3>
                           <div className="flex flex-wrap gap-3">
                             <Button
-                              variant="outline"
-                              className="bg-white text-gray-700 border-gray-300"
+                              className="text-white bg-[#FF7F7F] hover:bg-[#FF6666]"
+                              onClick={() => {
+                                // TODO: Add change password logic
+                                console.log('Change password clicked');
+                              }}
                             >
                               Change Password
                             </Button>
                             <Button
-                              variant="outline"
-                              className="bg-white text-red-500 hover:bg-red-50 hover:text-red-600 border-red-200"
+                              variant="ghost"
+                              className="text-white bg-[#FF7F7F] hover:bg-[#FF6666]"
+                              onClick={() => {
+                                // TODO: Add delete account logic
+                                console.log('Delete account clicked');
+                              }}
                             >
                               Delete Account
                             </Button>
@@ -623,6 +669,38 @@ export default function AccountPage() {
               )}
             </div>
           </div>
+
+          {process.env.NODE_ENV === 'development' && (
+            <div className="mt-8 p-4 border border-gray-200 rounded-md bg-gray-50">
+              <h3 className="text-sm font-semibold mb-2 text-gray-900">Debug Info</h3>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                className="bg-[#FF7F7F] hover:bg-[#FF6666] text-white"
+                onClick={async () => {
+                  try {
+                    const res = await fetch('/api/debug/redis-check');
+                    const data = await res.json();
+                    console.log('Redis debug data:', data);
+                    toast({
+                      title: 'Redis data logged',
+                      description: 'Check the console for details',
+                    });
+                  } catch (err) {
+                    console.error('Error fetching debug data:', err);
+                  }
+                }}
+              >
+                Check Redis Data
+              </Button>
+              
+              <div className="mt-4 text-xs font-mono overflow-x-auto text-gray-500">
+                <p>Session User ID: {session?.user?.id || 'Unknown'}</p>
+                <p>Loaded Credits: {JSON.stringify(credits)}</p>
+                <p>Loaded Subscription: {JSON.stringify(subscription)}</p>
+              </div>
+            </div>
+          )}
         </div>
       </Layout>
     </>

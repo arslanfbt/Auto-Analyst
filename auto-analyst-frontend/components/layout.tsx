@@ -27,7 +27,7 @@ export default function Layout({ children }: LayoutProps) {
               width={35}
               height={35}
             />
-            <span className="font-bold text-xl">Auto-Analyst</span>
+            <span className="font-bold text-xl text-black">Auto-Analyst</span>
           </Link>
 
           {/* Desktop Navigation */}

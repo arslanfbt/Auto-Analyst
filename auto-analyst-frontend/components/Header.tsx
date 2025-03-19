@@ -26,7 +26,7 @@ export default function Header() {
             height={32} 
             className="dark:invert"
           />
-          <span className="font-bold text-lg hidden sm:inline-block">Auto Analyst</span>
+          <span className="font-bold text-lg hidden sm:inline-block text-black text-[#FF7F7F]">Auto Analyst</span>
         </Link>
       </div>
       

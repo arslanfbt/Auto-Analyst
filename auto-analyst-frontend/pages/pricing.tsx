@@ -140,43 +140,8 @@ export default function PricingPage() {
     setIsLoading(true);
     
     try {
-      console.log('Creating checkout session for price ID:', priceId);
-      
-      // Call backend API to create Checkout session
-      const response = await fetch('/api/checkout-sessions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          priceId,
-          userId: session?.user?.email || undefined,
-        }),
-      });
-      
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(`Failed to create checkout session: ${errorData.message || response.statusText}`);
-      }
-      
-      const { sessionId } = await response.json();
-      console.log('Checkout session created:', sessionId);
-      
-      if (!sessionId) {
-        throw new Error('No session ID returned from API');
-      }
-      
-      // Redirect to Stripe Checkout
-      const stripe = await getStripe();
-      if (!stripe) {
-        throw new Error('Failed to initialize Stripe');
-      }
-      
-      const { error } = await stripe.redirectToCheckout({ sessionId });
-      
-      if (error) {
-        throw new Error(error.message);
-      }
+      // Redirect to the checkout page instead of creating a Stripe session directly
+      router.push(`/checkout?plan=${tierName.toLowerCase()}&cycle=${billingCycle}`);
     } catch (error) {
       console.error('Error during checkout:', error);
       alert(`Checkout error: ${error instanceof Error ? error.message : 'Unknown error'}`);

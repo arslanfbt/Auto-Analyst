@@ -15,37 +15,77 @@ export default async function handler(
   }
 
   try {
-    const { priceId, userId } = req.body;
+    const { priceId, userId, planName, amount, interval } = req.body;
     
-    if (!priceId) {
-      return res.status(400).json({ message: 'Price ID is required' });
+    if (!amount || !planName || !interval) {
+      return res.status(400).json({ message: 'Plan details are required' });
     }
 
-    // Create Checkout Sessions with expanded configuration
-    const session = await stripe.checkout.sessions.create({
-      payment_method_types: ['card'],
-      billing_address_collection: 'auto',
-      customer_email: userId, // Use the email directly as customer_email
-      line_items: [
-        {
-          price: priceId,
-          quantity: 1,
-        },
-      ],
-      mode: 'subscription',
-      ui_mode: 'hosted', // Explicitly set to hosted mode
-      success_url: `${req.headers.origin}/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${req.headers.origin}/pricing`,
+    // Create a customer or retrieve existing one
+    let customerId;
+    if (userId) {
+      const existingCustomers = await stripe.customers.list({
+        email: userId,
+        limit: 1,
+      });
+
+      if (existingCustomers.data.length > 0) {
+        customerId = existingCustomers.data[0].id;
+      } else {
+        const customer = await stripe.customers.create({
+          email: userId,
+          metadata: {
+            userId: userId || 'anonymous',
+          },
+        });
+        customerId = customer.id;
+      }
+    }
+
+    if (!customerId) {
+      return res.status(400).json({ message: 'Unable to create or retrieve customer' });
+    }
+
+    // Create a price on the fly
+    const product = await stripe.products.create({
+      name: `${planName} Plan`,
       metadata: {
-        userId: userId || 'anonymous',
+        planName,
       },
-      // Include tax collection if needed
-      automatic_tax: { enabled: true },
-      // Allow promotion codes
-      allow_promotion_codes: true,
     });
 
-    res.status(200).json({ sessionId: session.id });
+    const price = await stripe.prices.create({
+      product: product.id,
+      unit_amount: amount * 100, // Convert to cents
+      currency: 'usd',
+      recurring: {
+        interval: interval === 'year' ? 'year' : 'month',
+      },
+    });
+
+    // Create a subscription with the newly created price
+    const subscription = await stripe.subscriptions.create({
+      customer: customerId,
+      items: [{ price: price.id }],
+      payment_behavior: 'default_incomplete',
+      payment_settings: { save_default_payment_method: 'on_subscription' },
+      expand: ['latest_invoice.payment_intent'],
+      metadata: {
+        userId: userId || 'anonymous',
+        planName,
+        amount: amount.toString(),
+        interval,
+      },
+    });
+
+    // Get the client secret from the payment intent
+    // @ts-ignore - We know this exists because we expanded it
+    const clientSecret = subscription.latest_invoice.payment_intent.client_secret;
+
+    res.status(200).json({ 
+      clientSecret,
+      subscriptionId: subscription.id 
+    });
   } catch (error) {
     console.error('Stripe error:', error);
     const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';

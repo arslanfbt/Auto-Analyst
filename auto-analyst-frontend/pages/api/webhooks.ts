@@ -48,13 +48,13 @@ async function updateUserSubscription(userId: string, session: Stripe.Checkout.S
     }
     
     // Determine credits to assign based on plan
-    let newCreditTotal = 1000; // Default
-    if (planName.includes('Pro')) {
+    let newCreditTotal = 500; // Standard default
+    if (planName.toUpperCase().includes('PRO')) {
       newCreditTotal = 999999; // "Unlimited" for Pro plan
-    } else if (planName.includes('Standard')) {
-      newCreditTotal = 5000; // Standard plan credits
-    } else if (planName.includes('Basic')) {
-      newCreditTotal = 2000; // Basic plan credits
+    } else if (planName.toUpperCase().includes('STANDARD')) {
+      newCreditTotal = 500; // Standard plan credits
+    } else if (planName.toUpperCase().includes('FREE')) {
+      newCreditTotal = 100; // Free plan credits
     }
     
     // Get reset date
@@ -62,37 +62,36 @@ async function updateUserSubscription(userId: string, session: Stripe.Checkout.S
       ? creditUtils.getNextMonthFirstDay()
       : creditUtils.getNextYearFirstDay();
     
-    // Update user subscription using the new hash-based approach
+    // Save purchase date for renewal calculations
+    const purchaseDate = now.toISOString();
+    
+    // Update user subscription using the hash-based approach
     await redis.hset(KEYS.USER_SUBSCRIPTION(userId), {
       plan: planName,
       status: 'active',
       amount: amount.toString(),
       interval: interval,
+      purchaseDate: purchaseDate,
       renewalDate: renewalDate.toISOString().split('T')[0],
-      lastUpdated: new Date().toISOString()
+      lastUpdated: now.toISOString(),
+      stripeCustomerId: session.customer, 
+      stripeSubscriptionId: session.subscription
     });
     
-    // Update user credits using the new hash-based approach
+    // Update user credits using the hash-based approach
     await redis.hset(KEYS.USER_CREDITS(userId), {
       total: newCreditTotal.toString(),
       used: '0',
       resetDate: resetDate,
-      lastUpdate: new Date().toISOString()
+      lastUpdate: now.toISOString()
     });
     
-    // For backward compatibility, also update individual keys
-    await redis.set(`${KEYS.LEGACY_PREFIX}${userId}:planName`, planName);
-    await redis.set(`${KEYS.LEGACY_PREFIX}${userId}:planStatus`, 'active');
-    await redis.set(`${KEYS.LEGACY_PREFIX}${userId}:planAmount`, amount.toString());
-    await redis.set(`${KEYS.LEGACY_PREFIX}${userId}:planInterval`, interval);
-    await redis.set(`${KEYS.LEGACY_PREFIX}${userId}:planRenewalDate`, renewalDate.toISOString().split('T')[0]);
-    await redis.set(`${KEYS.LEGACY_PREFIX}${userId}:creditsTotal`, newCreditTotal.toString());
-    await redis.set(`${KEYS.LEGACY_PREFIX}${userId}:creditsUsed`, '0');
-    await redis.set(`${KEYS.LEGACY_PREFIX}${userId}:creditsLastUpdate`, new Date().toISOString());
-    await redis.set(`${KEYS.LEGACY_PREFIX}${userId}:creditsResetDate`, resetDate);
-    
-    // Also set in the legacy format
-    await redis.set(KEYS.LEGACY_CREDITS(userId), newCreditTotal);
+    // Also update by email for backward compatibility
+    if (session.customer_details?.email) {
+      const userEmail = session.customer_details.email;
+      await redis.set(`user_credits:${userEmail}`, newCreditTotal);
+      await redis.set(`user:${userEmail}:creditsUsed`, 0);
+    }
     
     console.log(`Updated subscription for user ${userId} to ${planName} (${interval})`);
     

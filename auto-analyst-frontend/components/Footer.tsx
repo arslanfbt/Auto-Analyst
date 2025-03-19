@@ -61,7 +61,16 @@ export default function Footer() {
             <h4 className="font-semibold mb-4">Company</h4>
             <ul className="space-y-2 text-gray-400">
               <li>About</li>
-              <li>Blog</li>
+              <li>
+                <a
+                  href="https://www.firebird-technologies.com/p/building-auto-analyst-a-data-analytics"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="hover:text-[#FF7F7F] transition-colors"
+                >
+                  Blog
+                </a>
+              </li>
               <li>Careers</li>
               <li>Contact</li>
             </ul>
