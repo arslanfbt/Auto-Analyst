@@ -3,7 +3,7 @@ import { useRouter } from 'next/router'
 import Head from 'next/head'
 import Link from 'next/link'
 import { Elements } from '@stripe/react-stripe-js'
-import { loadStripe } from '@stripe/stripe-js'
+import { loadStripe, StripeElementsOptions } from '@stripe/stripe-js'
 import { motion } from 'framer-motion'
 import { ArrowLeft, CreditCard, ShieldCheck, Lock } from 'lucide-react'
 import CheckoutForm from '@/components/CheckoutForm'
@@ -170,7 +170,15 @@ export default function CheckoutPage() {
             <div className="grid gap-10 lg:grid-cols-5">
               <div className="lg:col-span-3">
                 {clientSecret && (
-                  <Elements stripe={stripePromise} options={{ clientSecret }}>
+                  <Elements 
+                    stripe={stripePromise} 
+                    options={{ 
+                      clientSecret,
+                      appearance: {
+                        theme: 'stripe' as const
+                      }
+                    } as StripeElementsOptions}
+                  >
                     <CheckoutForm 
                       planName={planDetails.name}
                       amount={planDetails.amount}
