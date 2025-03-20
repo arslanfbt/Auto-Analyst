@@ -85,15 +85,7 @@ export default async function handler(
     // Update Redis data
     await redis.hset(KEYS.USER_SUBSCRIPTION(userId), subscriptionData)
     await redis.hset(KEYS.USER_CREDITS(userId), creditData)
-    
-    // Update legacy keys for backward compatibility if email is available
-    if (userEmail) {
-      await redis.set(`user_credits:${userEmail}`, creditTotal)
-      await redis.set(`user:${userEmail}:creditsUsed`, Math.min(creditsUsed, creditTotal))
-      await redis.set(`user:${userEmail}:planName`, planName)
-      await redis.set(`user:${userEmail}:creditsTotal`, creditTotal)
-    }
-    
+
     // Return success with updated plan data
     return res.status(200).json({
       success: true,

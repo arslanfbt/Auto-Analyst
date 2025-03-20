@@ -76,7 +76,7 @@ const ChatInterface: React.FC = () => {
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   const [userId, setUserId] = useState<number | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
-  const { hasEnoughCredits, deductCredits } = useCredits()
+  const { remainingCredits, isLoading: creditsLoading, checkCredits, hasEnoughCredits } = useCredits()
   const [insufficientCreditsModalOpen, setInsufficientCreditsModalOpen] = useState(false)
   const [requiredCredits, setRequiredCredits] = useState(0)
   const [isUserProfileOpen, setIsUserProfileOpen] = useState(false);
@@ -277,202 +277,7 @@ const ChatInterface: React.FC = () => {
     }
   }
 
-  const handleSendMessage = async (message: string) => {
-    if (!message.trim()) return;
-    
-    // Get current chat ID or create a real one when the user sends a message
-    let currentChatId = activeChatId;
-    let isFirstMessage = false;
-    
-    // For signed-in or admin users, ensure we have a real database chat ID
-    if (session || isAdmin) {
-      const existingChat = chatHistories.find(chat => chat.chat_id === currentChatId);
-      
-      // CREDIT CHECK: Check if user has enough credits based on model tier
-      // Get the selected model from current settings or use default
-      // We assume the model settings are available - if not, we need to fetch them
-      // This requires the modelSettings state to be added if not already present
-        
-      let modelName = process.env.NEXT_PUBLIC_DEFAULT_MODEL || "gpt-4o-mini"; // Default model
-      try {
-        const response = await axios.get(`${API_URL}/api/model-settings`);
-        if (response.data && response.data.model) {
-          modelName = response.data.model;
-        }
-      } catch (error) {
-        console.error("Failed to fetch model settings:", error);
-      }
-      
-      // Calculate credits required for this model
-      const creditCost = getModelCreditCost(modelName);
-      
-      // Check if user has enough credits
-      if (!hasEnoughCredits(creditCost)) {
-        setRequiredCredits(creditCost);
-        setInsufficientCreditsModalOpen(true);
-        return;
-      }
-      
-      // If the currentChatId is a temporary one (not in chat histories), create a real chat
-      if (!existingChat) {
-        isFirstMessage = true;
-        try {
-          console.log("Creating new chat on first message with user_id:", userId, "isAdmin:", isAdmin);
-          const response = await axios.post(`${API_URL}/chats/`, { 
-            user_id: userId,
-            is_admin: isAdmin 
-          }, { 
-            headers: { 'X-Session-ID': sessionId } 
-          });
-          
-          console.log("New chat created:", response.data);
-          currentChatId = response.data.chat_id;
-          // Wait for the state to be updated
-          await new Promise(resolve => {
-            setActiveChatId(currentChatId);
-            resolve(true);
-          });
-        } catch (error) {
-          console.error("Failed to create new chat:", error);
-          return;
-        }
-      }
-
-      // Save user message to the database
-      try {
-        await axios.post(`${API_URL}/chats/${currentChatId}/messages`, {
-          content: message,
-          sender: 'user'
-        }, {
-          params: { user_id: userId, is_admin: isAdmin },
-          headers: { 'X-Session-ID': sessionId }
-        });
-      } catch (error) {
-        console.error('Failed to save user message:', error);
-      }
-    }
-
-    // Add user message to local state for all users
-    addMessage({
-      text: message,
-      sender: "user",
-    });
-    setShowWelcome(false);
-
-    // Counting user queries for free trial
-    if (!session) {
-      incrementQueries();
-    }
-
-    setIsLoading(true);
-    
-    // Store original message for later use with chat title generation
-    const originalQuery = message;
-
-    try {
-      // Create an abort controller for this request
-      const controller = new AbortController();
-      setAbortController(controller);
-
-      // Match all @agent mentions in the query
-      const agentRegex = /@(\w+)/g
-      const matches = [...message.matchAll(agentRegex)]
-      
-      // If no agent calls are found, process as a regular message
-      if (matches.length === 0) {
-        await processRegularMessage(message, controller, currentChatId)
-      } else {
-        // Extract all unique agent names
-        const agentNames = [...new Set(matches.map(match => match[1]))]
-        
-        if (agentNames.length === 1) {
-          // Single agent case - use the original logic
-          const agentName = agentNames[0]
-          
-          // Add a system message indicating which agent is being called
-          addMessage({
-            text: "",
-            sender: "ai",
-            agent: agentName
-          })
-          
-          // Extract the query text by removing the @mentions
-          const cleanQuery = message.replace(agentRegex, '').trim()
-          await processAgentMessage(agentName, cleanQuery, controller, currentChatId)
-        } else {
-          // Multiple agents case - send a single request with comma-separated agent names
-          const combinedAgentName = agentNames.join(",")
-          
-          // Add a system message indicating which agents are being called
-          addMessage({
-            text: "",
-            sender: "ai",
-            agent: `Using agents: ${agentNames.join(", ")}`
-          })
-          
-          // Extract the query text by removing the @mentions
-          const cleanQuery = message.replace(agentRegex, '').trim()
-          await processAgentMessage(combinedAgentName, cleanQuery, controller, currentChatId)
-        }
-      }
-
-      // DEDUCT CREDITS: After successful response, deduct the credits
-      if (session || isAdmin) {
-        // Get the model that was used for the response
-        let modelName = "gpt-3.5-turbo"; // Default model
-        try {
-          const response = await axios.get(`${API_URL}/api/model-settings`);
-          if (response.data && response.data.model) {
-            modelName = response.data.model;
-          }
-        } catch (error) {
-          console.error("Failed to fetch model settings:", error);
-        }
-        
-        // Calculate and deduct credits
-        const creditCost = getModelCreditCost(modelName);
-        await deductCredits(creditCost);
-      }
-
-      // After the AI response is generated and saved, update the chat title for new chats
-      if (isFirstMessage) {
-        try {
-          console.log("Generating title for new chat using query:", message);
-          // Generate a title from the first message
-          const titleResponse = await axios.post(`${API_URL}/chat_history_name`, {
-            query: message
-          });
-          
-          console.log("Title response:", titleResponse.data);
-          
-          if (titleResponse.data && titleResponse.data.name) {
-            // Update the chat title in the backend
-            await axios.put(`${API_URL}/chats/${currentChatId}`, {
-              title: titleResponse.data.name
-            });
-            
-            // Refresh chat histories to get the updated title
-            fetchChatHistories();
-          }
-        } catch (error) {
-          console.error('Failed to update chat title:', error);
-        }
-      }
-    } catch (error) {
-      console.error("Error sending message:", error);
-      
-      // Add error message
-      addMessage({
-        text: "Sorry, there was an error processing your request. Please try again.",
-        sender: "ai"
-      });
-    } finally {
-      setIsLoading(false);
-      setAbortController(null);
-    }
-  };
-
-  // Updated version to use the actual chat ID, not temporary IDs
+  // Move these function definitions to appear BEFORE handleSendMessage
   const processRegularMessage = async (message: string, controller: AbortController, currentId: number | null) => {
     let accumulatedResponse = ""
     const baseUrl = API_URL
@@ -585,7 +390,6 @@ const ChatInterface: React.FC = () => {
     }
   }
 
-  // Similarly update processAgentMessage
   const processAgentMessage = async (agentName: string, message: string, controller: AbortController, currentId: number | null) => {
     let accumulatedResponse = ""
     const baseUrl = API_URL
@@ -649,6 +453,213 @@ const ChatInterface: React.FC = () => {
       }
     }
   }
+
+  // Then keep the handleSendMessage function as is
+  const handleSendMessage = useCallback(async (message: string) => {
+    if (isLoading || !message.trim()) return
+
+    // Check if the user has sufficient credits
+    if (session && !isAdmin) {
+      try {
+        // Get the model that will be used for this query
+        let modelName = modelSettings.model || "gpt-3.5-turbo";
+        
+        // Calculate required credits based on model tier
+        const creditCost = getModelCreditCost(modelName);
+        console.log(`[Credits] Required credits for ${modelName}: ${creditCost}`);
+        
+        // Check if user has enough credits
+        const hasEnough = await hasEnoughCredits(creditCost);
+        if (!hasEnough) {
+          setRequiredCredits(creditCost);
+          setInsufficientCreditsModalOpen(true);
+          return;
+        }
+      } catch (error) {
+        console.error("Error checking credits:", error);
+        // Continue anyway to avoid blocking experience
+      }
+    }
+
+    // Get current chat ID or create a real one when the user sends a message
+    let currentChatId = activeChatId;
+    let isFirstMessage = false;
+    
+    // For signed-in or admin users, ensure we have a real database chat ID
+    if (session || isAdmin) {
+      const existingChat = chatHistories.find(chat => chat.chat_id === currentChatId);
+      
+      // If the currentChatId is a temporary one (not in chat histories), create a real chat
+      if (!existingChat) {
+        isFirstMessage = true;
+        try {
+          console.log("Creating new chat on first message with user_id:", userId, "isAdmin:", isAdmin);
+          const response = await axios.post(`${API_URL}/chats/`, { 
+            user_id: userId,
+            is_admin: isAdmin 
+          }, { 
+            headers: { 'X-Session-ID': sessionId } 
+          });
+          
+          console.log("New chat created:", response.data);
+          currentChatId = response.data.chat_id;
+          // Wait for the state to be updated
+          await new Promise(resolve => {
+            setActiveChatId(currentChatId);
+            resolve(true);
+          });
+        } catch (error) {
+          console.error("Failed to create new chat:", error);
+          return;
+        }
+      }
+
+      // Save user message to the database
+      try {
+        await axios.post(`${API_URL}/chats/${currentChatId}/messages`, {
+          content: message,
+          sender: 'user'
+        }, {
+          params: { user_id: userId, is_admin: isAdmin },
+          headers: { 'X-Session-ID': sessionId }
+        });
+      } catch (error) {
+        console.error('Failed to save user message:', error);
+      }
+    }
+
+    // Add user message to local state for all users
+    addMessage({
+      text: message,
+      sender: "user",
+    });
+    setShowWelcome(false);
+
+    // Counting user queries for free trial
+    if (!session) {
+      incrementQueries();
+    }
+
+    setIsLoading(true);
+    
+    // Store original message for later use with chat title generation
+    const originalQuery = message;
+
+    try {
+      // Create an abort controller for this request
+      const controller = new AbortController();
+      setAbortController(controller);
+
+      // Match all @agent mentions in the query
+      const agentRegex = /@(\w+)/g
+      const matches = [...message.matchAll(agentRegex)]
+      
+      // If no agent calls are found, process as a regular message
+      if (matches.length === 0) {
+        await processRegularMessage(message, controller, currentChatId)
+      } else {
+        // Extract all unique agent names
+        const agentNames = [...new Set(matches.map(match => match[1]))]
+        
+        if (agentNames.length === 1) {
+          // Single agent case - use the original logic
+          const agentName = agentNames[0]
+          
+          // Add a system message indicating which agent is being called
+          addMessage({
+            text: "",
+            sender: "ai",
+            agent: agentName
+          })
+          
+          // Extract the query text by removing the @mentions
+          const cleanQuery = message.replace(agentRegex, '').trim()
+          await processAgentMessage(agentName, cleanQuery, controller, currentChatId)
+        } else {
+          // Multiple agents case - send a single request with comma-separated agent names
+          const combinedAgentName = agentNames.join(",")
+          
+          // Add a system message indicating which agents are being called
+          addMessage({
+            text: "",
+            sender: "ai",
+            agent: `Using agents: ${agentNames.join(", ")}`
+          })
+          
+          // Extract the query text by removing the @mentions
+          const cleanQuery = message.replace(agentRegex, '').trim()
+          await processAgentMessage(combinedAgentName, cleanQuery, controller, currentChatId)
+        }
+      }
+
+      // AFTER successful message processing - deduct credits using the correct user ID
+      if (session?.user) {
+        try {
+          const userId = (session.user as any).sub || session.user.id;
+          
+          // Determine the model that was used
+          let modelName = modelSettings.model || "gpt-3.5-turbo";
+          const creditCost = getModelCreditCost(modelName);
+          
+          console.log(`[Credits] Deducting ${creditCost} credits for user ${userId}`);
+          
+          // Deduct credits directly through an API call to ensure server-side processing
+          // This ensures we're using the correct Redis key structure
+          const response = await axios.post('/api/user/deduct-credits', {
+            userId: userId,
+            credits: creditCost,
+            description: `Used ${modelName} for chat`
+          });
+          
+          console.log('[Credits] Deduction result:', response.data);
+          
+          // Refresh the credits display in the UI after deduction
+          if (checkCredits) {
+            await checkCredits();
+          }
+        } catch (creditError) {
+          console.error('[Credits] Failed to deduct credits:', creditError);
+          // Don't block the user experience if credit deduction fails
+        }
+      }
+
+      // After the AI response is generated and saved, update the chat title for new chats
+      if (isFirstMessage) {
+        try {
+          console.log("Generating title for new chat using query:", message);
+          // Generate a title from the first message
+          const titleResponse = await axios.post(`${API_URL}/chat_history_name`, {
+            query: message
+          });
+          
+          console.log("Title response:", titleResponse.data);
+          
+          if (titleResponse.data && titleResponse.data.name) {
+            // Update the chat title in the backend
+            await axios.put(`${API_URL}/chats/${currentChatId}`, {
+              title: titleResponse.data.name
+            });
+            
+            // Refresh chat histories to get the updated title
+            fetchChatHistories();
+          }
+        } catch (error) {
+          console.error('Failed to update chat title:', error);
+        }
+      }
+    } catch (error) {
+      console.error("Error sending message:", error);
+      
+      // Add error message
+      addMessage({
+        text: "Sorry, there was an error processing your request. Please try again.",
+        sender: "ai"
+      });
+    } finally {
+      setIsLoading(false);
+      setAbortController(null);
+    }
+  }, [addMessage, clearMessages, incrementQueries, session, isAdmin, activeChatId, userId, sessionId, modelSettings, hasEnoughCredits, processRegularMessage, processAgentMessage, fetchChatHistories, checkCredits]);
 
   const handleFileUpload = async (file: File) => {
     // More thorough CSV validation
