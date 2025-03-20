@@ -35,7 +35,10 @@ async function updateUserSubscription(userId: string, session: Stripe.Checkout.S
 
     // Extract subscription details
     const planName = product.name;
-    const interval = price.recurring?.interval || 'month';
+    let interval = 'month';
+    if (planName.toLowerCase().includes('yearly') || price?.recurring?.interval === 'year') {
+      interval = 'year';
+    }
     const amount = price.unit_amount! / 100; // Convert from cents to dollars
     
     // Calculate next renewal date
@@ -48,19 +51,20 @@ async function updateUserSubscription(userId: string, session: Stripe.Checkout.S
     }
     
     // Determine credits to assign based on plan
-    let newCreditTotal = 500; // Standard default
+    let newCreditTotal = 100; // Free default
+    let planType = 'FREE';
+
+    // More robust plan detection - check for Pro first
     if (planName.toUpperCase().includes('PRO')) {
       newCreditTotal = 999999; // "Unlimited" for Pro plan
+      planType = 'PRO';
     } else if (planName.toUpperCase().includes('STANDARD')) {
       newCreditTotal = 500; // Standard plan credits
-    } else if (planName.toUpperCase().includes('FREE')) {
-      newCreditTotal = 100; // Free plan credits
+      planType = 'STANDARD';
     }
     
-    // Get reset date
-    const resetDate = interval === 'month' 
-      ? creditUtils.getNextMonthFirstDay()
-      : creditUtils.getNextYearFirstDay();
+    // Get reset date - always use monthly resets for credits regardless of billing interval
+    const resetDate = creditUtils.getNextMonthFirstDay();
     
     // Save purchase date for renewal calculations
     const purchaseDate = now.toISOString();
@@ -68,6 +72,7 @@ async function updateUserSubscription(userId: string, session: Stripe.Checkout.S
     // Update user subscription using the hash-based approach
     await redis.hset(KEYS.USER_SUBSCRIPTION(userId), {
       plan: planName,
+      planType: planType,
       status: 'active',
       amount: amount.toString(),
       interval: interval,

@@ -40,6 +40,7 @@ interface Subscription {
   renewalDate?: string;
   amount: number;
   interval: string;
+  planType?: string;
 }
 
 interface CreditUsage {
@@ -47,6 +48,7 @@ interface CreditUsage {
   total: number;
   resetDate: string;
   lastUpdate: string;
+  nextMonthlyReset?: string;
 }
 
 interface UserDataResponse {
@@ -257,14 +259,25 @@ export default function AccountPage() {
                    credits.total : 
                    parseInt(String(credits.total || '100'));
     
-    const remaining = Math.max(0, total_remaining - used);
-    const usagePercentage = total_remaining > 0 ? Math.min(100, (used / total_remaining) * 100) : 0;
+    // Check if this is an "unlimited" plan (Pro plan)
+    const isUnlimited = total_remaining > 99999 || 
+                        (subscription?.planType === 'PRO');
+    
+    // Display text for total credits
+    const totalDisplay = isUnlimited ? "No Limit" : total_remaining.toString();
+    
+    // Calculate remaining - only relevant for limited plans
+    const remaining = isUnlimited ? "Unlimited" : Math.max(0, total_remaining - used).toString();
+    
+    // For unlimited plans, show a small percentage just to have some progress
+    const usagePercentage = isUnlimited ? 5 : 
+                           (total_remaining > 0 ? Math.min(100, (used / total_remaining) * 100) : 0);
     
     return (
       <div className="space-y-4">
         <div className="flex justify-between items-center">
           <span className="text-gray-700">Credits used this month</span>
-          <span className="font-medium">{used} / {total_remaining}</span>
+          <span className="font-medium">{used} / {totalDisplay}</span>
         </div>
         <Progress value={usagePercentage} className="h-2" />
         <div className="flex justify-between items-center text-sm">
@@ -538,6 +551,12 @@ export default function AccountPage() {
                               <span className="text-gray-600">Next billing:</span>
                               <span className="font-medium text-gray-900">{subscription?.renewalDate || '2025-04-19'}</span>
                             </div>
+                            {subscription?.interval === 'year' && (
+                              <div className="flex justify-between mb-2">
+                                <span className="text-gray-600">Next credits reset:</span>
+                                <span className="font-medium text-gray-900">{credits?.resetDate || credits?.nextMonthlyReset || 'N/A'}</span>
+                              </div>
+                            )}
                           </div>
                         </div>
 

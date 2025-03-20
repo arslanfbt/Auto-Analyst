@@ -182,6 +182,17 @@ export default async function handler(
     const lastUpdate = creditsData.lastUpdate || new Date().toISOString()
     const resetDate = creditsData.resetDate || renewalDate
     
+    // Add a nextResetDate field for yearly plans
+    if (subscriptionData && subscriptionData.interval === 'year') {
+      // Ensure lastUpdate is a valid date string
+      const lastUpdateStr = typeof lastUpdate === 'string' ? lastUpdate : new Date().toISOString();
+      const nextReset = new Date(lastUpdateStr);
+      nextReset.setMonth(nextReset.getMonth() + 1);
+      
+      // Add the next monthly reset date for yearly plans
+      creditsData.nextMonthlyReset = nextReset.toISOString().split('T')[0];
+    }
+    
     // Return the user data
     const userData = {
       profile: {
@@ -205,7 +216,7 @@ export default async function handler(
       credits: {
         used: creditsUsed,
         total: formattedTotal,
-        resetDate: resetDate,
+        resetDate: isYearly && creditsData.nextMonthlyReset ? creditsData.nextMonthlyReset : resetDate,
         lastUpdate: lastUpdate
       },
       debug: {
