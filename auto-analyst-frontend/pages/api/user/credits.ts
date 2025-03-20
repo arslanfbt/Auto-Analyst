@@ -19,7 +19,7 @@ export default async function handler(
 
     const userId = token.sub
     
-    // Try the new hash-based approach first
+    // Get credits from hash
     const creditsHash = await redis.hgetall(KEYS.USER_CREDITS(userId));
     const subscriptionHash = await redis.hgetall(KEYS.USER_SUBSCRIPTION(userId));
     
@@ -33,26 +33,28 @@ export default async function handler(
       lastUpdate = creditsHash.lastUpdate || new Date().toISOString();
       planName = subscriptionHash?.plan || 'Free Plan';
     } else {
-      // Fall back to legacy keys
-      planName = await redis.get(`user:${userId}:planName`) || 'Free Plan';
-      creditsUsed = parseInt(await redis.get(`user:${userId}:creditsUsed`) || '0');
-      creditsTotal = parseInt(await redis.get(`user:${userId}:creditsTotal`) || 
-        planName === 'Pro Plan' ? '999999' : '1000');
-      resetDate = await redis.get(`user:${userId}:creditsResetDate`) || 
-        new Date(new Date().getFullYear(), new Date().getMonth() + 1, 1).toISOString().split('T')[0];
-      lastUpdate = await redis.get(`user:${userId}:creditsLastUpdate`) || new Date().toISOString();
+      // Initialize default values for new users
+      creditsTotal = 100;
+      creditsUsed = 0;
+      resetDate = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 1).toISOString().split('T')[0];
+      lastUpdate = new Date().toISOString();
+      planName = 'Free Plan';
+      
+      // Create hash entry for new users
+      await redis.hset(KEYS.USER_CREDITS(userId), {
+        total: creditsTotal.toString(),
+        used: creditsUsed.toString(),
+        resetDate,
+        lastUpdate
+      });
     }
     
     // Update the last update timestamp
     const currentTime = new Date().toISOString();
     
-    // Update in both formats
-    if (creditsHash) {
-      await redis.hset(KEYS.USER_CREDITS(userId), {
-        lastUpdate: currentTime
-      });
-    }
-    await redis.set(`user:${userId}:creditsLastUpdate`, currentTime);
+    await redis.hset(KEYS.USER_CREDITS(userId), {
+      lastUpdate: currentTime
+    });
     
     // Return the credit data
     res.status(200).json({

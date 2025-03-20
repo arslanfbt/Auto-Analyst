@@ -24,10 +24,7 @@ export default async function handler(
     const subscriptionData = await redis.hgetall(KEYS.USER_SUBSCRIPTION(userId))
     const creditsData = await redis.hgetall(KEYS.USER_CREDITS(userId))
     
-    // Also check legacy data
-    const legacyCredits = await redis.get(`user_credits:${userEmail}`)
-    const legacyCreditsUsed = await redis.get(`user:${userEmail}:creditsUsed`)
-    
+
     // Return all data for debugging
     return res.status(200).json({
       userId,
@@ -35,10 +32,6 @@ export default async function handler(
       redis: {
         subscription: subscriptionData,
         credits: creditsData,
-        legacy: {
-          credits: legacyCredits,
-          creditsUsed: legacyCreditsUsed
-        }
       }
     })
   } catch (error: any) {

@@ -51,45 +51,51 @@ export function CreditProvider({ children }: { children: ReactNode }) {
   const checkCredits = async () => {
     try {
       setIsLoading(true)
-      const userId = getUserId()
+      // Use token.sub as the primary ID when available
+      const userId = session?.user ? ((session.user as any).sub || session.user.id) : getUserId()
       
-      // Always check local storage first as fallback
-      const cachedCredits = localStorage.getItem(`user_credits_${userId}`)
-      const lastCreditUpdate = localStorage.getItem(`user_credits_updated_${userId}`)
+      console.log(`[Credits] Checking credits for user ID: ${userId}`);
       
       let currentCredits = 100; // Default
-      let redisSuccess = false;
       
       try {
-        // Try to get credits from Redis
-        currentCredits = await creditUtils.getRemainingCredits(userId)
-        console.log(`[Credits] Redis credits for ${userId}: ${currentCredits}`)
-        redisSuccess = true;
-      } catch (redisError) {
-        console.error('[Credits] Redis error, using fallback:', redisError);
-        // Use cached credits if available
+        // First try to get from API endpoint for most up-to-date data
+        const response = await fetch('/api/user/credits');
+        if (response.ok) {
+          const data = await response.json();
+          currentCredits = data.total === 999999 ? Infinity : data.total - data.used;
+          console.log('[Credits] API credits data:', data);
+        } else {
+          // Fall back to direct Redis access
+          currentCredits = await creditUtils.getRemainingCredits(userId);
+        }
+        console.log(`[Credits] Current credits for ${userId}: ${currentCredits}`);
+      } catch (error) {
+        console.error('[Credits] Error fetching credits:', error);
+        // Use cached credits as fallback
+        const cachedCredits = localStorage.getItem(`user_credits_${userId}`);
         if (cachedCredits) {
-          currentCredits = parseInt(cachedCredits)
+          currentCredits = parseInt(cachedCredits);
         }
       }
       
-      // Update local storage with current credits (from Redis or fallback)
-      localStorage.setItem(`user_credits_${userId}`, currentCredits.toString())
-      localStorage.setItem(`user_credits_updated_${userId}`, Date.now().toString())
+      // Update local storage with current credits
+      localStorage.setItem(`user_credits_${userId}`, currentCredits.toString());
+      localStorage.setItem(`user_credits_updated_${userId}`, Date.now().toString());
       
       // Update state
-      setRemainingCredits(currentCredits)
-      setIsChatBlocked(currentCredits <= 0)
+      setRemainingCredits(currentCredits);
+      setIsChatBlocked(currentCredits <= 0);
       
     } catch (error) {
-      console.error('Error checking credits:', error)
+      console.error('Error checking credits:', error);
       // Ultimate fallback
-      setRemainingCredits(100)
-      setIsChatBlocked(false)
+      setRemainingCredits(100);
+      setIsChatBlocked(false);
     } finally {
-      setIsLoading(false)
+      setIsLoading(false);
     }
-  }
+  };
 
   // Check if user has enough credits without deducting
   const hasEnoughCredits = (amount: number): boolean => {

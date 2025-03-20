@@ -105,22 +105,6 @@ export default async function handler(
         lastUpdate: new Date().toISOString()
       });
       
-      // For backward compatibility, also update individual keys
-      // This can be removed once the migration is complete
-      await redis.set(`${KEYS.LEGACY_PREFIX}${userId}:planName`, planName);
-      await redis.set(`${KEYS.LEGACY_PREFIX}${userId}:planStatus`, 'active');
-      await redis.set(`${KEYS.LEGACY_PREFIX}${userId}:planAmount`, amount.toString());
-      await redis.set(`${KEYS.LEGACY_PREFIX}${userId}:planInterval`, interval);
-      await redis.set(`${KEYS.LEGACY_PREFIX}${userId}:planRenewalDate`, renewalDate.toISOString().split('T')[0]);
-      await redis.set(`${KEYS.LEGACY_PREFIX}${userId}:creditsTotal`, creditsToAdd.toString());
-      await redis.set(`${KEYS.LEGACY_PREFIX}${userId}:creditsUsed`, '0');
-      await redis.set(`${KEYS.LEGACY_PREFIX}${userId}:creditsLastUpdate`, new Date().toISOString());
-      await redis.set(`${KEYS.LEGACY_PREFIX}${userId}:creditsResetDate`, resetDate);
-      
-      // Also keep the legacy format
-      await redis.set(KEYS.LEGACY_CREDITS(userId), creditsToAdd);
-      
-      console.log(`Successfully updated all Redis values for user ${userId}`);
     } catch (error) {
       console.error('Error updating Redis values:', error);
       return res.status(500).json({ error: 'Failed to update subscription in database' });

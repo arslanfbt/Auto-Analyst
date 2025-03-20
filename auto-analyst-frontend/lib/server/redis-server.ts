@@ -20,12 +20,6 @@ export const serverCreditUtils = {
         return total - used;
       }
       
-      // Fall back to legacy format
-      const legacyCredits = await serverRedis.get(KEYS.LEGACY_CREDITS(userId));
-      if (legacyCredits !== null) {
-        return parseInt(legacyCredits as string);
-      }
-      
       // Default for new users
       return 100;
     } catch (error) {

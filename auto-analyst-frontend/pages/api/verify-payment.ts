@@ -165,15 +165,7 @@ export default async function handler(
       
       console.log('Storing credit data:', creditData)
       await redis.hset(KEYS.USER_CREDITS(userId), creditData)
-      
-      // Update legacy keys for email-based lookups
-      if (userEmail) {
-        console.log(`Updating legacy keys for email: ${userEmail}`)
-        await redis.set(`user_credits:${userEmail}`, creditAmount)
-        await redis.set(`user:${userEmail}:creditsUsed`, 0)
-        await redis.set(`user:${userEmail}:planName`, planName)
-        await redis.set(`user:${userEmail}:creditsTotal`, creditAmount)
-      }
+
     }
     
     // Mark this payment as processed
@@ -276,18 +268,7 @@ async function updateUserSubscriptionFromSession(userId: string, session: Stripe
     
     console.log('Storing credit data in Redis:', creditData)
     await redis.hset(KEYS.USER_CREDITS(userId), creditData)
-    
-    // Also update legacy keys if email is available
-    if (session.customer_details?.email) {
-      const email = session.customer_details.email
-      console.log(`Updating legacy keys for email: ${email}`)
-      
-      await redis.set(`user_credits:${email}`, creditAmount)
-      await redis.set(`user:${email}:creditsUsed`, 0)
-      await redis.set(`user:${email}:planName`, planName)
-      await redis.set(`user:${email}:creditsTotal`, creditAmount)
-    }
-    
+
     console.log('Successfully updated user subscription and credits')
     return true
   } catch (error) {

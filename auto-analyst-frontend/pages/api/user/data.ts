@@ -1,9 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { getToken } from 'next-auth/jwt'
-import { Redis } from '@upstash/redis'
-
-// Create Redis client
-const redis = Redis.fromEnv()
+import redis, { KEYS } from '@/lib/redis'
 
 // Define subscription plan options to match pricing.tsx tiers
 const SUBSCRIPTION_PLANS = {
@@ -56,8 +53,7 @@ export default async function handler(
     
     // Check subscription data in Redis (hash-based storage)
     console.log(`Checking subscription data in Redis...`)
-    const subscriptionKey = `user:${userId}:subscription`
-    const subscriptionData = await redis.hgetall(subscriptionKey) || {}
+    const subscriptionData = await redis.hgetall(KEYS.USER_SUBSCRIPTION(userId)) || {}
     console.log('Subscription data from Redis:', subscriptionData)
     
     // Determine plan key mapping
@@ -105,21 +101,8 @@ export default async function handler(
     
     // Check credit data in Redis with special handling for force refresh
     console.log(`Checking credit data in Redis for user ${userId}...`)
-    const creditsKey = KEYS.USER_CREDITS(userId)
-    console.log('Credit key to check:', creditsKey)
-    
-    // Try both key formats
-    const creditsData = await redis.hgetall(creditsKey) || {}
+    const creditsData = await redis.hgetall(KEYS.USER_CREDITS(userId)) || {}
     console.log('Credits data from Redis hash:', creditsData)
-    
-    // Also check direct keys for backup
-    const singleCreditsKey = `user_credits:${userEmail}`
-    const directCredits = await redis.get(singleCreditsKey)
-    console.log('Direct credits key check:', singleCreditsKey, directCredits)
-    
-    const creditsUsedKey = `user:${userEmail}:creditsUsed`
-    const directCreditsUsed = await redis.get(creditsUsedKey)
-    console.log('Direct credits used key check:', creditsUsedKey, directCreditsUsed)
     
     // If we're forcing a refresh or if plan has changed, make sure we get the right credit total
     if (forceRefresh || Object.keys(creditsData).length === 0 || 
@@ -133,12 +116,11 @@ export default async function handler(
       const total = planDetails.totalCredits
       
       // Keep the existing used credits if available
-      const used = creditsData.used ? parseInt(creditsData.used as string) : 
-                  directCreditsUsed !== null ? parseInt(directCreditsUsed as string) : 0
+      const used = creditsData.used ? parseInt(creditsData.used as string) : 0
       
       const now = new Date().toISOString()
       
-      // Update the credits in Redis with plan-specific totals
+      // Update the credits in Redis with plan-specific totals - only use hash-based approach
       const updatedCreditsData = {
         total: total.toString(),
         used: used.toString(),
@@ -148,7 +130,7 @@ export default async function handler(
       }
       
       console.log('Updating credits with plan-specific data:', updatedCreditsData)
-      await redis.hset(creditsKey, updatedCreditsData)
+      await redis.hset(KEYS.USER_CREDITS(userId), updatedCreditsData)
       
       // Use the updated data for our response
       return res.status(200).json({
@@ -255,10 +237,4 @@ function calculateRenewalDate(purchaseDate: string, interval: string): string {
   }
   
   return date.toISOString().split('T')[0]
-}
-
-// Add key definitions if needed
-export const KEYS = {
-  USER_SUBSCRIPTION: (userId: string) => `user:${userId}:subscription`,
-  USER_CREDITS: (userId: string) => `user:${userId}:credits`,
 } 

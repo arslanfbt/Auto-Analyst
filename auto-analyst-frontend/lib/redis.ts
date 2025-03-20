@@ -23,22 +23,19 @@ testConnection();
 
 export default redis
 
-// New schema key prefixes
+// Consolidated hash-based key schema - ONLY use these keys
 export const KEYS = {
   USER_PROFILE: (userId: string) => `user:${userId}:profile`,
   USER_SUBSCRIPTION: (userId: string) => `user:${userId}:subscription`,
   USER_CREDITS: (userId: string) => `user:${userId}:credits`,
-  // Legacy keys for backward compatibility
-  LEGACY_CREDITS: (userId: string) => `user_credits:${userId}`,
-  LEGACY_PREFIX: 'user:'
 };
 
-// Credits management utilities with improved hash-based storage
+// Credits management utilities with consolidated hash-based storage
 export const creditUtils = {
   // Get user's remaining credits
   async getRemainingCredits(userId: string): Promise<number> {
     try {
-      // Try getting from the hash first
+      // Only use hash-based storage
       const creditsHash = await redis.hgetall<{
         total?: string;
         used?: string;
@@ -48,22 +45,6 @@ export const creditUtils = {
         const total = parseInt(creditsHash.total);
         const used = creditsHash.used ? parseInt(creditsHash.used) : 0;
         return total - used;
-      }
-      
-      // Fall back to legacy format
-      const legacyCredits = await redis.get<number>(KEYS.LEGACY_CREDITS(userId));
-      if (legacyCredits !== null) {
-        return legacyCredits;
-      }
-      
-      // Try individual keys as a last resort
-      const total = await redis.get<string>(`${KEYS.LEGACY_PREFIX}${userId}:creditsTotal`);
-      const used = await redis.get<string>(`${KEYS.LEGACY_PREFIX}${userId}:creditsUsed`);
-      
-      if (total) {
-        const totalNum = parseInt(total);
-        const usedNum = used ? parseInt(used) : 0;
-        return totalNum - usedNum;
       }
       
       // Default for new users
@@ -77,18 +58,13 @@ export const creditUtils = {
   // Set initial credits for a user
   async initializeCredits(userId: string, credits: number = parseInt(process.env.NEXT_PUBLIC_CREDITS_INITIAL_AMOUNT || '100')): Promise<void> {
     try {
-      // New hash-based approach
+      // Only use hash-based approach
       await redis.hset(KEYS.USER_CREDITS(userId), {
         total: credits.toString(),
         used: '0',
         lastUpdate: new Date().toISOString(),
         resetDate: this.getNextMonthFirstDay()
       });
-      
-      // For backward compatibility
-      await redis.set(KEYS.LEGACY_CREDITS(userId), credits);
-      await redis.set(`${KEYS.LEGACY_PREFIX}${userId}:creditsTotal`, credits.toString());
-      await redis.set(`${KEYS.LEGACY_PREFIX}${userId}:creditsUsed`, '0');
       
       console.log(`Credits initialized successfully for ${userId}: ${credits}`);
     } catch (error) {
@@ -99,7 +75,7 @@ export const creditUtils = {
   // Deduct credits when a user makes an API call
   async deductCredits(userId: string, amount: number): Promise<boolean> {
     try {
-      // First try the hash approach
+      // Only use hash-based approach
       const creditsHash = await redis.hgetall<{
         total?: string;
         used?: string;
@@ -122,30 +98,14 @@ export const creditUtils = {
           lastUpdate: new Date().toISOString()
         });
         
-        // For backward compatibility
-        await redis.set(KEYS.LEGACY_CREDITS(userId), total - newUsed);
-        await redis.set(`${KEYS.LEGACY_PREFIX}${userId}:creditsUsed`, newUsed.toString());
-        
         return true;
       }
       
-      // Fall back to legacy approach if hash not found
-      const totalStr = await redis.get<string>(`${KEYS.LEGACY_PREFIX}${userId}:creditsTotal`) || '100';
-      const usedStr = await redis.get<string>(`${KEYS.LEGACY_PREFIX}${userId}:creditsUsed`) || '0';
+      // Initialize credits if not found
+      await this.initializeCredits(userId);
       
-      const total = parseInt(totalStr);
-      const used = parseInt(usedStr);
-      const remaining = total - used;
-      
-      if (remaining < amount) {
-        return false;
-      }
-      
-      const newUsed = used + amount;
-      await redis.set(`${KEYS.LEGACY_PREFIX}${userId}:creditsUsed`, newUsed.toString());
-      await redis.set(KEYS.LEGACY_CREDITS(userId), total - newUsed);
-      
-      return true;
+      // Check if we have enough of the initial credits
+      return amount <= 100;
     } catch (error) {
       console.error('Error deducting credits:', error);
       return true; // Failsafe
@@ -201,11 +161,6 @@ export const creditUtils = {
         resetDate: sub.interval === 'year' ? this.getNextYearFirstDay() : this.getNextMonthFirstDay()
       });
       
-      // Update legacy format
-      await redis.set(KEYS.LEGACY_CREDITS(userId), creditAmount);
-      await redis.set(`${KEYS.LEGACY_PREFIX}${userId}:creditsTotal`, creditAmount.toString());
-      await redis.set(`${KEYS.LEGACY_PREFIX}${userId}:creditsUsed`, '0');
-      
       return true;
     } catch (error) {
       console.error('Error resetting user credits:', error);
@@ -227,7 +182,7 @@ export const subscriptionUtils = {
     isPro: boolean;
   }> {
     try {
-      // Get subscription from hash (most efficient approach)
+      // Get subscription and credits from hash
       const subData = await redis.hgetall(KEYS.USER_SUBSCRIPTION(userId));
       const creditsData = await redis.hgetall(KEYS.USER_CREDITS(userId));
       
@@ -379,13 +334,6 @@ export const subscriptionUtils = {
           // Save to Redis
           await redis.hset(KEYS.USER_CREDITS(userId), newCreditData);
           
-          // Update legacy keys if email available
-          const userEmail = await redis.hget(KEYS.USER_PROFILE(userId), 'email');
-          if (userEmail) {
-            await redis.set(`user_credits:${userEmail}`, creditAmount);
-            await redis.set(`user:${userEmail}:creditsUsed`, 0);
-          }
-          
           return true;
         }
       }
@@ -447,14 +395,6 @@ export const subscriptionUtils = {
       await redis.hset(KEYS.USER_SUBSCRIPTION(userId), subscriptionData);
       await redis.hset(KEYS.USER_CREDITS(userId), creditData);
       
-      // Update legacy keys if email available
-      const userEmail = await redis.hget(KEYS.USER_PROFILE(userId), 'email');
-      if (userEmail) {
-        await redis.set(`user_credits:${userEmail}`, 100);
-        await redis.set(`user:${userEmail}:creditsUsed`, 0);
-        await redis.set(`user:${userEmail}:planName`, 'Free Plan');
-      }
-      
       console.log(`Successfully downgraded user ${userId} to the Free plan`);
       return true;
     } catch (error) {
@@ -467,7 +407,6 @@ export const subscriptionUtils = {
   // This should be called periodically (via a cron job or similar)
   async checkExpiredSubscriptions(): Promise<void> {
     try {
-      // This is a simplified version - in production you'd want to use a queue
       // Get all subscription keys
       const subscriptionKeys = await redis.keys('user:*:subscription');
       

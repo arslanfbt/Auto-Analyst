@@ -86,15 +86,6 @@ async function updateUserSubscription(userId: string, session: Stripe.Checkout.S
       lastUpdate: now.toISOString()
     });
     
-    // Also update by email for backward compatibility
-    if (session.customer_details?.email) {
-      const userEmail = session.customer_details.email;
-      await redis.set(`user_credits:${userEmail}`, newCreditTotal);
-      await redis.set(`user:${userEmail}:creditsUsed`, 0);
-    }
-    
-    console.log(`Updated subscription for user ${userId} to ${planName} (${interval})`);
-    
     return true;
   } catch (error) {
     console.error('Error updating user subscription:', error);
