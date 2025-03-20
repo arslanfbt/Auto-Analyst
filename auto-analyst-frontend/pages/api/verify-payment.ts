@@ -102,23 +102,24 @@ export default async function handler(
       let planType = 'FREE'
       let creditAmount = 100
       
-      if (amount >= 10 && amount <= 20) {
+      // Updated price ranges to match actual pricing in pricing.tsx
+      if (amount >= 10 && amount < 25) {
         // Standard monthly plan ($15/month)
         planName = 'Standard Plan' 
         planType = 'STANDARD'
         creditAmount = 500
-      } else if (amount >= 30 && amount <= 50) {
-        // Pro monthly plan ($39/month)
+      } else if (amount >= 25 && amount < 100) {
+        // Pro monthly plan ($29/month)
         planName = 'Pro Plan'
         planType = 'PRO'
         creditAmount = 999999 // Unlimited
-      } else if (amount >= 150 && amount <= 250) {
-        // Standard yearly plan ($165/year)
+      } else if (amount >= 100 && amount < 200) {
+        // Standard yearly plan ($126/year)
         planName = 'Standard Plan (Yearly)'
         planType = 'STANDARD'
         creditAmount = 500
-      } else if (amount >= 350 && amount <= 500) {
-        // Pro yearly plan ($399/year)
+      } else if (amount >= 200 && amount < 500) {
+        // Pro yearly plan ($243.60/year)
         planName = 'Pro Plan (Yearly)'
         planType = 'PRO'
         creditAmount = 999999 // Unlimited
@@ -221,20 +222,20 @@ async function updateUserSubscriptionFromSession(userId: string, session: Stripe
       renewalDate.setFullYear(now.getFullYear() + 1)
     }
     
-    // Determine plan type and credits allocation
+    // Determine plan type and credits allocation with more robust matching
     let planType = 'FREE'
     let creditAmount = 100
     
-    // Case-insensitive matching for plan names
+    // More robust plan name matching
     const planNameUpper = planName.toUpperCase()
     
-    // Map plan name to our internal constants
-    if (planNameUpper.includes('STANDARD')) {
-      planType = 'STANDARD'
-      creditAmount = 500
-    } else if (planNameUpper.includes('PRO')) {
+    // First check for PRO plans (check first to avoid "STANDARD" matching in "PRO STANDARD")
+    if (planNameUpper.includes('PRO')) {
       planType = 'PRO'
       creditAmount = 999999 // Unlimited
+    } else if (planNameUpper.includes('STANDARD')) {
+      planType = 'STANDARD'
+      creditAmount = 500
     }
     
     console.log(`Mapped plan type: ${planType} with ${creditAmount} credits`)

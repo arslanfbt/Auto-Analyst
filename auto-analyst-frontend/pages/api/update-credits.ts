@@ -81,15 +81,26 @@ export default async function handler(
       ? creditUtils.getNextMonthFirstDay()
       : creditUtils.getNextYearFirstDay();
 
-    // Determine credits to add based on plan
-    const creditsToAdd = PLAN_CREDITS[planName as keyof typeof PLAN_CREDITS] || 1000;
-    
+    // Determine credits to add based on plan with better matching
+    let creditsToAdd = 100; // Default for Free plan
+    let planType = 'FREE';
+
+    // Check for Pro plan first to prevent issues with name substrings
+    if (planName.toLowerCase().includes('pro')) {
+      creditsToAdd = 999999; // Unlimited
+      planType = 'PRO';
+    } else if (planName.toLowerCase().includes('standard')) {
+      creditsToAdd = 500;
+      planType = 'STANDARD';
+    }
+
     console.log(`Setting ${creditsToAdd} credits for user ${userId} based on plan ${planName}`);
     
     try {
       // Update user subscription using the new hash-based approach
       await redis.hset(KEYS.USER_SUBSCRIPTION(userId), {
         plan: planName,
+        planType: planType, // Add explicit planType
         status: 'active',
         amount: amount.toString(),
         interval: interval,

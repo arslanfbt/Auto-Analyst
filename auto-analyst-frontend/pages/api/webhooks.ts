@@ -48,13 +48,16 @@ async function updateUserSubscription(userId: string, session: Stripe.Checkout.S
     }
     
     // Determine credits to assign based on plan
-    let newCreditTotal = 500; // Standard default
+    let newCreditTotal = 100; // Free default
+    let planType = 'FREE';
+
+    // More robust plan detection - check for Pro first
     if (planName.toUpperCase().includes('PRO')) {
       newCreditTotal = 999999; // "Unlimited" for Pro plan
+      planType = 'PRO';
     } else if (planName.toUpperCase().includes('STANDARD')) {
       newCreditTotal = 500; // Standard plan credits
-    } else if (planName.toUpperCase().includes('FREE')) {
-      newCreditTotal = 100; // Free plan credits
+      planType = 'STANDARD';
     }
     
     // Get reset date
@@ -68,6 +71,7 @@ async function updateUserSubscription(userId: string, session: Stripe.Checkout.S
     // Update user subscription using the hash-based approach
     await redis.hset(KEYS.USER_SUBSCRIPTION(userId), {
       plan: planName,
+      planType: planType, // Add explicit planType
       status: 'active',
       amount: amount.toString(),
       interval: interval,
