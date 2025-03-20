@@ -48,6 +48,7 @@ interface CreditUsage {
   total: number;
   resetDate: string;
   lastUpdate: string;
+  nextMonthlyReset?: string;
 }
 
 interface UserDataResponse {
@@ -550,6 +551,12 @@ export default function AccountPage() {
                               <span className="text-gray-600">Next billing:</span>
                               <span className="font-medium text-gray-900">{subscription?.renewalDate || '2025-04-19'}</span>
                             </div>
+                            {subscription?.interval === 'year' && (
+                              <div className="flex justify-between mb-2">
+                                <span className="text-gray-600">Next credits reset:</span>
+                                <span className="font-medium text-gray-900">{credits?.resetDate || credits?.nextMonthlyReset || 'N/A'}</span>
+                              </div>
+                            )}
                           </div>
                         </div>
 

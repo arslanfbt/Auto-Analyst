@@ -126,7 +126,7 @@ export default async function handler(
       }
       
       // Determine the interval based on amount
-      const interval = (amount >= 150) ? 'year' : 'month'
+      const interval = (amount >= 100) ? 'year' : 'month'
       
       console.log(`Determined plan: ${planName} (${interval}) with ${creditAmount} credits`)
       
@@ -156,11 +156,15 @@ export default async function handler(
       console.log('Storing fallback subscription data:', subscriptionData)
       await redis.hset(KEYS.USER_SUBSCRIPTION(userId), subscriptionData)
       
+      // Calculate next credits reset date (always monthly)
+      const creditResetDate = new Date();
+      creditResetDate.setMonth(creditResetDate.getMonth() + 1);
+      
       // Update credits
       const creditData = {
         total: creditAmount.toString(),
         used: '0',
-        resetDate: renewalDate.toISOString().split('T')[0],
+        resetDate: creditResetDate.toISOString().split('T')[0],
         lastUpdate: now.toISOString()
       }
       
@@ -259,11 +263,15 @@ async function updateUserSubscriptionFromSession(userId: string, session: Stripe
     // Update user's subscription in Redis
     await redis.hset(KEYS.USER_SUBSCRIPTION(userId), subscriptionData)
     
-    // Update user's credits
+    // Calculate next credits reset date (always monthly)
+    const creditResetDate = new Date();
+    creditResetDate.setMonth(creditResetDate.getMonth() + 1);
+    
+    // Update credits
     const creditData = {
       total: creditAmount.toString(),
       used: '0',
-      resetDate: renewalDate.toISOString().split('T')[0],
+      resetDate: creditResetDate.toISOString().split('T')[0],
       lastUpdate: now.toISOString()
     }
     

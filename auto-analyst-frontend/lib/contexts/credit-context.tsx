@@ -11,6 +11,7 @@ interface CreditContextType {
   hasEnoughCredits: (amount: number) => boolean
   deductCredits: (amount: number) => Promise<boolean>
   isChatBlocked: boolean
+  creditResetDate: string | null
 }
 
 const CreditContext = createContext<CreditContextType | undefined>(undefined)
@@ -197,7 +198,8 @@ export function CreditProvider({ children }: { children: ReactNode }) {
       checkCredits,
       hasEnoughCredits,
       deductCredits,
-      isChatBlocked
+      isChatBlocked,
+      creditResetDate: creditsState.resetDate
     }}>
       {children}
     </CreditContext.Provider>

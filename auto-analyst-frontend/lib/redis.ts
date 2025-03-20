@@ -298,8 +298,9 @@ export const subscriptionUtils = {
         return false;
       }
       
-      // Only proceed if subscription is active and yearly
-      if (subscriptionData.status === 'active' && subscriptionData.interval === 'year') {
+      // Updated: For yearly subscriptions, we need to check if it's time for monthly credit refresh
+      // Even though billing interval is yearly, credits refresh monthly
+      if (subscriptionData.status === 'active') {
         const now = new Date();
         const lastUpdate = creditsData.lastUpdate ? new Date(creditsData.lastUpdate as string) : null;
         
@@ -316,8 +317,9 @@ export const subscriptionUtils = {
         }
         
         // If last update was more than a month ago or is missing, refresh credits
+        // This applies to both monthly and yearly subscriptions
         if (!lastUpdate || this.isMonthDifference(lastUpdate, now)) {
-          console.log(`Refreshing monthly credits for yearly subscriber ${userId}`);
+          console.log(`Refreshing monthly credits for user ${userId} with ${subscriptionData.interval} plan`);
           
           // Calculate next reset date - one month from now
           const resetDate = new Date(now);

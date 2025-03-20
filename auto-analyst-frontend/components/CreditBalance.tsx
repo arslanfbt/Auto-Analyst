@@ -1,18 +1,30 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useCredits } from '@/lib/contexts/credit-context'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './ui/tooltip'
 import Link from 'next/link'
-import { ChevronUp, CreditCard, Coins, Infinity as InfinityIcon } from 'lucide-react'
+import { ChevronUp, CreditCard, Coins, Infinity as InfinityIcon, RefreshCcw } from 'lucide-react'
 import { motion } from 'framer-motion'
 
 const CreditBalance = () => {
-  const { remainingCredits, isLoading, checkCredits } = useCredits()
+  const { remainingCredits, isLoading, checkCredits, creditResetDate } = useCredits()
   const [isHovering, setIsHovering] = useState(false)
+  const [daysToReset, setDaysToReset] = useState<number | null>(null)
   
   // Check if credits represent unlimited (Pro plan)
   const isUnlimited = remainingCredits > 999998;
+  
+  // Format reset date info
+  useEffect(() => {
+    if (creditResetDate) {
+      const resetDate = new Date(creditResetDate);
+      const now = new Date();
+      const diffTime = resetDate.getTime() - now.getTime();
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      setDaysToReset(diffDays > 0 ? diffDays : null);
+    }
+  }, [creditResetDate]);
   
   // Display for credits
   const creditsDisplay = isUnlimited ? (
@@ -53,6 +65,12 @@ const CreditBalance = () => {
               >
                 <Coins className="h-4 w-4 text-[#FF7F7F]" />
                 <span className="ml-1">{isLoading ? '...' : creditsDisplay}</span>
+                {!isUnlimited && daysToReset && daysToReset <= 7 && (
+                  <span className="ml-1 text-xs text-gray-500 flex items-center">
+                    <RefreshCcw className="h-3 w-3 mr-0.5" />
+                    {daysToReset}d
+                  </span>
+                )}
               </motion.span>
             </motion.div>
             
@@ -77,7 +95,13 @@ const CreditBalance = () => {
           </Link>
         </TooltipTrigger>
         <TooltipContent side="bottom" className="bg-[#FF7F7F] text-white">
-          <p className="text-sm font-medium">Get more tokens with a plan upgrade</p>
+          <p className="text-sm font-medium">
+            {isUnlimited 
+              ? "You have unlimited credits with your Pro plan"
+              : daysToReset && daysToReset <= 7
+                ? `Credits refresh in ${daysToReset} days. Upgrade for more.`
+                : "Get more credits with a plan upgrade"}
+          </p>
         </TooltipContent>
       </Tooltip>
     </TooltipProvider>
