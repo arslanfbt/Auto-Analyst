@@ -1,6 +1,6 @@
 "use client"
 
-import ChatInterface from "@/components/ChatInterface"
+import ChatInterface from "@/components/chat/ChatInterface"
 import ResponsiveLayout from "../../components/ResponsiveLayout"
 import "../globals.css"
 

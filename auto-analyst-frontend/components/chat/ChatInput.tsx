@@ -3,9 +3,9 @@
 import React, { useState, useEffect, useRef, forwardRef, useImperativeHandle } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { Send, Paperclip, X, Square, Loader2, CheckCircle2, XCircle, Eye, CreditCard } from 'lucide-react'
-import AgentHint from './chat/AgentHint'
-import { Button } from "./ui/button"
-import { Textarea } from "./ui/textarea"
+import AgentHint from './AgentHint'
+import { Button } from "../ui/button"
+import { Textarea } from "../ui/textarea"
 import { useCookieConsentStore } from "@/lib/store/cookieConsentStore"
 import { AlertCircle } from "lucide-react"
 import { useSession } from "next-auth/react"

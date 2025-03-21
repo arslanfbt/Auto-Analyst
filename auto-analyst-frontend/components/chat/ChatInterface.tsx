@@ -10,7 +10,7 @@ import Sidebar from "./Sidebar"
 import axios from "axios"
 import { useSession } from "next-auth/react"
 import { useFreeTrialStore } from "@/lib/store/freeTrialStore"
-import FreeTrialOverlay from "./chat/FreeTrialOverlay"
+import FreeTrialOverlay from "./FreeTrialOverlay"
 import { useChatHistoryStore } from "@/lib/store/chatHistoryStore"
 import { useCookieConsentStore } from "@/lib/store/cookieConsentStore"
 import { useRouter } from "next/navigation"
@@ -19,10 +19,10 @@ import { useSessionStore } from '@/lib/store/sessionStore'
 import API_URL from '@/config/api'
 import { useCredits } from '@/lib/contexts/credit-context'
 import { getModelCreditCost } from '@/lib/model-tiers'
-import InsufficientCreditsModal from '@/components/InsufficientCreditsModal'
+import InsufficientCreditsModal from '@/components/chat/InsufficientCreditsModal'
 import CreditBalance from '@/components/CreditBalance'
 import { Avatar } from '@/components/ui/avatar'
-import UserProfilePopup from './UserProfilePopup'
+import UserProfilePopup from '../UserProfilePopup'
 import SettingsPopup from './SettingsPopup'
 
 interface PlotlyMessage {

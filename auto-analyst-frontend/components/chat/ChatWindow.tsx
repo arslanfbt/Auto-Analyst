@@ -6,7 +6,7 @@ import LoadingIndicator from "@/components/chat/LoadingIndicator"
 import MessageContent from "@/components/chat/MessageContent"
 import PlotlyChart from "@/components/PlotlyChart"
 import { ChatMessage } from "@/lib/store/chatHistoryStore"
-import WelcomeSection from "./chat/WelcomeSection"
+import WelcomeSection from "./WelcomeSection"
 
 interface PlotlyMessage {
   type: "plotly"
