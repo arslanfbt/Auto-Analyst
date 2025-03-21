@@ -6,7 +6,7 @@ const redis = new Redis({
   token: process.env.UPSTASH_REDIS_REST_TOKEN || '',
 })
 
-// Test connection and log status
+// Test connection and log status - but only when explicitly called
 const testConnection = async () => {
   try {
     await redis.ping();
@@ -18,10 +18,14 @@ const testConnection = async () => {
   }
 };
 
-// Run connection test when module is imported
-testConnection();
+// Don't automatically run the test on import
+// This prevents build-time errors and unnecessary connections
+// testConnection();
 
 export default redis
+
+// Export test connection function for explicit use in runtime contexts
+export { testConnection }
 
 // Consolidated hash-based key schema - ONLY use these keys
 export const KEYS = {

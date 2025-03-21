@@ -2,9 +2,9 @@
 module.exports = {
     darkMode: ["class"],
     content: [
-    "./app/**/*.{js,ts,jsx,tsx}",
-    "./components/**/*.{js,ts,jsx,tsx}",
     "./pages/**/*.{js,ts,jsx,tsx}",
+    "./components/**/*.{js,ts,jsx,tsx}",
+    "./app/**/*.{js,ts,jsx,tsx}",
   ],
   theme: {
   	extend: {
@@ -56,7 +56,11 @@ module.exports = {
   				'3': 'hsl(var(--chart-3))',
   				'4': 'hsl(var(--chart-4))',
   				'5': 'hsl(var(--chart-5))'
-  			}
+  			},
+  			'primary': '#FF7F7F',
+  			'primary-hover': '#FF6666',
+  			'background': '#FFFFFF',
+  			'foreground': '#333333',
   		}
   	}
   },
