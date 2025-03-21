@@ -4,7 +4,6 @@ import { useSession } from 'next-auth/react';
 import { motion } from 'framer-motion';
 import { CheckCircle, X, Check, ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
-import getStripe from '../utils/get-stripejs';
 import { Infinity as InfinityIcon } from 'lucide-react';
 import { MODEL_TIERS } from '../lib/model-tiers';
 import { useRouter } from 'next/router';

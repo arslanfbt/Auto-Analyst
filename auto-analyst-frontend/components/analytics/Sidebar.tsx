@@ -1,16 +1,16 @@
 import Link from 'next/link';
-import { useRouter } from 'next/router';
+import { usePathname } from 'next/navigation';
 import { useState } from 'react';
 import { getSessionId } from '@/lib/api/auth';
 
 export default function Sidebar() {
-  const router = useRouter();
+  const pathname = usePathname();
   const [showDebugInfo, setShowDebugInfo] = useState(false);
   
   // Function to handle admin signout
   const handleSignOut = () => {
     localStorage.removeItem('adminApiKey');
-    router.reload(); // Reload the page to trigger re-authentication
+    window.location.reload();
   };
   
   const activeClass = "bg-[#FFF0F0] text-[#FF7F7F] font-medium";
@@ -30,7 +30,7 @@ export default function Sidebar() {
           <Link 
             href="/analytics/dashboard"
             className={`flex items-center px-3 py-2 text-sm rounded-md ${
-              router.pathname === '/analytics/dashboard' ? activeClass : inactiveClass
+              pathname === '/analytics/dashboard' ? activeClass : inactiveClass
             }`}
           >
             <svg className="mr-3 h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -49,7 +49,7 @@ export default function Sidebar() {
           <Link 
             href="/analytics/models"
             className={`flex items-center px-3 py-2 text-sm rounded-md ${
-              router.pathname === '/analytics/models' ? activeClass : inactiveClass
+              pathname === '/analytics/models' ? activeClass : inactiveClass
             }`}
           >
             <svg className="mr-3 h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -61,7 +61,7 @@ export default function Sidebar() {
           <Link 
             href="/analytics/tiers"
             className={`flex items-center px-3 py-2 text-sm rounded-md ${
-              router.pathname === '/analytics/tiers' ? activeClass : inactiveClass
+              pathname === '/analytics/tiers' ? activeClass : inactiveClass
             }`}
           >
             <svg className="mr-3 h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -80,7 +80,7 @@ export default function Sidebar() {
           <Link 
             href="/analytics/users"
             className={`flex items-center px-3 py-2 text-sm rounded-md ${
-              router.pathname === '/analytics/users' ? activeClass : inactiveClass
+              pathname === '/analytics/users' ? activeClass : inactiveClass
             }`}
           >
             <svg className="mr-3 h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -99,7 +99,7 @@ export default function Sidebar() {
           <Link 
             href="/analytics/costs"
             className={`flex items-center px-3 py-2 text-sm rounded-md ${
-              router.pathname === '/analytics/costs' ? activeClass : inactiveClass
+              pathname === '/analytics/costs' ? activeClass : inactiveClass
             }`}
           >
             <svg className="mr-3 h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -115,7 +115,7 @@ export default function Sidebar() {
         <h3 className="text-lg font-medium text-gray-900">Admin Tools</h3>
         <div className="mt-3 space-y-3">
           <button 
-            onClick={() => router.reload()}
+            onClick={() => window.location.reload()}
             className="w-full text-left px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:bg-gray-50 hover:text-gray-900"
           >
             Refresh Data
