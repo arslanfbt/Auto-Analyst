@@ -3,6 +3,7 @@ import { X, CheckCircle, AlertCircle, Info, Settings } from 'lucide-react';
 import { name } from 'plotly.js/lib/scatter';
 import API_URL from '@/config/api'
 import { useSessionStore } from '@/lib/store/sessionStore'
+import { getModelCreditCost } from '@/lib/model-tiers'
 
 interface SettingsPopupProps {
   isOpen: boolean;
@@ -15,6 +16,7 @@ interface SettingsPopupProps {
     temperature: number;
     maxTokens: number;
   };
+  onSettingsUpdated?: (settings: any) => void;
 }
 
 // Define model providers and their models
@@ -70,7 +72,7 @@ const MODEL_PROVIDERS = [
 
 const BASE_URL = API_URL;
 
-const SettingsPopup: React.FC<SettingsPopupProps> = ({ isOpen, onClose, initialSettings }) => {
+const SettingsPopup: React.FC<SettingsPopupProps> = ({ isOpen, onClose, initialSettings, onSettingsUpdated }) => {
   // Get sessionId from the session store
   const { sessionId } = useSessionStore();
   
@@ -138,7 +140,23 @@ const SettingsPopup: React.FC<SettingsPopupProps> = ({ isOpen, onClose, initialS
         throw new Error(errorData.detail || errorData.message || 'Failed to update settings');
       }
 
+      // Create settings object that we'll pass to parent component
+      const updatedSettings = {
+        provider: selectedProvider,
+        model: selectedModel,
+        hasCustomKey: useCustomAPI,
+        apiKey: useCustomAPI ? apiKey.trim() : '',
+        temperature: temperature,
+        maxTokens: maxTokens,
+      };
+
       setNotification({ type: 'success', message: 'Settings updated successfully!' });
+      
+      // Call the callback if provided
+      if (onSettingsUpdated) {
+        onSettingsUpdated(updatedSettings);
+      }
+      
       setTimeout(() => {
         setNotification(null);
         onClose();
@@ -153,6 +171,9 @@ const SettingsPopup: React.FC<SettingsPopupProps> = ({ isOpen, onClose, initialS
   };
 
   if (!isOpen) return null;
+
+  // Get credit cost for the currently selected model
+  const selectedModelCreditCost = getModelCreditCost(selectedModel);
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
@@ -188,16 +209,23 @@ const SettingsPopup: React.FC<SettingsPopupProps> = ({ isOpen, onClose, initialS
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Model
             </label>
+            <div className="mb-1 text-xs text-gray-500 flex items-center">
+              <Info className="h-3 w-3 mr-1" />
+              Current selection: <span className="font-semibold ml-1">{selectedModelCreditCost} credits</span> per query
+            </div>
             <select
               value={selectedModel}
               onChange={(e) => setSelectedModel(e.target.value)}
               className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-[#FF7F7F] focus:border-transparent"
             >
-              {MODEL_PROVIDERS.find(p => p.name === selectedProvider)?.models.map((model) => (
-                <option key={model.id} value={model.id}>
-                  {model.name}
-                </option>
-              ))}
+              {MODEL_PROVIDERS.find(p => p.name === selectedProvider)?.models.map((model) => {
+                const creditCost = getModelCreditCost(model.id);
+                return (
+                  <option key={model.id} value={model.id}>
+                    {model.name} ({creditCost} credits)
+                  </option>
+                );
+              })}
             </select>
           </div>
           

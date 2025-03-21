@@ -454,9 +454,43 @@ const ChatInterface: React.FC = () => {
     }
   }
 
+  // Updated fetchModelSettings function to use the correct endpoint
+  const fetchModelSettings = async () => {
+    try {
+      // Change from /settings/model to /api/model-settings to match the backend
+      const response = await axios.get(`${API_URL}/api/model-settings`, {
+        headers: { 'X-Session-ID': sessionId }
+      });
+      
+      if (response.data) {
+        setModelSettings({
+          provider: response.data.provider,
+          model: response.data.model,
+          hasCustomKey: !!response.data.api_key,
+          apiKey: response.data.api_key || '',
+          temperature: response.data.temperature,
+          maxTokens: response.data.maxTokens // Note: backend uses maxTokens not max_tokens
+        });
+        
+        // Log the model that was successfully fetched
+        console.log(`[Settings] Fetched model settings: ${response.data.model}`);
+      }
+    } catch (error) {
+      console.error('Failed to fetch model settings:', error);
+    }
+  };
+
   // Then keep the handleSendMessage function as is
   const handleSendMessage = useCallback(async (message: string) => {
     if (isLoading || !message.trim()) return
+
+    // First, refresh model settings to ensure we have the latest
+    try {
+      await fetchModelSettings();
+    } catch (error) {
+      console.error("Error refreshing model settings:", error);
+      // Continue with existing settings if refresh fails
+    }
 
     // Check if the user has sufficient credits
     if (session && !isAdmin) {
@@ -595,18 +629,48 @@ const ChatInterface: React.FC = () => {
       // AFTER successful message processing - deduct credits using the correct user ID
       if (session?.user) {
         try {
-          const userId = (session.user as any).sub || session.user.id;
+          // Get the model directly from the API instead of relying on React state
+          let modelName;
+          try {
+            const settingsResponse = await axios.get(`${API_URL}/api/model-settings`, {
+              headers: { 'X-Session-ID': sessionId }
+            });
+            modelName = settingsResponse.data.model;
+            console.log(`[Credits] Using freshly fetched model: ${modelName}`);
+          } catch (settingsError) {
+            console.error('[Credits] Failed to fetch fresh model settings:', settingsError);
+            // Fall back to the model in state
+            modelName = modelSettings.model || "gpt-3.5-turbo";
+          }
           
-          // Determine the model that was used
-          let modelName = modelSettings.model || "gpt-3.5-turbo";
+          // Use more robust user ID extraction with logging
+          let userIdForCredits = '';
+          
+          if ((session.user as any).sub) {
+            userIdForCredits = (session.user as any).sub;
+          } else if (session.user.id) {
+            userIdForCredits = session.user.id;
+          } else if (session.user.email) {
+            userIdForCredits = session.user.email;
+          } else {
+            // Fallback to logged in user ID from component state
+            userIdForCredits = userId?.toString() || '';
+          }
+          
+          // Skip credit deduction if we still can't identify the user
+          if (!userIdForCredits) {
+            console.warn('[Credits] Cannot identify user for credit deduction');
+            return;
+          }
+          
+          // Calculate credit cost based on the fresh model name
           const creditCost = getModelCreditCost(modelName);
           
-          console.log(`[Credits] Deducting ${creditCost} credits for user ${userId}`);
+          console.log(`[Credits] Deducting ${creditCost} credits for user ${userIdForCredits} for model ${modelName}`);
           
-          // Deduct credits directly through an API call to ensure server-side processing
-          // This ensures we're using the correct Redis key structure
+          // Deduct credits directly through an API call
           const response = await axios.post('/api/user/deduct-credits', {
-            userId: userId,
+            userId: userIdForCredits,
             credits: creditCost,
             description: `Used ${modelName} for chat`
           });
@@ -756,6 +820,13 @@ const ChatInterface: React.FC = () => {
     }
   }, [mounted]);
 
+  // Use the fetchModelSettings function in the useEffect hook
+  useEffect(() => {
+    if (isSettingsOpen) {
+      fetchModelSettings();
+    }
+  }, [isSettingsOpen]);
+
   const handleChatDelete = useCallback((chatId: number) => {
     axios.delete(`${API_URL}/chats/${chatId}`, {
       params: { user_id: userId },
@@ -788,22 +859,6 @@ const ChatInterface: React.FC = () => {
       console.error(`Failed to delete chat ${chatId}:`, error);
     });
   }, [activeChatId, chatHistories, clearMessages, createNewChat, loadChat, userId, sessionId]);
-
-  // Fetch model settings when settings popup is opened
-  useEffect(() => {
-    if (isSettingsOpen) {
-      const fetchModelSettings = async () => {
-        try {
-          const response = await axios.get(`${API_URL}/api/model-settings`);
-          setModelSettings(response.data);
-        } catch (error) {
-          console.error('Failed to fetch model settings:', error);
-        }
-      };
-      
-      fetchModelSettings();
-    }
-  }, [isSettingsOpen]);
 
   const handleNavigateToAccount = useCallback(() => {
     router.push('/account');
@@ -927,6 +982,12 @@ const ChatInterface: React.FC = () => {
           isOpen={isSettingsOpen}
           onClose={() => setIsSettingsOpen(false)}
           initialSettings={modelSettings as any}
+          onSettingsUpdated={(updatedSettings) => {
+            // Update the local modelSettings state immediately when settings are saved
+            setModelSettings(updatedSettings);
+            // Also refresh from server to ensure we have the latest settings
+            fetchModelSettings();
+          }}
         />
         
         <InsufficientCreditsModal
