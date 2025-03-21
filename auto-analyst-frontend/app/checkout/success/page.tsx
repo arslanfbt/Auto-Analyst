@@ -1,5 +1,7 @@
+"use client"
+
 import { useEffect, useState } from 'react'
-import { useRouter } from 'next/router'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { Loader2, CheckCircle, ShieldAlert } from 'lucide-react'
 import Layout from '@/components/layout'
 import { useSession } from 'next-auth/react'
@@ -7,6 +9,7 @@ import { useToast } from '@/components/ui/use-toast'
 
 export default function CheckoutSuccess() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { data: session } = useSession()
   const { toast } = useToast()
   const [isProcessing, setIsProcessing] = useState(true)
@@ -16,10 +19,10 @@ export default function CheckoutSuccess() {
   const [debugInfo, setDebugInfo] = useState<any>(null)
 
   useEffect(() => {
-    if (!router.isReady || !session) return;
+    if (!session) return;
     
     // Extract payment_intent from URL
-    const { payment_intent } = router.query;
+    const payment_intent = searchParams?.get('payment_intent');
     
     if (payment_intent) {
       const processPayment = async () => {
@@ -90,7 +93,7 @@ export default function CheckoutSuccess() {
       setIsProcessing(false);
       setError('No payment information found');
     }
-  }, [router.isReady, session, router.query, retryCount]);
+  }, [session, searchParams]);
 
   // Force refresh account data when coming back from payment
   useEffect(() => {

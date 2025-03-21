@@ -1,6 +1,8 @@
+"use client"
+
 import React from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/router'
+import { useRouter, usePathname } from 'next/navigation'
 import { useSession } from 'next-auth/react'
 import { User, Menu, X } from 'lucide-react'
 import { useState } from 'react'
@@ -13,6 +15,7 @@ interface LayoutProps {
 
 export default function Layout({ children }: LayoutProps) {
   const router = useRouter()
+  const pathname = usePathname()
   const { data: session } = useSession()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
@@ -35,7 +38,7 @@ export default function Layout({ children }: LayoutProps) {
             <Link 
               href="/chat" 
               className={`text-gray-600 hover:text-[#FF7F7F] ${
-                router.pathname === '/chat' ? 'text-[#FF7F7F] font-medium' : ''
+                pathname === '/chat' ? 'text-[#FF7F7F] font-medium' : ''
               }`}
             >
               Chat
@@ -43,7 +46,7 @@ export default function Layout({ children }: LayoutProps) {
             <Link 
               href="/pricing" 
               className={`text-gray-600 hover:text-[#FF7F7F] ${
-                router.pathname === '/pricing' ? 'text-[#FF7F7F] font-medium' : ''
+                pathname === '/pricing' ? 'text-[#FF7F7F] font-medium' : ''
               }`}
             >
               Pricing
@@ -101,7 +104,7 @@ export default function Layout({ children }: LayoutProps) {
               <Link 
                 href="/chat" 
                 className={`text-gray-600 hover:text-[#FF7F7F] py-2 ${
-                  router.pathname === '/chat' ? 'text-[#FF7F7F] font-medium' : ''
+                  pathname === '/chat' ? 'text-[#FF7F7F] font-medium' : ''
                 }`}
                 onClick={() => setMobileMenuOpen(false)}
               >
@@ -110,7 +113,7 @@ export default function Layout({ children }: LayoutProps) {
               <Link 
                 href="/pricing" 
                 className={`text-gray-600 hover:text-[#FF7F7F] py-2 ${
-                  router.pathname === '/pricing' ? 'text-[#FF7F7F] font-medium' : ''
+                  pathname === '/pricing' ? 'text-[#FF7F7F] font-medium' : ''
                 }`}
                 onClick={() => setMobileMenuOpen(false)}
               >

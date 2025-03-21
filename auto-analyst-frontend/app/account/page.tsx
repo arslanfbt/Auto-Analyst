@@ -1,5 +1,7 @@
+"use client"
+
 import { useState, useEffect } from 'react'
-import { useRouter } from 'next/router'
+import { useRouter, useSearchParams } from 'next/navigation'
 import Head from 'next/head'
 import { useSession } from 'next-auth/react'
 import Layout from '@/components/layout'
@@ -59,6 +61,7 @@ interface UserDataResponse {
 
 export default function AccountPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { data: session, status } = useSession()
   const [activeTab, setActiveTab] = useState('overview')
   const [loading, setLoading] = useState(true)
@@ -187,12 +190,15 @@ export default function AccountPage() {
 
   useEffect(() => {
     // Check if we're returning from checkout success
-    if (router.query.refresh === 'true' || router.query.from === 'checkout') {
+    const refresh = searchParams?.get('refresh')
+    const from = searchParams?.get('from')
+    
+    if (refresh === 'true' || from === 'checkout') {
       refreshUserData()
       // Remove the query param to prevent unnecessary refreshes
-      router.replace('/account', undefined, { shallow: true })
+      router.replace('/account')
     }
-  }, [router.query])
+  }, [searchParams])
 
   useEffect(() => {
     // Add CSS for custom toggle switches

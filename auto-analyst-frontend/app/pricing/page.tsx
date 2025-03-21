@@ -1,3 +1,5 @@
+"use client"
+
 import { useState, useEffect } from 'react';
 import Head from 'next/head';
 import { useSession } from 'next-auth/react';
@@ -5,8 +7,8 @@ import { motion } from 'framer-motion';
 import { CheckCircle, X, Check, ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
 import { Infinity as InfinityIcon } from 'lucide-react';
-import { MODEL_TIERS } from '../lib/model-tiers';
-import { useRouter } from 'next/router';
+import { MODEL_TIERS } from '@/lib/model-tiers';
+import { useRouter, useSearchParams } from 'next/navigation';
 
 // Define pricing tiers with both monthly and yearly options
 const pricingTiers = [
@@ -89,16 +91,17 @@ export default function PricingPage() {
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [billingCycle, setBillingCycle] = useState<'monthly' | 'yearly'>('yearly');
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [referringPage, setReferringPage] = useState<string>('home');
   
   useEffect(() => {
     // Get the referring page from the query parameters or localStorage
-    const referrer = router.query.from as string || localStorage.getItem('referringPage') || 'home';
+    const referrer = searchParams?.get('from') || localStorage.getItem('referringPage') || 'home';
     setReferringPage(referrer);
     
     // Store the current page as the referring page for future navigation
     localStorage.setItem('referringPage', 'pricing');
-  }, [router.query]);
+  }, [searchParams]);
   
   const getBackButtonText = () => {
     switch (referringPage) {
@@ -397,7 +400,7 @@ export default function PricingPage() {
                   <td className="py-4 px-6 text-gray-700">{MODEL_TIERS.tier1.credits}</td>
                   <td className="py-4 px-6 text-gray-700">
                     <div className="flex flex-wrap gap-1">
-                      {MODEL_TIERS.tier1.models.slice(0, 3).map(model => (
+                      {MODEL_TIERS.tier1.models.slice(0, 3).map((model: string) => (
                         <span key={model} className="inline-flex bg-gray-100 text-gray-700 rounded-full px-2 py-1 text-xs">
                           {model}
                         </span>
@@ -415,7 +418,7 @@ export default function PricingPage() {
                   <td className="py-4 px-6 text-gray-700">{MODEL_TIERS.tier2.credits}</td>
                   <td className="py-4 px-6 text-gray-700">
                     <div className="flex flex-wrap gap-1">
-                      {MODEL_TIERS.tier2.models.map(model => (
+                      {MODEL_TIERS.tier2.models.map((model: string) => (
                         <span key={model} className="inline-flex bg-gray-100 text-gray-700 rounded-full px-2 py-1 text-xs">
                           {model}
                         </span>
@@ -430,7 +433,7 @@ export default function PricingPage() {
                   <td className="py-4 px-6 text-gray-700">{MODEL_TIERS.tier3.credits}</td>
                   <td className="py-4 px-6 text-gray-700">
                     <div className="flex flex-wrap gap-1">
-                      {MODEL_TIERS.tier3.models.slice(0, 3).map(model => (
+                      {MODEL_TIERS.tier3.models.slice(0, 3).map((model: string) => (
                         <span key={model} className="inline-flex bg-gray-100 text-gray-700 rounded-full px-2 py-1 text-xs">
                           {model}
                         </span>

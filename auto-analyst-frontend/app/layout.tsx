@@ -1,11 +1,6 @@
 import "./globals.css"
 import type { Metadata } from "next"
-import { Inter } from "next/font/google" // The Inter font is free to use for commercial purposes!
-import { Providers } from './providers'
-import { CreditProvider } from '@/lib/contexts/credit-context'
-import { AuthProvider } from '@/components/AuthProvider'
-
-const inter = Inter({ subsets: ["latin"] })
+import ClientLayout from "@/components/ClientLayout"
 
 export const metadata: Metadata = {
   title: "Auto-Analyst",
@@ -19,12 +14,8 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className={inter.className}>
-        <AuthProvider>
-          <CreditProvider>
-            <Providers>{children}</Providers>
-          </CreditProvider>
-        </AuthProvider>
+      <body>
+        <ClientLayout>{children}</ClientLayout>
       </body>
     </html>
   )
