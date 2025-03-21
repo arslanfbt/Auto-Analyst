@@ -5,8 +5,7 @@ export function middleware(request: NextRequest) {
   // Get the pathname
   const { pathname } = request.nextUrl;
 
-  // Only check admin routes through middleware
-  // Analytics routes handle their own auth via the adminApiKey in localStorage
+  // Check if it's an admin route
   if (pathname.startsWith('/admin')) {
     const token = request.cookies.get('authToken')?.value;
     
@@ -16,6 +15,9 @@ export function middleware(request: NextRequest) {
       url.searchParams.set('redirect', pathname);
       return NextResponse.redirect(url);
     }
+    
+    // You could also verify the token here with a JWT library
+    // For more complex auth, consider using an API route or Auth.js
   }
 
   return NextResponse.next();
