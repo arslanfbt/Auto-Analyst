@@ -1,13 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server'
 import Stripe from 'stripe'
 
-// Initialize Stripe with the secret key
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: '2025-02-24.acacia', // Use the latest API version
-})
+export const dynamic = 'force-dynamic'
+
+// Initialize Stripe only if the secret key exists
+const stripe = process.env.STRIPE_SECRET_KEY 
+  ? new Stripe(process.env.STRIPE_SECRET_KEY, {
+      apiVersion: '2025-02-24.acacia',
+    })
+  : null
 
 export async function POST(request: NextRequest) {
   try {
+    // Check if Stripe is initialized
+    if (!stripe) {
+      console.error('Stripe is not initialized - missing API key')
+      return NextResponse.json({ error: 'Stripe configuration error' }, { status: 500 })
+    }
+    
     const body = await request.json()
     const { priceId, userId, planName, amount, interval } = body
     

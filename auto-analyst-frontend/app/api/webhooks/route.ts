@@ -6,11 +6,14 @@ import redis, { creditUtils, KEYS } from '@/lib/redis'
 // Use the correct App Router configuration instead of the default body parser
 export const dynamic = 'force-dynamic'
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: '2025-02-24.acacia',
-})
+// Initialize Stripe only if the secret key exists
+const stripe = process.env.STRIPE_SECRET_KEY 
+  ? new Stripe(process.env.STRIPE_SECRET_KEY, {
+      apiVersion: '2025-02-24.acacia',
+    })
+  : null
 
-const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET!
+const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET || ''
 
 // Helper function to read the raw request body as text
 async function getRawBody(readable: Readable): Promise<Buffer> {
@@ -25,7 +28,7 @@ async function getRawBody(readable: Readable): Promise<Buffer> {
 async function updateUserSubscription(userId: string, session: Stripe.Checkout.Session) {
   try {
     // Retrieve the complete line items to get product details
-    const lineItems = await stripe.checkout.sessions.listLineItems(session.id)
+    const lineItems = await stripe!.checkout.sessions.listLineItems(session.id)
     if (!lineItems.data.length) return false
 
     // Get the price ID from the line item
@@ -33,10 +36,10 @@ async function updateUserSubscription(userId: string, session: Stripe.Checkout.S
     if (!priceId) return false
 
     // Retrieve price to get recurring interval and product ID
-    const price = await stripe.prices.retrieve(priceId)
+    const price = await stripe!.prices.retrieve(priceId)
     
     // Retrieve product details
-    const product = await stripe.products.retrieve(price.product as string)
+    const product = await stripe!.products.retrieve(price.product as string)
 
     // Extract subscription details
     const planName = product.name
@@ -98,6 +101,12 @@ async function updateUserSubscription(userId: string, session: Stripe.Checkout.S
 
 export async function POST(request: NextRequest) {
   try {
+    // Check if Stripe is initialized
+    if (!stripe) {
+      console.error('Stripe is not initialized - missing API key')
+      return NextResponse.json({ error: 'Stripe configuration error' }, { status: 500 })
+    }
+    
     const signature = request.headers.get('stripe-signature')
     
     if (!signature) {
