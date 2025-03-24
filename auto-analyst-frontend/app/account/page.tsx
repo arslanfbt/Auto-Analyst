@@ -190,15 +190,15 @@ export default function AccountPage() {
 
   useEffect(() => {
     // Check if we're returning from checkout success
-    const refresh = searchParams?.get('refresh')
-    const from = searchParams?.get('from')
+    const refreshParam = searchParams?.get('refresh')
+    const fromParam = searchParams?.get('from')
     
-    if (refresh === 'true' || from === 'checkout') {
+    if (refreshParam === 'true' || fromParam === 'checkout') {
       refreshUserData()
       // Remove the query param to prevent unnecessary refreshes
       router.replace('/account')
     }
-  }, [searchParams])
+  }, [searchParams, router, refreshUserData])
 
   useEffect(() => {
     // Add CSS for custom toggle switches

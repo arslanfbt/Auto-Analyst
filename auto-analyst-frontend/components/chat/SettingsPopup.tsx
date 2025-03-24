@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { X, CheckCircle, AlertCircle, Info, Settings } from 'lucide-react';
-import { name } from 'plotly.js/lib/scatter';
 import API_URL from '@/config/api'
 import { useSessionStore } from '@/lib/store/sessionStore'
 import { getModelCreditCost } from '@/lib/model-tiers'
@@ -177,15 +176,16 @@ const SettingsPopup: React.FC<SettingsPopupProps> = ({ isOpen, onClose, initialS
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg p-6 w-96 relative">
+      <div className="bg-white rounded-lg p-6 w-96 relative shadow-lg">
         <button
           onClick={onClose}
           className="absolute top-4 right-4 text-gray-400 hover:text-[#FF7F7F] transition-colors"
+          aria-label="Close"
         >
           <X className="h-6 w-6" />
         </button>
         
-        <h2 className="text-xl font-semibold mb-6">Settings</h2>
+        <h2 className="text-xl font-semibold mb-6 text-gray-800">Settings</h2>
         
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
@@ -195,7 +195,7 @@ const SettingsPopup: React.FC<SettingsPopupProps> = ({ isOpen, onClose, initialS
             <select
               value={selectedProvider}
               onChange={(e) => setSelectedProvider(e.target.value)}
-              className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-[#FF7F7F] focus:border-transparent"
+              className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-[#FF7F7F] focus:border-transparent bg-white"
             >
               {MODEL_PROVIDERS.map((provider) => (
                 <option key={provider.name} value={provider.name}>
@@ -211,12 +211,12 @@ const SettingsPopup: React.FC<SettingsPopupProps> = ({ isOpen, onClose, initialS
             </label>
             <div className="mb-1 text-xs text-gray-500 flex items-center">
               <Info className="h-3 w-3 mr-1" />
-              Current selection: <span className="font-semibold ml-1">{selectedModelCreditCost} credits</span> per query
+              Current selection: <span className="font-semibold ml-1">{selectedModelCreditCost} credits per query</span>
             </div>
             <select
               value={selectedModel}
               onChange={(e) => setSelectedModel(e.target.value)}
-              className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-[#FF7F7F] focus:border-transparent"
+              className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-[#FF7F7F] focus:border-transparent bg-white"
             >
               {MODEL_PROVIDERS.find(p => p.name === selectedProvider)?.models.map((model) => {
                 const creditCost = getModelCreditCost(model.id);
@@ -235,7 +235,7 @@ const SettingsPopup: React.FC<SettingsPopupProps> = ({ isOpen, onClose, initialS
               id="useCustomAPI"
               checked={useCustomAPI}
               onChange={(e) => setUseCustomAPI(e.target.checked)}
-              className="rounded border-gray-300 text-[#FF7F7F] focusj:ring-[#FF7F7F]"
+              className="rounded bg-white border-white text-[#FF7F7F] focus:ring-[#FF7F7F]"
             />
             <label htmlFor="useCustomAPI" className="text-sm font-medium text-gray-700">
               Use custom API key
@@ -250,10 +250,10 @@ const SettingsPopup: React.FC<SettingsPopupProps> = ({ isOpen, onClose, initialS
                 </label>
                 <div className="relative group">
                   <Info className="h-4 w-4 text-gray-400 cursor-help" />
-                  <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 hidden group-hover:block w-64 p-2 bg-gray-800 text-white text-xs rounded-md shadow-lg">
+                  <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 hidden group-hover:block w-64 p-2 bg-[#FF7F7F] text-white text-xs rounded-md shadow-lg z-10">
                     Your API key is never stored on our servers. It's only used once for the current request.
                     <div className="absolute top-full left-1/2 transform -translate-x-1/2 -mt-1">
-                      <div className="border-solid border-4 border-transparent border-t-gray-800"></div>
+                      <div className="border-solid border-4 border-transparent border-t-[#FF7F7F]"></div>
                     </div>
                   </div>
                 </div>
@@ -263,7 +263,7 @@ const SettingsPopup: React.FC<SettingsPopupProps> = ({ isOpen, onClose, initialS
                 value={apiKey}
                 onChange={(e) => setApiKey(e.target.value)}
                 placeholder="Enter your API key"
-                className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-[#FF7F7F] focus:border-transparent"
+                className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-[#FF7F7F] focus:border-transparent bg-white"
               />
             </div>
           )}
@@ -280,7 +280,7 @@ const SettingsPopup: React.FC<SettingsPopupProps> = ({ isOpen, onClose, initialS
           </div>
 
           {showAdvanced && (
-            <div className="space-y-4">
+            <div className="space-y-4 p-3 bg-gray-50 rounded-md">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Temperature ({temperature})
@@ -292,8 +292,12 @@ const SettingsPopup: React.FC<SettingsPopupProps> = ({ isOpen, onClose, initialS
                   step="0.1"
                   value={temperature}
                   onChange={(e) => setTemperature(parseFloat(e.target.value))}
-                  className="w-full"
+                  className="w-full accent-[#FF7F7F]"
                 />
+                <div className="flex justify-between text-xs text-gray-500">
+                  <span>More precise</span>
+                  <span>More creative</span>
+                </div>
               </div>
 
               <div>
@@ -306,7 +310,7 @@ const SettingsPopup: React.FC<SettingsPopupProps> = ({ isOpen, onClose, initialS
                   onChange={(e) => setMaxTokens(parseInt(e.target.value))}
                   min="1"
                   max="32000"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-[#FF7F7F] focus:border-transparent bg-white"
                 />
               </div>
             </div>
