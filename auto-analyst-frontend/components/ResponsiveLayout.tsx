@@ -2,7 +2,7 @@
 
 import React, { useState } from "react"
 import { motion } from "framer-motion"
-import Sidebar from "./Sidebar"
+import Sidebar from "./chat/Sidebar"
 import { useChatHistoryStore } from "@/lib/store/chatHistoryStore"
 
 interface ResponsiveLayoutProps {

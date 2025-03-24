@@ -7,7 +7,7 @@ import { vscDarkPlus } from "react-syntax-highlighter/dist/esm/styles/prism"
 import { Code2, ChevronDown, ChevronUp, Copy, Check, Play, Edit2, Save, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
-import PlotlyChart from "@/components/PlotlyChart"
+import PlotlyChart from "@/components/chat/PlotlyChart"
 import axios from "axios"
 import { useSessionStore } from '@/lib/store/sessionStore'
 import API_URL from '@/config/api'

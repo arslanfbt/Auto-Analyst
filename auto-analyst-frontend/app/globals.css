@@ -4,24 +4,14 @@
 
 :root {
   --foreground-rgb: 0, 0, 0;
-  --background-start-rgb: 214, 219, 220;
+  --background-start-rgb: 250, 250, 250;
   --background-end-rgb: 255, 255, 255;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --foreground-rgb: 255, 255, 255;
-    --background-start-rgb: 0, 0, 0;
-    --background-end-rgb: 0, 0, 0;
-  }
 }
 
 body {
   color: rgb(var(--foreground-rgb));
   background: linear-gradient(to bottom, transparent, rgb(var(--background-end-rgb))) rgb(var(--background-start-rgb));
 }
-
-
 
 @layer base {
   :root {
@@ -51,35 +41,7 @@ body {
     --chart-5: 27 87% 67%;
     --radius: 0.5rem;
   }
-  .dark {
-    --background: 0 0% 3.9%;
-    --foreground: 0 0% 98%;
-    --card: 0 0% 3.9%;
-    --card-foreground: 0 0% 98%;
-    --popover: 0 0% 3.9%;
-    --popover-foreground: 0 0% 98%;
-    --primary: 0 0% 98%;
-    --primary-foreground: 0 0% 9%;
-    --secondary: 0 0% 14.9%;
-    --secondary-foreground: 0 0% 98%;
-    --muted: 0 0% 14.9%;
-    --muted-foreground: 0 0% 63.9%;
-    --accent: 0 0% 14.9%;
-    --accent-foreground: 0 0% 98%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 0 0% 14.9%;
-    --input: 0 0% 14.9%;
-    --ring: 0 0% 83.1%;
-    --chart-1: 220 70% 50%;
-    --chart-2: 160 60% 45%;
-    --chart-3: 30 80% 55%;
-    --chart-4: 280 65% 60%;
-    --chart-5: 340 75% 55%;
-  }
 }
-
-
 
 @layer base {
   * {
@@ -90,3 +52,33 @@ body {
   }
 }
 
+/* Add these styles to ensure text visibility */
+.text-emphasis {
+  color: #1a202c !important; /* Dark text for emphasis */
+  font-weight: 500 !important; /* Medium weight for better readability */
+}
+
+/* Increase contrast for all status text */
+p.status-message {
+  color: #1a202c;
+  font-weight: 500;
+  background-color: rgba(255, 255, 255, 0.9);
+  text-shadow: 0px 0px 1px rgba(255, 255, 255, 0.5);
+}
+
+/* Add additional styling for form controls to ensure good contrast */
+input, textarea, select {
+  color: #1a202c;
+  background-color: white;
+}
+
+/* Styling for form labels */
+label {
+  color: #4a5568;
+  font-weight: 500;
+}
+
+/* Ensure buttons have good contrast */
+button {
+  font-weight: 500;
+}
