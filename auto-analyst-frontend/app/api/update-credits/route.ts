@@ -3,9 +3,14 @@ import { getToken } from 'next-auth/jwt'
 import redis, { creditUtils, KEYS } from '@/lib/redis'
 import Stripe from 'stripe'
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: '2025-02-24.acacia',
-})
+export const dynamic = 'force-dynamic'
+
+// Initialize Stripe only if the secret key exists
+const stripe = process.env.STRIPE_SECRET_KEY 
+  ? new Stripe(process.env.STRIPE_SECRET_KEY, {
+      apiVersion: '2025-02-24.acacia',
+    })
+  : null
 
 // Credit amounts based on plan level
 const PLAN_CREDITS = {
@@ -16,6 +21,12 @@ const PLAN_CREDITS = {
 
 export async function POST(request: NextRequest) {
   try {
+    // Check if Stripe is initialized
+    if (!stripe) {
+      console.error('Stripe is not initialized - missing API key')
+      return NextResponse.json({ error: 'Stripe configuration error' }, { status: 500 })
+    }
+    
     const body = await request.json()
     const { session_id } = body
 

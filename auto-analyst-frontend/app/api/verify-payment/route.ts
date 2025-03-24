@@ -1,14 +1,25 @@
-import { NextResponse } from 'next/server'
+import { NextResponse, NextRequest } from 'next/server'
 import { getToken } from 'next-auth/jwt'
 import Stripe from 'stripe'
 import redis, { KEYS } from '@/lib/redis'
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: '2025-02-24.acacia',
-})
+export const dynamic = 'force-dynamic'
 
-export async function POST(request: Request) {
+// Initialize Stripe only if the secret key exists
+const stripe = process.env.STRIPE_SECRET_KEY 
+  ? new Stripe(process.env.STRIPE_SECRET_KEY, {
+      apiVersion: '2025-02-24.acacia',
+    })
+  : null
+
+export async function POST(request: NextRequest) {
   try {
+    // Check if Stripe is initialized
+    if (!stripe) {
+      console.error('Stripe is not initialized - missing API key')
+      return NextResponse.json({ error: 'Stripe configuration error' }, { status: 500 })
+    }
+    
     // Get auth token from the request
     const token = await getToken({ req: request as any })
     if (!token?.sub) {
@@ -190,7 +201,7 @@ async function updateUserSubscriptionFromSession(userId: string, session: Stripe
     console.log(`Processing subscription update for user ${userId} from session ${session.id}`)
     
     // Get line items to extract product details
-    const lineItems = await stripe.checkout.sessions.listLineItems(session.id)
+    const lineItems = await stripe!.checkout.sessions.listLineItems(session.id)
     if (!lineItems.data.length) {
       console.error('No line items found in checkout session')
       return false
@@ -204,8 +215,8 @@ async function updateUserSubscriptionFromSession(userId: string, session: Stripe
     }
     
     // Get the price object which contains the product ID and interval
-    const price = await stripe.prices.retrieve(priceId)
-    const product = await stripe.products.retrieve(price.product as string)
+    const price = await stripe!.prices.retrieve(priceId)
+    const product = await stripe!.products.retrieve(price.product as string)
     
     // Extract details
     const planName = product.name
