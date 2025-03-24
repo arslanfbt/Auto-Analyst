@@ -154,8 +154,8 @@ export async function POST(request: Request) {
       console.log('Storing fallback subscription data:', subscriptionData)
       await redis.hset(KEYS.USER_SUBSCRIPTION(userId), subscriptionData)
       
-      // Calculate next credits reset date (always monthly)
-      const creditResetDate = new Date();
+      // Calculate next credits reset date (one month from purchase date)
+      const creditResetDate = new Date(now);
       creditResetDate.setMonth(creditResetDate.getMonth() + 1);
       
       // Update credits
@@ -263,8 +263,8 @@ async function updateUserSubscriptionFromSession(userId: string, session: Stripe
     // Update user's subscription in Redis
     await redis.hset(KEYS.USER_SUBSCRIPTION(userId), subscriptionData)
     
-    // Calculate next credits reset date (always monthly)
-    const creditResetDate = new Date();
+    // Calculate next credits reset date (one month from current date)
+    const creditResetDate = new Date(now);
     creditResetDate.setMonth(creditResetDate.getMonth() + 1);
     
     // Update credits

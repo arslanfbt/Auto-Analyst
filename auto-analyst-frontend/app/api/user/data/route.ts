@@ -149,9 +149,7 @@ export async function GET(request: NextRequest) {
       credits: {
         used: creditsUsed,
         total: formattedTotal,
-        resetDate: interval === 'year' && subscriptionData.nextMonthlyReset 
-          ? subscriptionData.nextMonthlyReset as string 
-          : resetDate,
+        resetDate: resetDate,
         lastUpdate: lastUpdate,
         resetInterval: 'month' // Always monthly
       },

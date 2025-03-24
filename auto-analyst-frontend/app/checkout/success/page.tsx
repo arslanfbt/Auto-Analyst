@@ -2,133 +2,175 @@
 
 import { useEffect, useState } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { CheckCircle, RefreshCw, XCircle } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import Link from 'next/link';
 import { useSession } from 'next-auth/react';
+import { useToast } from '@/components/ui/use-toast';
+import { Loader2, ShieldAlert, CheckCircle } from 'lucide-react'
+import Layout from '@/components/layout'
 
 export default function CheckoutSuccess() {
-  const searchParams = useSearchParams();
-  const { data: session } = useSession();
-  const paymentIntentId = searchParams ? searchParams.get('payment_intent') : null;
-  const sessionId = searchParams ? searchParams.get('session_id') : null;
-  const router = useRouter();
-  
-  const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading');
-  const [retryCount, setRetryCount] = useState(1);
-  const [errorMessage, setErrorMessage] = useState('');
-
-  async function verifyPayment() {
-    if ((!paymentIntentId && !sessionId) || !session?.user?.email) {
-      setStatus('error');
-      setErrorMessage('Missing payment information or user session');
-      return;
-    }
-
-    try {
-      console.log(`Verifying payment: ${paymentIntentId || sessionId}`);
-      const response = await fetch('/api/verify-payment', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          payment_intent: paymentIntentId,
-          session_id: sessionId
-        }),
-      });
-
-      const data = await response.json();
-      console.log('Verification response:', data);
-
-      if (response.ok && (data === true || data.success === true || data.alreadyProcessed === true)) {
-        setStatus('success');
-        
-        // After a short delay, redirect to account page with refresh param
-        setTimeout(() => {
-          router.push('/account?refresh=true&from=checkout');
-        }, 2000); // 2 second delay to show success message
-      } else {
-        // If we haven't reached max retries, try again
-        if (retryCount < 3) {
-          setRetryCount(prev => prev + 1);
-          setTimeout(verifyPayment, 3000); // Retry after 3 seconds
-        } else {
-          setStatus('error');
-          setErrorMessage(data.error || data.message || 'Failed to verify payment');
-        }
-      }
-    } catch (error) {
-      console.error('Verification error:', error);
-      if (retryCount < 3) {
-        setRetryCount(prev => prev + 1);
-        setTimeout(verifyPayment, 3000);
-      } else {
-        setStatus('error');
-        setErrorMessage('Network error during payment verification');
-      }
-    }
-  }
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  const { data: session } = useSession()
+  const { toast } = useToast()
+  const [isProcessing, setIsProcessing] = useState(true)
+  const [isRedirecting, setIsRedirecting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [retryCount, setRetryCount] = useState(0)
+  const [debugInfo, setDebugInfo] = useState<any>(null)
 
   useEffect(() => {
-    verifyPayment();
-  }, [paymentIntentId, sessionId, session]);
+    if (!session) return;
+    
+    // Extract payment_intent from URL
+    const payment_intent = searchParams?.get('payment_intent');
+    
+    if (payment_intent) {
+      const processPayment = async () => {
+        try {
+          console.log(`Processing payment intent: ${payment_intent}`)
+          
+          // Send payment intent to our verification API
+          const response = await fetch('/api/verify-payment', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+              payment_intent,
+              // Include timestamp to prevent caching issues
+              timestamp: new Date().getTime() 
+            }),
+          });
+          
+          const data = await response.json();
+          
+          if (!response.ok) {
+            setDebugInfo(data);
+            throw new Error(data.error || 'Payment verification failed');
+          }
+          
+          console.log('Payment verification successful:', data);
+          
+          // Check if it was already processed
+          if (data.alreadyProcessed) {
+            console.log('Payment was already processed');
+          }
+          
+          // Success! Show toast and redirect
+          toast({
+            title: 'Subscription Activated!',
+            description: 'Your plan has been successfully activated.',
+          });
+          
+          // Wait 1 second before redirecting to account page
+          setTimeout(() => {
+            setIsProcessing(false);
+            setIsRedirecting(true);
+            // Add special parameter to force account page refresh
+            setTimeout(() => {
+              router.push(`/account?refresh=${Date.now()}`);
+            }, 1500);
+          }, 1000);
+        } catch (error: any) {
+          console.error('Payment verification error:', error);
+          
+          // If we haven't tried too many times, retry
+          if (retryCount < 3) {
+            setRetryCount(prev => prev + 1);
+            console.log(`Retrying payment verification (${retryCount + 1}/3)...`);
+            
+            // Wait 2 seconds before retrying
+            setTimeout(() => {
+              processPayment();
+            }, 2000);
+          } else {
+            setIsProcessing(false);
+            setError(error.message || 'Failed to process payment');
+          }
+        }
+      };
+      
+      processPayment();
+    } else {
+      setIsProcessing(false);
+      setError('No payment information found');
+    }
+  }, [session, searchParams, retryCount]);
+
+  // Force refresh account data when coming back from payment
+  useEffect(() => {
+    if (session) {
+      // Invalidate any cached subscription data
+      fetch('/api/user/data?_t=' + Date.now());
+    }
+  }, [session]);
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4">
-      <div className="w-full max-w-md bg-white rounded-lg shadow-md p-6 space-y-6">
-        {status === 'loading' && (
-          <>
-            <div className="flex flex-col items-center justify-center space-y-4 py-8">
-              <div className="relative h-16 w-16">
-                <RefreshCw className="h-16 w-16 text-[#FF7F7F] animate-spin" />
-              </div>
-              <h1 className="text-2xl font-bold text-center">Activating Your Subscription</h1>
-              <p className="text-gray-600 text-center">Please wait while we set up your new plan...</p>
-              <p className="text-[#FF7F7F] font-medium">Retry attempt {retryCount}/3</p>
+    <Layout>
+      <div className="flex flex-col items-center justify-center min-h-[60vh] p-4">
+        <div className="w-full max-w-md p-8 space-y-6 bg-white rounded-lg shadow-md">
+          {isProcessing && (
+            <div className="text-center bg-white p-8 rounded-lg shadow-lg">
+              <Loader2 className="w-16 h-16 mx-auto text-[#FF7F7F] animate-spin" />
+              <h1 className="mt-6 text-2xl font-bold text-black">
+                Activating Your Subscription
+              </h1>
+              <p className="mt-3 text-lg text-black font-semibold status-message">
+                Please wait while we set up your new plan...
+              </p>
+              {retryCount > 0 && (
+                <div className="mt-4 py-3 px-4 bg-amber-100 border-2 border-amber-300 rounded-md">
+                  <p className="text-amber-800 font-bold text-lg">
+                    Retry attempt {retryCount}/3
+                  </p>
+                </div>
+              )}
             </div>
-          </>
-        )}
-
-        {status === 'success' && (
-          <>
-            <div className="flex flex-col items-center justify-center space-y-4 py-8">
-              <div className="relative h-16 w-16">
-                <CheckCircle className="h-16 w-16 text-green-500" />
-              </div>
-              <h1 className="text-2xl font-bold text-center text-green-700">Payment Successful!</h1>
-              <p className="text-gray-600 text-center">
-                Your subscription has been activated and your account has been credited.
+          )}
+          
+          {isRedirecting && (
+            <div className="text-center">
+              <CheckCircle className="w-16 h-16 mx-auto text-green-500" />
+              <h1 className="mt-6 text-2xl font-bold text-gray-900">
+                Success!
+              </h1>
+              <p className="mt-2 text-gray-600">
+                Your subscription has been activated. Taking you to your account...
               </p>
             </div>
-            <Button asChild className="w-full bg-[#FF7F7F] hover:bg-[#FF6666] text-white">
-              <Link href="/chat">Continue to Dashboard</Link>
-            </Button>
-          </>
-        )}
-
-        {status === 'error' && (
-          <>
-            <div className="flex flex-col items-center justify-center space-y-4 py-8">
-              <div className="relative h-16 w-16">
-                <XCircle className="h-16 w-16 text-red-500" />
-              </div>
-              <h1 className="text-2xl font-bold text-center text-red-700">Payment Verification Failed</h1>
-              <p className="text-gray-600 text-center">
-                {errorMessage || "We couldn't verify your payment. Please contact support for assistance."}
+          )}
+          
+          {error && (
+            <div className="text-center">
+              <ShieldAlert className="w-16 h-16 mx-auto text-red-500" />
+              <h1 className="text-2xl font-bold text-red-600">
+                Subscription Activation Issue
+              </h1>
+              <p className="mt-2 text-gray-600">
+                {error}
               </p>
+              <p className="mt-2 text-sm text-gray-500">
+                Don't worry! If your payment was successful, your subscription
+                will be activated automatically. Please go to your account page.
+              </p>
+              <button
+                onClick={() => router.push('/account')}
+                className="mt-4 px-4 py-2 bg-[#FF7F7F] text-white rounded hover:bg-[#FF6666]"
+              >
+                Go to my account
+              </button>
+              
+              {/* Debug information - only in development */}
+              {process.env.NODE_ENV === 'development' && debugInfo && (
+                <div className="mt-4 p-3 bg-gray-100 rounded text-left">
+                  <p className="text-xs font-mono">Debug Info:</p>
+                  <pre className="text-xs overflow-auto max-h-32">
+                    {JSON.stringify(debugInfo, null, 2)}
+                  </pre>
+                </div>
+              )}
             </div>
-            <div className="flex flex-col space-y-3">
-              <Button asChild className="w-full bg-[#FF7F7F] hover:bg-[#FF6666] text-white">
-                <Link href="/pricing">Return to Pricing</Link>
-              </Button>
-              <Button asChild variant="outline" className="w-full">
-                <Link href="/contact">Contact Support</Link>
-              </Button>
-            </div>
-          </>
-        )}
+          )}
+        </div>
       </div>
-    </div>
+    </Layout>
   );
-}
+} 
