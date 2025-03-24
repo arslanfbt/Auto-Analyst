@@ -4,7 +4,7 @@ import React, { useEffect, useRef, useCallback, useState } from "react"
 import { motion } from "framer-motion"
 import LoadingIndicator from "@/components/chat/LoadingIndicator"
 import MessageContent from "@/components/chat/MessageContent"
-import PlotlyChart from "@/components/PlotlyChart"
+import PlotlyChart from "@/components/chat/PlotlyChart"
 import { ChatMessage } from "@/lib/store/chatHistoryStore"
 import WelcomeSection from "./WelcomeSection"
 

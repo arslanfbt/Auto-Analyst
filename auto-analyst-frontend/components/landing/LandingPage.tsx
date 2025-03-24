@@ -5,7 +5,7 @@ import { useSession } from "next-auth/react"
 import HeroSection from "./HeroSection"
 import FeaturesSection from "./FeatureSection"
 import Footer from "./Footer"
-import { Button } from "./ui/button"
+import { Button } from "../ui/button"
 import CookieConsent from "./CookieConsent"
 import { useState, useEffect } from "react"
 

@@ -2,7 +2,7 @@
 
 import { motion, AnimatePresence } from "framer-motion"
 import { useState, useEffect } from "react"
-import { Button } from "./ui/button"
+import { Button } from "../ui/button"
 import { useCookieConsentStore } from "@/lib/store/cookieConsentStore"
 
 export default function CookieConsent() {

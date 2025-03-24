@@ -7,7 +7,7 @@ import { useSession } from 'next-auth/react'
 import { User, Menu, X } from 'lucide-react'
 import { useState } from 'react'
 import Image from 'next/image'
-import Footer from './Footer'
+import Footer from './landing/Footer'
 
 interface LayoutProps {
   children: React.ReactNode
