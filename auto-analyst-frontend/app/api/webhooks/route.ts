@@ -3,12 +3,8 @@ import Stripe from 'stripe'
 import { Readable } from 'stream'
 import redis, { creditUtils, KEYS } from '@/lib/redis'
 
-// Disable the default body parser to access the raw request body
-export const config = {
-  api: {
-    bodyParser: false,
-  },
-}
+// Use the correct App Router configuration instead of the default body parser
+export const dynamic = 'force-dynamic'
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
   apiVersion: '2025-02-24.acacia',
