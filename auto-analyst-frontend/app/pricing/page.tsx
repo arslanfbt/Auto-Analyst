@@ -349,29 +349,17 @@ export default function PricingPage() {
                 </tr>
                 <tr>
                   <td className="py-4 px-6 border-b text-gray-700 font-medium">Data Analysis</td>
-                  <td className="py-4 px-6 border-b text-center">Basic</td>
+                  <td className="py-4 px-6 border-b text-center">Advanced</td>
                   <td className="py-4 px-6 border-b text-center">Advanced</td>
                   <td className="py-4 px-6 border-b text-center">Advanced</td>
                 </tr>
                 <tr>
-                  <td className="py-4 px-6 border-b text-gray-700 font-medium">API Access</td>
-                  <td className="py-4 px-6 border-b text-center">
-                    <X className="h-5 w-5 text-red-500 mx-auto" />
-                  </td>
+                  <td className="py-4 px-6 border-b text-gray-700 font-medium">Custom API Access</td>
                   <td className="py-4 px-6 border-b text-center">
                     <Check className="h-5 w-5 text-green-500 mx-auto" />
                   </td>
                   <td className="py-4 px-6 border-b text-center">
                     <Check className="h-5 w-5 text-green-500 mx-auto" />
-                  </td>
-                </tr>
-                <tr>
-                  <td className="py-4 px-6 border-b text-gray-700 font-medium">Team Collaboration</td>
-                  <td className="py-4 px-6 border-b text-center">
-                    <X className="h-5 w-5 text-red-500 mx-auto" />
-                  </td>
-                  <td className="py-4 px-6 border-b text-center">
-                    <X className="h-5 w-5 text-red-500 mx-auto" />
                   </td>
                   <td className="py-4 px-6 border-b text-center">
                     <Check className="h-5 w-5 text-green-500 mx-auto" />
@@ -515,8 +503,8 @@ export default function PricingPage() {
               <p className="mt-2 text-gray-600">Credits are used to process your requests. Each request consumes a certain number of credits based on complexity and model used.</p>
             </div>
             <div className="py-6">
-              <h3 className="text-lg font-medium text-gray-900">How does the Pro plan's unlimited credits work?</h3>
-              <p className="mt-2 text-gray-600">With the Pro plan, you can use as many credits as you need without worrying about limits. This is ideal for high-volume users or teams.</p>
+              <h3 className="text-lg font-medium text-gray-900">How are credits reset?</h3>
+              <p className="mt-2 text-gray-600">Credits are reset each month from the purchase date.</p>
             </div>
             <div className="py-6">
               <h3 className="text-lg font-medium text-gray-900">Can I upgrade or downgrade my plan?</h3>
