@@ -20,7 +20,7 @@ export default function Header() {
       <div className="flex items-center">
         <Link href="/" className="flex items-center gap-2">
           <Image 
-            src="/logo.svg" 
+            src="https://4q2e4qu710mvgubg.public.blob.vercel-storage.com/Auto-analysts%20icon%20small-S682Oi8nbFhOADUHXJSD9d0KtSWKCe.png" 
             alt="Auto Analyst Logo" 
             width={32} 
             height={32} 

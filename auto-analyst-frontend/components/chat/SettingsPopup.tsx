@@ -107,6 +107,18 @@ const SettingsPopup: React.FC<SettingsPopupProps> = ({ isOpen, onClose, initialS
     }
   }, [selectedProvider, selectedModel]);
 
+  // Update selected model when initialSettings change
+  useEffect(() => {
+    if (initialSettings) {
+      setSelectedModel(initialSettings.model);
+      setSelectedProvider(initialSettings.provider);
+      setUseCustomAPI(initialSettings.hasCustomKey);
+      setApiKey(initialSettings.apiKey);
+      setTemperature(initialSettings.temperature);
+      setMaxTokens(initialSettings.maxTokens);
+    }
+  }, [initialSettings]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {

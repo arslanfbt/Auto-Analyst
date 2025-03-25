@@ -53,21 +53,19 @@ const pricingTiers = [
       'Advanced data analysis',
       'Access to all models',
       'Priority support',
-      'Unlimited CSV uploads',
       'API access',
     ],
     highlight: true,
   },
   {
-    name: 'Pro',
+    name: 'Enterprise',
     monthly: {
-      price: 29,
-      priceId: process.env.NEXT_PUBLIC_STRIPE_PRO_PRICE_ID,
+      price: null, // Custom pricing
+      priceId: null, // No direct subscription
     },
     yearly: {
-      price: 243.60, // $29 * 12 months = $348, with 30% discount = $243.60
-      priceId: process.env.NEXT_PUBLIC_STRIPE_PRO_YEARLY_PRICE_ID,
-      savings: 104.40, // $348 - $243.60 = $104.40 savings
+      price: null, // Custom pricing
+      priceId: null, // No direct subscription
     },
     credits: {
       monthly: 'Unlimited',
@@ -77,9 +75,11 @@ const pricingTiers = [
       'Everything in Standard',
       'Unlimited credits',
       'Dedicated support',
-      'Team collaboration',
       'Priority processing',
       'Custom integrations',
+      'Tailored solutions',
+      'Custom Agents',
+      'Marketing Analytics APIs',
     ],
     highlight: false,
   }
@@ -154,6 +154,11 @@ export default function PricingPage() {
   const handleSubscribe = (plan: string, cycle: string) => {
     if (plan === 'free') {
       router.push('/chat');
+      return;
+    }
+    
+    if (plan === 'enterprise') {
+      router.push('/contact?subject=Enterprise%20Plan%20Inquiry');
       return;
     }
     
@@ -250,14 +255,26 @@ export default function PricingPage() {
                 
                 <div className="mt-4 flex items-baseline">
                   <span className="text-5xl font-extrabold tracking-tight text-gray-900">
-                    ${billingCycle === 'monthly' 
-                      ? tier.monthly.price
-                      : tier.yearly.price}
+                    {tier.name === 'Enterprise' 
+                      ? '' 
+                      : `$${billingCycle === 'monthly' 
+                          ? tier.monthly.price
+                          : tier.name === 'Standard'
+                            ? (tier.yearly.price ? (tier.yearly.price / 12).toFixed(2) : '0.00') // Show monthly equivalent of yearly price
+                            : tier.yearly.price}`}
                   </span>
                   <span className="ml-1 text-xl font-medium text-gray-500">
-                    {tier.monthly.price === 0 ? '' : `/${billingCycle === 'monthly' ? 'mo' : 'yr'}`}
+                    {tier.monthly.price === 0 || tier.name === 'Enterprise'
+                      ? '' 
+                      : `/${billingCycle === 'monthly' ? 'mo' : (tier.name === 'Standard' ? 'mo' : 'yr')}`}
                   </span>
                 </div>
+                
+                {tier.name === 'Enterprise' && (
+                  <p className="mt-2 text-lg text-gray-700">
+                    Custom pricing for your needs
+                  </p>
+                )}
                 
                 {billingCycle === 'yearly' && tier.yearly.savings && (
                   <p className="mt-2 text-sm text-green-600 font-medium">
@@ -289,9 +306,15 @@ export default function PricingPage() {
                       ? 'bg-[#FF7F7F] hover:bg-[#FF6666] text-white'
                       : 'bg-white text-gray-900 border border-gray-300 hover:bg-gray-50'
                   }`}
-                  disabled={!session && tier.name !== 'Free'}
+                  disabled={!session && tier.name !== 'Free' && tier.name !== 'Enterprise'}
                 >
-                  {tier.name === 'Free' ? 'Get Started' : session ? 'Subscribe' : 'Sign in to Subscribe'}
+                  {tier.name === 'Free' 
+                    ? 'Get Started' 
+                    : tier.name === 'Enterprise'
+                      ? 'Contact Sales'
+                      : session 
+                        ? 'Subscribe' 
+                        : 'Sign in to Subscribe'}
                 </button>
               </div>
             </motion.div>
@@ -356,6 +379,18 @@ export default function PricingPage() {
                 </tr>
                 <tr>
                   <td className="py-4 px-6 border-b text-gray-700 font-medium">Custom Integrations</td>
+                  <td className="py-4 px-6 border-b text-center">
+                    <X className="h-5 w-5 text-red-500 mx-auto" />
+                  </td>
+                  <td className="py-4 px-6 border-b text-center">
+                    <X className="h-5 w-5 text-red-500 mx-auto" />
+                  </td>
+                  <td className="py-4 px-6 border-b text-center">
+                    <Check className="h-5 w-5 text-green-500 mx-auto" />
+                  </td>
+                </tr>
+                <tr>
+                  <td className="py-4 px-6 border-b text-gray-700 font-medium">SLA Guarantees</td>
                   <td className="py-4 px-6 border-b text-center">
                     <X className="h-5 w-5 text-red-500 mx-auto" />
                   </td>
@@ -454,7 +489,7 @@ export default function PricingPage() {
               you can make 20 queries. Using a Basic tier model at 1 credit per query would allow for 100 queries.
             </p>
             <p className="text-sm mt-2">
-              <span className="font-medium">Pro plan users</span> have unlimited access to all models regardless of tier.
+              <span className="font-medium">Enterprise plan users</span> have unlimited access to all models regardless of tier.
             </p>
           </div>
         </div>

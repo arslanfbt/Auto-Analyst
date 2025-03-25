@@ -20,9 +20,9 @@ import API_URL from '@/config/api'
 import { useCredits } from '@/lib/contexts/credit-context'
 import { getModelCreditCost } from '@/lib/model-tiers'
 import InsufficientCreditsModal from '@/components/chat/InsufficientCreditsModal'
-import CreditBalance from '@/components/CreditBalance'
+import CreditBalance from '@/components/chat/CreditBalance'
 import { Avatar } from '@/components/ui/avatar'
-import UserProfilePopup from '../UserProfilePopup'
+import UserProfilePopup from './UserProfilePopup'
 import SettingsPopup from './SettingsPopup'
 
 interface PlotlyMessage {

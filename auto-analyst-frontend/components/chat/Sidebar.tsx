@@ -3,7 +3,7 @@
 import { type FC, useState, useEffect } from "react"
 import Image from "next/image"
 import { motion } from "framer-motion"
-import { X, MessageSquarePlus, History, Settings, LogOut, Trash2, Database, BarChart2 } from "lucide-react"
+import { X, MessageSquarePlus, History, Settings, LogOut, Trash2, BarChart2 } from "lucide-react"
 import { signOut, useSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
 import { useChatHistoryStore } from "@/lib/store/chatHistoryStore"
@@ -11,9 +11,7 @@ import SettingsPopup from './SettingsPopup'
 import axios from "axios"
 import { useSessionStore } from '@/lib/store/sessionStore'
 import API_URL from '@/config/api'
-import { Button } from "@/components/ui/button"
 import { format } from 'date-fns'
-import CreditBalance from '@/components/CreditBalance'
 
 const PREVIEW_API_URL = API_URL;
 
