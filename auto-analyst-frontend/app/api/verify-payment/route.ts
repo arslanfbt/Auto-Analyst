@@ -2,6 +2,7 @@ import { NextResponse, NextRequest } from 'next/server'
 import { getToken } from 'next-auth/jwt'
 import Stripe from 'stripe'
 import redis, { KEYS } from '@/lib/redis'
+import { sendSubscriptionConfirmation, sendPaymentConfirmationEmail } from '@/lib/email'
 
 export const dynamic = 'force-dynamic'
 
@@ -59,7 +60,7 @@ export async function POST(request: NextRequest) {
 
     // DIRECT METHOD: Since sessions list might be unreliable,
     // manually create the subscription data from the payment intent
-    const userEmail = token.email
+    const _userEmail = token.email
     
     // Get metadata from the payment intent if available
     const metadata = intent.metadata || {}
@@ -93,6 +94,46 @@ export async function POST(request: NextRequest) {
           
           // Mark payment as processed
           await redis.set(processedKey, 'true')
+
+          // Get plan name from session or line items
+          let planName = 'Basic';
+          if (session.metadata?.plan) {
+            planName = session.metadata.plan;
+          } else if (session.line_items) {
+            try {
+              const lineItems = await stripe.checkout.sessions.listLineItems(session.id);
+              if (lineItems.data.length > 0 && lineItems.data[0].price?.product) {
+                const product = await stripe.products.retrieve(lineItems.data[0].price.product as string);
+                planName = product.name;
+              }
+            } catch (err) {
+              console.log('Could not retrieve product details:', err);
+            }
+          }
+
+          // Send email confirmation
+          if (session && session.customer_details?.email) {
+            try {
+              await sendPaymentConfirmationEmail({
+                email: session.customer_details.email,
+                name: session.customer_details.name || token.name || '',
+                plan: planName,
+                amount: ((session.amount_total || 0) / 100).toFixed(2),
+                billingCycle: session.metadata?.cycle === 'yearly' ? 'Annual' : 'Monthly',
+                date: new Date().toLocaleString('en-US', {
+                  year: 'numeric', 
+                  month: 'long',
+                  day: 'numeric'
+                })
+              });
+              
+              console.log(`Payment confirmation email sent to ${session.customer_details.email}`);
+            } catch (emailError) {
+              // Log the error but don't fail the request
+              console.error('Failed to send payment confirmation email:', emailError);
+            }
+          }
+
           return NextResponse.json({ success: true })
         } else {
           console.log('No session found by payment intent, using fallback method')
@@ -179,6 +220,24 @@ export async function POST(request: NextRequest) {
       
       console.log('Storing credit data:', creditData)
       await redis.hset(KEYS.USER_CREDITS(userId), creditData)
+
+      // Get user email (first try from session, then from token)
+      
+      const userEmail= _userEmail || ''
+      if (userEmail && userEmail.includes('@')) {
+        await sendSubscriptionConfirmation(
+          userEmail,
+          planName,
+          planType,
+          amount,
+          interval,
+          renewalDate.toISOString().split('T')[0],
+          creditAmount,
+          creditResetDate.toISOString().split('T')[0]
+        )
+      } else {
+        console.log('No email found for user, cannot send confirmation email')
+      }
     }
     
     // Mark this payment as processed
@@ -288,6 +347,23 @@ async function updateUserSubscriptionFromSession(userId: string, session: Stripe
     
     console.log('Storing credit data in Redis:', creditData)
     await redis.hset(KEYS.USER_CREDITS(userId), creditData)
+
+    // Get user email (first try from session, then from token)
+    const userEmail = session.customer_email || ''
+    if (userEmail) {
+      await sendSubscriptionConfirmation(
+        userEmail,
+        planName,
+        planType,
+        amount,
+        interval,
+        renewalDate.toISOString().split('T')[0],
+        creditAmount,
+        creditResetDate.toISOString().split('T')[0]
+      )
+    } else {
+      console.log('No email found for user, cannot send confirmation email')
+    }
 
     console.log('Successfully updated user subscription and credits')
     return true

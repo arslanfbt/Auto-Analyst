@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import Stripe from 'stripe'
 import { Readable } from 'stream'
 import redis, { creditUtils, KEYS } from '@/lib/redis'
+import { sendSubscriptionConfirmation, sendPaymentConfirmationEmail } from '@/lib/email'
 
 // Use the correct App Router configuration instead of the default body parser
 export const dynamic = 'force-dynamic'
@@ -92,6 +93,32 @@ async function updateUserSubscription(userId: string, session: Stripe.Checkout.S
       lastUpdate: now.toISOString()
     })
     
+    // Get user email from session or lookup in Redis
+    let userEmail = session.customer_email || ''
+    if (!userEmail && userId) {
+      // Try to fetch email from Redis user profile
+      const userProfile = await redis.hgetall(`user:${userId}`)
+      if (userProfile && userProfile.email) {
+        userEmail = userProfile.email as string
+      }
+    }
+    
+    // Send confirmation email if we have the user's email
+    if (userEmail) {
+      await sendSubscriptionConfirmation(
+        userEmail,
+        planName,
+        planType,
+        amount,
+        interval,
+        renewalDate.toISOString().split('T')[0],
+        creditAmount,
+        creditUtils.getNextMonthFirstDay()
+      )
+    } else {
+      console.log(`No email found for user ${userId}, cannot send confirmation email`)
+    }
+    
     return true
   } catch (error) {
     console.error('Error updating user subscription:', error)
@@ -137,18 +164,54 @@ export async function POST(request: NextRequest) {
 
         if (!userId) {
           console.error('No user ID found in session metadata')
-          return NextResponse.json({ error: 'No user ID found' }, { status: 400 })
+          return NextResponse.json({ error: 'User ID missing from session metadata' }, { status: 400 })
         }
 
         // Update the user's subscription
-        const success = await updateUserSubscription(userId, session)
+        const updated = await updateUserSubscription(userId, session)
         
-        if (success) {
-          console.log(`Successfully processed checkout for user ${userId}`)
-        } else {
-          console.error(`Failed to process checkout for user ${userId}`)
+        if (!updated) {
+          console.error('Failed to update user subscription')
+          return NextResponse.json({ error: 'Failed to update subscription' }, { status: 500 })
         }
-        break
+        
+        // Get customer details and subscription info
+        const customerEmail = session.customer_email || session.customer_details?.email;
+        const customerName = session.customer_details?.name || '';
+        
+        // Get metadata from the session
+        const plan = session.metadata?.plan || 'Standard';
+        const cycle = session.metadata?.cycle || 'monthly';
+        
+        // Format amount
+        const amount = ((session.amount_total || 0) / 100).toFixed(2);
+        
+        // Format date
+        const date = new Date().toLocaleString('en-US', {
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric'
+        });
+        
+        // Send confirmation email
+        if (customerEmail) {
+          try {
+            await sendPaymentConfirmationEmail({
+              email: customerEmail,
+              name: customerName,
+              plan: plan,
+              amount: amount,
+              billingCycle: cycle === 'yearly' ? 'Annual' : 'Monthly',
+              date: date
+            });
+            console.log(`Payment confirmation email sent to ${customerEmail}`);
+          } catch (error) {
+            console.error('Failed to send payment confirmation email:', error);
+            // Continue processing - don't fail the webhook due to email issues
+          }
+        }
+        
+        return NextResponse.json({ received: true })
       }
         
       case 'customer.subscription.updated': {
@@ -169,9 +232,8 @@ export async function POST(request: NextRequest) {
       
       default:
         console.log(`Unhandled event type: ${event.type}`)
+        return NextResponse.json({ received: true })
     }
-
-    return NextResponse.json({ received: true })
   } catch (error: any) {
     console.error('Webhook error:', error)
     return NextResponse.json({ error: error.message || 'Webhook handler failed' }, { status: 500 })

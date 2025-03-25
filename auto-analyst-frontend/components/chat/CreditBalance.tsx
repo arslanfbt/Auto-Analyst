@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react'
 import { useCredits } from '@/lib/contexts/credit-context'
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './ui/tooltip'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import Link from 'next/link'
 import { ChevronUp, CreditCard, Coins, Infinity as InfinityIcon, RefreshCcw } from 'lucide-react'
 import { motion } from 'framer-motion'
