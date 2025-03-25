@@ -22,7 +22,7 @@ import { getModelCreditCost } from '@/lib/model-tiers'
 import InsufficientCreditsModal from '@/components/chat/InsufficientCreditsModal'
 import CreditBalance from '@/components/CreditBalance'
 import { Avatar } from '@/components/ui/avatar'
-import UserProfilePopup from '../UserProfilePopup'
+import UserProfilePopup from './UserProfilePopup'
 import SettingsPopup from './SettingsPopup'
 
 interface PlotlyMessage {

@@ -5,8 +5,8 @@ import Image from "next/image"
 import { Menu, User } from "lucide-react"
 import { useSession } from "next-auth/react"
 import { Avatar } from '@/components/ui/avatar'
-import UserProfilePopup from '../UserProfilePopup'
-import CreditBalance from '@/components/CreditBalance'
+import UserProfilePopup from './UserProfilePopup'
+import CreditBalance from './CreditBalance'
 import { useChatState } from "./ChatStateProvider"
 
 interface ChatHeaderProps {
