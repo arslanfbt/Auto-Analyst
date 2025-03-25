@@ -75,11 +75,11 @@ const pricingTiers = [
       'Everything in Standard',
       'Unlimited credits',
       'Dedicated support',
-      'Team collaboration',
       'Priority processing',
       'Custom integrations',
       'Tailored solutions',
-      'SLA guarantees',
+      'Custom Agents',
+      'Marketing Analytics APIs',
     ],
     highlight: false,
   }
