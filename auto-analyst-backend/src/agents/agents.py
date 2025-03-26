@@ -492,6 +492,10 @@ class chat_history_name_agent(dspy.Signature):
     query = dspy.InputField(desc="The query to make a name for")
     name = dspy.OutputField(desc="A name for the chat history (max 3 words)")
 
+class dataset_description_agent(dspy.Signature):
+    """You are an agent that takes a dataset and returns a description for the dataset"""
+    dataset = dspy.InputField(desc="The dataset to make a description for")
+    description = dspy.OutputField(desc="A one line description for the dataset")
 
 if __name__ == "__main__":
     import dspy

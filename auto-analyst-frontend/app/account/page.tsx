@@ -107,9 +107,7 @@ export default function AccountPage() {
         let planDefaultTotal = 100; // Free plan default
         if (data.subscription?.plan) {
           const planName = data.subscription.plan.toLowerCase();
-          if (planName.includes('pro')) {
-            planDefaultTotal = 999999;
-          } else if (planName.includes('standard')) {
+          if (planName.includes('standard')) {
             planDefaultTotal = 500;
           }
         }
@@ -265,9 +263,8 @@ export default function AccountPage() {
                    credits.total : 
                    parseInt(String(credits.total || '100'));
     
-    // Check if this is an "unlimited" plan (Pro plan)
-    const isUnlimited = total_remaining > 99999 || 
-                        (subscription?.planType === 'PRO');
+    // Check if this is an "unlimited" plan (remove PRO plan check)
+    const isUnlimited = total_remaining > 99999; // Remove check for PRO plan
     
     // Display text for total credits
     const totalDisplay = isUnlimited ? "No Limit" : total_remaining.toString();
@@ -400,17 +397,16 @@ export default function AccountPage() {
   const canDowngrade = () => {
     if (!subscription) return false
     const planName = subscription.plan.toLowerCase()
-    return planName.includes('pro') || planName.includes('standard')
+    return planName.includes('standard')
   }
   
   // Helper to get the next lower plan
   const getDowngradePlanName = () => {
-    if (!subscription) return 'Free'
+    if (!subscription) return 'Free Plan'
     const planName = subscription.plan.toLowerCase()
     
-    if (planName.includes('pro')) return 'Standard'
-    if (planName.includes('standard')) return 'Free'
-    return 'Free'
+    if (planName.includes('standard')) return 'Free Plan'
+    return 'Standard Plan'
   }
 
   if (status === 'loading' || loading) {
@@ -709,6 +705,7 @@ export default function AccountPage() {
                             Change Plan
                           </Button>
                           <Button
+                            variant="ghost"
                             className="text-white bg-[#FF7F7F] hover:bg-[#FF6666]"
                           >
                             Update Payment Method

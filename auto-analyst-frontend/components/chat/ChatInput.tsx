@@ -39,6 +39,8 @@ interface AgentSuggestion {
 interface FilePreview {
   headers: string[];
   rows: string[][];
+  name: string;
+  description: string;
 }
 
 interface DatasetDescription {
@@ -133,11 +135,6 @@ const ChatInput = forwardRef<
         // First preview the file
         await handleFilePreview(file);
         setFileUpload(prev => prev ? { ...prev, status: 'success' } : null)
-        // Set default name from filename (without .csv extension)
-        setDatasetDescription(prev => ({
-          ...prev,
-          name: file.name.replace('.csv', '')
-        }));
       } catch (error) {
         const errorMessage = getErrorMessage(error)
         setFileUpload(prev => prev ? { ...prev, status: 'error', errorMessage } : null)
@@ -152,17 +149,84 @@ const ChatInput = forwardRef<
   const handleFilePreview = async (file: File) => {
     if (file.type === 'text/csv') {
       try {
+        // Check if we already have a session ID - if so, we can skip the upload
+        // and just fetch the preview directly
+        if (fileUpload?.status === 'success' && sessionId) {
+          console.log('File already uploaded, fetching preview from session...');
+          
+          // Just get the preview using the existing session
+          const previewResponse = await axios.post(`${PREVIEW_API_URL}/api/preview-csv`, null, {
+            headers: {
+              'X-Session-ID': sessionId,
+            },
+          });
+          
+          console.log('Preview response from existing session:', previewResponse.data);
+          
+          const { headers, rows, name, description } = previewResponse.data;
+          
+          // Update both states with the same name and description
+          setFilePreview({ headers, rows, name, description });
+          setDatasetDescription({ name, description });
+          setShowPreview(true);
+          
+          return;
+        }
+        
+        // Otherwise, do a fresh upload
+        console.log('Uploading new file and getting preview...');
         const formData = new FormData();
         formData.append('file', file);
         
-        console.log('Sending preview request...');
-        const response = await axios.post(`${PREVIEW_API_URL}/api/preview-csv`, formData);
-        console.log('Preview response:', response.data);
+        // Add required fields
+        const tempName = file.name.replace('.csv', '');
+        const tempDescription = 'Preview dataset';
+        formData.append('name', tempName);
+        formData.append('description', tempDescription);
         
-        const { headers, rows } = response.data;
-        setFilePreview({ headers, rows });
+        // Upload the file
+        const uploadResponse = await axios.post(`${PREVIEW_API_URL}/upload_dataframe`, formData, {
+          headers: {
+            'Content-Type': 'multipart/form-data',
+            ...(sessionId && { 'X-Session-ID': sessionId }),
+          },
+        });
+        
+        console.log('Upload response:', uploadResponse.data);
+        const previewSessionId = uploadResponse.data.session_id || sessionId;
+        
+        // Then request a preview using the session ID
+        const previewResponse = await axios.post(`${PREVIEW_API_URL}/api/preview-csv`, null, {
+          headers: {
+            ...(previewSessionId && { 'X-Session-ID': previewSessionId }),
+          },
+        });
+        
+        console.log('Preview response:', previewResponse.data);
+        
+        // Extract all fields including name and description
+        const { headers, rows, name, description } = previewResponse.data;
+        
+        // Store both in filePreview and datasetDescription
+        setFilePreview({ 
+          headers, 
+          rows, 
+          name: name || tempName,
+          description: description || tempDescription 
+        });
+        
+        // Sync the datasetDescription state with the same values
+        setDatasetDescription({ 
+          name: name || tempName, 
+          description: description || tempDescription 
+        });
+        
         setShowPreview(true);
-        console.log('Dialog should be visible now', { showPreview: true, headers, rows });
+        
+        // If we got a new session ID from the upload, save it
+        if (uploadResponse.data.session_id) {
+          setSessionId(uploadResponse.data.session_id);
+        }
       } catch (error) {
         console.error('Failed to preview file:', error);
       }
@@ -321,7 +385,9 @@ const ChatInput = forwardRef<
       
       setFilePreview({
         headers: response.data.headers,
-        rows: response.data.rows
+        rows: response.data.rows,
+        name: response.data.name,
+        description: response.data.description
       });
       
       // Pre-fill the name and description for default dataset
@@ -332,6 +398,11 @@ const ChatInput = forwardRef<
       
       setShowPreview(true);
       setFileUpload(null); // Clear any previously uploaded file
+      
+      // If we got a session ID, save it
+      if (response.data.session_id) {
+        setSessionId(response.data.session_id);
+      }
     } catch (error) {
       console.error('Failed to fetch default dataset:', error);
     }
@@ -413,6 +484,35 @@ const ChatInput = forwardRef<
       day: 'numeric' 
     })
   }
+
+  // Add a function to generate dataset description automatically
+  const generateDatasetDescription = async () => {
+    if (!sessionId) return;
+    
+    try {
+      setDatasetDescription(prev => ({
+        ...prev, 
+        description: "Generating description..."
+      }));
+      
+      const response = await axios.post(`${PREVIEW_API_URL}/create-dataset-description`, {
+        sessionId: sessionId
+      });
+      
+      if (response.data && response.data.description) {
+        setDatasetDescription(prev => ({
+          ...prev,
+          description: response.data.description
+        }));
+      }
+    } catch (error) {
+      console.error("Failed to generate description:", error);
+      setDatasetDescription(prev => ({
+        ...prev,
+        description: prev.description === "Generating description..." ? "" : prev.description
+      }));
+    }
+  };
 
   return (
     <>
@@ -620,7 +720,7 @@ const ChatInput = forwardRef<
         {showPreview && (
           <Dialog open={showPreview} onOpenChange={setShowPreview}>
             <DialogContent className="w-[90vw] max-w-4xl h-[90vh] overflow-hidden bg-gray-50 fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
-              <DialogHeader className="border-b pb-4 bg-gray-50 z-10">
+              <DialogHeader className="border-b pb-4 bg-gray-50 z-8">
                 <DialogTitle className="text-xl text-gray-800">
                   Dataset Details
                 </DialogTitle>
@@ -643,13 +743,22 @@ const ChatInput = forwardRef<
                     <label className="block text-sm font-medium text-gray-800 mb-1">
                       Description
                     </label>
-                    <textarea
-                      value={datasetDescription.description}
-                      onChange={(e) => setDatasetDescription(prev => ({ ...prev, description: e.target.value }))}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-[#FF7F7F] focus:border-transparent text-gray-800"
-                      rows={3}
-                      placeholder="Describe what this dataset contains and its purpose"
-                    />
+                    <div className="relative">
+                      <textarea
+                        value={datasetDescription.description}
+                        onChange={(e) => setDatasetDescription(prev => ({ ...prev, description: e.target.value }))}
+                        className="w-full px-3 py-2 pr-28 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-[#FF7F7F] focus:border-transparent text-gray-800"
+                        rows={3}
+                        placeholder="Describe what this dataset contains and its purpose"
+                      />
+                      <button
+                        type="button"
+                        onClick={generateDatasetDescription}
+                        className="absolute right-2 top-2 px-2 py-1 text-xs font-medium bg-gray-100 text-gray-700 rounded hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-[#FF7F7F]"
+                      >
+                        Auto-generate
+                      </button>
+                    </div>
                   </div>
                 </div>
 
@@ -660,9 +769,9 @@ const ChatInput = forwardRef<
                     </h3>
                     <button
                       onClick={handleUploadWithDescription}
-                      disabled={!datasetDescription.name || !datasetDescription.description}
+                      disabled={!filePreview?.name || !filePreview?.description}
                       className={`px-3 py-1.5 text-xs font-medium text-white rounded-md flex items-center gap-2 ${
-                        !datasetDescription.name || !datasetDescription.description
+                        !filePreview?.name || !filePreview?.description
                           ? 'bg-gray-400 cursor-not-allowed'
                           : 'bg-[#FF7F7F] hover:bg-[#FF6666]'
                       }`}
@@ -691,14 +800,14 @@ const ChatInput = forwardRef<
                               key={i}
                               className="hover:bg-gray-50 transition-colors"
                             >
-                              {row.map((cell, j) => (
+                              {Array.isArray(row) ? row.map((cell, j) => (
                                 <TableCell 
                                   key={j} 
                                   className="px-4 py-3 border-b border-gray-100 text-gray-700 whitespace-nowrap"
                                 >
                                   {cell === null ? '-' : cell}
                                 </TableCell>
-                              ))}
+                              )) : null}
                             </TableRow>
                           ))}
                         </TableBody>
@@ -710,7 +819,7 @@ const ChatInput = forwardRef<
                 <div className="flex justify-end gap-3 mt-4">
                   <button
                     onClick={() => setShowPreview(false)}
-                    className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-[#FF7F7F] focus:border-transparent transition-colors hover:border-[#FF7F7F] text-white"
+                    className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-[#FF7F7F] focus:border-transparent transition-colors"
                   >
                     Close
                   </button>

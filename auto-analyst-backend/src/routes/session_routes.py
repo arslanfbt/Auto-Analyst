@@ -12,6 +12,8 @@ from pydantic import BaseModel
 from src.managers.session_manager import get_session_id
 from src.schemas.model_settings import ModelSettings
 from src.utils.logger import Logger
+from src.agents.agents import dataset_description_agent
+import dspy
 
 logger = Logger("session_routes", see_time=True, console_log=False)
 
@@ -150,22 +152,46 @@ async def get_model_settings(app_state = Depends(get_app_state)):
     }
 
 @router.post("/api/preview-csv")
-async def preview_csv(file: UploadFile = File(...)):
-    if not file.filename.endswith('.csv'):
-        raise HTTPException(status_code=400, detail="File must be a CSV")
-    
-    content = await file.read()
+async def preview_csv(app_state = Depends(get_app_state), session_id: str = Depends(get_session_id_dependency)):
+    """Preview the dataset stored in the session."""
     try:
-        # Read CSV content
-        df = pd.read_csv(StringIO(content.decode('utf-8')))
-        
+        # Get the session state to ensure we're using the current dataset
+        session_state = app_state.get_session_state(session_id)
+        df = session_state["current_df"]
+
         # Replace NaN values with None (which becomes null in JSON)
         df = df.where(pd.notna(df), None)
+
+        # Convert columns to appropriate types if necessary
+        for column in df.columns:
+            if df[column].dtype == 'object':
+                # Attempt to convert to boolean if the column contains 'True'/'False' strings
+                if df[column].isin(['True', 'False']).all():
+                    df[column] = df[column].astype(bool)
+
+        # Extract name and description if available
+        name = "Dataset"
+        description = "No description available"
         
-        # Get first 10 rows and convert to dict
+        # Try to get the description from make_data if available
+        if "make_data" in session_state and session_state["make_data"]:
+            data_dict = session_state["make_data"]
+            if "Description" in data_dict:
+                full_desc = data_dict["Description"]
+                # Try to parse the description format "{name} Dataset: {description}"
+                if "Dataset:" in full_desc:
+                    parts = full_desc.split("Dataset:", 1)
+                    name = parts[0].strip()
+                    description = parts[1].strip()
+                else:
+                    description = full_desc
+
+        # Get rows and convert to dict
         preview_data = {
             "headers": df.columns.tolist(),
-            "rows": df.head(10).values.tolist()
+            "rows": df.head(5).values.tolist(),  # Limit to first 5 rows for performance
+            "name": name,
+            "description": description
         }
         return preview_data
     except Exception as e:
@@ -235,3 +261,31 @@ async def reset_session(
             status_code=500,
             detail=f"Failed to reset session: {str(e)}"
         )
+
+
+@router.post("/create-dataset-description")
+async def create_dataset_description(
+    request: dict,
+    app_state = Depends(get_app_state)
+):
+    session_id = request.get("sessionId")
+    if not session_id:
+        raise HTTPException(status_code=400, detail="Session ID is required")
+    
+    try:
+        # Get the session state to access the dataset
+        session_state = app_state.get_session_state(session_id)
+        df = session_state["current_df"]
+        
+        # Convert dataframe to a string representation for the agent
+        dataset_info = {
+            "columns": df.columns.tolist(),
+            "sample": df.head(2).to_dict(),
+            "stats": df.describe().to_dict()
+        }
+        
+        # Generate description
+        description = dspy.ChainOfThought(dataset_description_agent)(dataset=str(dataset_info))
+        return {"description": description.description}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to generate description: {str(e)}")
