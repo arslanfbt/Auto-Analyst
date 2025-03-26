@@ -6,6 +6,7 @@ Auto-Analyst is an analytics platform featuring a **FastAPI backend** and a **Ne
 ### **Tech Stack**  
 - **Frontend:** Next.js / React  (Learn more about the frontend architecture [here](/docs/frontend.md))
 - **Backend:** Python / FastAPI  (Learn more about the api breakdown [here](/docs/backend.md))
+- **Database:** SQLite for data storage and Redis Upstash for rate limiting.
 - **Infrastructure:** Vercel and Hugging Face Spaces (To be deployed on AWS Amplify via Terraform)  
 - **CI/CD:** GitHub Actions  
 
@@ -25,28 +26,19 @@ The following core functionalities have been developed and integrated into the s
 - **Model Performance Tracking** – Evaluates model usage, response times, and token consumption patterns.  
 - **Admin Authentication** – Secure, API key-based authentication for administrative access.  
 - **Real-time Updates** – WebSocket-based real-time updates for dashboard and analytics views.  
----
-
-## 🚧 In-Progress Features  
-Key features under active development or require further refinement:  
-
 - **Real-time Analytics Enhancements** – WebSocket handling is functional but requires additional robustness improvements.  
 - **Enterprise Deployment Options** – On-premise deployment is planned to integrate APIs such as LinkedIn, Google, Meta or custom APIs.  
-- **Documentation** – Documentation is planned to be added to the project to improve the developer experience and maintainability.  
-- **Model Credits Tracking** – Model credits tracking is planned to be added to the project to divide the usage between the users.  
-- **Pricing plans and Stripe Integration** – Pricing plans and Stripe integration are planned to be added to the project for the users to purchase more credits.  
+- **Documentation** – Documentation has been added to the project to improve the developer experience and maintainability.  
+- **Model Credits Tracking** – Model credits tracking has been implemented using Redis Upstash to divide the usage between the users.  
+- **Pricing plans and Stripe Integration** – Pricing plans and Stripe integration have been implemented for users to purchase more credits.  
 ---
 
 ## 🛠️ Issues & Fixes Needed  
 The following areas require attention to improve system stability and performance:  
 
-- **WebSocket Connection Handling** – Improved error handling is needed for `active_dashboard_connections` and `active_user_connections` management.  
 - **Error Handling** – Certain API endpoints require more robust exception handling to improve fault tolerance.  
 - **Cost Calculation Precision** – The floating-point precision in cost calculations may need adjustments, particularly for projected estimates.  
-- **Query Performance** – Some database queries could be optimized for efficiency when handling large volumes of data.  
-- **Static Query** - Change the Data Viz query to be more around the static dataset of Housing.
-- **User Icon** - Add a user sign up icon in the chat interface.
-- **Code Execution Hover UI** - Fix the hover UI of the code execution.
+- **Query Performance** – Optimize agents to be more efficient and response less hallucinated results.
 ---
 
 ## 🔄 Development Workflow  
@@ -142,12 +134,8 @@ The following areas require attention to improve system stability and performanc
 - **Admin API key security** is crucial to prevent unauthorized access in production.  
 - **Cost calculation accuracy** should be regularly validated against actual expenditures.  
 - **Session management stability** requires further validation to ensure data consistency.  
+- **User Accounts Page** needs some work to be done such as change email, update plans, etc.
 
 ### **Next Steps:**  
-- Define **Pricing Plans** for the users.
-- Implement **Redis** for caching the model credits for the users.
-- Integrate **Stripe** for payment processing.
-- Strengthen **real-time capabilities** through enhanced WebSocket handling.  
-- Expand **test coverage** to mitigate regressions.  
 - Improve **documentation** to support development and maintainability.  
 - Deploy the **Database** to be on cloud and persist the data. 
