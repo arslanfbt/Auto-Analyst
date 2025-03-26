@@ -41,6 +41,7 @@ from src.routes.session_routes import router as session_router, get_session_id_d
 from src.schemas.query_schemas import QueryRequest
 from src.utils.logger import Logger
 
+
 logger = Logger("app", see_time=True, console_log=True)
 load_dotenv()
 

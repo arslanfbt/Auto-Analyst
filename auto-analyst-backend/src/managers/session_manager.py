@@ -13,7 +13,7 @@ from src.agents.agents import auto_analyst, auto_analyst_ind
 from src.agents.retrievers.retrievers import make_data
 
 # Initialize logger
-logger = Logger("session_manager", see_time=True, console_log=False)
+logger = Logger("session_manager", see_time=True, console_log=True)
 
 class SessionManager:
     """
@@ -31,8 +31,10 @@ class SessionManager:
         """
         self._sessions = {}  # Store session-specific states
         self._default_df = None
+        self._make_data = None
         self._default_retrievers = None
         self._default_ai_system = None
+        self._dataset_description = None
         self.styling_instructions = styling_instructions
         self.available_agents = available_agents
         
@@ -83,9 +85,10 @@ class SessionManager:
         if session_id not in self._sessions:
             # Initialize with default state
             self._sessions[session_id] = {
-                "current_df": self._default_df,
+                "current_df": self._default_df if self._make_data is None else self._make_data,
                 "retrievers": self._default_retrievers,
-                "ai_system": self._default_ai_system
+                "ai_system": self._default_ai_system,
+                "make_data": self._make_data
             }
         return self._sessions[session_id]
 
@@ -109,15 +112,15 @@ class SessionManager:
             desc: Description of the dataset
         """
         try:
-            data_dict = make_data(df, desc)  # Create the make_data object
+            data_dict = make_data(df, desc)
             retrievers = self.initialize_retrievers(self.styling_instructions, [str(data_dict)])
             ai_system = auto_analyst(agents=list(self.available_agents.values()), retrievers=retrievers)
-            
+            self._make_data = data_dict
             self._sessions[session_id] = {
                 "current_df": df,
                 "retrievers": retrievers,
                 "ai_system": ai_system,
-                "make_data": data_dict  # Store the make_data object in session state
+                "make_data": data_dict
             }
         except Exception as e:
             logger.log_message(f"Error updating dataset for session {session_id}: {str(e)}", level=logging.ERROR)
