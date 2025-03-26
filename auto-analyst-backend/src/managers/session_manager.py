@@ -109,14 +109,15 @@ class SessionManager:
             desc: Description of the dataset
         """
         try:
-            data_dict = make_data(df, desc)
+            data_dict = make_data(df, desc)  # Create the make_data object
             retrievers = self.initialize_retrievers(self.styling_instructions, [str(data_dict)])
             ai_system = auto_analyst(agents=list(self.available_agents.values()), retrievers=retrievers)
             
             self._sessions[session_id] = {
                 "current_df": df,
                 "retrievers": retrievers,
-                "ai_system": ai_system
+                "ai_system": ai_system,
+                "make_data": data_dict  # Store the make_data object in session state
             }
         except Exception as e:
             logger.log_message(f"Error updating dataset for session {session_id}: {str(e)}", level=logging.ERROR)

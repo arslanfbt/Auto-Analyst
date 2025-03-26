@@ -150,22 +150,20 @@ async def get_model_settings(app_state = Depends(get_app_state)):
     }
 
 @router.post("/api/preview-csv")
-async def preview_csv(file: UploadFile = File(...)):
-    if not file.filename.endswith('.csv'):
-        raise HTTPException(status_code=400, detail="File must be a CSV")
-    
-    content = await file.read()
+async def preview_csv(app_state = Depends(get_app_state), session_id: str = Depends(get_session_id_dependency)):
+    """Preview the first 5 rows of the dataset stored in the session."""
     try:
-        # Read CSV content
-        df = pd.read_csv(StringIO(content.decode('utf-8')))
-        
+        # Get the session state to ensure we're using the current dataset
+        session_state = app_state.get_session_state(session_id)
+        df = session_state["current_df"]
+
         # Replace NaN values with None (which becomes null in JSON)
         df = df.where(pd.notna(df), None)
-        
-        # Get first 10 rows and convert to dict
+
+        # Get first 5 rows and convert to dict
         preview_data = {
             "headers": df.columns.tolist(),
-            "rows": df.head(10).values.tolist()
+            "rows": df.head(5).values.tolist()  # Return as a 2D array
         }
         return preview_data
     except Exception as e:

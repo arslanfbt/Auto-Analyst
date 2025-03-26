@@ -691,14 +691,14 @@ const ChatInput = forwardRef<
                               key={i}
                               className="hover:bg-gray-50 transition-colors"
                             >
-                              {row.map((cell, j) => (
+                              {Array.isArray(row) ? row.map((cell, j) => (
                                 <TableCell 
                                   key={j} 
                                   className="px-4 py-3 border-b border-gray-100 text-gray-700 whitespace-nowrap"
                                 >
                                   {cell === null ? '-' : cell}
                                 </TableCell>
-                              ))}
+                              )) : null}
                             </TableRow>
                           ))}
                         </TableBody>
