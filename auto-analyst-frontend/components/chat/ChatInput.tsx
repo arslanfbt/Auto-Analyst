@@ -720,7 +720,7 @@ const ChatInput = forwardRef<
         {showPreview && (
           <Dialog open={showPreview} onOpenChange={setShowPreview}>
             <DialogContent className="w-[90vw] max-w-4xl h-[90vh] overflow-hidden bg-gray-50 fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
-              <DialogHeader className="border-b pb-4 bg-gray-50 z-10">
+              <DialogHeader className="border-b pb-4 bg-gray-50 z-8">
                 <DialogTitle className="text-xl text-gray-800">
                   Dataset Details
                 </DialogTitle>
@@ -747,7 +747,7 @@ const ChatInput = forwardRef<
                       <textarea
                         value={datasetDescription.description}
                         onChange={(e) => setDatasetDescription(prev => ({ ...prev, description: e.target.value }))}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-[#FF7F7F] focus:border-transparent text-gray-800"
+                        className="w-full px-3 py-2 pr-28 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-[#FF7F7F] focus:border-transparent text-gray-800"
                         rows={3}
                         placeholder="Describe what this dataset contains and its purpose"
                       />
@@ -819,7 +819,7 @@ const ChatInput = forwardRef<
                 <div className="flex justify-end gap-3 mt-4">
                   <button
                     onClick={() => setShowPreview(false)}
-                    className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-[#FF7F7F] focus:border-transparent transition-colors hover:border-[#FF7F7F] text-white"
+                    className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-[#FF7F7F] focus:border-transparent transition-colors"
                   >
                     Close
                   </button>

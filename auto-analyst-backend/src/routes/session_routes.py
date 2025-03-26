@@ -161,7 +161,14 @@ async def preview_csv(app_state = Depends(get_app_state), session_id: str = Depe
 
         # Replace NaN values with None (which becomes null in JSON)
         df = df.where(pd.notna(df), None)
-        
+
+        # Convert columns to appropriate types if necessary
+        for column in df.columns:
+            if df[column].dtype == 'object':
+                # Attempt to convert to boolean if the column contains 'True'/'False' strings
+                if df[column].isin(['True', 'False']).all():
+                    df[column] = df[column].astype(bool)
+
         # Extract name and description if available
         name = "Dataset"
         description = "No description available"
@@ -182,7 +189,7 @@ async def preview_csv(app_state = Depends(get_app_state), session_id: str = Depe
         # Get rows and convert to dict
         preview_data = {
             "headers": df.columns.tolist(),
-            "rows": df.head(5).values.tolist(),  # Limit to first 20 rows for performance
+            "rows": df.head(5).values.tolist(),  # Limit to first 5 rows for performance
             "name": name,
             "description": description
         }
@@ -273,7 +280,7 @@ async def create_dataset_description(
         # Convert dataframe to a string representation for the agent
         dataset_info = {
             "columns": df.columns.tolist(),
-            "sample": df.head(5).to_dict(),
+            "sample": df.head(2).to_dict(),
             "stats": df.describe().to_dict()
         }
         

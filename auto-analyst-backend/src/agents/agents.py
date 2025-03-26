@@ -497,7 +497,6 @@ class dataset_description_agent(dspy.Signature):
     dataset = dspy.InputField(desc="The dataset to make a description for")
     description = dspy.OutputField(desc="A one line description for the dataset")
 
-
 if __name__ == "__main__":
     import dspy
     from dspy import ChainOfThought
