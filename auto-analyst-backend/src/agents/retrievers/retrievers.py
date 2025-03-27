@@ -57,7 +57,6 @@ def make_data(df, desc):
     dict_['dataframe_head_view'] = df.head(5).to_markdown()
     dict_['all_column_names'] = str(list(df.columns))
 
-        
     for c in df.columns:
 
         df[c] = correct_num(df,c)
