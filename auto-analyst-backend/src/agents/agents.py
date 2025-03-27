@@ -493,9 +493,25 @@ class chat_history_name_agent(dspy.Signature):
     name = dspy.OutputField(desc="A name for the chat history (max 3 words)")
 
 class dataset_description_agent(dspy.Signature):
-    """You are an agent that takes a dataset and returns a description for the dataset"""
+    """You are an agent that takes a dataset and returns a detailed description for the dataset. 
+    The description should provide insights into the nature of the dataset, including its purpose, 
+    the type of data it contains, and any relevant context that would help users understand its significance. 
+    For example, if the dataset pertains to sales data, the description could include information about 
+    the time period covered, the geographical scope, and the types of products included. 
+    Here are a few examples of dataset descriptions that illustrate this approach:
+
+    1. 'This dataset contains sales transactions from an e-commerce platform over the last five years, 
+    including product categories, customer demographics, and purchase amounts, providing a comprehensive 
+    view of consumer behavior and trends in online shopping.'
+
+    2. 'The dataset consists of weather data collected from various meteorological stations across the 
+    United States, covering temperature, humidity, and precipitation levels from 2000 to 2020, 
+    which can be used for climate analysis and forecasting.'
+
+    By providing a rich and informative description, users can better grasp the dataset's relevance 
+    and applicability to their specific needs or research questions."""
     dataset = dspy.InputField(desc="The dataset to make a description for")
-    description = dspy.OutputField(desc="A one line description for the dataset")
+    description = dspy.OutputField(desc="A detailed description for the dataset, at least 200 words.")
 
 if __name__ == "__main__":
     import dspy

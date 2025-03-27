@@ -480,7 +480,7 @@ async def index():
 async def chat_history_name(request: dict):
     query = request.get("query")
     name = None
-    with dspy.settings.context(lm=dspy.GROQ(model="llama-3.2-11b-vision-preview", max_tokens=100, temperature=1.0, api_key=os.getenv("GROQ_API_KEY"))):
+    with dspy.settings.context(lm=dspy.LM(model="gpt-4o-mini", max_tokens=300, temperature=1.0, api_key=os.getenv("OPENAI_API_KEY"))):
         name = app.state.get_chat_history_name_agent()(query=str(query))
     return {"name": name.name if name else "New Chat"}
 
