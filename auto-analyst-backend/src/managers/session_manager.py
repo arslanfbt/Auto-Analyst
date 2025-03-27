@@ -9,7 +9,7 @@ from typing import Dict, Any, List, Optional
 from llama_index.core import Document, VectorStoreIndex
 from src.utils.logger import Logger
 from src.managers.user_manager import create_user, get_current_user
-from src.agents.agents import auto_analyst, auto_analyst_ind
+from src.agents.agents import auto_analyst, auto_analyst_ind, dataset_description_agent, chat_history_name_agent
 from src.agents.retrievers.retrievers import make_data
 
 # Initialize logger
@@ -37,6 +37,8 @@ class SessionManager:
         self._dataset_description = None
         self.styling_instructions = styling_instructions
         self.available_agents = available_agents
+        self.dataset_description_agent = dataset_description_agent
+        self.chat_history_name_agent = chat_history_name_agent
         
         self.initialize_default_dataset()
     
