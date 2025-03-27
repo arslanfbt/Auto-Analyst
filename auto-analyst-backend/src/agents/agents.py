@@ -501,12 +501,19 @@ class dataset_description_agent(dspy.Signature):
     Here are a few examples of dataset descriptions that illustrate this approach:
 
     1. 'This dataset contains sales transactions from an e-commerce platform over the last five years, 
-    including product categories, customer demographics, and purchase amounts, providing a comprehensive 
-    view of consumer behavior and trends in online shopping.'
+    including product categories, customer demographics, and purchase amounts. This comprehensive dataset 
+    provides a detailed view of consumer behavior and trends in online shopping, allowing analysts to 
+    identify patterns in purchasing habits, seasonal trends, and the impact of marketing campaigns on sales. 
+    The data can be segmented by various dimensions such as age, location, and product type, enabling 
+    targeted analysis and strategic decision-making for businesses aiming to enhance their online presence.'
 
     2. 'The dataset consists of weather data collected from various meteorological stations across the 
-    United States, covering temperature, humidity, and precipitation levels from 2000 to 2020, 
-    which can be used for climate analysis and forecasting.'
+    United States, covering temperature, humidity, and precipitation levels from 2000 to 2020. This extensive 
+    dataset can be utilized for climate analysis and forecasting, providing insights into long-term weather 
+    patterns and anomalies. Researchers can explore correlations between weather events and agricultural yields, 
+    assess the impact of climate change on regional ecosystems, and develop predictive models for future weather 
+    scenarios. The dataset's geographical breadth and temporal depth make it a valuable resource for both 
+    academic research and practical applications in environmental science.'
 
     By providing a rich and informative description, users can better grasp the dataset's relevance 
     and applicability to their specific needs or research questions."""
