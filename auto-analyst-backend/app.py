@@ -158,7 +158,7 @@ class AppState:
     
     def get_chat_history_name_agent(self):
         return dspy.ChainOfThought(self.chat_name_agent)
-
+    
 # Initialize FastAPI app with state
 app = FastAPI(title="AI Analytics API", version="1.0")
 app.state = AppState()
@@ -476,17 +476,13 @@ async def index():
         ],
     }
 
-# @app.post("/chat_history_name")
-# async def chat_history_name(request: dict):
-#     query = request.get("query")
-#     name = dspy.ChainOfThought(chat_history_name_agent)(query=query)
-#     return {"name": name.name}
-
 @app.post("/chat_history_name")
 async def chat_history_name(request: dict):
     query = request.get("query")
-    name = app.state.get_chat_history_name_agent()(query=query)
-    return {"name": name.name}
+    name = None
+    with dspy.settings.context(lm=dspy.GROQ(model="llama-3.2-11b-vision-preview", max_tokens=100, temperature=1.0, api_key=os.getenv("GROQ_API_KEY"))):
+        name = app.state.get_chat_history_name_agent()(query=str(query))
+    return {"name": name.name if name else "New Chat"}
 
 # In the section where routers are included, add the session_router
 app.include_router(chat_router)
