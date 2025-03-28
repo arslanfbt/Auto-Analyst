@@ -865,6 +865,7 @@ async def handle_new_model_usage(model_usage: ModelUsage):
         session.refresh(model_usage)  # Refresh attributes
         logger.log_message(f"Processing new model usage event: {model_usage.model_name}, user: {model_usage.user_id}", level=logging.INFO)
         
+        
         date_str = model_usage.timestamp.strftime('%Y-%m-%d') if model_usage.timestamp else None
         
         # Create dashboard update
