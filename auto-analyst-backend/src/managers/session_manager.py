@@ -34,7 +34,7 @@ class SessionManager:
         self._make_data = None
         self._default_retrievers = None
         self._default_ai_system = None
-        self._dataset_description = None
+        self._dataset_description = "A comprehensive dataset containing housing information including price, area, bedrooms, and other relevant features."
         self.styling_instructions = styling_instructions
         self.available_agents = available_agents
         
@@ -44,8 +44,7 @@ class SessionManager:
         """Initialize the default dataset and store it"""
         try:
             self._default_df = pd.read_csv("Housing.csv")
-            desc = "Housing Dataset"
-            data_dict = make_data(self._default_df, desc)
+            data_dict = make_data(self._default_df, self._dataset_description)
             self._default_retrievers = self.initialize_retrievers(self.styling_instructions, [str(data_dict)])
             self._default_ai_system = auto_analyst(agents=list(self.available_agents.values()), 
                                                   retrievers=self._default_retrievers)
@@ -88,7 +87,8 @@ class SessionManager:
                 "current_df": self._default_df if self._make_data is None else self._make_data,
                 "retrievers": self._default_retrievers,
                 "ai_system": self._default_ai_system,
-                "make_data": self._make_data
+                "make_data": self._make_data,
+                "description": self._dataset_description
             }
         return self._sessions[session_id]
 
@@ -120,7 +120,8 @@ class SessionManager:
                 "current_df": df,
                 "retrievers": retrievers,
                 "ai_system": ai_system,
-                "make_data": data_dict
+                "make_data": data_dict,
+                "description": desc
             }
         except Exception as e:
             logger.log_message(f"Error updating dataset for session {session_id}: {str(e)}", level=logging.ERROR)
@@ -142,7 +143,8 @@ class SessionManager:
             self._sessions[session_id] = {
                 "current_df": self._default_df.copy(),  # Create a copy to ensure isolation
                 "retrievers": self._default_retrievers,
-                "ai_system": self._default_ai_system
+                "ai_system": self._default_ai_system,
+                "description": self._dataset_description
             }
         except Exception as e:
             logger.log_message(f"Error resetting session {session_id}: {str(e)}", level=logging.ERROR)
