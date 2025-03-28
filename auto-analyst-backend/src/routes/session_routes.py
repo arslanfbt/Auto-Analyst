@@ -32,7 +32,10 @@ async def get_session_id_dependency(request: Request):
     app_state = get_app_state(request)
     return await get_session_id(request, app_state._session_manager)
 
-
+# Define a model for reset session request
+class ResetSessionRequest(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
 
 @router.post("/upload_dataframe")
 async def upload_dataframe(
@@ -203,29 +206,31 @@ async def get_default_dataset(
     session_id: str = Depends(get_session_id_dependency)
 ):
     """Get default dataset and ensure session is using it"""
-    try:
+    # try:
         # First ensure the session is reset to default
-        app_state.reset_session_to_default(session_id)
-        
-        # Get the session state to ensure we're using the default dataset
-        session_state = app_state.get_session_state(session_id)
-        df = session_state["current_df"]
-        
-        # Replace NaN values with None (which becomes null in JSON)
-        df = df.where(pd.notna(df), None)
-        
-        preview_data = {
-            "headers": df.columns.tolist(),
-            "rows": df.head(10).values.tolist(),
-            "name": "Housing Dataset",
-            "description": "A comprehensive dataset containing housing information including price, area, bedrooms, and other relevant features."
-        }
-        return preview_data
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    # app_state.reset_session_to_default(session_id)
+    
+    # Get the session state to ensure we're using the default dataset
+    session_state = app_state.get_session_state(session_id)
+    df = session_state["current_df"]
+    desc = session_state["description"]
+    
+    # Replace NaN values with None (which becomes null in JSON)
+    df = df.where(pd.notna(df), None)
+    
+    preview_data = {
+        "headers": df.columns.tolist(),
+        "rows": df.head(10).values.tolist(),
+        "name": "Housing Dataset",
+        "description": desc
+    }
+    return preview_data
+    # except Exception as e:
+    #     raise HTTPException(status_code=400, detail=str(e))
 
 @router.post("/reset-session")
 async def reset_session(
+    request_data: Optional[ResetSessionRequest] = None,
     app_state = Depends(get_app_state),
     session_id: str = Depends(get_session_id_dependency),
     name: str = None,
@@ -235,21 +240,19 @@ async def reset_session(
     try:
         app_state.reset_session_to_default(session_id)
         
+        # Get name and description from either query params or request body
+        if request_data:
+            name = request_data.name or name
+            description = request_data.description or description
+        
         # If name and description are provided, update the dataset description
         if name and description:
             session_state = app_state.get_session_state(session_id)
+            df = session_state["current_df"]
             desc = f"{name} Dataset: {description}"
-            from src.agents.retrievers.retrievers import make_data
-            from scripts.format_response import initialize_retrievers
-            data_dict = make_data(session_state["current_df"], desc)
-            # Access the styling_instructions from app_state
-            styling_instructions = app_state._session_manager.styling_instructions
-            session_state["retrievers"] = initialize_retrievers(styling_instructions, [str(data_dict)])
-            from src.agents.agents import auto_analyst
-            session_state["ai_system"] = auto_analyst(
-                agents=list(app_state._session_manager.available_agents.values()), 
-                retrievers=session_state["retrievers"]
-            )
+            
+            # Update the session dataset with the new description
+            app_state.update_session_dataset(session_id, df, desc)
         
         return {
             "message": "Session reset to default dataset",
@@ -257,6 +260,7 @@ async def reset_session(
             "dataset": "Housing.csv"
         }
     except Exception as e:
+        logger.log_message(f"Failed to reset session: {str(e)}", level=logging.ERROR)
         raise HTTPException(
             status_code=500,
             detail=f"Failed to reset session: {str(e)}"
