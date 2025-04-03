@@ -357,6 +357,14 @@ async def chat_with_all(
                 request.query
             )
 
+            plan_descrition = format_response_to_markdown({"analytical_planner": plan_response}, dataframe=session_state["current_df"])
+            
+            yield json.dumps({
+                "agent": "Analytical Planner",
+                "content": plan_descrition,
+                "status": "success" if plan_descrition else "error"
+            }) + "\n"
+
             async for agent_name, inputs, response in session_state["ai_system"].execute_plan(request.query, plan_response):
                 formatted_response = format_response_to_markdown(
                     {agent_name: response}, 
