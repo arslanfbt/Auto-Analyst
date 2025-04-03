@@ -203,7 +203,6 @@ async def chat_with_agent(
             # Update session state with this chat ID
             session_state["chat_id"] = chat_id_param
         except (ValueError, TypeError):
-            # logger.warning(f"Invalid chat_id in query params: {request_obj.query_params.get('chat_id')}")
             pass
 
     if session_state["current_df"] is None:
@@ -243,6 +242,22 @@ async def chat_with_agent(
         # Record start time for timing
         start_time = time.time()
         
+        # Add chat context from previous messages if chat_id is available
+        chat_id = session_state.get("chat_id")
+        chat_context = ""
+        if chat_id:
+            # Get chat manager from app state
+            chat_manager = app.state._session_manager.chat_manager
+            # Get recent messages
+            recent_messages = chat_manager.get_recent_chat_history(chat_id, limit=5)
+            # Extract agent commentaries
+            chat_context = chat_manager.extract_agent_commentaries(recent_messages)
+        print("chat_context", chat_context)
+        # Append context to the query if available
+        enhanced_query = request.query
+        if chat_context:
+            enhanced_query = f"{request.query}\n\nPrevious context:\n{chat_context}"
+        
         # For multiple agents
         if "," in agent_name:
             agent_list = [AVAILABLE_AGENTS[agent.strip()] for agent in agent_name.split(",")]
@@ -253,7 +268,7 @@ async def chat_with_agent(
             agent = auto_analyst_ind(agents=[agent], retrievers=session_state["retrievers"])
         
         try:
-            response = agent(request.query, agent_name)
+            response = agent(enhanced_query, agent_name)
         except Exception as agent_error:
             raise HTTPException(
                 status_code=500,
@@ -270,29 +285,29 @@ async def chat_with_agent(
             processing_time_ms = int((time.time() - start_time) * 1000)
             
             # Get prompt and response sizes
-            prompt_size = len(request.query)
+            prompt_size = len(enhanced_query)
             response_size = len(str(response))
             
             model_name = app.state.model_config.get("model", "gpt-4o-mini")
             provider = ai_manager.get_provider_for_model(model_name)
                 
-                # Estimate tokens (actual implementation may vary)
+            # Estimate tokens
             try:
-                prompt_tokens = len(ai_manager.tokenizer.encode(request.query))
+                prompt_tokens = len(ai_manager.tokenizer.encode(enhanced_query))
                 completion_tokens = len(ai_manager.tokenizer.encode(str(response)))
                 total_tokens = prompt_tokens + completion_tokens
             except:
                 # Fallback estimation
-                words = len(request.query.split()) + len(str(response).split())
-                total_tokens = words * 1.5  # rough estimate
-                prompt_tokens = len(request.query.split()) * 1.5
+                words = len(enhanced_query.split()) + len(str(response).split())
+                total_tokens = words * 1.5
+                prompt_tokens = len(enhanced_query.split()) * 1.5
                 completion_tokens = total_tokens - prompt_tokens
             
             cost = ai_manager.calculate_cost(model_name, prompt_tokens, completion_tokens)
             # Save to DB with the proper chat_id
             ai_manager.save_usage_to_db(
                 user_id=session_state.get("user_id"),
-                chat_id=session_state.get("chat_id"),  # This will now be the one from query params
+                chat_id=session_state.get("chat_id"),
                 model_name=model_name,
                 provider=provider,
                 prompt_tokens=int(prompt_tokens),
@@ -308,7 +323,7 @@ async def chat_with_agent(
         
         return {
             "agent_name": agent_name,
-            "query": request.query,
+            "query": request.query,  # Return original query without context
             "response": formatted_response,
             "session_id": session_id
         }
@@ -350,14 +365,39 @@ async def chat_with_all(
         total_inputs = ""
 
         try:
+            # Add chat context from previous messages if chat_id is available
+            chat_id = session_state.get("chat_id")
+            chat_context = ""
+            if chat_id:
+                # Get chat manager from app state
+                chat_manager = app.state._session_manager.chat_manager
+                # Get recent messages
+                recent_messages = chat_manager.get_recent_chat_history(chat_id, limit=5)
+                # Extract agent commentaries
+                chat_context = chat_manager.extract_agent_commentaries(recent_messages)
+            
+            # Append context to the query if available
+            enhanced_query = request.query
+            if chat_context:
+                enhanced_query = f"{request.query}\n\nPrevious context:\n{chat_context}"
+                print("chat_context", chat_context)
+            
             loop = asyncio.get_event_loop()
             plan_response = await loop.run_in_executor(
                 None,
                 session_state["ai_system"].get_plan,
-                request.query
+                enhanced_query  # Use enhanced query with context
             )
 
-            async for agent_name, inputs, response in session_state["ai_system"].execute_plan(request.query, plan_response):
+            plan_descrition = format_response_to_markdown({"analytical_planner": plan_response}, dataframe=session_state["current_df"])
+            
+            yield json.dumps({
+                "agent": "Analytical Planner",
+                "content": plan_descrition,
+                "status": "success" if plan_descrition else "error"
+            }) + "\n"
+
+            async for agent_name, inputs, response in session_state["ai_system"].execute_plan(enhanced_query, plan_response):
                 formatted_response = format_response_to_markdown(
                     {agent_name: response}, 
                     dataframe=session_state["current_df"]
@@ -375,7 +415,7 @@ async def chat_with_all(
 
             if session_state.get("user_id"):
                 overall_processing_time_ms = int((time.time() - overall_start_time) * 1000)
-                prompt_size = len(request.query)
+                prompt_size = len(enhanced_query)  # Use enhanced_query size instead of request.query
 
                 # Track the code combiner agent response
                 if "refined_complete_code" in response:
