@@ -11,6 +11,7 @@ from src.utils.logger import Logger
 from src.managers.user_manager import create_user, get_current_user
 from src.agents.agents import auto_analyst, auto_analyst_ind
 from src.agents.retrievers.retrievers import make_data
+from src.managers.chat_manager import ChatManager
 
 # Initialize logger
 logger = Logger("session_manager", see_time=True, console_log=True)
@@ -37,6 +38,7 @@ class SessionManager:
         self._dataset_description = "A comprehensive dataset containing housing information including price, area, bedrooms, and other relevant features."
         self.styling_instructions = styling_instructions
         self.available_agents = available_agents
+        self.chat_manager = ChatManager(db_url='sqlite:///chat_database.db')
         
         self.initialize_default_dataset()
     

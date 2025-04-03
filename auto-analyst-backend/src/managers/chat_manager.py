@@ -10,7 +10,7 @@ from datetime import datetime
 import time
 import tiktoken
 from src.utils.logger import Logger
-
+import re
 logger = Logger("chat_manager", see_time=True, console_log=False)
 
 
@@ -934,4 +934,66 @@ class ChatManager:
                 "top_users": []
             }
         finally:
-            session.close() 
+            session.close()
+
+    def get_recent_chat_history(self, chat_id: int, limit: int = 5) -> List[Dict[str, Any]]:
+        """
+        Get recent message history for a chat, limited to the last 'limit' messages.
+        
+        Args:
+            chat_id: ID of the chat to get history for
+            limit: Maximum number of recent messages to return
+            
+        Returns:
+            List of dictionaries containing message information
+        """
+        session = self.Session()
+        try:
+            messages = session.query(Message).filter(
+                Message.chat_id == chat_id
+            ).order_by(Message.timestamp.desc()).limit(limit * 2).all()  # Fetch more to get message pairs
+            
+            # Reverse to get chronological order
+            messages.reverse()
+            
+            return [
+                {
+                    "message_id": msg.message_id,
+                    "chat_id": msg.chat_id,
+                    "content": msg.content,
+                    "sender": msg.sender,
+                    "timestamp": msg.timestamp.isoformat()
+                } for msg in messages
+            ]
+        except SQLAlchemyError as e:
+            logger.error(f"Error retrieving chat history: {str(e)}")
+            return []
+        finally:
+            session.close()
+
+
+    def extract_agent_commentaries(self, messages: List[Dict[str, Any]]) -> str:
+        """
+        Extract code_combiner_agent commentaries from message history.
+
+        Args:
+            messages: List of message dictionaries
+
+        Returns:
+            String containing combined commentaries
+        """
+        
+        commentaries = []
+        
+        for msg in messages:
+            # Ensure content exists and is from AI before extracting commentary
+            if msg.get("sender") == "ai" and "content" in msg:
+                content = msg["content"]
+                print("----")
+                matches = re.findall(r"### Commentary\n(.*?)(?=\n\n##|\Z)", content, re.DOTALL)                
+                commentaries.extend(match.strip() for match in matches)
+
+        print(commentaries)
+        
+        # Return the last 3 commentaries to maintain context
+        return "\n".join(commentaries[-3:])  
