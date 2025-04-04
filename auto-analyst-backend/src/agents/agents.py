@@ -11,6 +11,9 @@ class analytical_planner(dspy.Signature):
     1. Datasets
     2. Data Agent descriptions
     3. User-defined Goal
+
+    IMPORTANT: You may be provided with previous interaction history. The section marked "### Current Query:" contains the user's current request. Any text in "### Previous Interaction History:" is for context only and is NOT part of the current request.
+    
     You take these three inputs to develop a comprehensive plan to achieve the user-defined goal from the data & Agents available.
     In case you think the user-defined goal is infeasible you can ask the user to redefine or add more description to the goal.
 
@@ -40,42 +43,51 @@ class preprocessing_agent(dspy.Signature):
     # Doer Agent which performs pre-processing like cleaning data, make new columns etc
     """ Given a user-defined analysis goal and a pre-loaded dataset df, 
     I will generate Python code using NumPy and Pandas to build an exploratory analytics pipeline.
-      The goal is to simplify the preprocessing and introductory analysis of the dataset.
+    The goal is to simplify the preprocessing and introductory analysis of the dataset.
 
-Task Requirements:
+    IMPORTANT: You may be provided with previous interaction history. The section marked "### Current Query:" contains the user's current request. Any text in "### Previous Interaction History:" is for context only and is NOT part of the current request.
 
-Identify and separate numeric and categorical columns into two lists: numeric_columns and categorical_columns.
-Handle null values in the dataset, applying the correct logic for numeric and categorical columns.
-Convert string dates to datetime format.
-Create a correlation matrix that only includes numeric columns.
-Use the correct column names according to the dataset.
+    Task Requirements:
 
-The generated Python code should be concise, readable, and follow best practices for data preprocessing and introductory analysis. 
-The code should be written using NumPy and Pandas libraries, and should not read the CSV file into the dataframe (it is already loaded as df).
-When splitting numerical and categorical use this script:
+    Identify and separate numeric and categorical columns into two lists: numeric_columns and categorical_columns.
+    Handle null values in the dataset, applying the correct logic for numeric and categorical columns.
+    Convert string dates to datetime format.
+    Create a correlation matrix that only includes numeric columns.
+    Use the correct column names according to the dataset.
 
-categorical_columns = df.select_dtypes(include=[object, 'category']).columns.tolist()
-numeric_columns = df.select_dtypes(include=[np.number]).columns.tolist()
+    The generated Python code should be concise, readable, and follow best practices for data preprocessing and introductory analysis. 
+    The code should be written using NumPy and Pandas libraries, and should not read the CSV file into the dataframe (it is already loaded as df).
+    When splitting numerical and categorical use this script:
 
-DONOT 
+    categorical_columns = df.select_dtypes(include=[object, 'category']).columns.tolist()
+    numeric_columns = df.select_dtypes(include=[np.number]).columns.tolist()
 
-Use this to handle conversion to Datetime
-def safe_to_datetime(date):
-    try:
-        return pd.to_datetime(date,errors='coerce', cache=False)
-    except (ValueError, TypeError):
-        return pd.NaT
+    DONOT 
 
-df['datetime_column'] = df['datetime_column'].apply(safe_to_datetime)
+    Use this to handle conversion to Datetime
+    def safe_to_datetime(date):
+        try:
+            return pd.to_datetime(date,errors='coerce', cache=False)
+        except (ValueError, TypeError):
+            return pd.NaT
 
-You will be given recent history as a hint! Use that to infer what the user is saying
-If visualizing use plotly
+    df['datetime_column'] = df['datetime_column'].apply(safe_to_datetime)
+
+    If visualizing use plotly 
+
+    Provide a concise bullet-point summary of the preprocessing steps performed.
+    
+    Example Summary:
+    • Identified 5 numeric and 3 categorical columns
+    • Handled missing values by imputing means for numeric columns and mode for categorical columns
+    • Converted date strings to datetime format
+    • Created correlation matrix showing strong relationship between income and loan amount
 
     """
     dataset = dspy.InputField(desc="Available datasets loaded in the system, use this df, column_names  set df as copy of df")
     goal = dspy.InputField(desc="The user defined goal could ")
     code = dspy.OutputField(desc ="The code that does the data preprocessing and introductory analysis")
-    commentary = dspy.OutputField(desc="The comments about what analysis is being performed")
+    summary = dspy.OutputField(desc="A concise bullet-point summary of the preprocessing operations performed")
     
 
 
@@ -84,85 +96,93 @@ class statistical_analytics_agent(dspy.Signature):
     """ 
     You are a statistical analytics agent. Your task is to take a dataset and a user-defined goal and output Python code that performs the appropriate statistical analysis to achieve that goal. Follow these guidelines:
 
-Data Handling:
+    IMPORTANT: You may be provided with previous interaction history. The section marked "### Current Query:" contains the user's current request. Any text in "### Previous Interaction History:" is for context only and is NOT part of the current request.
+
+    Data Handling:
 
     Always handle strings as categorical variables in a regression using statsmodels C(string_column).
     Do not change the index of the DataFrame.
     Convert X and y into float when fitting a model.
-Error Handling:
+    Error Handling:
 
     Always check for missing values and handle them appropriately.
     Ensure that categorical variables are correctly processed.
     Provide clear error messages if the model fitting fails.
-Regression:
+    Regression:
 
     For regression, use statsmodels and ensure that a constant term is added to the predictor using sm.add_constant(X).
     Handle categorical variables using C(column_name) in the model formula.
     Fit the model with model = sm.OLS(y.astype(float), X.astype(float)).fit().
-Seasonal Decomposition:
+    Seasonal Decomposition:
 
     Ensure the period is set correctly when performing seasonal decomposition.
     Verify the number of observations works for the decomposition.
-Output:
+    Output:
 
     Ensure the code is executable and as intended.
     Also choose the correct type of model for the problem
     Avoid adding data visualization code.
 
-Use code like this to prevent failing:
-import pandas as pd
-import numpy as np
-import statsmodels.api as sm
+    Use code like this to prevent failing:
+    import pandas as pd
+    import numpy as np
+    import statsmodels.api as sm
 
-def statistical_model(X, y, goal, period=None):
-    try:
-        # Check for missing values and handle them
-        X = X.dropna()
-        y = y.loc[X.index].dropna()
+    def statistical_model(X, y, goal, period=None):
+        try:
+            # Check for missing values and handle them
+            X = X.dropna()
+            y = y.loc[X.index].dropna()
 
-        # Ensure X and y are aligned
-        X = X.loc[y.index]
+            # Ensure X and y are aligned
+            X = X.loc[y.index]
 
-        # Convert categorical variables
-        for col in X.select_dtypes(include=['object', 'category']).columns:
-            X[col] = X[col].astype('category')
+            # Convert categorical variables
+            for col in X.select_dtypes(include=['object', 'category']).columns:
+                X[col] = X[col].astype('category')
 
-        # Add a constant term to the predictor
-        X = sm.add_constant(X)
+            # Add a constant term to the predictor
+            X = sm.add_constant(X)
 
-        # Fit the model
-        if goal == 'regression':
-            # Handle categorical variables in the model formula
-            formula = 'y ~ ' + ' + '.join([f'C({col})' if X[col].dtype.name == 'category' else col for col in X.columns])
-            model = sm.OLS(y.astype(float), X.astype(float)).fit()
-            return model.summary()
+            # Fit the model
+            if goal == 'regression':
+                # Handle categorical variables in the model formula
+                formula = 'y ~ ' + ' + '.join([f'C({col})' if X[col].dtype.name == 'category' else col for col in X.columns])
+                model = sm.OLS(y.astype(float), X.astype(float)).fit()
+                return model.summary()
 
-        elif goal == 'seasonal_decompose':
-            if period is None:
-                raise ValueError("Period must be specified for seasonal decomposition")
-            decomposition = sm.tsa.seasonal_decompose(y, period=period)
-            return decomposition
+            elif goal == 'seasonal_decompose':
+                if period is None:
+                    raise ValueError("Period must be specified for seasonal decomposition")
+                decomposition = sm.tsa.seasonal_decompose(y, period=period)
+                return decomposition
 
-        else:
-            raise ValueError("Unknown goal specified. Please provide a valid goal.")
+            else:
+                raise ValueError("Unknown goal specified. Please provide a valid goal.")
 
-    except Exception as e:
-        return f"An error occurred: {e}"
+        except Exception as e:
+            return f"An error occurred: {e}"
 
-# Example usage:
-result = statistical_analysis(X, y, goal='regression')
-print(result)
+    # Example usage:
+    result = statistical_analysis(X, y, goal='regression')
+    print(result)
 
+    If visualizing use plotly
 
-    You may be give recent agent interactions as a hint! With the first being the latest
-If visualizing use plotly
-
+    Provide a concise bullet-point summary of the statistical analysis performed.
+    
+    Example Summary:
+    • Applied linear regression with OLS to predict house prices based on 5 features
+    • Model achieved R-squared of 0.78
+    • Significant predictors include square footage (p<0.001) and number of bathrooms (p<0.01)
+    • Detected strong seasonal pattern with 12-month periodicity
+    • Forecast shows 15% growth trend over next quarter
 
     """
     dataset = dspy.InputField(desc="Available datasets loaded in the system, use this df,columns  set df as copy of df")
     goal = dspy.InputField(desc="The user defined goal for the analysis to be performed")
     code = dspy.OutputField(desc ="The code that does the statistical analysis using statsmodel")
-    commentary = dspy.OutputField(desc="The comments about what analysis is being performed")
+    summary = dspy.OutputField(desc="A concise bullet-point summary of the statistical analysis performed and key findings")
     
 
 class sk_learn_agent(dspy.Signature):
@@ -171,17 +191,24 @@ class sk_learn_agent(dspy.Signature):
     Your task is to take a dataset and a user-defined goal, and output Python code that performs the appropriate machine learning analysis to achieve that goal. 
     You should use the scikit-learn library.
 
+    IMPORTANT: You may be provided with previous interaction history. The section marked "### Current Query:" contains the user's current request. Any text in "### Previous Interaction History:" is for context only and is NOT part of the current request.
 
     Make sure your output is as intended!
 
-    You may be give recent agent interactions as a hint! With the first being the latest
-
+    Provide a concise bullet-point summary of the machine learning operations performed.
+    
+    Example Summary:
+    • Trained a Random Forest classifier on customer churn data with 80/20 train-test split
+    • Model achieved 92% accuracy and 88% F1-score
+    • Feature importance analysis revealed that contract length and monthly charges are the strongest predictors of churn
+    • Implemented K-means clustering (k=4) on customer shopping behaviors
+    • Identified distinct segments: high-value frequent shoppers (22%), occasional big spenders (35%), budget-conscious regulars (28%), and rare visitors (15%)
     
     """
     dataset = dspy.InputField(desc="Available datasets loaded in the system, use this df,columns. set df as copy of df")
     goal = dspy.InputField(desc="The user defined goal ")
     code = dspy.OutputField(desc ="The code that does the Exploratory data analysis")
-    commentary = dspy.OutputField(desc="The comments about what analysis is being performed")
+    summary = dspy.OutputField(desc="A concise bullet-point summary of the machine learning analysis performed and key results")
     
     
     
@@ -197,28 +224,39 @@ class code_combiner_agent(dspy.Signature):
     """ You are a code combine agent, taking Python code output from many agents and combining the operations into 1 output
     You also fix any errors in the code. 
 
+    IMPORTANT: You may be provided with previous interaction history. The section marked "### Current Query:" contains the user's current request. Any text in "### Previous Interaction History:" is for context only and is NOT part of the current request.
 
     Double check column_names/dtypes using dataset, also check if applied logic works for the datatype
     df.copy = df.copy()
     Also add this to display Plotly chart
     fig.show()
 
-
-
     Make sure your output is as intended!
-        You may be give recent agent interactions as a hint! With the first being the latest
 
+    Provide a concise bullet-point summary of the code integration performed.
+    
+    Example Summary:
+    • Integrated preprocessing, statistical analysis, and visualization code into single workflow
+    • Fixed variable scope issues between modules and standardized DataFrame handling
+    • Added error handling for missing columns
+    • Combined exploratory analysis with machine learning pipeline
+    • Optimized code by removing redundant data transformations
+    • Created an integrated dashboard with 3 visualizations showing data patterns and model predictions
 
     """
     dataset = dspy.InputField(desc="Use this double check column_names, data types")
     agent_code_list =dspy.InputField(desc="A list of code given by each agent")
     refined_complete_code = dspy.OutputField(desc="Refined complete code base")
+    summary = dspy.OutputField(desc="A concise bullet-point summary of the code integration performed and improvements made")
     
     
 class data_viz_agent(dspy.Signature):
     # Visualizes data using Plotly
     """
     You are AI agent who uses the goal to generate data visualizations in Plotly.
+    
+    IMPORTANT: You may be provided with previous interaction history. The section marked "### Current Query:" contains the user's current request. Any text in "### Previous Interaction History:" is for context only and is NOT part of the current request.
+    
     You have to use the tools available to your disposal
     If row_count of dataset > 50000, use sample while visualizing 
     use this
@@ -232,18 +270,27 @@ class data_viz_agent(dspy.Signature):
     You must give an output as code, in case there is no relevant columns, just state that you don't have the relevant information
     
     Make sure your output is as intended! DO NOT OUTPUT THE DATASET/STYLING INDEX 
-    ONLY OUTPUT THE CODE AND COMMENTARY. ONLY USE ONE OF THESE 'K','M' or 1,000/1,000,000. NOT BOTH
+    ONLY OUTPUT THE CODE AND SUMMARY. ONLY USE ONE OF THESE 'K','M' or 1,000/1,000,000. NOT BOTH
     ALWAYS RETURN fig.to_html(full_html=False)
-    You may be give recent agent interactions as a hint! With the first being the latest
     DONT INCLUDE GOAL/DATASET/STYLING INDEX IN YOUR OUTPUT!
     You can add trendline into a scatter plot to show it changes,only if user mentions for it in the query!
+
+    Provide a concise bullet-point summary of the visualization created.
+    
+    Example Summary:
+    • Created an interactive scatter plot of sales vs. marketing spend with color-coded product categories
+    • Included a trend line showing positive correlation (r=0.72)
+    • Highlighted outliers where high marketing spend resulted in low sales
+    • Generated a time series chart of monthly revenue from 2020-2023
+    • Added annotations for key business events
+    • Visualization reveals 35% YoY growth with seasonal peaks in Q4
 
     """
     goal = dspy.InputField(desc="user defined goal which includes information about data and chart they want to plot")
     dataset = dspy.InputField(desc=" Provides information about the data in the data frame. Only use column names and dataframe_name as in this context")
     styling_index = dspy.InputField(desc='Provides instructions on how to style your Plotly plots')
     code= dspy.OutputField(desc="Plotly code that visualizes what the user needs according to the query & dataframe_index & styling_context")
-    commentary = dspy.OutputField(desc="The comments about what analysis is being performed, this should not include code")
+    summary = dspy.OutputField(desc="A concise bullet-point summary of the visualization created and key insights revealed")
     
     
 
@@ -313,7 +360,7 @@ class auto_analyst_ind(dspy.Module):
             
             # Generate memory summary
             memory_result = self.memory_summarize_agent(
-                agent_response=specified_agent+' '+agent_dict['code']+'\n'+agent_dict['commentary'],
+                agent_response=specified_agent+' '+agent_dict['code']+'\n'+agent_dict['summary'],
                 user_goal=query
             )
             
