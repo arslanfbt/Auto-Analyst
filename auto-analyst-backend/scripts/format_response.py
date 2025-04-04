@@ -139,12 +139,8 @@ def format_response_to_markdown(api_response, agent_name = None, dataframe=None)
                                 logger.warning(f"Large JSON output detected: {len(json_output)} bytes")
                             markdown.append(f"```plotly\n{json_output}\n```\n")
 
-            if 'summary' in content:
-                # make the summary a bullet-point list
-                summary_lines = content['summary'].split('\n')
-                markdown.append("### Summary\n")
-                for line in summary_lines:
-                    markdown.append(f"• {line.strip().replace('•', '')}\n")
+            if 'commentary' in content:
+                markdown.append(f"### Commentary\n{content['commentary']}\n")
 
             if 'refined_complete_code' in content:
                 try:

@@ -60,7 +60,7 @@ print(df_copy.head())
 print("\nCorrelation Matrix:\n", correlation_matrix)
 ```
 
-### Summary
+### Commentary
 1. **Import Libraries**: The necessary libraries, NumPy and Pandas, are imported to handle numerical operations and data manipulation.
 
 2. **Datetime Conversion Function**: A `safe_to_datetime` function is defined to gracefully handle the conversion of string dates to datetime objects, ensuring that any errors during conversion result in `NaT` (Not a Time) values without interrupting the workflow.
@@ -125,7 +125,7 @@ except Exception as e:
     print(f"An error occurred: {e}")
 ```
 
-### Summary
+### Commentary
 The code performs a multiple linear regression analysis to identify the key factors affecting housing prices. It begins by creating a copy of the original dataframe to preserve the data. The dependent variable `price` is separated from the independent variables. Rows with any missing values are removed to ensure data quality. Categorical variables are converted to the 'category' data type, which allows statsmodels to handle them appropriately in the regression. A constant term is added to the independent variables to account for the intercept in the model. The Ordinary Least Squares (OLS) regression model is then fitted using the prepared data. Finally, the summary of the regression model is printed, providing detailed statistics on the significance and impact of each predictor on the housing price.
 
 
@@ -164,7 +164,7 @@ fig.update_layout(
 fig.to_html(full_html=False)
 ```
 
-### Summary
+### Commentary
 The scatter plot visualizes the relationship between the area of the houses and their prices. By color-coding the points based on the number of bedrooms, it becomes easier to observe how bedroom count correlates with both area and price. This helps in identifying trends such as whether larger houses with more bedrooms tend to be priced higher.
 """
 
