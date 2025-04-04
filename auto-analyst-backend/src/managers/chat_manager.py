@@ -972,38 +972,33 @@ class ChatManager:
             session.close()
 
 
-    def extract_response_history(self, messages: List[Dict[str, Any]]) -> str:
+    def extract_agent_commentaries(self, messages: List[Dict[str, Any]]) -> str:
         """
-        Extract response history from message history.
+        Extract code_combiner_agent commentaries from message history.
 
         Args:
             messages: List of message dictionaries
 
         Returns:
-            String containing combined response history in a structured format
+            String containing combined commentaries
         """
         
-        summaries = []
+        commentaries = []
         user_messages = []
         for msg in messages:
             # Get User Messages
             if msg.get("sender") == "user":
                 user_messages.append(msg)
-            # Ensure content exists and is from AI before extracting summary
+            # Ensure content exists and is from AI before extracting commentary
             if msg.get("sender") == "ai" and "content" in msg:
                 content = msg["content"]
-                matches = re.findall(r"### Summary\n(.*?)(?=\n\n##|\Z)", content, re.DOTALL)                
-                summaries.extend(match.strip() for match in matches)
+                matches = re.findall(r"### Commentary\n(.*?)(?=\n\n##|\Z)", content, re.DOTALL)                
+                commentaries.extend(match.strip() for match in matches)
 
-        # Combine user messages with summaries in a structured format
+        # Combine user messages with commentaries
         combined_conversations = []
-        for user_msg, summary in zip(user_messages, summaries):
-            combined_conversations.append(f"Query: {user_msg['content']}\nSummary: {summary}")
+        for user_msg, commentary in zip(user_messages, commentaries):
+            combined_conversations.append(f"User: {user_msg['content']}\nAI: {commentary}")
 
         # Return the last 3 conversations to maintain context
-        formatted_context = "\n\n".join(combined_conversations[-3:])
-        
-        # Add a clear header to indicate this is past interaction history
-        if formatted_context:
-            return f"### Previous Interaction History:\n{formatted_context}"
-        return ""  
+        return "\n".join(combined_conversations[-3:])  
