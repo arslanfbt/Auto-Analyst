@@ -984,16 +984,21 @@ class ChatManager:
         """
         
         commentaries = []
-        
+        user_messages = []
         for msg in messages:
+            # Get User Messages
+            if msg.get("sender") == "user":
+                user_messages.append(msg)
             # Ensure content exists and is from AI before extracting commentary
             if msg.get("sender") == "ai" and "content" in msg:
                 content = msg["content"]
-                print("----")
                 matches = re.findall(r"### Commentary\n(.*?)(?=\n\n##|\Z)", content, re.DOTALL)                
                 commentaries.extend(match.strip() for match in matches)
 
-        print(commentaries)
-        
-        # Return the last 3 commentaries to maintain context
-        return "\n".join(commentaries[-3:])  
+        # Combine user messages with commentaries
+        combined_conversations = []
+        for user_msg, commentary in zip(user_messages, commentaries):
+            combined_conversations.append(f"User: {user_msg['content']}\nAI: {commentary}")
+
+        # Return the last 3 conversations to maintain context
+        return "\n".join(combined_conversations[-3:])  

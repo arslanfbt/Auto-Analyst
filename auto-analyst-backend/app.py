@@ -252,7 +252,6 @@ async def chat_with_agent(
             recent_messages = chat_manager.get_recent_chat_history(chat_id, limit=5)
             # Extract agent commentaries
             chat_context = chat_manager.extract_agent_commentaries(recent_messages)
-        print("chat_context", chat_context)
         # Append context to the query if available
         enhanced_query = request.query
         if chat_context:
@@ -375,12 +374,11 @@ async def chat_with_all(
                 recent_messages = chat_manager.get_recent_chat_history(chat_id, limit=5)
                 # Extract agent commentaries
                 chat_context = chat_manager.extract_agent_commentaries(recent_messages)
-            
             # Append context to the query if available
             enhanced_query = request.query
             if chat_context:
                 enhanced_query = f"{request.query}\n\nPrevious context:\n{chat_context}"
-                print("chat_context", chat_context)
+                print("chat_context", enhanced_query)
             
             loop = asyncio.get_event_loop()
             plan_response = await loop.run_in_executor(
