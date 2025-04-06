@@ -61,12 +61,12 @@ export default function InsufficientCreditsModal({
           >
             Close
           </Button>
-          <Link href="/enterprise" className="sm:flex-1">
+          <Link href="/pricing" className="sm:flex-1">
             <Button 
               variant="default"
               className="w-full bg-[#FF7F7F] hover:bg-[#FF6666] text-white transition-colors"
             >
-              Explore Enterprise
+              Upgrade
             </Button>
           </Link>
         </DialogFooter>
