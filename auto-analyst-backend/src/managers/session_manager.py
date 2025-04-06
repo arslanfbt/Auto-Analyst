@@ -35,7 +35,9 @@ class SessionManager:
         self._make_data = None
         self._default_retrievers = None
         self._default_ai_system = None
-        self._dataset_description = "A comprehensive dataset containing housing information including price, area, bedrooms, and other relevant features."
+        self._dataset_description = """This dataset focuses on the real estate market, containing 545 entries detailing numerous aspects of residential properties, such as their selling prices and structural features. Each record includes essential numeric attributes like `price`, `area`, `bedrooms`, `bathrooms`, `stories`, and `parking`, allowing for thorough quantitative analysis. The dataset also includes binary features like `mainroad`, `guestroom`, `basement`, `hotwaterheating`, `airconditioning`, `prefarea`, and `furnishingstatus`, adding qualitative dimensions that affect property desirability and value.
+
+        Statistical summaries reveal that the average price of properties is approximately 4.77 million, with a substantial standard deviation indicating a diverse market. The average area of the properties is about 5,151 square feet, while the typical layout features about three bedrooms and one bathroom. Understanding these patterns can assist stakeholders in making strategic decisions in areas such as pricing and investment. Overall, this dataset proves invaluable for realtors, investors, and analysts seeking to grasp market dynamics and property features that drive value."""
         self.styling_instructions = styling_instructions
         self.available_agents = available_agents
         self.chat_manager = ChatManager(db_url='sqlite:///chat_database.db')
