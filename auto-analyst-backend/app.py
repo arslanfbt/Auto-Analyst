@@ -128,9 +128,9 @@ class AppState:
         """Clear session-specific state using the SessionManager"""
         self._session_manager.clear_session_state(session_id)
 
-    def update_session_dataset(self, session_id: str, df, desc):
+    def update_session_dataset(self, session_id: str, df, name, desc):
         """Update dataset for a specific session using the SessionManager"""
-        self._session_manager.update_session_dataset(session_id, df, desc)
+        self._session_manager.update_session_dataset(session_id, df, name, desc)
 
     def reset_session_to_default(self, session_id: str):
         """Reset a session to use the default dataset using the SessionManager"""

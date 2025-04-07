@@ -14,7 +14,7 @@ from src.agents.retrievers.retrievers import make_data
 from src.managers.chat_manager import ChatManager
 
 # Initialize logger
-logger = Logger("session_manager", see_time=True, console_log=True)
+logger = Logger("session_manager", see_time=True, console_log=False)
 
 class SessionManager:
     """
@@ -24,17 +24,20 @@ class SessionManager:
     
     def __init__(self, styling_instructions: List[str], available_agents: Dict):
         """
-        Initialize SessionManager with default styling instructions and available agents
+        Initialize session manager with styling instructions and agents
         
         Args:
-            styling_instructions: List of styling instructions for visualizations
-            available_agents: Dictionary of available agent functions
+            styling_instructions: List of styling instructions
+            available_agents: Dictionary of available agents
         """
-        self._sessions = {}  # Store session-specific states
+        self._sessions = {}
         self._default_df = None
-        self._make_data = None
         self._default_retrievers = None
         self._default_ai_system = None
+        self._dataset_description = None
+        self._make_data = None
+        self._default_name = "Housing Dataset"  # Default dataset name
+        
         self._dataset_description = """This dataset focuses on the real estate market, containing 545 entries detailing numerous aspects of residential properties, such as their selling prices and structural features. Each record includes essential numeric attributes like `price`, `area`, `bedrooms`, `bathrooms`, `stories`, and `parking`, allowing for thorough quantitative analysis. The dataset also includes binary features like `mainroad`, `guestroom`, `basement`, `hotwaterheating`, `airconditioning`, `prefarea`, and `furnishingstatus`, adding qualitative dimensions that affect property desirability and value.
 
         Statistical summaries reveal that the average price of properties is approximately 4.77 million, with a substantial standard deviation indicating a diverse market. The average area of the properties is about 5,151 square feet, while the typical layout features about three bedrooms and one bathroom. Understanding these patterns can assist stakeholders in making strategic decisions in areas such as pricing and investment. Overall, this dataset proves invaluable for realtors, investors, and analysts seeking to grasp market dynamics and property features that drive value."""
@@ -92,7 +95,8 @@ class SessionManager:
                 "retrievers": self._default_retrievers,
                 "ai_system": self._default_ai_system,
                 "make_data": self._make_data,
-                "description": self._dataset_description
+                "description": self._dataset_description,
+                "name": self._default_name
             }
         return self._sessions[session_id]
 
@@ -106,54 +110,70 @@ class SessionManager:
         if session_id in self._sessions:
             del self._sessions[session_id]
 
-    def update_session_dataset(self, session_id: str, df, desc: str):
+
+    def update_session_dataset(self, session_id: str, df, name: str, desc: str):
         """
         Update dataset for a specific session
-        
+
         Args:
             session_id: The session identifier
             df: Pandas DataFrame containing the dataset
+            name: Name of the dataset
             desc: Description of the dataset
         """
         try:
             data_dict = make_data(df, desc)
             retrievers = self.initialize_retrievers(self.styling_instructions, [str(data_dict)])
             ai_system = auto_analyst(agents=list(self.available_agents.values()), retrievers=retrievers)
-            self._make_data = data_dict
-            self._sessions[session_id] = {
+            # Ensure make_data is updated if needed elsewhere, though maybe not necessary to store globally?
+            # self._make_data = data_dict 
+            
+            if session_id not in self._sessions:
+                 self._sessions[session_id] = {} # Ensure session exists
+
+            self._sessions[session_id].update({
                 "current_df": df,
                 "retrievers": retrievers,
                 "ai_system": ai_system,
-                "make_data": data_dict,
-                "description": desc
-            }
+                "make_data": data_dict, # Store session-specific data context
+                "description": desc,
+                "name": name # Explicitly set the name for custom dataset
+            })
+            logger.log_message(f"Updated session {session_id} with custom dataset: {name}", level=logging.INFO)
         except Exception as e:
             logger.log_message(f"Error updating dataset for session {session_id}: {str(e)}", level=logging.ERROR)
-            # Revert to default state
-            self.clear_session_state(session_id)
+            # Optionally revert to default state or raise error
+            # self.reset_session_to_default(session_id) # Consider if reset is desired on failure
+            raise e # Re-raise the exception so the endpoint can handle it
 
     def reset_session_to_default(self, session_id: str):
         """
         Reset a session to use the default dataset
-        
+
         Args:
             session_id: The session identifier
         """
         try:
-            # First clear any existing session
-            self.clear_session_state(session_id)
-            
-            # Then initialize with default state
+            # Clear any custom data associated with the session first
+            if session_id in self._sessions:
+                del self._sessions[session_id]
+                logger.log_message(f"Cleared existing state for session {session_id} before reset.", level=logging.INFO)
+
+            # Initialize with default state
             self._sessions[session_id] = {
-                "current_df": self._default_df.copy(),  # Create a copy to ensure isolation
+                "current_df": self._default_df.copy(), # Use a copy
                 "retrievers": self._default_retrievers,
                 "ai_system": self._default_ai_system,
-                "description": self._dataset_description
+                "description": self._dataset_description,
+                "name": self._default_name, # Explicitly set the default name
+                "make_data": None # Clear any custom make_data
             }
+            logger.log_message(f"Reset session {session_id} to default dataset: {self._default_name}", level=logging.INFO)
         except Exception as e:
             logger.log_message(f"Error resetting session {session_id}: {str(e)}", level=logging.ERROR)
             raise e
-    
+
+
     def set_session_user(self, session_id: str, user_id: int, chat_id: int = None):
         """
         Associate a user with a session

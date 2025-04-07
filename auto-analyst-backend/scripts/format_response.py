@@ -145,7 +145,7 @@ def format_response_to_markdown(api_response, agent_name = None, dataframe=None)
                 summary_lines = content['summary'].split('\n')
                 markdown.append("### Summary\n")
                 for line in summary_lines:
-                    markdown.append(f"• {line.strip().replace('•', '')}\n")
+                    markdown.append(f"• {line.strip().replace('•', '').replace('-', '')}\n")
 
             if 'refined_complete_code' in content:
                 try:
