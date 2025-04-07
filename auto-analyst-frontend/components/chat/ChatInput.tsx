@@ -21,6 +21,7 @@ import { useSessionStore } from '@/lib/store/sessionStore'
 import { useCredits } from '@/lib/contexts/credit-context'
 import API_URL from '@/config/api'
 import Link from 'next/link'
+import DatasetResetPopup from './DatasetResetPopup'
 
 // const PREVIEW_API_URL = 'http://localhost:8000';
 const PREVIEW_API_URL = API_URL;
@@ -81,11 +82,187 @@ const ChatInput = forwardRef<
   const { sessionId, setSessionId } = useSessionStore()
   const { remainingCredits, isChatBlocked } = useCredits()
   const [showCreditInfo, setShowCreditInfo] = useState(false)
+  const [showDatasetResetPopup, setShowDatasetResetPopup] = useState(false)
+  const [datasetMismatch, setDatasetMismatch] = useState(false)
 
   // Expose handlePreviewDefaultDataset to parent
   useImperativeHandle(ref, () => ({
     handlePreviewDefaultDataset
   }));
+
+  // Use a ref to track localStorage changes
+  const lastUploadedFileRef = useRef<string | null>(null);
+
+  // Check for saved file on component mount and when localStorage changes
+  useEffect(() => {
+    // Only run on client side
+    if (typeof window !== 'undefined' && !fileUpload) {
+      const savedFile = localStorage.getItem('lastUploadedFile');
+      if (savedFile) {
+        try {
+          lastUploadedFileRef.current = savedFile; // Save current value
+          const fileInfo = JSON.parse(savedFile);
+          // Create a mock File object for display purposes
+          const mockFile = new File([""], fileInfo.name, { 
+            type: fileInfo.type,
+            lastModified: fileInfo.lastModified
+          });
+          
+          setFileUpload({
+            file: mockFile,
+            status: 'success'
+          });
+        } catch (error) {
+          console.error("Error restoring file info:", error);
+          localStorage.removeItem('lastUploadedFile');
+        }
+      } else if (lastUploadedFileRef.current) {
+        // If we had a value before but it's gone now, clear the state
+        lastUploadedFileRef.current = null;
+        setFileUpload(null);
+      }
+    }
+  }, [fileUpload]);
+  
+  // Add an effect to check for localStorage changes
+  useEffect(() => {
+    const checkForStorageChanges = () => {
+      const currentValue = localStorage.getItem('lastUploadedFile');
+      
+      // If storage changed and we have a value
+      if (currentValue !== lastUploadedFileRef.current && currentValue) {
+        try {
+          const fileInfo = JSON.parse(currentValue);
+          // Create a mock File object for display purposes
+          const mockFile = new File([""], fileInfo.name, { 
+            type: fileInfo.type,
+            lastModified: fileInfo.lastModified
+          });
+          
+          setFileUpload({
+            file: mockFile,
+            status: 'success'
+          });
+          
+          lastUploadedFileRef.current = currentValue;
+        } catch (error) {
+          console.error("Error processing storage change:", error);
+        }
+      } 
+      // If storage was cleared and we had a value
+      else if (!currentValue && lastUploadedFileRef.current) {
+        setFileUpload(null);
+        lastUploadedFileRef.current = null;
+      }
+    };
+    
+    // Check on mount
+    checkForStorageChanges();
+    
+    // Set up listener for storage events (in case another tab changes localStorage)
+    window.addEventListener('storage', checkForStorageChanges);
+    
+    // Custom interval to detect changes in the same tab (every 500ms)
+    const intervalId = setInterval(checkForStorageChanges, 500);
+    
+    return () => {
+      window.removeEventListener('storage', checkForStorageChanges);
+      clearInterval(intervalId);
+    };
+  }, []);
+
+  // Check if there's a custom dataset in the session when component mounts
+  useEffect(() => {
+    const checkSessionDataset = async () => {
+      if (sessionId) {
+        try {
+          const response = await axios.get(`${PREVIEW_API_URL}/api/session-info`, {
+            headers: {
+              'X-Session-ID': sessionId,
+            }
+          });
+          
+          console.log("Session info in ChatInput:", response.data);
+          
+          // If we have a custom dataset on the server
+          if (response.data && response.data.is_custom_dataset) {
+            const customName = response.data.dataset_name || 'Custom Dataset';
+            const hasLocalStorageFile = localStorage.getItem('lastUploadedFile');
+            
+            // If UI doesn't show a custom dataset but server has one
+            if (!fileUpload && hasLocalStorageFile) {
+              try {
+                const fileInfo = JSON.parse(hasLocalStorageFile);
+                // Create a mock File object for display purposes
+                const mockFile = new File([""], fileInfo.name, { 
+                  type: fileInfo.type,
+                  lastModified: fileInfo.lastModified
+                });
+                
+                setFileUpload({
+                  file: mockFile,
+                  status: 'success'
+                });
+              } catch (error) {
+                console.error("Error restoring file info:", error);
+                localStorage.removeItem('lastUploadedFile');
+              }
+            } else if (!fileUpload && !hasLocalStorageFile) {
+              // UI shows no custom dataset, but server has one, and no localStorage
+              // This is likely after a refresh - show the dataset reset popup
+              console.log("UI shows no dataset, but server has custom dataset - showing reset dialog");
+              
+              // Create a mock File object just for display purposes
+              const mockFile = new File([""], `${customName}.csv`, { type: 'text/csv' });
+              
+              // Set the file upload state but also show the reset dialog
+              setFileUpload({
+                file: mockFile,
+                status: 'success'
+              });
+              
+              // Show the dataset reset popup to get user consent
+              setDatasetMismatch(true);
+              setShowDatasetResetPopup(true);
+            }
+          } else if (fileUpload && fileUpload.status === 'success') {
+            // The UI shows a custom dataset, but the server says we're using the default
+            // This means there's a mismatch - the session was reset on the server side
+            console.log("Dataset mismatch detected: UI shows custom dataset but server uses default");
+            setDatasetMismatch(true);
+            setShowDatasetResetPopup(true);
+          } else {
+            // Clear any file upload state since we're using the default dataset
+            setFileUpload(null);
+            localStorage.removeItem('lastUploadedFile');
+          }
+        } catch (error) {
+          console.error("Error checking session dataset in ChatInput:", error);
+        }
+      }
+    };
+    
+    checkSessionDataset();
+  }, [sessionId]);
+
+  // Store uploaded file info in localStorage to persist across page refreshes
+  useEffect(() => {
+    // Only run on client side
+    if (typeof window !== 'undefined') {
+      if (fileUpload && fileUpload.status === 'success') {
+        // Save file info to localStorage
+        const fileInfo = JSON.stringify({
+          name: fileUpload.file.name,
+          type: fileUpload.file.type,
+          lastModified: fileUpload.file.lastModified
+        });
+        
+        // Update localStorage and our ref to avoid triggering our own listener
+        localStorage.setItem('lastUploadedFile', fileInfo);
+        lastUploadedFileRef.current = fileInfo;
+      }
+    }
+  }, [fileUpload]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -112,11 +289,19 @@ const ChatInput = forwardRef<
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (file) {
+      // Log file details for debugging
+      console.log('Selected file:', {
+        name: file.name,
+        size: file.size,
+        type: file.type,
+        lastModified: file.lastModified
+      });
+      
       // Check file type before proceeding
       const isCSVByExtension = file.name.toLowerCase().endsWith('.csv');
       const isCSVByType = file.type === 'text/csv' || file.type === 'application/csv';
       
-      if (!isCSVByExtension || !isCSVByType) {
+      if (!isCSVByExtension || (!isCSVByType && file.type !== '')) {
         setFileUpload({ 
           file, 
           status: 'error', 
@@ -125,10 +310,15 @@ const ChatInput = forwardRef<
         
         setTimeout(() => {
           setFileUpload(null);
+          localStorage.removeItem('lastUploadedFile');
         }, 3000);
         return;
       }
       
+      // Reset any previous file state
+      localStorage.removeItem('lastUploadedFile');
+      
+      // Set to loading state
       setFileUpload({ file, status: 'loading' })
       
       try {
@@ -141,13 +331,14 @@ const ChatInput = forwardRef<
         
         setTimeout(() => {
           setFileUpload(null);
+          localStorage.removeItem('lastUploadedFile');
         }, 3000)
       }
     }
   }
 
   const handleFilePreview = async (file: File) => {
-    if (file.type === 'text/csv') {
+    if (file.type === 'text/csv' || file.name.toLowerCase().endsWith('.csv')) {
       try {
         // Check if we already have a session ID - if so, we can skip the upload
         // and just fetch the preview directly
@@ -174,7 +365,7 @@ const ChatInput = forwardRef<
         }
         
         // Otherwise, do a fresh upload
-        console.log('Uploading new file and getting preview...');
+        console.log('Uploading new file and getting preview...', file.name, file.size, file.type);
         const formData = new FormData();
         formData.append('file', file);
         
@@ -184,54 +375,74 @@ const ChatInput = forwardRef<
         formData.append('name', tempName);
         formData.append('description', tempDescription);
         
+        console.log('FormData prepared:', {
+          fileName: file.name,
+          fileSize: file.size,
+          fileType: file.type,
+          name: tempName,
+          description: tempDescription
+        });
+        
         // Upload the file
-        const uploadResponse = await axios.post(`${PREVIEW_API_URL}/upload_dataframe`, formData, {
-          headers: {
-            'Content-Type': 'multipart/form-data',
-            ...(sessionId && { 'X-Session-ID': sessionId }),
-          },
-        });
-        
-        console.log('Upload response:', uploadResponse.data);
-        const previewSessionId = uploadResponse.data.session_id || sessionId;
-        
-        // Then request a preview using the session ID
-        const previewResponse = await axios.post(`${PREVIEW_API_URL}/api/preview-csv`, null, {
-          headers: {
-            ...(previewSessionId && { 'X-Session-ID': previewSessionId }),
-          },
-        });
-        
-        console.log('Preview response:', previewResponse.data);
-        
-        // Extract all fields including name and description
-        const { headers, rows, name, description } = previewResponse.data;
-        
-        // Store both in filePreview and datasetDescription
-        setFilePreview({ 
-          headers, 
-          rows, 
-          name: name || tempName,
-          description: description || tempDescription 
-        });
-        
-        // Sync the datasetDescription state with the same values
-        setDatasetDescription({ 
-          name: name || tempName, 
-          description: description || tempDescription 
-        });
-        
-        setShowPreview(true);
-        
-        // If we got a new session ID from the upload, save it
-        if (uploadResponse.data.session_id) {
-          setSessionId(uploadResponse.data.session_id);
+        try {
+          const uploadResponse = await axios.post(`${PREVIEW_API_URL}/upload_dataframe`, formData, {
+            headers: {
+              'Content-Type': 'multipart/form-data',
+              ...(sessionId && { 'X-Session-ID': sessionId }),
+            },
+          });
+          
+          console.log('Upload response:', uploadResponse.data);
+          const previewSessionId = uploadResponse.data.session_id || sessionId;
+          
+          // Then request a preview using the session ID
+          const previewResponse = await axios.post(`${PREVIEW_API_URL}/api/preview-csv`, null, {
+            headers: {
+              ...(previewSessionId && { 'X-Session-ID': previewSessionId }),
+            },
+          });
+          
+          console.log('Preview response:', previewResponse.data);
+          
+          // Extract all fields including name and description
+          const { headers, rows, name, description } = previewResponse.data;
+          
+          // Store both in filePreview and datasetDescription
+          setFilePreview({ 
+            headers, 
+            rows, 
+            name: name || tempName,
+            description: description || tempDescription 
+          });
+          
+          // Sync the datasetDescription state with the same values
+          setDatasetDescription({ 
+            name: name || tempName, 
+            description: description || tempDescription 
+          });
+          
+          setShowPreview(true);
+          
+          // If we got a new session ID from the upload, save it
+          if (uploadResponse.data.session_id) {
+            setSessionId(uploadResponse.data.session_id);
+          }
+        } catch (error: any) {
+          // Handle upload errors
+          console.error('Upload error details:', {
+            message: error.message,
+            response: error.response?.data,
+            status: error.response?.status
+          });
+          throw error;
         }
       } catch (error) {
         console.error('Failed to preview file:', error);
+        alert(`Error uploading file: ${getErrorMessage(error)}`);
       }
     } else {
       console.log('Not a CSV file');
+      alert('Please upload a CSV file');
     }
   }
 
@@ -247,6 +458,7 @@ const ChatInput = forwardRef<
 
   const clearFile = () => {
     setFileUpload(null)
+    localStorage.removeItem('lastUploadedFile');
     if (fileInputRef.current) {
       fileInputRef.current.value = ""
     }
@@ -376,6 +588,18 @@ const ChatInput = forwardRef<
 
   const handlePreviewDefaultDataset = async () => {
     try {
+      // Remove any existing file info first to prevent conflicts
+      setFileUpload(null);
+      localStorage.removeItem('lastUploadedFile');
+      if (lastUploadedFileRef) {
+        lastUploadedFileRef.current = null;
+      }
+      
+      // Clear the file input too
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
+      
       // This will now also ensure we're using the default dataset
       const response = await axios.get(`${PREVIEW_API_URL}/api/default-dataset`, {
         headers: {
@@ -390,21 +614,22 @@ const ChatInput = forwardRef<
         description: response.data.description
       });
       
-      // Pre-fill the name and description for default dataset
+      // Pre-fill the name and description
       setDatasetDescription({
-        name: response.data.name || 'Housing Dataset',
+        name: response.data.name || 'Dataset',
         description: response.data.description || 'Please provide a description for this dataset'
       });
       
       setShowPreview(true);
-      setFileUpload(null); // Clear any previously uploaded file
       
       // If we got a session ID, save it
       if (response.data.session_id) {
         setSessionId(response.data.session_id);
       }
+      
+      console.log("Default dataset preview loaded, upload state reset");
     } catch (error) {
-      console.error('Failed to fetch default dataset:', error);
+      console.error('Failed to fetch dataset preview:', error);
     }
   };
 
@@ -418,22 +643,83 @@ const ChatInput = forwardRef<
       let formData = new FormData();
       
       if (fileUpload?.file) {
+        // Log file details to console for debugging
+        console.log("Upload file details:", {
+          name: fileUpload.file.name,
+          size: fileUpload.file.size,
+          type: fileUpload.file.type,
+          lastModified: fileUpload.file.lastModified
+        });
+        
+        // Only check for mock files in specific cases when we know it was created programmatically
+        // This avoids incorrectly flagging legitimate small files
+        const isMockFile = fileUpload.file.size === 0 && 
+                         !fileInputRef.current?.files?.length && 
+                         !fileUpload.file.lastModified;
+        
+        if (isMockFile) {
+          // This is likely a mock file created from localStorage after a page refresh
+          // We can't upload it as-is
+          alert("Please select your dataset file again to upload it");
+          
+          // Clear the file upload state before asking for a new file
+          setFileUpload(null);
+          localStorage.removeItem('lastUploadedFile');
+          
+          // Clear the file input so user can select again
+          if (fileInputRef.current) {
+            fileInputRef.current.value = "";
+            setTimeout(() => {
+              fileInputRef.current?.click();
+            }, 100);
+          }
+          
+          // Close the preview dialog
+          setShowPreview(false);
+          return;
+        }
+        
         // For uploaded file
         formData.append('file', fileUpload.file);
         formData.append('name', datasetDescription.name);
         formData.append('description', datasetDescription.description);
 
-        const response = await axios.post(`${PREVIEW_API_URL}/upload_dataframe`, formData, {
-          headers: {
-            'Content-Type': 'multipart/form-data',
-            ...(sessionId && { 'X-Session-ID': sessionId }),
-          },
+        console.log('Final upload with description:', {
+          fileName: fileUpload.file.name,
+          fileSize: fileUpload.file.size,
+          name: datasetDescription.name,
+          description: datasetDescription.description
         });
 
-        if (response.status === 200) {
-          if (response.data.session_id) {
-            setSessionId(response.data.session_id);
+        try {
+          const response = await axios.post(`${PREVIEW_API_URL}/upload_dataframe`, formData, {
+            headers: {
+              'Content-Type': 'multipart/form-data',
+              ...(sessionId && { 'X-Session-ID': sessionId }),
+            },
+          });
+
+          if (response.status === 200) {
+            if (response.data.session_id) {
+              setSessionId(response.data.session_id);
+            }
+            // Close the preview dialog
+            setShowPreview(false);
+            
+            // Show success message
+            setUploadSuccess(true);
+            setTimeout(() => {
+              setUploadSuccess(false);
+            }, 3000);
           }
+        } catch (error: any) {
+          console.error('Final upload error details:', {
+            message: error.message,
+            response: error.response?.data,
+            status: error.response?.status
+          });
+          alert(`Upload failed: ${error.response?.data?.detail || error.message}`);
+          throw error;
         }
       } else {
         // For default dataset, just update the session with the new description
@@ -450,6 +736,15 @@ const ChatInput = forwardRef<
           if (response.data.session_id) {
             setSessionId(response.data.session_id);
           }
+          
+          // Close the preview dialog
+          setShowPreview(false);
+          
+          // Show success message
+          setUploadSuccess(true);
+          setTimeout(() => {
+            setUploadSuccess(false);
+          }, 3000);
         }
       }
       
@@ -458,6 +753,16 @@ const ChatInput = forwardRef<
       if (fileUpload) {
         setFileUpload(prev => prev ? { ...prev, status: 'success' } : null);
       }
+      
+      // Save to localStorage after successful upload to persist across refreshes
+      if (fileUpload?.file) {
+        localStorage.setItem('lastUploadedFile', JSON.stringify({
+          name: fileUpload.file.name,
+          type: fileUpload.file.type,
+          lastModified: fileUpload.file.lastModified
+        }));
+      }
+      
       setDatasetDescription({ name: '', description: '' });
       
       setTimeout(() => {
@@ -511,6 +816,85 @@ const ChatInput = forwardRef<
         ...prev,
         description: prev.description === "Generating description..." ? "" : prev.description
       }));
+    }
+  };
+
+  // Add handler for dataset reset confirmation
+  const handleDatasetReset = async (keepCustomData: boolean) => {
+    if (keepCustomData && fileUpload && fileUpload.file) {
+      // Check if this is likely a mock file (zero size)
+      const isMockFile = fileUpload.file.size === 0;
+      
+      if (isMockFile) {
+        // First clear existing file state
+        setFileUpload(null);
+        localStorage.removeItem('lastUploadedFile');
+        
+        // If we have a file input reference, clear it and trigger a click
+        if (fileInputRef.current) {
+          console.log("Clearing file input and requesting new selection");
+          fileInputRef.current.value = "";
+          
+          // Close the dataset reset popup first
+          setShowDatasetResetPopup(false);
+          setDatasetMismatch(false);
+          
+          // Wait a moment then trigger file selection
+          setTimeout(() => {
+            if (fileInputRef.current) {
+              fileInputRef.current.click();
+            }
+          }, 100);
+        } else {
+          // If we can't access the file input, show the preview dialog
+          console.log("Showing preview dialog for file selection");
+          setShowPreview(true);
+          
+          // Pre-fill the name from the file
+          setDatasetDescription({
+            name: fileUpload.file.name.replace('.csv', ''),
+            description: 'Please provide a description for your dataset'
+          });
+          
+          // Close the dataset reset popup
+          setShowDatasetResetPopup(false);
+          setDatasetMismatch(false);
+        }
+      } else {
+        // This is a real file, we can try to show the preview directly
+        try {
+          console.log("Showing preview for existing file");
+          await handleFilePreview(fileUpload.file);
+          
+          // Close the dataset reset popup
+          setShowDatasetResetPopup(false);
+          setDatasetMismatch(false);
+        } catch (error) {
+          console.error("Failed to preview dataset:", error);
+          
+          // Clear the file upload state if preview fails
+          setFileUpload(null);
+          localStorage.removeItem('lastUploadedFile');
+          
+          // Close the dataset reset popup
+          setShowDatasetResetPopup(false);
+          setDatasetMismatch(false);
+          
+          // Show an error message
+          alert("Failed to preview dataset. Please select your file again.");
+        }
+      }
+    } else {
+      // User chose to reset, clear the file upload state
+      setFileUpload(null);
+      localStorage.removeItem('lastUploadedFile');
+      
+      // Show default dataset preview
+      handlePreviewDefaultDataset();
+      
+      // Close the popup
+      setShowDatasetResetPopup(false);
+      setDatasetMismatch(false);
     }
   };
 
@@ -718,7 +1102,26 @@ const ChatInput = forwardRef<
       </div>
       <AnimatePresence>
         {showPreview && (
-          <Dialog open={showPreview} onOpenChange={setShowPreview}>
+          <Dialog 
+            open={showPreview} 
+            onOpenChange={(open) => {
+              if (!open) {
+                // When dialog is closed without completing upload
+                setShowPreview(false);
+                
+                // If the dialog is closed without completing upload of a new file,
+                // and we don't have a successful upload yet, reset everything
+                if (fileUpload?.status !== 'success') {
+                  console.log('Dialog closed without completing upload, resetting state');
+                  setFileUpload(null);
+                  localStorage.removeItem('lastUploadedFile');
+                  if (fileInputRef.current) {
+                    fileInputRef.current.value = "";
+                  }
+                }
+              }
+            }}
+          >
             <DialogContent className="w-[90vw] max-w-4xl h-[90vh] overflow-hidden bg-gray-50 fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
               <DialogHeader className="border-b pb-4 bg-gray-50 z-8">
                 <DialogTitle className="text-xl text-gray-800">
@@ -862,6 +1265,14 @@ const ChatInput = forwardRef<
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Dataset Reset Popup */}
+      <DatasetResetPopup
+        isOpen={showDatasetResetPopup}
+        onClose={() => setShowDatasetResetPopup(false)}
+        onConfirm={() => handleDatasetReset(false)} 
+        onCancel={() => handleDatasetReset(true)}
+      />
     </>
   )
 })

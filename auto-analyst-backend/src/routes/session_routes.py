@@ -50,7 +50,7 @@ async def upload_dataframe(
         new_df = pd.read_csv(io.BytesIO(contents))
         desc = f"{name} Dataset: {description}"
         
-        app_state.update_session_dataset(session_id, new_df, desc)
+        app_state.update_session_dataset(session_id, new_df, name, desc)
         
         return {"message": "Dataframe uploaded successfully", "session_id": session_id}
     except Exception as e:
@@ -155,6 +155,7 @@ async def get_model_settings(app_state = Depends(get_app_state)):
     }
 
 @router.post("/api/preview-csv")
+@router.get("/api/preview-csv")
 async def preview_csv(app_state = Depends(get_app_state), session_id: str = Depends(get_session_id_dependency)):
     """Preview the dataset stored in the session."""
     try:
@@ -252,7 +253,7 @@ async def reset_session(
             desc = f"{name} Dataset: {description}"
             
             # Update the session dataset with the new description
-            app_state.update_session_dataset(session_id, df, desc)
+            app_state.update_session_dataset(session_id, df, name, desc)
         
         return {
             "message": "Session reset to default dataset",
@@ -293,3 +294,52 @@ async def create_dataset_description(
         return {"description": description.description}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to generate description: {str(e)}")
+
+@router.get("/api/session-info")
+async def get_session_info(
+    app_state = Depends(get_app_state),
+    session_id: str = Depends(get_session_id_dependency)
+):
+    """Get information about the current session including dataset status"""
+    try:
+        # Get the session state
+        session_state = app_state.get_session_state(session_id)
+        
+        # Get session manager reference for default name
+        session_manager = app_state._session_manager
+        
+        # Check if this is using a custom dataset or the default
+        current_name = session_state.get("name", "")
+        default_name = getattr(session_manager, "_default_name", "Housing Dataset")
+        
+        logger.log_message(f"Session info - current name: '{current_name}', default name: '{default_name}'", level=logging.INFO)
+        logger.log_message(f"Session info - session state keys: {list(session_state.keys())}", level=logging.INFO)
+        
+        # More robust detection of custom dataset
+        is_custom = False
+        
+        # Check by name
+        if current_name and current_name != default_name:
+            is_custom = True
+            logger.log_message(f"Custom dataset detected by name: {current_name}", level=logging.INFO)
+        
+        # Return session information
+        response_data = {
+            "session_id": session_id,
+            "is_custom_dataset": is_custom,
+            "dataset_name": current_name,
+            "default_name": default_name,
+            "has_session": True,
+            "session_keys": list(session_state.keys())  # For debugging
+        }
+        
+        logger.log_message(f"Session info response: {response_data}", level=logging.INFO)
+        return response_data
+    except Exception as e:
+        logger.log_message(f"Error getting session info: {str(e)}", level=logging.ERROR)
+        return {
+            "session_id": session_id,
+            "is_custom_dataset": False,
+            "has_session": False,
+            "error": str(e)
+        }
