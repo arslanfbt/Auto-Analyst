@@ -276,6 +276,14 @@ async def chat_with_agent(
         
         formatted_response = format_response_to_markdown(response, agent_name, session_state["current_df"])
         
+        if formatted_response == "Please provide a valid query...":
+            return {
+                "agent_name": agent_name,
+                "query": request.query,  # Return original query without context
+                "response": formatted_response,
+                "session_id": session_id
+            }
+        
         # Track model usage directly with AI Manager
         ai_manager = app.state.get_ai_manager()
 
@@ -389,6 +397,15 @@ async def chat_with_all(
 
             plan_descrition = format_response_to_markdown({"analytical_planner": plan_response}, dataframe=session_state["current_df"])
             
+            # if plan_descrition is empty, yield and send error
+            if plan_descrition == "Please provide a valid query...":
+                yield json.dumps({
+                    "agent": "Analytical Planner",
+                    "content": plan_descrition,
+                    "status": "error"
+                }) + "\n"
+                return
+            
             yield json.dumps({
                 "agent": "Analytical Planner",
                 "content": plan_descrition,
@@ -401,6 +418,13 @@ async def chat_with_all(
                     dataframe=session_state["current_df"]
                 ) or "No response generated"
 
+                if formatted_response == "Please provide a valid query...":
+                    yield json.dumps({
+                        "agent": agent_name,
+                        "content": formatted_response,
+                        "status": "error"
+                    }) + "\n"
+                    return
                 if agent_name != "code_combiner_agent":
                     total_response += str(response) if response else ""
                     total_inputs += str(inputs) if inputs else ""
@@ -465,7 +489,7 @@ async def chat_with_all(
             logger.log_message(f"Error in generate_responses: {str(e)}", level=logging.ERROR)
             yield json.dumps({
                 "agent": "planner",
-                "content": f"Error: An error occurred while generating responses. Please try again! {str(e)}",
+                "content": f"An error occurred while generating responses. Please try again!\n{str(e)}",
                 "status": "error"
             }) + "\n"
 

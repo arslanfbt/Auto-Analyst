@@ -5,8 +5,9 @@ import contextlib
 from io import StringIO
 import time
 import logging
+from src.utils.logger import Logger
 
-logger = logging.getLogger(__name__)
+logger = Logger(__name__, level="INFO", see_time=False, console_log=False)
 
 @contextlib.contextmanager
 def stdoutIO(stdout=None):
@@ -174,7 +175,8 @@ def format_response_to_markdown(api_response, agent_name = None, dataframe=None)
         logger.error(f"Error in format_response_to_markdown: {str(e)}")
         return f"{str(e)}"
     
-            
+    logger.log_message(f"Generated markdown content for agent '{agent_name}' at {time.strftime('%Y-%m-%d %H:%M:%S')}: {markdown}, length: {len(markdown)}", level=logging.INFO)
+    
     if not markdown or len(markdown) <= 1:
         return "Please provide a valid query..."
         
