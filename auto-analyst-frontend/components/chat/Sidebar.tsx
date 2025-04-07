@@ -71,24 +71,45 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, onNewChat, chatHisto
   const handleNewChat = async () => {
     if (sessionId) {
       try {
-        // Wait for reset to complete
-        await axios.post(`${PREVIEW_API_URL}/reset-session`, null, {
+        // Before resetting, check if there's a custom dataset loaded
+        const sessionInfoResponse = await axios.get(`${PREVIEW_API_URL}/api/session-info`, {
           headers: {
             'X-Session-ID': sessionId,
-          },
+          }
         });
         
-        clearMessages()
-        onClose()
-        // Call onNewChat last to ensure proper order
-        onNewChat()  // This will trigger handleNewChat in ChatInterface
+        // If there's a custom dataset, we'll let the ChatInterface handle it
+        console.log("Dataset check before new chat:", sessionInfoResponse.data);
+        const hasCustomDataset = sessionInfoResponse.data && sessionInfoResponse.data.is_custom_dataset;
+        
+        if (!hasCustomDataset) {
+          // If no custom dataset, we can reset session directly
+          console.log("No custom dataset, resetting session directly");
+          await axios.post(`${PREVIEW_API_URL}/reset-session`, null, {
+            headers: {
+              'X-Session-ID': sessionId,
+            },
+          });
+        } else {
+          console.log("Custom dataset detected, ChatInterface will handle dataset choice");
+          // We'll let ChatInterface handle the custom dataset flow
+        }
+        
+        clearMessages();
+        onClose();
+        onNewChat();  // This will trigger handleNewChat in ChatInterface
       } catch (error) {
-        console.error('Failed to reset session:', error);
+        console.error('Failed to check or reset session:', error);
+        
+        // Fallback to normal flow
+        clearMessages();
+        onClose();
+        onNewChat();
       }
     } else {
-      clearMessages()
-      onClose()
-      onNewChat()
+      clearMessages();
+      onClose();
+      onNewChat();
     }
   }
 

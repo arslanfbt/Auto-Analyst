@@ -24,6 +24,16 @@ import CreditBalance from '@/components/chat/CreditBalance'
 import { Avatar } from '@/components/ui/avatar'
 import UserProfilePopup from './UserProfilePopup'
 import SettingsPopup from './SettingsPopup'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+  DialogDescription
+} from "@/components/ui/dialog"
+import { Button } from "../ui/button"
+import DatasetResetPopup from './DatasetResetPopup'
 
 interface PlotlyMessage {
   type: "plotly"
@@ -89,6 +99,9 @@ const ChatInterface: React.FC = () => {
     temperature: process.env.NEXT_PUBLIC_DEFAULT_TEMPERATURE || 0.7,
     maxTokens: process.env.NEXT_PUBLIC_DEFAULT_MAX_TOKENS || 6000
   });
+  const [showDatasetResetConfirm, setShowDatasetResetConfirm] = useState(false);
+  const [hasUploadedDataset, setHasUploadedDataset] = useState(false);
+  const [tempChatIdForReset, setTempChatIdForReset] = useState<number | null>(null);
 
   useEffect(() => {
     setMounted(true)
@@ -148,9 +161,54 @@ const ChatInterface: React.FC = () => {
     }
   }, [session, mounted]);
 
+  // Define createNewChat function that was removed
+  const createNewChat = useCallback(async () => {
+    // Clear local messages state
+    clearMessages();
+    setShowWelcome(true);
+    
+    // Just set a temporary ID - we'll create the actual chat when the user sends a message
+    const tempId = Date.now(); // Use timestamp as temporary ID
+    setActiveChatId(tempId);
+    return tempId;
+  }, [clearMessages]);
+
   // Define loadChat before it's used in the fetchChatHistories dependency array
   const loadChat = useCallback(async (chatId: number) => {
     try {
+      // Before loading the chat, check if there's a dataset mismatch
+      // that might happen when switching between chats
+      try {
+        const sessionResponse = await axios.get(`${API_URL}/api/session-info`, {
+          headers: {
+            'X-Session-ID': sessionId,
+          }
+        });
+        
+        console.log("Session info before loading chat:", sessionResponse.data);
+        
+        // If we have a custom dataset, check if this chat should show the popup
+        if (sessionResponse.data && sessionResponse.data.is_custom_dataset) {
+          // Store per-chat popup state in sessionStorage
+          const chatPopupKey = `datasetPopupShown_chat_${chatId}`;
+          const popupShownForChat = window.sessionStorage.getItem(chatPopupKey);
+          
+          if (!popupShownForChat) {
+            console.log(`Dataset selection popup shown for chat ${chatId}`);
+            window.sessionStorage.setItem(chatPopupKey, 'true');
+            setTempChatIdForReset(chatId);
+            setShowDatasetResetConfirm(true);
+            return; // Wait for user decision before loading chat
+          } else {
+            console.log(`Dataset popup already shown for chat ${chatId}, loading directly`);
+          }
+        }
+      } catch (error) {
+        console.error("Error checking dataset before loading chat:", error);
+        // Continue with loading chat if check fails
+      }
+      
+      // Normal chat loading logic
       setActiveChatId(chatId);
       console.log(`Loading chat ${chatId}...`);
       const response = await axios.get(`${API_URL}/chats/${chatId}`, {
@@ -230,17 +288,6 @@ const ChatInterface: React.FC = () => {
     }
   }, [session, userId, activeChatId, sessionId, loadChat, isAdmin]);
 
-  const createNewChat = useCallback(async () => {
-    // Clear local messages state
-    clearMessages();
-    setShowWelcome(true);
-    
-    // Just set a temporary ID - we'll create the actual chat when the user sends a message
-    const tempId = Date.now(); // Use timestamp as temporary ID
-    setActiveChatId(tempId);
-    return tempId;
-  }, [clearMessages]);
-
   const handleNewChat = useCallback(async () => {
     // Clean up empty chats before creating a new one
     if (session || isAdmin) {
@@ -257,16 +304,45 @@ const ChatInterface: React.FC = () => {
       }
     }
     
-    // Clear messages and set up for a new chat
-    clearMessages();
-    setShowWelcome(true);
-    
     // Set a temporary ID - real chat will be created on first message
     const tempId = Date.now();
-    setActiveChatId(tempId);
     
-    // Refresh chat list after cleanup
-    fetchChatHistories();
+    // Before setting up new chat, check for custom dataset
+    try {
+      const response = await axios.get(`${API_URL}/api/session-info`, {
+        headers: {
+          'X-Session-ID': sessionId,
+        }
+      });
+      
+      console.log("Session info when creating new chat:", response.data);
+      
+      // For new chat button, ALWAYS show dataset popup if using custom dataset
+      // This is different from the page refresh case - we want to explicitly confirm
+      if (response.data && response.data.is_custom_dataset) {
+        console.log("Custom dataset detected when creating new chat");
+        
+        // Always show popup for new chat, regardless of what's in sessionStorage
+        setTempChatIdForReset(tempId);
+        setShowDatasetResetConfirm(true);
+        
+        // Don't set any chat state yet - wait for user decision in handleDatasetResetConfirm
+        return;
+      } else {
+        // No custom dataset, proceed normally
+        clearMessages();
+        setShowWelcome(true);
+        setActiveChatId(tempId);
+        fetchChatHistories();
+      }
+    } catch (error) {
+      console.error("Error checking for custom dataset:", error);
+      // Fallback to normal flow
+      clearMessages();
+      setShowWelcome(true);
+      setActiveChatId(tempId);
+      fetchChatHistories();
+    }
   }, [clearMessages, fetchChatHistories, userId, sessionId, session, isAdmin]);
 
   const handleStopGeneration = () => {
@@ -803,15 +879,19 @@ const ChatInterface: React.FC = () => {
     }
   }, [mounted, fetchChatHistories, session, isAdmin]);
 
-  // Remove the useEffect that creates a new chat on mount - let's not create chats until needed
-  // Instead, just clear messages and set a temporary ID
+  // Add back the initial page load effect
   useEffect(() => {
     if (mounted) {
+      // Just set up an empty chat initially, the dataset check will handle the rest
       clearMessages();
       setShowWelcome(true);
-      setActiveChatId(Date.now()); // Just a temporary ID
+      
+      // Only set activeChatId if we don't already have one
+      if (!activeChatId) {
+        setActiveChatId(Date.now());
+      }
     }
-  }, [mounted, clearMessages]);
+  }, [mounted, clearMessages, activeChatId]);
 
   // Add useEffect to check admin status
   useEffect(() => {
@@ -826,6 +906,148 @@ const ChatInterface: React.FC = () => {
       fetchModelSettings();
     }
   }, [isSettingsOpen]);
+
+  // Modify the session info useEffect to ensure popup shows immediately after page load
+  useEffect(() => {
+    if (sessionId) {
+      // Check if there's a previously uploaded dataset in the session
+      const checkSessionDataset = async () => {
+        try {
+          console.log("Checking session dataset with ID:", sessionId);
+          const response = await axios.get(`${API_URL}/api/session-info`, {
+            headers: {
+              'X-Session-ID': sessionId,
+            }
+          });
+          
+          console.log("Session info response:", response.data);
+          
+          // If the dataset isn't the default, mark as having an uploaded dataset
+          if (response.data && response.data.is_custom_dataset) {
+            console.log("Custom dataset detected:", response.data.dataset_name);
+            setHasUploadedDataset(true);
+            
+            // Only show the popup on page load if:
+            // 1. We haven't shown it before in this browser session
+            // 2. We have a custom dataset loaded
+            const popupShownThisSession = window.sessionStorage.getItem('datasetPopupShown');
+            
+            if (!popupShownThisSession) {
+              console.log("Showing dataset reset popup on page load");
+              window.sessionStorage.setItem('datasetPopupShown', 'true');
+              const tempId = activeChatId || Date.now();
+              setTempChatIdForReset(tempId);
+              setShowDatasetResetConfirm(true);
+            } else {
+              console.log("Dataset popup already shown this session, skipping");
+            }
+          } else {
+            console.log("Using default dataset");
+            setHasUploadedDataset(false);
+          }
+        } catch (error) {
+          console.error("Error checking session dataset:", error);
+        }
+      };
+      
+      // Slight delay to ensure it runs after initial render
+      setTimeout(() => {
+        checkSessionDataset();
+      }, 100);
+    }
+  }, [sessionId, activeChatId]);
+  
+  // Also fix the reset confirmation handler to properly update dataset state
+  const handleDatasetResetConfirm = async (shouldReset: boolean) => {
+    try {
+      if (shouldReset) {
+        // User chose to reset to default dataset
+        console.log("Resetting to default dataset");
+        
+        // Reset the session to use the default dataset
+        const resetResponse = await axios.post(`${API_URL}/reset-session`, null, {
+          headers: { 'X-Session-ID': sessionId }
+        });
+        
+        console.log("Reset response:", resetResponse.data);
+        
+        // Reset the flag since we're now using the default dataset
+        setHasUploadedDataset(false);
+        
+        // Show the default dataset preview and ensure file upload state is fully reset
+        if (chatInputRef.current) {
+          // This will reset all file upload state including localStorage and the file input
+          chatInputRef.current.handlePreviewDefaultDataset();
+          
+          // Also clear localStorage to prevent confusion with stored file reference
+          localStorage.removeItem('lastUploadedFile');
+          
+          // We need to ensure the file upload HTML element is also reset
+          // This is a workaround since we can't directly reset it from here
+          setTimeout(() => {
+            // Force a re-render by toggling a small state change
+            setHasUploadedDataset(false);
+          }, 100);
+        }
+      } else {
+        // User chose to keep their uploaded dataset
+        console.log("Keeping custom dataset");
+        
+        // No need to force them to reselect the file if we have session state
+        // Just ensure the UI reflects the current dataset
+        try {
+          const sessionResponse = await axios.get(`${API_URL}/api/session-info`, {
+            headers: {
+              'X-Session-ID': sessionId,
+            }
+          });
+          
+          if (sessionResponse.data && sessionResponse.data.is_custom_dataset) {
+            // The server already has the custom dataset, so we just need
+            // to update the UI to show it's loaded
+            setHasUploadedDataset(true);
+            
+            // Let the ChatInput know that we want to keep using the custom dataset
+            if (chatInputRef.current && sessionResponse.data.dataset_name) {
+              // DON'T call handlePreviewDefaultDataset as this resets to the default dataset
+              // Instead, just ensure the file info is properly stored in localStorage
+              const datasetName = sessionResponse.data.dataset_name;
+              
+              // Create a mock file info for the custom dataset
+              const fileInfo = {
+                name: datasetName.endsWith('.csv') ? datasetName : `${datasetName}.csv`,
+                type: 'text/csv',
+                lastModified: new Date().getTime()
+              };
+              
+              // Store this in localStorage for ChatInput to detect
+              localStorage.setItem('lastUploadedFile', JSON.stringify(fileInfo));
+              
+              // Force a refresh of the ChatInput component
+              setTimeout(() => {
+                setHasUploadedDataset(prev => !prev);
+                setTimeout(() => setHasUploadedDataset(true), 10);
+              }, 10);
+            }
+          }
+        } catch (error) {
+          console.error("Error getting session info for dataset handling:", error);
+        }
+      }
+      
+      // Hide the popup
+      setShowDatasetResetConfirm(false);
+      
+      // Now proceed with loading the chat
+      if (tempChatIdForReset) {
+        loadChat(tempChatIdForReset);
+        setTempChatIdForReset(null);
+      }
+    } catch (error) {
+      console.error("Error handling dataset reset:", error);
+      setShowDatasetResetConfirm(false);
+    }
+  };
 
   const handleChatDelete = useCallback((chatId: number) => {
     axios.delete(`${API_URL}/chats/${chatId}`, {
@@ -994,6 +1216,13 @@ const ChatInterface: React.FC = () => {
           isOpen={insufficientCreditsModalOpen}
           onClose={() => setInsufficientCreditsModalOpen(false)}
           requiredCredits={requiredCredits}
+        />
+
+        <DatasetResetPopup 
+          isOpen={showDatasetResetConfirm}
+          onClose={() => setShowDatasetResetConfirm(false)}
+          onConfirm={() => handleDatasetResetConfirm(true)}
+          onCancel={() => handleDatasetResetConfirm(false)}
         />
       </motion.div>
     </div>
