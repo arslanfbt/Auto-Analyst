@@ -104,6 +104,7 @@ const ChatInterface: React.FC = () => {
   const [tempChatIdForReset, setTempChatIdForReset] = useState<number | null>(null);
   const [recentlyUploadedDataset, setRecentlyUploadedDataset] = useState(false);
   const datasetPopupShownRef = useRef(false);
+  const popupShownForChatIdsRef = useRef<Set<number>>(new Set());
 
   useEffect(() => {
     setMounted(true)
@@ -220,15 +221,18 @@ const ChatInterface: React.FC = () => {
         
         // If we have a custom dataset, check if this chat should show the popup
         if (sessionResponse.data && sessionResponse.data.is_custom_dataset) {
-          // Don't show popup if we already showed it this session
-          if (!datasetPopupShownRef.current) {
+          // Only show popup if we haven't shown it for this specific chat ID
+          if (!popupShownForChatIdsRef.current.has(chatId)) {
             console.log(`Dataset selection popup shown for chat ${chatId}`);
             datasetPopupShownRef.current = true;
+            // Add this chat to the tracked set
+            popupShownForChatIdsRef.current.add(chatId);
+            
             setTempChatIdForReset(chatId);
             setShowDatasetResetConfirm(true);
             return; // Wait for user decision before loading chat
           } else {
-            console.log(`Dataset popup already shown, loading chat ${chatId} directly`);
+            console.log(`Dataset popup already shown for chat ${chatId}, loading directly`);
           }
         }
       } catch (error) {
@@ -348,11 +352,13 @@ const ChatInterface: React.FC = () => {
         console.log("Session info when creating new chat:", response.data);
         
         // For new chat button, only show dataset popup if using custom dataset
-        // and we haven't shown the popup already
-        if (response.data && response.data.is_custom_dataset && !datasetPopupShownRef.current) {
+        // and we haven't shown the popup for this specific new chat
+        if (response.data && response.data.is_custom_dataset && !popupShownForChatIdsRef.current.has(tempId)) {
           console.log("Custom dataset detected when creating new chat");
           
           datasetPopupShownRef.current = true;
+          popupShownForChatIdsRef.current.add(tempId);
+          
           setTempChatIdForReset(tempId);
           setShowDatasetResetConfirm(true);
           
@@ -363,6 +369,10 @@ const ChatInterface: React.FC = () => {
         console.error("Error checking for custom dataset:", error);
       }
     } else {
+      // We've recently uploaded a dataset, so suppress the popup
+      console.log("Recently uploaded dataset, suppressing popup in newChat");
+      datasetPopupShownRef.current = true;
+      
       // Reset the recently uploaded flag after using it
       setRecentlyUploadedDataset(false);
     }
@@ -605,6 +615,9 @@ const ChatInterface: React.FC = () => {
       console.log("Dataset was just uploaded, suppressing consent popup for this message");
       // Ensure the popup won't show during this entire message flow
       datasetPopupShownRef.current = true;
+      if (activeChatId) {
+        popupShownForChatIdsRef.current.add(activeChatId);
+      }
       // We'll keep the flag true until the message is fully processed
     }
 
@@ -894,14 +907,17 @@ const ChatInterface: React.FC = () => {
         maxContentLength: 30 * 1024 * 1024, // 30MB
       })
       
-      // Set flag to indicate we just uploaded a dataset
+      // Set flag to indicate we just uploaded a dataset - this is crucial
       setRecentlyUploadedDataset(true);
       
       // Mark that we have an uploaded dataset
       setHasUploadedDataset(true);
       
-      // Reset the popup shown flag to ensure a clean state for future operations
-      datasetPopupShownRef.current = false;
+      // Mark the popup as shown for the current chat ID
+      if (activeChatId) {
+        popupShownForChatIdsRef.current.add(activeChatId);
+      }
+      datasetPopupShownRef.current = true;
 
     } catch (error) {
       let errorMessage = "An error occurred while uploading the file.";
@@ -964,7 +980,7 @@ const ChatInterface: React.FC = () => {
     }
   }, [isSettingsOpen]);
 
-  // Modify the session info useEffect to prevent duplicate popups
+  // Modify the session info useEffect to work with chat-specific tracking
   useEffect(() => {
     if (sessionId) {
       // Check if there's a previously uploaded dataset in the session
@@ -973,6 +989,7 @@ const ChatInterface: React.FC = () => {
           // Skip check if we just uploaded a dataset
           if (recentlyUploadedDataset) {
             console.log("Skipping initial dataset check because dataset was just uploaded");
+            datasetPopupShownRef.current = true;
             return;
           }
           
@@ -992,15 +1009,18 @@ const ChatInterface: React.FC = () => {
             
             // Only show the popup on page load if:
             // 1. We haven't shown it already in this component lifecycle
-            // 2. We have a custom dataset loaded
-            if (!datasetPopupShownRef.current) {
+            // 2. We haven't shown it for the current active chat
+            // 3. We have a custom dataset loaded
+            const currentChatId = activeChatId || Date.now();
+            if (!datasetPopupShownRef.current && !popupShownForChatIdsRef.current.has(currentChatId)) {
               console.log("Showing dataset reset popup on page load");
               datasetPopupShownRef.current = true;
-              const tempId = activeChatId || Date.now();
-              setTempChatIdForReset(tempId);
+              popupShownForChatIdsRef.current.add(currentChatId);
+              
+              setTempChatIdForReset(currentChatId);
               setShowDatasetResetConfirm(true);
             } else {
-              console.log("Dataset popup already shown this session, skipping");
+              console.log("Dataset popup already shown for this chat, skipping");
             }
           } else {
             console.log("Using default dataset");
@@ -1101,20 +1121,24 @@ const ChatInterface: React.FC = () => {
       
       // Now proceed with loading the chat
       if (tempChatIdForReset) {
+        // Mark the popup as shown for this specific chat
+        if (tempChatIdForReset) {
+          popupShownForChatIdsRef.current.add(tempChatIdForReset);
+        }
+        datasetPopupShownRef.current = true;
+        
         loadChat(tempChatIdForReset);
         setTempChatIdForReset(null);
       }
-      
-      // Reset the popup shown flag after a delay to avoid immediate re-trigger
-      setTimeout(() => {
-        datasetPopupShownRef.current = false;
-      }, 500);
     } catch (error) {
       console.error("Error handling dataset reset:", error);
       setShowDatasetResetConfirm(false);
       
-      // Also reset the flag in case of error
-      datasetPopupShownRef.current = false;
+      // Also set the flags in case of error to avoid repeated popups
+      datasetPopupShownRef.current = true;
+      if (tempChatIdForReset) {
+        popupShownForChatIdsRef.current.add(tempChatIdForReset);
+      }
     }
   };
 

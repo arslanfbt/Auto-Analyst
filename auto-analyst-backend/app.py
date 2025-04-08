@@ -250,12 +250,12 @@ async def chat_with_agent(
             chat_manager = app.state._session_manager.chat_manager
             # Get recent messages
             recent_messages = chat_manager.get_recent_chat_history(chat_id, limit=5)
-            # Extract agent commentaries
-            chat_context = chat_manager.extract_agent_commentaries(recent_messages)
+            # Extract response history
+            chat_context = chat_manager.extract_response_history(recent_messages)
         # Append context to the query if available
         enhanced_query = request.query
         if chat_context:
-            enhanced_query = f"Current Query:{request.query}\n\nPrevious context:\n{chat_context}"
+            enhanced_query = f"### Current Query:\n{request.query}\n\n{chat_context}"
         # For multiple agents
         if "," in agent_name:
             agent_list = [AVAILABLE_AGENTS[agent.strip()] for agent in agent_name.split(",")]
@@ -379,13 +379,12 @@ async def chat_with_all(
                 chat_manager = app.state._session_manager.chat_manager
                 # Get recent messages
                 recent_messages = chat_manager.get_recent_chat_history(chat_id, limit=5)
-                # Extract agent commentaries
-                chat_context = chat_manager.extract_agent_commentaries(recent_messages)
+                # Extract response history
+                chat_context = chat_manager.extract_response_history(recent_messages)
             # Append context to the query if available
             enhanced_query = request.query
             if chat_context:
-                enhanced_query = f"Current Query:\n{request.query}\n\nPrevious context:\n{chat_context}"
-                print("chat_context", enhanced_query)
+                enhanced_query = f"### Current Query:\n{request.query}\n\n{chat_context}"
             
             loop = asyncio.get_event_loop()
             plan_response = await loop.run_in_executor(

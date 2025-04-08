@@ -84,6 +84,8 @@ const ChatInput = forwardRef<
   const [showCreditInfo, setShowCreditInfo] = useState(false)
   const [showDatasetResetPopup, setShowDatasetResetPopup] = useState(false)
   const [datasetMismatch, setDatasetMismatch] = useState(false)
+  // Replace session flag with a set of chat IDs that have shown the popup
+  const popupShownForChatIdsRef = useRef<Set<number>>(new Set());
 
   // Expose handlePreviewDefaultDataset to parent
   useImperativeHandle(ref, () => ({
@@ -372,6 +374,9 @@ const ChatInput = forwardRef<
       setFileUpload({ file, status: 'loading' })
       
       try {
+        // Mark that we've shown the popup to prevent it from appearing after upload
+        popupShownForChatIdsRef.current = new Set();
+        
         // First preview the file - always do a fresh upload
         // Pass true to indicate this is a new dataset
         await handleFilePreview(file, true);
@@ -408,6 +413,10 @@ const ChatInput = forwardRef<
               },
             });
             console.log('Session reset before new file upload');
+            
+            // Reset the popup shown flags to ensure we show the popup for this new dataset state
+            // if we switch to another chat that had a different dataset
+            popupShownForChatIdsRef.current = new Set();
           } catch (resetError) {
             console.error('Failed to reset session before upload:', resetError);
             // Continue with upload anyway
@@ -663,6 +672,10 @@ const ChatInput = forwardRef<
         fileInputRef.current.value = "";
       }
       
+      // Reset the popup shown flags when switching to default dataset
+      // to ensure we show the popup for each chat that had a different dataset
+      popupShownForChatIdsRef.current = new Set();
+      
       // This will now also ensure we're using the default dataset
       const response = await axios.get(`${PREVIEW_API_URL}/api/default-dataset`, {
         headers: {
@@ -759,6 +772,9 @@ const ChatInput = forwardRef<
               },
             });
             console.log('Session reset before final upload');
+            
+            // Reset the popup shown flags for the new dataset state
+            popupShownForChatIdsRef.current = new Set();
           } catch (resetError) {
             console.error('Failed to reset session before final upload:', resetError);
             // Continue with upload anyway
@@ -836,6 +852,9 @@ const ChatInput = forwardRef<
           setTimeout(() => {
             setUploadSuccess(false);
           }, 3000);
+          
+          // Reset popup shown flags for new dataset state
+          popupShownForChatIdsRef.current = new Set();
         }
       }
       
@@ -990,6 +1009,10 @@ const ChatInput = forwardRef<
       setShowDatasetResetPopup(false);
       setDatasetMismatch(false);
     }
+    
+    // Reset the popup shown flags to ensure we ask for each chat with the
+    // new dataset state (whether it's default or custom)
+    popupShownForChatIdsRef.current = new Set();
   };
 
   return (
