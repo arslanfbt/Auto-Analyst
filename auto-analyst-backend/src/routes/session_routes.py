@@ -43,14 +43,32 @@ async def upload_dataframe(
     name: str = Form(...),
     description: str = Form(...),
     app_state = Depends(get_app_state),
-    session_id: str = Depends(get_session_id_dependency)
+    session_id: str = Depends(get_session_id_dependency),
+    request: Request = None
 ):
     try:
+        # Log the incoming request details
+        logger.log_message(f"Upload request for session {session_id}: name='{name}', description='{description}'", level=logging.INFO)
+        
+        # Check if we need to force a complete session reset before upload
+        force_refresh = request.headers.get("X-Force-Refresh") == "true" if request else False
+        
+        if force_refresh:
+            logger.log_message(f"Force refresh requested for session {session_id} before upload", level=logging.INFO)
+            # Reset the session but don't completely wipe it, so we maintain user association
+            app_state.reset_session_to_default(session_id)
+        
+        # Now process the new file
         contents = await file.read()
         new_df = pd.read_csv(io.BytesIO(contents))
         desc = f"{name} Dataset: {description}"
         
+        logger.log_message(f"Updating session dataset with description: '{desc}'", level=logging.INFO)
         app_state.update_session_dataset(session_id, new_df, name, desc)
+        
+        # Log the final state
+        session_state = app_state.get_session_state(session_id)
+        logger.log_message(f"Session dataset updated with description: '{session_state.get('description')}'", level=logging.INFO)
         
         return {"message": "Dataframe uploaded successfully", "session_id": session_id}
     except Exception as e:
@@ -161,7 +179,16 @@ async def preview_csv(app_state = Depends(get_app_state), session_id: str = Depe
     try:
         # Get the session state to ensure we're using the current dataset
         session_state = app_state.get_session_state(session_id)
-        df = session_state["current_df"]
+        df = session_state.get("current_df")
+        
+        # Handle case where dataset might be missing
+        if df is None:
+            logger.log_message(f"Dataset not found in session {session_id}, using default", level=logging.WARNING)
+            # Create a new default session for this session ID
+            app_state.reset_session_to_default(session_id)
+            # Get the session state again
+            session_state = app_state.get_session_state(session_id)
+            df = session_state.get("current_df")
 
         # Replace NaN values with None (which becomes null in JSON)
         df = df.where(pd.notna(df), None)
@@ -174,8 +201,11 @@ async def preview_csv(app_state = Depends(get_app_state), session_id: str = Depe
                     df[column] = df[column].astype(bool)
 
         # Extract name and description if available
-        name = "Dataset"
-        description = "No description available"
+        name = session_state.get("name", "Dataset")
+        description = session_state.get("description", "No description available")
+        
+        # Log what we're returning
+        logger.log_message(f"Preview for session {session_id}, dataset name: {name}, raw description: '{description}'", level=logging.INFO)
         
         # Try to get the description from make_data if available
         if "make_data" in session_state and session_state["make_data"]:
@@ -185,11 +215,31 @@ async def preview_csv(app_state = Depends(get_app_state), session_id: str = Depe
                 # Try to parse the description format "{name} Dataset: {description}"
                 if "Dataset:" in full_desc:
                     parts = full_desc.split("Dataset:", 1)
-                    name = parts[0].strip()
-                    description = parts[1].strip()
+                    extracted_name = parts[0].strip()
+                    extracted_description = parts[1].strip()
+                    
+                    # Only use extracted values if they're meaningful
+                    if extracted_name:
+                        name = extracted_name
+                    if extracted_description and extracted_description != "No description available":
+                        description = extracted_description
+                    
+                    logger.log_message(f"Extracted name: '{name}', description: '{description}'", level=logging.INFO)
                 else:
-                    description = full_desc
+                    # If we can't parse it, use the full description
+                    if full_desc and full_desc != "No description available":
+                        description = full_desc
 
+        # Make sure we're not returning "No description available" if there's a description in the session
+        if description == "No description available" and session_state.get("description"):
+            session_desc = session_state.get("description")
+            # Check if the description is in the format "{name} Dataset: {description}"
+            if "Dataset:" in session_desc:
+                parts = session_desc.split("Dataset:", 1)
+                description = parts[1].strip()
+            else:
+                description = session_desc
+                
         # Get rows and convert to dict
         preview_data = {
             "headers": df.columns.tolist(),
@@ -197,8 +247,13 @@ async def preview_csv(app_state = Depends(get_app_state), session_id: str = Depe
             "name": name,
             "description": description
         }
+        
+        # Log what we're returning
+        logger.log_message(f"Returning preview data with name: '{name}', description: '{description}'", level=logging.INFO)
+        
         return preview_data
     except Exception as e:
+        logger.log_message(f"Error in preview_csv: {str(e)}", level=logging.ERROR)
         raise HTTPException(status_code=400, detail=str(e))
 
 @router.get("/api/default-dataset")
@@ -250,7 +305,7 @@ async def reset_session(
         if name and description:
             session_state = app_state.get_session_state(session_id)
             df = session_state["current_df"]
-            desc = f"{name} Dataset: {description}"
+            desc = f"{description}"
             
             # Update the session dataset with the new description
             app_state.update_session_dataset(session_id, df, name, desc)
@@ -308,8 +363,9 @@ async def get_session_info(
         # Get session manager reference for default name
         session_manager = app_state._session_manager
         
-        # Check if this is using a custom dataset or the default
+        # Get more detailed dataset information
         current_name = session_state.get("name", "")
+        current_description = session_state.get("description", "")
         default_name = getattr(session_manager, "_default_name", "Housing Dataset")
         
         logger.log_message(f"Session info - current name: '{current_name}', default name: '{default_name}'", level=logging.INFO)
@@ -323,11 +379,25 @@ async def get_session_info(
             is_custom = True
             logger.log_message(f"Custom dataset detected by name: {current_name}", level=logging.INFO)
         
+        # Also check by checking if we have a dataframe that's different from default
+        if "current_df" in session_state and session_state["current_df"] is not None:
+            try:
+                # This is just a basic check - we could make it more sophisticated if needed
+                custom_col_count = len(session_state["current_df"].columns)
+                if hasattr(session_manager, "_default_df") and session_manager._default_df is not None:
+                    default_col_count = len(session_manager._default_df.columns)
+                    if custom_col_count != default_col_count:
+                        is_custom = True
+                        logger.log_message(f"Custom dataset detected by column count: {custom_col_count} vs {default_col_count}", level=logging.INFO)
+            except Exception as e:
+                logger.log_message(f"Error comparing datasets: {str(e)}", level=logging.ERROR)
+        
         # Return session information
         response_data = {
             "session_id": session_id,
             "is_custom_dataset": is_custom,
             "dataset_name": current_name,
+            "dataset_description": current_description,
             "default_name": default_name,
             "has_session": True,
             "session_keys": list(session_state.keys())  # For debugging

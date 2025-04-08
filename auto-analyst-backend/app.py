@@ -255,8 +255,7 @@ async def chat_with_agent(
         # Append context to the query if available
         enhanced_query = request.query
         if chat_context:
-            enhanced_query = f"{request.query}\n\nPrevious context:\n{chat_context}"
-        
+            enhanced_query = f"Current Query:{request.query}\n\nPrevious context:\n{chat_context}"
         # For multiple agents
         if "," in agent_name:
             agent_list = [AVAILABLE_AGENTS[agent.strip()] for agent in agent_name.split(",")]
@@ -385,7 +384,7 @@ async def chat_with_all(
             # Append context to the query if available
             enhanced_query = request.query
             if chat_context:
-                enhanced_query = f"{request.query}\n\nPrevious context:\n{chat_context}"
+                enhanced_query = f"Current Query:\n{request.query}\n\nPrevious context:\n{chat_context}"
                 print("chat_context", enhanced_query)
             
             loop = asyncio.get_event_loop()
