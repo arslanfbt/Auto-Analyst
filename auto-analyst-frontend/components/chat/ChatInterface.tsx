@@ -80,7 +80,10 @@ const ChatInterface: React.FC = () => {
   const [showWelcome, setShowWelcome] = useState(true)
   const [abortController, setAbortController] = useState<AbortController | null>(null)
   const { sessionId } = useSessionStore()
-  const chatInputRef = useRef<{ handlePreviewDefaultDataset: () => void }>(null);
+  const chatInputRef = useRef<{ 
+    handlePreviewDefaultDataset: () => void;
+    handleSilentDefaultDataset: () => void;
+  }>(null);
   const [activeChatId, setActiveChatId] = useState<number | null>(null);
   const [chatHistories, setChatHistories] = useState<ChatHistory[]>([]);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
@@ -105,6 +108,7 @@ const ChatInterface: React.FC = () => {
   const [recentlyUploadedDataset, setRecentlyUploadedDataset] = useState(false);
   const datasetPopupShownRef = useRef(false);
   const popupShownForChatIdsRef = useRef<Set<number>>(new Set());
+  const [isNewLoginSession, setIsNewLoginSession] = useState(false);
 
   useEffect(() => {
     setMounted(true)
@@ -161,6 +165,104 @@ const ChatInterface: React.FC = () => {
       };
       
       createOrGetUser();
+    }
+  }, [session, mounted]);
+
+  // Add new effect to reset dataset on login
+  useEffect(() => {
+    // Only run when a user successfully logs in and component is mounted
+    if (session?.user && mounted && sessionId) {
+      const resetToDefaultDatasetOnLogin = async () => {
+        try {
+          console.log("New login detected, checking dataset state");
+          
+          // Check if user has stored login status in localStorage
+          const lastLoginUser = localStorage.getItem('lastLoginUser');
+          const currentUser = session.user.email || session.user.name || '';
+          const lastSessionTime = localStorage.getItem('lastSessionTime');
+          const currentTime = Date.now();
+          const SESSION_TIMEOUT = 1000 * 60 * 30; // 30 minutes in milliseconds
+          
+          // Detect if this is a new session:
+          // 1. Different user OR
+          // 2. Same user but browser was closed (lastSessionTime is too old)
+          const isNewSession = lastLoginUser !== currentUser ||
+                            !lastSessionTime ||
+                            (currentTime - parseInt(lastSessionTime)) > SESSION_TIMEOUT;
+          
+          if (isNewSession) {
+            console.log("New session detected, silently resetting to default dataset");
+            
+            // Mark this as a new login session so popup appears in silent mode
+            setIsNewLoginSession(true);
+            
+            // Reset the session to use the default dataset without asking for confirmation
+            await axios.post(`${API_URL}/reset-session`, null, {
+              headers: { 'X-Session-ID': sessionId }
+            });
+            
+            // Reset local dataset state
+            setHasUploadedDataset(false);
+            localStorage.removeItem('lastUploadedFile');
+            
+            // Reset popup tracking
+            datasetPopupShownRef.current = false;
+            popupShownForChatIdsRef.current = new Set();
+            
+            // Store current user and timestamp to identify new sessions in future
+            localStorage.setItem('lastLoginUser', currentUser);
+            localStorage.setItem('lastSessionTime', currentTime.toString());
+            
+            // Force the use of default dataset with an explicit API call, but don't show preview
+            try {
+              await axios.get(`${API_URL}/api/default-dataset`, {
+                headers: { 'X-Session-ID': sessionId }
+              });
+              console.log("Default dataset loaded silently on login");
+              
+              // Instead of showing the preview directly, use the silent method
+              if (chatInputRef.current && chatInputRef.current.handleSilentDefaultDataset) {
+                chatInputRef.current.handleSilentDefaultDataset();
+              } else {
+                // If the method doesn't exist yet, we'll do a silent reset here
+                localStorage.removeItem('lastUploadedFile');
+              }
+              
+              // After a brief delay, reset the new login session flag
+              setTimeout(() => {
+                setIsNewLoginSession(false);
+              }, 1000);
+            } catch (error) {
+              console.error("Error loading default dataset:", error);
+              setIsNewLoginSession(false);
+            }
+          } else {
+            console.log("Returning user in same session, maintaining dataset state");
+            // Update the session timestamp
+            localStorage.setItem('lastSessionTime', currentTime.toString());
+          }
+        } catch (error) {
+          console.error("Error resetting dataset on login:", error);
+          setIsNewLoginSession(false);
+        }
+      };
+      
+      resetToDefaultDatasetOnLogin();
+    } else if (!session && mounted) {
+      // Clear last login when user logs out
+      localStorage.removeItem('lastLoginUser');
+    }
+  }, [session, mounted, sessionId]);
+
+  // Add another effect to periodically update the session time while active
+  useEffect(() => {
+    if (session?.user && mounted) {
+      // Start a timer to update the last session time periodically
+      const intervalId = setInterval(() => {
+        localStorage.setItem('lastSessionTime', Date.now().toString());
+      }, 60000); // Update every minute
+      
+      return () => clearInterval(intervalId);
     }
   }, [session, mounted]);
 
@@ -1316,6 +1418,7 @@ const ChatInterface: React.FC = () => {
           onClose={() => setShowDatasetResetConfirm(false)}
           onConfirm={() => handleDatasetResetConfirm(true)}
           onCancel={() => handleDatasetResetConfirm(false)}
+          silentOnLogin={isNewLoginSession}
         />
       </motion.div>
     </div>
