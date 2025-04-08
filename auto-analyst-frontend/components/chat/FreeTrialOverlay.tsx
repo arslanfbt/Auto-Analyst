@@ -28,14 +28,14 @@ export default function FreeTrialOverlay() {
           Ready to unlock full access?
         </h2>
         <p className="text-gray-600 mb-6">
-          You've used your free trial. Sign in now to continue analyzing your data with our AI-powered platform.
+          Sign up now to get your free trial and start analyzing your data with our AI-powered platform.
         </p>
         <div className="space-y-4">
           <Button
             onClick={() => router.push('/login?callbackUrl=/chat')}
             className="w-full bg-[#FF7F7F] text-white hover:bg-[#FF6666]"
           >
-            Sign in to Continue
+            Sign up for Free Trial
           </Button>
           <Button
             variant="outline"

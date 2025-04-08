@@ -45,8 +45,8 @@ const DatasetResetPopup: React.FC<DatasetResetPopupProps> = ({
               <div>
                 <p className="text-sm font-medium text-gray-800">Please choose an option:</p>
                 <ul className="list-disc ml-5 mt-1 text-sm text-gray-700 space-y-1">
-                  <li><strong>Continue with custom dataset</strong> - Use your previously uploaded data</li>
-                  <li><strong>Switch to Housing Dataset</strong> - Reset to the standard default dataset</li>
+                  <li><strong>Keep current dataset</strong> - Continue using your uploaded data</li>
+                  <li><strong>Use default dataset</strong> - Reset to the standard dataset</li>
                 </ul>
               </div>
             </div>
@@ -58,14 +58,14 @@ const DatasetResetPopup: React.FC<DatasetResetPopupProps> = ({
             className="border-[#FFCACA] text-[#FF7F7F] hover:bg-[#FFE5E5]"
             onClick={onCancel}
           >
-            Continue with Custom Dataset
+            Keep Current Dataset
           </Button>
           <Button 
             variant="default"
             className="bg-[#FF7F7F] hover:bg-[#FF6666] text-white"
             onClick={onConfirm}
           >
-            Switch to Housing Dataset
+            Use Default Dataset
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -73,4 +73,4 @@ const DatasetResetPopup: React.FC<DatasetResetPopupProps> = ({
   );
 };
 
-export default DatasetResetPopup; 
+export default DatasetResetPopup;
