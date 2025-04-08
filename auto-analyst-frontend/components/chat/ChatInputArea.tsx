@@ -10,7 +10,10 @@ const ChatInputArea = () => {
   const { data: session } = useSession()
   const { hasFreeTrial } = useFreeTrialStore()
   const { isLoading, handleSendMessage, handleFileUpload, handleStopGeneration } = useChatState()
-  const chatInputRef = useRef<{ handlePreviewDefaultDataset: () => void }>(null)
+  const chatInputRef = useRef<{ 
+    handlePreviewDefaultDataset: () => void; 
+    handleSilentDefaultDataset: () => void; 
+  }>(null)
   const isAdmin = localStorage.getItem('isAdmin') === 'true'
   
   const isInputDisabled = () => {
