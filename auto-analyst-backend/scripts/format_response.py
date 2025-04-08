@@ -182,7 +182,6 @@ def format_response_to_markdown(api_response, agent_name = None, dataframe=None)
         
     return '\n'.join(markdown)
 
-
 # Example usage with dummy data
 if __name__ == "__main__":
     sample_response = {
