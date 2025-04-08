@@ -26,6 +26,44 @@ def format_code_block(code_str):
 def format_code_backticked_block(code_str):
     code_clean = re.sub(r'^```python\n?', '', code_str, flags=re.MULTILINE)
     code_clean = re.sub(r'\n```$', '', code_clean)
+    # Remove reading the csv file if it's already in the context
+    code_clean = re.sub(r"df\s*=\s*pd\.read_csv\([\"\'].*?[\"\']\).*?(\n|$)", '', code_clean)
+    
+    # Remove the df = pd.DataFrame() if it's already in the context
+    code_clean = re.sub(r"df\s*=\s*pd\.DataFrame\(\s*\).*?(\n|$)", '', code_clean)
+    
+    # Remove any data = ... statements including sample data creation
+    code_clean = re.sub(r"data\s*=\s*.*?(\n|$)", '', code_clean)
+    
+    # Remove any dictionary/list assignments that look like sample data
+    code_clean = re.sub(r"data\s*=\s*\{.*?\}.*?(\n|$)", '', code_clean)
+    code_clean = re.sub(r"data\s*=\s*\[.*?\].*?(\n|$)", '', code_clean)
+    
+    # Remove dictionary key-value pairs with array data (like 'Date': [...], 'Price': [...])
+    code_clean = re.sub(r"[\'\"][\w\s\&\%\$]+[\'\"]\s*:\s*\[.*?\],?", '', code_clean, flags=re.DOTALL)
+    
+    # Remove sample DataFrame creation blocks that include braces
+    code_clean = re.sub(r"\{\s*[\'\"][\w\s\&\%\$]+[\'\"]\s*:\s*\[.*?\],?(\s*[\'\"][\w\s\&\%\$]+[\'\"]\s*:\s*\[.*?\],?)*\s*\}", '', code_clean, flags=re.DOTALL)
+    
+    # Remove plt.show() statements
+    code_clean = re.sub(r"plt\.show\(\).*?(\n|$)", '', code_clean)
+    
+    # Remove df = pd.DataFrame(data) statements based on the image
+    code_clean = re.sub(r"df\s*=\s*pd\.DataFrame\(data\).*?(\n|$)", '', code_clean)
+    code_clean = re.sub(r"df\s*=\s*pd\.DataFrame\(\{.*?\}\).*?(\n|$)", '', code_clean, flags=re.DOTALL)
+    
+    # Remove sample dataframe lines with multiple array values
+    code_clean = re.sub(r"# Sample DataFrames?.*?(\n|$)", '', code_clean, flags=re.MULTILINE)
+    
+    # Remove standalone curly braces (often leftover from data structure removal)
+    code_clean = re.sub(r"^\s*}\s*$", '', code_clean, flags=re.MULTILINE)
+    
+    # Remove any lines that contain just whitespace and single characters (likely leftover from removals)
+    code_clean = re.sub(r"^\s*[{}]\s*$", '', code_clean, flags=re.MULTILINE)
+    
+    # Remove empty lines that might have been created after cleaning
+    code_clean = re.sub(r"\n\s*\n+", "\n\n", code_clean)
+    
     return f'```python\n{code_clean}\n```'
 
     
@@ -55,7 +93,7 @@ def execute_code_from_markdown(code_str, dataframe=None):
     # If a dataframe is provided, add it to the context
     if dataframe is not None:
         context['df'] = dataframe
-
+    
     # Modify code to store multiple JSON outputs
     modified_code = re.sub(
         r'(\w*_?)fig(\w*)\.show\(\)',
@@ -68,6 +106,44 @@ def execute_code_from_markdown(code_str, dataframe=None):
         r'json_outputs.append(plotly.io.to_json(\1fig\2, pretty=True))',
         modified_code
     )
+    
+    # Remove reading the csv file if it's already in the context
+    modified_code = re.sub(r"df\s*=\s*pd\.read_csv\([\"\'].*?[\"\']\).*?(\n|$)", '', modified_code)
+    
+    # Remove the df = pd.DataFrame() if it's already in the context
+    modified_code = re.sub(r"df\s*=\s*pd\.DataFrame\(\s*\).*?(\n|$)", '', modified_code)
+    
+    # Remove any data = ... statements including sample data creation
+    modified_code = re.sub(r"data\s*=\s*.*?(\n|$)", '', modified_code)
+    
+    # Remove any dictionary/list assignments that look like sample data
+    modified_code = re.sub(r"data\s*=\s*\{.*?\}.*?(\n|$)", '', modified_code)
+    modified_code = re.sub(r"data\s*=\s*\[.*?\].*?(\n|$)", '', modified_code)
+    
+    # Remove dictionary key-value pairs with array data (like 'Date': [...], 'Price': [...])
+    modified_code = re.sub(r"[\'\"][\w\s\&\%\$]+[\'\"]\s*:\s*\[.*?\],?", '', modified_code, flags=re.DOTALL)
+    
+    # Remove sample DataFrame creation blocks that include braces
+    modified_code = re.sub(r"\{\s*[\'\"][\w\s\&\%\$]+[\'\"]\s*:\s*\[.*?\],?(\s*[\'\"][\w\s\&\%\$]+[\'\"]\s*:\s*\[.*?\],?)*\s*\}", '', modified_code, flags=re.DOTALL)
+    
+    # Remove df = pd.DataFrame(data) statements based on the image
+    modified_code = re.sub(r"df\s*=\s*pd\.DataFrame\(data\).*?(\n|$)", '', modified_code)
+    modified_code = re.sub(r"df\s*=\s*pd\.DataFrame\(\{.*?\}\).*?(\n|$)", '', modified_code, flags=re.DOTALL)
+    
+    # Remove sample dataframe lines with multiple array values
+    modified_code = re.sub(r"# Sample DataFrames?.*?(\n|$)", '', modified_code, flags=re.MULTILINE)
+    
+    # Remove standalone curly braces (often leftover from data structure removal)
+    modified_code = re.sub(r"^\s*}\s*$", '', modified_code, flags=re.MULTILINE)
+    
+    # Remove any lines that contain just whitespace and single characters (likely leftover from removals)
+    modified_code = re.sub(r"^\s*[{}]\s*$", '', modified_code, flags=re.MULTILINE)
+    
+    # Remove empty lines that might have been created after cleaning
+    modified_code = re.sub(r"\n\s*\n+", "\n\n", modified_code)
+    
+    # Remove plt.show() statements
+    modified_code = re.sub(r"plt\.show\(\).*?(\n|$)", '', modified_code)
 
     # Only add df = pd.read_csv() if no dataframe was provided and the code contains pd.read_csv
     if dataframe is None and 'pd.read_csv' not in modified_code:
@@ -76,13 +152,6 @@ def execute_code_from_markdown(code_str, dataframe=None):
             r'import pandas as pd\n\n# Read Housing.csv\ndf = pd.read_csv("Housing.csv")',
             modified_code
         )
-    
-    # remove plt.show()
-    modified_code = re.sub(
-        r'plt\.show\(\)',
-        '',
-        modified_code
-    )
 
 
     try:

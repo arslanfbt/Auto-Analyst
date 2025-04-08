@@ -530,7 +530,7 @@ class auto_analyst(dspy.Module):
                 yield agent_name, inputs, {"error": str(e)}
         # Execute code combiner after all agents complete
         code_list = [result['code'] for _, result in completed_results if 'code' in result]
-        with dspy.settings.context(lm=dspy.LM(model="anthropic/claude-3-5-sonnet-latest", max_tokens=8000, temperature=1.0)):
+        with dspy.settings.context(lm=dspy.LM(model="anthropic/claude-3-7-sonnet-latest", max_tokens=12000, temperature=1.0)):
             combiner_result = self.code_combiner_agent(agent_code_list=str(code_list), dataset=dict_['dataset'])
         yield 'code_combiner_agent', str(code_list), dict(combiner_result)
 
