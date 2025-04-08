@@ -58,7 +58,7 @@ interface ChatInputProps {
 }
 
 const ChatInput = forwardRef<
-  { handlePreviewDefaultDataset: () => void },
+  { handlePreviewDefaultDataset: () => void, handleSilentDefaultDataset: () => void },
   ChatInputProps
 >(({ onSendMessage, onFileUpload, disabled, isLoading, onStopGeneration }, ref) => {
   const [message, setMessage] = useState("")
@@ -89,7 +89,8 @@ const ChatInput = forwardRef<
 
   // Expose handlePreviewDefaultDataset to parent
   useImperativeHandle(ref, () => ({
-    handlePreviewDefaultDataset
+    handlePreviewDefaultDataset,
+    handleSilentDefaultDataset
   }));
 
   // Use a ref to track localStorage changes
@@ -673,8 +674,20 @@ const ChatInput = forwardRef<
       }
       
       // Reset the popup shown flags when switching to default dataset
-      // to ensure we show the popup for each chat that had a different dataset
       popupShownForChatIdsRef.current = new Set();
+      
+      // First force a reset on the backend to ensure we're truly using the default dataset
+      try {
+        await axios.post(`${PREVIEW_API_URL}/reset-session`, null, {
+          headers: {
+            ...(sessionId && { 'X-Session-ID': sessionId }),
+          },
+        });
+        console.log('Session forcefully reset to default dataset');
+      } catch (resetError) {
+        console.error('Failed to reset session for default dataset:', resetError);
+        // Continue anyway
+      }
       
       // This will now also ensure we're using the default dataset
       const response = await axios.get(`${PREVIEW_API_URL}/api/default-dataset`, {
@@ -706,9 +719,84 @@ const ChatInput = forwardRef<
         setSessionId(response.data.session_id);
       }
       
+      // Clear any dataset-related UI elements
+      setDatasetMismatch(false);
+      setShowDatasetResetPopup(false);
+      
       console.log("Default dataset preview loaded, upload state reset");
     } catch (error) {
       console.error('Failed to fetch dataset preview:', error);
+    }
+  };
+
+  const handleSilentDefaultDataset = async () => {
+    try {
+      // Remove any existing file info first to prevent conflicts
+      setFileUpload(null);
+      localStorage.removeItem('lastUploadedFile');
+      if (lastUploadedFileRef) {
+        lastUploadedFileRef.current = null;
+      }
+      
+      // Clear the file input too
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
+      
+      // Reset the popup shown flags when switching to default dataset
+      popupShownForChatIdsRef.current = new Set();
+      
+      // First force a reset on the backend to ensure we're truly using the default dataset
+      try {
+        await axios.post(`${PREVIEW_API_URL}/reset-session`, null, {
+          headers: {
+            ...(sessionId && { 'X-Session-ID': sessionId }),
+          },
+        });
+        console.log('Session silently reset to default dataset');
+      } catch (resetError) {
+        console.error('Failed to silently reset session for default dataset:', resetError);
+        // Continue anyway
+      }
+      
+      // Load default dataset without showing preview
+      const response = await axios.get(`${PREVIEW_API_URL}/api/default-dataset`, {
+        headers: {
+          ...(sessionId && { 'X-Session-ID': sessionId }),
+        },
+      });
+      
+      // Store dataset info but don't show preview UI
+      const defaultDescription = response.data.description || 'Default housing dataset containing information about residential properties';
+      
+      // Prepare preview data but don't show the dialog
+      setFilePreview({
+        headers: response.data.headers,
+        rows: response.data.rows,
+        name: response.data.name,
+        description: defaultDescription
+      });
+      
+      // Pre-fill the name and description
+      setDatasetDescription({
+        name: response.data.name || 'Dataset',
+        description: defaultDescription
+      });
+      
+      // Don't set showPreview to true here
+      
+      // If we got a session ID, save it
+      if (response.data.session_id) {
+        setSessionId(response.data.session_id);
+      }
+      
+      // Clear any dataset-related UI elements
+      setDatasetMismatch(false);
+      setShowDatasetResetPopup(false);
+      
+      console.log("Default dataset silently loaded, upload state reset");
+    } catch (error) {
+      console.error('Failed to silently load default dataset:', error);
     }
   };
 
