@@ -89,15 +89,41 @@ class SessionManager:
             Dictionary containing session state
         """
         if session_id not in self._sessions:
+            # Check if we need to create a brand new session
+            logger.log_message(f"Creating new session state for session_id: {session_id}", level=logging.INFO)
+            
             # Initialize with default state
             self._sessions[session_id] = {
-                "current_df": self._default_df if self._make_data is None else self._make_data,
+                "current_df": self._default_df.copy() if self._default_df is not None else None,
                 "retrievers": self._default_retrievers,
                 "ai_system": self._default_ai_system,
                 "make_data": self._make_data,
                 "description": self._dataset_description,
-                "name": self._default_name
+                "name": self._default_name,
+                "creation_time": time.time()
             }
+        else:
+            # Verify dataset integrity in existing session
+            session = self._sessions[session_id]
+            
+            # If dataset is somehow missing, restore it
+            if "current_df" not in session or session["current_df"] is None:
+                logger.log_message(f"Restoring missing dataset for session {session_id}", level=logging.WARNING)
+                session["current_df"] = self._default_df.copy() if self._default_df is not None else None
+                session["retrievers"] = self._default_retrievers
+                session["ai_system"] = self._default_ai_system
+                session["description"] = self._dataset_description
+                session["name"] = self._default_name
+            
+            # Ensure we have the basic required fields
+            if "name" not in session:
+                session["name"] = self._default_name
+            if "description" not in session:
+                session["description"] = self._dataset_description
+            
+            # Update last accessed time
+            session["last_accessed"] = time.time()
+            
         return self._sessions[session_id]
 
     def clear_session_state(self, session_id: str):
@@ -125,26 +151,32 @@ class SessionManager:
             data_dict = make_data(df, desc)
             retrievers = self.initialize_retrievers(self.styling_instructions, [str(data_dict)])
             ai_system = auto_analyst(agents=list(self.available_agents.values()), retrievers=retrievers)
-            # Ensure make_data is updated if needed elsewhere, though maybe not necessary to store globally?
-            # self._make_data = data_dict 
             
-            if session_id not in self._sessions:
-                 self._sessions[session_id] = {} # Ensure session exists
-
-            self._sessions[session_id].update({
+            # Create a completely fresh session state for the new dataset
+            # This ensures no remnants of the previous dataset remain
+            session_state = {
                 "current_df": df,
                 "retrievers": retrievers,
                 "ai_system": ai_system,
-                "make_data": data_dict, # Store session-specific data context
+                "make_data": data_dict,
                 "description": desc,
-                "name": name # Explicitly set the name for custom dataset
-            })
-            logger.log_message(f"Updated session {session_id} with custom dataset: {name}", level=logging.INFO)
+                "name": name
+            }
+            
+            # Preserve user_id and chat_id if they exist in the current session
+            if session_id in self._sessions:
+                if "user_id" in self._sessions[session_id]:
+                    session_state["user_id"] = self._sessions[session_id]["user_id"]
+                if "chat_id" in self._sessions[session_id]:
+                    session_state["chat_id"] = self._sessions[session_id]["chat_id"]
+            
+            # Replace the entire session with the new state
+            self._sessions[session_id] = session_state
+            
+            logger.log_message(f"Updated session {session_id} with completely fresh dataset state: {name}", level=logging.INFO)
         except Exception as e:
             logger.log_message(f"Error updating dataset for session {session_id}: {str(e)}", level=logging.ERROR)
-            # Optionally revert to default state or raise error
-            # self.reset_session_to_default(session_id) # Consider if reset is desired on failure
-            raise e # Re-raise the exception so the endpoint can handle it
+            raise e
 
     def reset_session_to_default(self, session_id: str):
         """
