@@ -58,7 +58,11 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, onNewChat, chatHisto
     if (isSettingsOpen) {
       const fetchModelSettings = async () => {
         try {
-          const response = await axios.get(`${PREVIEW_API_URL}/api/model-settings`);
+          const response = await axios.get(`${PREVIEW_API_URL}/api/model-settings`, {
+            headers: {
+              'X-Session-ID': sessionId
+            }
+          });
           setModelSettings(response.data);
         } catch (error) {
           console.error('Failed to fetch model settings:', error);
@@ -66,7 +70,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, onNewChat, chatHisto
       };
       fetchModelSettings();
     }
-  }, [isSettingsOpen]);
+  }, [isSettingsOpen, sessionId]);
 
   const handleNewChat = async () => {
     if (sessionId) {

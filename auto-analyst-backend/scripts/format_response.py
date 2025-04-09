@@ -33,11 +33,11 @@ def format_code_backticked_block(code_str):
     code_clean = re.sub(r"df\s*=\s*pd\.DataFrame\(\s*\).*?(\n|$)", '', code_clean)
     
     # Remove any data = ... statements including sample data creation
-    code_clean = re.sub(r"data\s*=\s*.*?(\n|$)", '', code_clean)
+    code_clean = re.sub(r"\bdata\s*=\s*.*?(\n|$)", '', code_clean)
     
     # Remove any dictionary/list assignments that look like sample data
-    code_clean = re.sub(r"data\s*=\s*\{.*?\}.*?(\n|$)", '', code_clean)
-    code_clean = re.sub(r"data\s*=\s*\[.*?\].*?(\n|$)", '', code_clean)
+    code_clean = re.sub(r"\bdata\s*=\s*\{.*?\}.*?(\n|$)", '', code_clean)
+    code_clean = re.sub(r"\bdata\s*=\s*\[.*?\].*?(\n|$)", '', code_clean)
     
     # Remove dictionary key-value pairs with array data (like 'Date': [...], 'Price': [...])
     code_clean = re.sub(r"[\'\"][\w\s\&\%\$]+[\'\"]\s*:\s*\[.*?\],?", '', code_clean, flags=re.DOTALL)
@@ -114,12 +114,11 @@ def execute_code_from_markdown(code_str, dataframe=None):
     modified_code = re.sub(r"df\s*=\s*pd\.DataFrame\(\s*\).*?(\n|$)", '', modified_code)
     
     # Remove any data = ... statements including sample data creation
-    modified_code = re.sub(r"data\s*=\s*.*?(\n|$)", '', modified_code)
+    modified_code = re.sub(r"\bdata\s*=\s*.*?(\n|$)", '', modified_code)
     
     # Remove any dictionary/list assignments that look like sample data
-    modified_code = re.sub(r"data\s*=\s*\{.*?\}.*?(\n|$)", '', modified_code)
-    modified_code = re.sub(r"data\s*=\s*\[.*?\].*?(\n|$)", '', modified_code)
-    
+    modified_code = re.sub(r"\bdata\s*=\s*\{.*?\}.*?(\n|$)", '', modified_code)
+    modified_code = re.sub(r"\bdata\s*=\s*\[.*?\].*?(\n|$)", '', modified_code)
     # Remove dictionary key-value pairs with array data (like 'Date': [...], 'Price': [...])
     modified_code = re.sub(r"[\'\"][\w\s\&\%\$]+[\'\"]\s*:\s*\[.*?\],?", '', modified_code, flags=re.DOTALL)
     
