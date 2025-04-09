@@ -11,6 +11,7 @@ import time
 import tiktoken
 from src.utils.logger import Logger
 import re
+
 logger = Logger("chat_manager", see_time=True, console_log=False)
 
 
@@ -90,7 +91,7 @@ class ChatManager:
             }
         except SQLAlchemyError as e:
             session.rollback()
-            logger.error(f"Error creating chat: {str(e)}")
+            logger.log_message(f"Error creating chat: {str(e)}", level=logging.ERROR)
             raise
         finally:
             session.close()
@@ -159,7 +160,7 @@ class ChatManager:
             }
         except SQLAlchemyError as e:
             session.rollback()
-            logger.error(f"Error adding message: {str(e)}")
+            logger.log_message(f"Error adding message: {str(e)}", level=logging.ERROR)
             raise
         finally:
             session.close()
@@ -209,11 +210,11 @@ class ChatManager:
                 else:
                     logger.warning(f"Failed to generate title: {response.status_code}")
             except Exception as e:
-                logger.error(f"Error calling chat_history_name endpoint: {str(e)}")
+                logger.log_message(f"Error calling chat_history_name endpoint: {str(e)}", level=logging.ERROR)
                 # Continue execution even if title generation fails
         except SQLAlchemyError as e:
             session.rollback()
-            logger.error(f"Error updating chat title: {str(e)}")
+            logger.log_message(f"Error updating chat title: {str(e)}", level=logging.ERROR)
         finally:
             session.close()
     
@@ -262,7 +263,7 @@ class ChatManager:
                 ]
             }
         except SQLAlchemyError as e:
-            logger.error(f"Error retrieving chat: {str(e)}")
+            logger.log_message(f"Error retrieving chat: {str(e)}", level=logging.ERROR)
             raise
         finally:
             session.close()
@@ -298,7 +299,7 @@ class ChatManager:
                 } for chat in chats
             ]
         except SQLAlchemyError as e:
-            logger.error(f"Error retrieving chats: {str(e)}")
+            logger.log_message(f"Error retrieving chats: {str(e)}", level=logging.ERROR)
             return []
         finally:
             session.close()
@@ -327,7 +328,7 @@ class ChatManager:
                 }
             return None
         except SQLAlchemyError as e:
-            logger.error(f"Error retrieving last message: {str(e)}")
+            logger.log_message(f"Error retrieving last message: {str(e)}", level=logging.ERROR)
             return None
         finally:
             session.close()
@@ -368,7 +369,7 @@ class ChatManager:
             return result > 0
         except SQLAlchemyError as e:
             session.rollback()
-            logger.error(f"Error deleting chat: {str(e)}")
+            logger.log_message(f"Error deleting chat: {str(e)}", level=logging.ERROR)
             return False
         finally:
             session.close()
@@ -411,7 +412,7 @@ class ChatManager:
                 } for chat in chats
             ]
         except SQLAlchemyError as e:
-            logger.error(f"Error searching chats: {str(e)}")
+            logger.log_message(f"Error searching chats: {str(e)}", level=logging.ERROR)
             raise
         finally:
             session.close()
@@ -444,7 +445,7 @@ class ChatManager:
                 } for msg in matching_messages
             ]
         except SQLAlchemyError as e:
-            logger.error(f"Error retrieving matching messages: {str(e)}")
+            logger.log_message(f"Error retrieving matching messages: {str(e)}", level=logging.ERROR)
             return []
         finally:
             session.close()
@@ -480,7 +481,7 @@ class ChatManager:
             }
         except SQLAlchemyError as e:
             session.rollback()
-            logger.error(f"Error getting/creating user: {str(e)}")
+            logger.log_message(f"Error getting/creating user: {str(e)}", level=logging.ERROR)
             raise
         finally:
             session.close()
@@ -520,7 +521,7 @@ class ChatManager:
             }
         except SQLAlchemyError as e:
             session.rollback()
-            logger.error(f"Error updating chat: {str(e)}")
+            logger.log_message(f"Error updating chat: {str(e)}", level=logging.ERROR)
             raise
         finally:
             session.close()
@@ -549,7 +550,7 @@ class ChatManager:
             
             return title
         except Exception as e:
-            logger.error(f"Error generating title: {str(e)}")
+            logger.log_message(f"Error generating title: {str(e)}", level=logging.ERROR)
             return "New Chat"
     
     def delete_empty_chats(self, user_id: Optional[int] = None, is_admin: bool = False) -> int:
@@ -593,7 +594,7 @@ class ChatManager:
             return 0
         except SQLAlchemyError as e:
             session.rollback()
-            logger.error(f"Error deleting empty chats: {str(e)}")
+            logger.log_message(f"Error deleting empty chats: {str(e)}", level=logging.ERROR)
             return 0
         finally:
             session.close()
@@ -644,7 +645,7 @@ class ChatManager:
             )
             
         except SQLAlchemyError as e:
-            logger.error(f"Error saving AI response: {str(e)}")
+            logger.log_message(f"Error saving AI response: {str(e)}", level=logging.ERROR)
             session.rollback()
         finally:
             session.close()
@@ -736,7 +737,7 @@ class ChatManager:
         
         except SQLAlchemyError as e:
             session.rollback()
-            logger.error(f"Error tracking model usage: {str(e)}")
+            logger.log_message(f"Error tracking model usage: {str(e)}", level=logging.ERROR)
             return {}
         finally:
             session.close()
@@ -800,7 +801,7 @@ class ChatManager:
             } for usage in usages]
         
         except SQLAlchemyError as e:
-            logger.error(f"Error retrieving model usage analytics: {str(e)}")
+            logger.log_message(f"Error retrieving model usage analytics: {str(e)}", level=logging.ERROR)
             return []
         finally:
             session.close()
@@ -922,7 +923,7 @@ class ChatManager:
             }
         
         except SQLAlchemyError as e:
-            logger.error(f"Error retrieving usage summary: {str(e)}")
+            logger.log_message(f"Error retrieving usage summary: {str(e)}", level=logging.ERROR)
             return {
                 "summary": {
                     "total_cost": 0.0,
@@ -966,7 +967,7 @@ class ChatManager:
                 } for msg in messages
             ]
         except SQLAlchemyError as e:
-            logger.error(f"Error retrieving chat history: {str(e)}")
+            logger.log_message(f"Error retrieving chat history: {str(e)}", level=logging.ERROR)
             return []
         finally:
             session.close()

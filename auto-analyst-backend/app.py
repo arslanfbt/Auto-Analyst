@@ -42,7 +42,7 @@ from src.schemas.query_schemas import QueryRequest
 from src.utils.logger import Logger
 
 
-logger = Logger("app", see_time=True, console_log=True)
+logger = Logger("app", see_time=True, console_log=False)
 load_dotenv()
 
 # Add styling_instructions at the top level
