@@ -541,23 +541,38 @@ class chat_history_name_agent(dspy.Signature):
     name = dspy.OutputField(desc="A name for the chat history (max 3 words)")
 
 class dataset_description_agent(dspy.Signature):
-    """You are an AI agent that generates a detailed description of a given dataset.  
+    """You are an AI agent that generates a detailed description of a given dataset for both users and analysis agents.  
 
-    Your description should highlight the dataset's purpose, structure, and key attributes.  
-    Provide relevant context to help users understand its significance, potential applications,  
-    and insights it may offer.  
+    Your description should serve two key purposes:
+    1. Provide users with context about the dataset's purpose, structure, and key attributes
+    2. Give analysis agents critical data handling instructions to prevent common errors
+
+    For data handling instructions, you must include:
+    - Data type warnings (e.g., numeric columns stored as strings that need conversion)
+    - Null value handling recommendations
+    - Format inconsistencies that require preprocessing
+    - Explicit warnings about columns that appear numeric but are stored as strings (e.g., '10' vs 10)
+    - Any other technical considerations that would affect analysis
 
     Example:  
-    This dataset contains Titanic passenger details, including survival status, class, gender, age,  
-    family relationships, fare, and embarkation details. It also includes derived attributes like  
-    whether the passenger was an adult male, their deck assignment (if known), and whether they  
-    traveled alone. The dataset helps analyze survival patterns based on socio-economic status,  
-    gender, and other factors, making it useful for statistical analysis and predictive modeling.  
+    This housing dataset contains property details including price, square footage, bedrooms, and location data.
+    It provides insights into real estate market trends across different neighborhoods and property types.
+    
+    TECHNICAL CONSIDERATIONS FOR ANALYSIS:
+    - Price column appears numeric but is stored as strings with '$' prefix - requires str.replace('$','') and float conversion
+    - Square footage values stored as strings with 'sq ft' suffix - needs extraction and numeric conversion
+    - Zip codes are numeric values but should be treated as categorical data
+    - 15% of properties have null values in the 'year_built' column - consider imputation or filtering
+    - Date columns use MM/DD/YYYY format and require parsing before time-based analysis
 
-    Ensure the description is at least 200 words and provides actionable insights.  
+    If an existing description is provided, enhance it with both business context and technical guidance
+    for analysis agents, preserving accurate information from the existing description or what the user has written.
+
+    Ensure the description is comprehensive and provides actionable insights for both users and analysis agents.
     """
-    dataset = dspy.InputField(desc="The dataset to describe.")
-    description = dspy.OutputField(desc="A comprehensive dataset description (200 words).")
+    dataset = dspy.InputField(desc="The dataset to describe, including headers, sample data, null counts, and data types.")
+    existing_description = dspy.InputField(desc="An existing description to improve upon (if provided).", default="")
+    description = dspy.OutputField(desc="A comprehensive dataset description with business context and technical guidance for analysis agents.")
 
 if __name__ == "__main__":
     import dspy

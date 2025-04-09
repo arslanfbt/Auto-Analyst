@@ -15,7 +15,7 @@ from src.utils.logger import Logger
 from src.agents.agents import dataset_description_agent
 import dspy
 
-logger = Logger("session_routes", see_time=True, console_log=False)
+logger = Logger("session_routes", see_time=False, console_log=False)
 
 # Add session header for dependency
 X_SESSION_ID = APIKeyHeader(name="X-Session-ID", auto_error=False)
@@ -340,6 +340,10 @@ async def create_dataset_description(
         session_state = app_state.get_session_state(session_id)
         df = session_state["current_df"]
         
+        # Get any existing description provided by the user
+        existing_description = request.get("existingDescription", "")
+        
+        
         # Convert dataframe to a string representation for the agent
         dataset_info = {
             "columns": df.columns.tolist(),
@@ -353,7 +357,16 @@ async def create_dataset_description(
         
         # Generate description using session model
         with dspy.settings.context(lm=session_lm):
-            description = dspy.ChainOfThought(dataset_description_agent)(dataset=str(dataset_info))
+            # If there's an existing description, have the agent improve it
+            if existing_description:
+                description = dspy.ChainOfThought(dataset_description_agent)(
+                    dataset=str(dataset_info),
+                    existing_description=existing_description
+                )
+            else:
+                description = dspy.ChainOfThought(dataset_description_agent)(
+                    dataset=str(dataset_info)
+                )
         
         return {"description": description.description}
     except Exception as e:

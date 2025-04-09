@@ -14,7 +14,7 @@ from src.agents.retrievers.retrievers import make_data
 from src.managers.chat_manager import ChatManager
 
 # Initialize logger
-logger = Logger("session_manager", see_time=True, console_log=False)
+logger = Logger("session_manager", see_time=False, console_log=False)
 
 class SessionManager:
     """
