@@ -74,7 +74,7 @@ export default function ContactPage() {
               <div className="text-center py-8">
                 <h2 className="text-2xl font-bold text-gray-900 mb-4">Thank You!</h2>
                 <p className="text-gray-600 mb-6">
-                  We'll be in touch with you shortly to schedule your demo.
+                  We'll be in touch with you shortly.
                 </p>
                 <button
                   onClick={() => router.push('/')}
@@ -85,7 +85,7 @@ export default function ContactPage() {
               </div>
             ) : (
               <>
-                <h1 className="text-3xl font-bold text-gray-900 mb-6">Schedule a Demo</h1>
+                <h1 className="text-3xl font-bold text-gray-900 mb-6">Contact Us</h1>
                 {error && (
                   <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-600">
                     <p>{error}</p>
@@ -169,7 +169,7 @@ export default function ContactPage() {
                         Submitting...
                       </>
                     ) : (
-                      'Schedule Demo'
+                      'Contact Us'
                     )}
                   </button>
                 </form>

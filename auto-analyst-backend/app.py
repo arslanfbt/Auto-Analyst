@@ -42,7 +42,7 @@ from src.schemas.query_schemas import QueryRequest
 from src.utils.logger import Logger
 
 
-logger = Logger("app", see_time=True, console_log=True)
+logger = Logger("app", see_time=True, console_log=False)
 load_dotenv()
 
 # Add styling_instructions at the top level
@@ -63,7 +63,7 @@ DEFAULT_MODEL_CONFIG = {
     "max_tokens": int(os.getenv("MAX_TOKENS", 6000))
 }
 
-# Initialize DSPy with default model
+# Create default LM config but don't set it globally
 if DEFAULT_MODEL_CONFIG["provider"].lower() == "groq":
     default_lm = dspy.GROQ(
         model=DEFAULT_MODEL_CONFIG["model"],
@@ -79,7 +79,37 @@ else:
         max_tokens=DEFAULT_MODEL_CONFIG["max_tokens"]
     )
 
-dspy.configure(lm=default_lm)
+# Function to get model config from session or use default
+def get_session_lm(session_state):
+    """Get the appropriate LM instance for a session, or default if not configured"""
+    model_config = session_state.get("model_config", DEFAULT_MODEL_CONFIG)
+    
+    if not model_config:
+        return default_lm
+        
+    provider = model_config.get("provider", "openai").lower()
+    
+    if provider == "groq":
+        return dspy.GROQ(
+            model=model_config.get("model", DEFAULT_MODEL_CONFIG["model"]),
+            api_key=model_config.get("api_key", DEFAULT_MODEL_CONFIG["api_key"]),
+            temperature=model_config.get("temperature", DEFAULT_MODEL_CONFIG["temperature"]),
+            max_tokens=model_config.get("max_tokens", DEFAULT_MODEL_CONFIG["max_tokens"])
+        )
+    elif provider == "anthropic":
+        return dspy.LM(
+            model=model_config.get("model", DEFAULT_MODEL_CONFIG["model"]),
+            api_key=model_config.get("api_key", DEFAULT_MODEL_CONFIG["api_key"]),
+            temperature=model_config.get("temperature", DEFAULT_MODEL_CONFIG["temperature"]),
+            max_tokens=model_config.get("max_tokens", DEFAULT_MODEL_CONFIG["max_tokens"])
+        )
+    else:  # OpenAI is the default
+        return dspy.LM(
+            model=model_config.get("model", DEFAULT_MODEL_CONFIG["model"]),
+            api_key=model_config.get("api_key", DEFAULT_MODEL_CONFIG["api_key"]),
+            temperature=model_config.get("temperature", DEFAULT_MODEL_CONFIG["temperature"]),
+            max_tokens=model_config.get("max_tokens", DEFAULT_MODEL_CONFIG["max_tokens"])
+        )
 
 # Initialize retrievers with empty data first
 def initialize_retrievers(styling_instructions: List[str], doc: List[str]):
@@ -116,7 +146,7 @@ X_SESSION_ID = APIKeyHeader(name="X-Session-ID", auto_error=False)
 class AppState:
     def __init__(self):
         self._session_manager = SessionManager(styling_instructions, AVAILABLE_AGENTS)
-        self.model_config = DEFAULT_MODEL_CONFIG
+        self.model_config = DEFAULT_MODEL_CONFIG.copy()
         self.ai_manager = AI_Manager()
         self.chat_name_agent = chat_history_name_agent
     
@@ -158,7 +188,7 @@ class AppState:
     
     def get_chat_history_name_agent(self):
         return dspy.ChainOfThought(self.chat_name_agent)
-    
+
 # Initialize FastAPI app with state
 app = FastAPI(title="AI Analytics API", version="1.0")
 app.state = AppState()
@@ -242,6 +272,9 @@ async def chat_with_agent(
         # Record start time for timing
         start_time = time.time()
         
+        # Get session-specific model
+        session_lm = get_session_lm(session_state)
+        
         # Add chat context from previous messages if chat_id is available
         chat_id = session_state.get("chat_id")
         chat_context = ""
@@ -266,7 +299,9 @@ async def chat_with_agent(
             agent = auto_analyst_ind(agents=[agent], retrievers=session_state["retrievers"])
         
         try:
-            response = agent(enhanced_query, agent_name)
+            # Use session-specific model for this request
+            with dspy.settings.context(lm=session_lm):
+                response = agent(enhanced_query, agent_name)
         except Exception as agent_error:
             raise HTTPException(
                 status_code=500,
@@ -294,7 +329,9 @@ async def chat_with_agent(
             prompt_size = len(enhanced_query)
             response_size = len(str(response))
             
-            model_name = app.state.model_config.get("model", "gpt-4o-mini")
+            # Get model name from session config
+            model_config = session_state.get("model_config", DEFAULT_MODEL_CONFIG)
+            model_name = model_config.get("model", DEFAULT_MODEL_CONFIG["model"])
             provider = ai_manager.get_provider_for_model(model_name)
                 
             # Estimate tokens
@@ -365,6 +402,9 @@ async def chat_with_all(
     if session_state["ai_system"] is None:
         raise HTTPException(status_code=500, detail="AI system not properly initialized.")
 
+    # Get session-specific model
+    session_lm = get_session_lm(session_state)
+
     async def generate_responses():
         overall_start_time = time.time()
         total_response = ""
@@ -386,52 +426,54 @@ async def chat_with_all(
             if chat_context:
                 enhanced_query = f"### Current Query:\n{request.query}\n\n{chat_context}"
             
-            loop = asyncio.get_event_loop()
-            plan_response = await loop.run_in_executor(
-                None,
-                session_state["ai_system"].get_plan,
-                enhanced_query  # Use enhanced query with context
-            )
+            # Use the session model for this specific request
+            with dspy.settings.context(lm=session_lm):
+                loop = asyncio.get_event_loop()
+                plan_response = await loop.run_in_executor(
+                    None,
+                    session_state["ai_system"].get_plan,
+                    enhanced_query  # Use enhanced query with context
+                )
 
-            plan_descrition = format_response_to_markdown({"analytical_planner": plan_response}, dataframe=session_state["current_df"])
-            
-            # if plan_descrition is empty, yield and send error
-            if plan_descrition == "Please provide a valid query...":
-                yield json.dumps({
-                    "agent": "Analytical Planner",
-                    "content": plan_descrition,
-                    "status": "error"
-                }) + "\n"
-                return
-            
-            yield json.dumps({
-                "agent": "Analytical Planner",
-                "content": plan_descrition,
-                "status": "success" if plan_descrition else "error"
-            }) + "\n"
-
-            async for agent_name, inputs, response in session_state["ai_system"].execute_plan(enhanced_query, plan_response):
-                formatted_response = format_response_to_markdown(
-                    {agent_name: response}, 
-                    dataframe=session_state["current_df"]
-                ) or "No response generated"
-
-                if formatted_response == "Please provide a valid query...":
+                plan_descrition = format_response_to_markdown({"analytical_planner": plan_response}, dataframe=session_state["current_df"])
+                
+                # if plan_descrition is empty, yield and send error
+                if plan_descrition == "Please provide a valid query...":
                     yield json.dumps({
-                        "agent": agent_name,
-                        "content": formatted_response,
+                        "agent": "Analytical Planner",
+                        "content": plan_descrition,
                         "status": "error"
                     }) + "\n"
                     return
-                if agent_name != "code_combiner_agent":
-                    total_response += str(response) if response else ""
-                    total_inputs += str(inputs) if inputs else ""
-
+                
                 yield json.dumps({
-                    "agent": agent_name,
-                    "content": formatted_response,
-                    "status": "success" if response else "error"
+                    "agent": "Analytical Planner",
+                    "content": plan_descrition,
+                    "status": "success" if plan_descrition else "error"
                 }) + "\n"
+
+                async for agent_name, inputs, response in session_state["ai_system"].execute_plan(enhanced_query, plan_response):
+                    formatted_response = format_response_to_markdown(
+                        {agent_name: response}, 
+                        dataframe=session_state["current_df"]
+                    ) or "No response generated"
+
+                    if formatted_response == "Please provide a valid query...":
+                        yield json.dumps({
+                            "agent": agent_name,
+                            "content": formatted_response,
+                            "status": "error"
+                        }) + "\n"
+                        return
+                    if agent_name != "code_combiner_agent":
+                        total_response += str(response) if response else ""
+                        total_inputs += str(inputs) if inputs else ""
+
+                    yield json.dumps({
+                        "agent": agent_name,
+                        "content": formatted_response,
+                        "status": "success" if response else "error"
+                    }) + "\n"
 
             if session_state.get("user_id"):
                 overall_processing_time_ms = int((time.time() - overall_start_time) * 1000)
@@ -460,7 +502,9 @@ async def chat_with_all(
                         is_streaming=True
                     )
 
-                model_name = app.state.model_config.get("model", "gpt-4o-mini")
+                # Get model info from session state
+                model_config = session_state.get("model_config", DEFAULT_MODEL_CONFIG)
+                model_name = model_config.get("model", DEFAULT_MODEL_CONFIG["model"])
                 provider = app.state.ai_manager.get_provider_for_model(model_name)
                 prompt_tokens = len(app.state.ai_manager.tokenizer.encode(total_inputs)) 
                 completion_tokens = len(app.state.ai_manager.tokenizer.encode(total_response))  
@@ -537,11 +581,17 @@ async def index():
     }
 
 @app.post("/chat_history_name")
-async def chat_history_name(request: dict):
+async def chat_history_name(request: dict, session_id: str = Depends(get_session_id_dependency)):
     query = request.get("query")
     name = None
-    with dspy.settings.context(lm=dspy.LM(model="gpt-4o-mini", max_tokens=300, temperature=1.0, api_key=os.getenv("OPENAI_API_KEY"))):
+    
+    # Get session state to get model config
+    session_state = app.state.get_session_state(session_id)
+    session_lm = get_session_lm(session_state)
+    
+    with dspy.settings.context(lm=session_lm):
         name = app.state.get_chat_history_name_agent()(query=str(query))
+        
     return {"name": name.name if name else "New Chat"}
 
 # In the section where routers are included, add the session_router

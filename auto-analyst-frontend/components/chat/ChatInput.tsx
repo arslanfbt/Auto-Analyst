@@ -274,7 +274,7 @@ const ChatInput = forwardRef<
               
               // Show the dataset reset popup to get user consent
               setDatasetMismatch(true);
-              setShowDatasetResetPopup(true);
+              // setShowDatasetResetPopup(true);
             }
           } else if (fileUpload && fileUpload.status === 'success') {
             // The UI shows a custom dataset, but the server says we're using the default
@@ -1001,8 +1001,15 @@ const ChatInput = forwardRef<
         description: "Generating description..."
       }));
       
+      // Get the current user-written description if it exists
+      const currentDescription = datasetDescription.description;
+      const existingDescription = currentDescription && 
+                                 currentDescription !== "Generating description..." && 
+                                 currentDescription !== "Preview dataset";
+      
       const response = await axios.post(`${PREVIEW_API_URL}/create-dataset-description`, {
-        sessionId: sessionId
+        sessionId: sessionId,
+        existingDescription: existingDescription
       });
       
       if (response.data && response.data.description) {

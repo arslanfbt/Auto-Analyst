@@ -6,6 +6,7 @@ from io import StringIO
 import time
 import logging
 from src.utils.logger import Logger
+import textwrap
 
 logger = Logger(__name__, level="INFO", see_time=False, console_log=False)
 
@@ -17,6 +18,39 @@ def stdoutIO(stdout=None):
     sys.stdout = stdout
     yield stdout
     sys.stdout = old
+    
+    
+def clean_print_statements(code_block):
+    """
+    This function cleans up any `print()` statements that might contain unwanted `\n` characters.
+    It ensures print statements are properly formatted without unnecessary newlines.
+    """
+    # This regex targets print statements, even if they have newlines inside
+    return re.sub(r'print\((.*?)(\\n.*?)(.*?)\)', r'print(\1\3)', code_block, flags=re.DOTALL)
+
+
+def remove_main_block(code):
+    # Match the __main__ block
+    pattern = r'(?m)^if\s+__name__\s*==\s*["\']__main__["\']\s*:\s*\n((?:\s+.*\n?)*)'
+    
+    match = re.search(pattern, code)
+    if match:
+        main_block = match.group(1)
+        
+        # Dedent the code block inside __main__
+        dedented_block = textwrap.dedent(main_block)
+        
+        # Remove \n from any print statements in the block (also handling multiline print cases)
+        dedented_block = clean_print_statements(dedented_block)
+        # Replace the block in the code
+        cleaned_code = re.sub(pattern, dedented_block, code)
+        
+        # Optional: Remove leading newlines if any
+        cleaned_code = cleaned_code.strip()
+        
+        return cleaned_code
+    return code
+
 
 def format_code_block(code_str):
     code_clean = re.sub(r'^```python\n?', '', code_str, flags=re.MULTILINE)
@@ -26,25 +60,57 @@ def format_code_block(code_str):
 def format_code_backticked_block(code_str):
     code_clean = re.sub(r'^```python\n?', '', code_str, flags=re.MULTILINE)
     code_clean = re.sub(r'\n```$', '', code_clean)
-    # Remove reading the csv file if it's already in the context
-    code_clean = re.sub(r"df\s*=\s*pd\.read_csv\([\"\'].*?[\"\']\).*?(\n|$)", '', code_clean)
-    
-    # Remove the df = pd.DataFrame() if it's already in the context
-    code_clean = re.sub(r"df\s*=\s*pd\.DataFrame\(\s*\).*?(\n|$)", '', code_clean)
-    
-    # Remove any data = ... statements including sample data creation
-    code_clean = re.sub(r"data\s*=\s*.*?(\n|$)", '', code_clean)
-    
-    # Remove any dictionary/list assignments that look like sample data
-    code_clean = re.sub(r"data\s*=\s*\{.*?\}.*?(\n|$)", '', code_clean)
-    code_clean = re.sub(r"data\s*=\s*\[.*?\].*?(\n|$)", '', code_clean)
-    
-    # Remove dictionary key-value pairs with array data (like 'Date': [...], 'Price': [...])
-    code_clean = re.sub(r"[\'\"][\w\s\&\%\$]+[\'\"]\s*:\s*\[.*?\],?", '', code_clean, flags=re.DOTALL)
-    
-    # Remove sample DataFrame creation blocks that include braces
-    code_clean = re.sub(r"\{\s*[\'\"][\w\s\&\%\$]+[\'\"]\s*:\s*\[.*?\],?(\s*[\'\"][\w\s\&\%\$]+[\'\"]\s*:\s*\[.*?\],?)*\s*\}", '', code_clean, flags=re.DOTALL)
-    
+    # Only match assignments at top level (not indented)
+    # 1. Remove 'df = pd.DataFrame()' if it's at the top level
+    code_clean = re.sub(
+        r"^df\s*=\s*pd\.DataFrame\(\s*\)\s*(#.*)?$",
+        '',
+        code_clean,
+        flags=re.MULTILINE
+    )
+
+    # 2. Remove top-level `data = ...` assignments
+    code_clean = re.sub(
+        r"^data\s*=\s*.+$",
+        '',
+        code_clean,
+        flags=re.MULTILINE
+    )
+
+    # 3. Remove top-level dictionary assignments like data = { ... }
+    code_clean = re.sub(
+        r"^data\s*=\s*\{.*?\}\s*(#.*)?$",
+        '',
+        code_clean,
+        flags=re.DOTALL | re.MULTILINE
+    )
+
+    # 4. Remove top-level list assignments like data = [ ... ]
+    code_clean = re.sub(
+        r"^data\s*=\s*\[.*?\]\s*(#.*)?$",
+        '',
+        code_clean,
+        flags=re.DOTALL | re.MULTILINE
+    )
+
+    # 5. Remove dict key-value pairs with list values like "Date": [...], anywhere in code
+    # Use with caution: this will break JSON/dict syntax if you're not post-processing
+    code_clean = re.sub(
+        r"[ \t]*[\'\"][^\'\"]+[\'\"]\s*:\s*\[.*?\],?",
+        '',
+        code_clean,
+        flags=re.DOTALL
+    )
+
+    # 6. Remove full dict blocks that look like sample dataframes:
+    #    {'Date': [...], 'Price': [...], ...}
+    code_clean = re.sub(
+        r"\{\s*(?:[\'\"][^\'\"]+[\'\"]\s*:\s*\[.*?\],?\s*)+\}",
+        '',
+        code_clean,
+        flags=re.DOTALL
+    )
+
     # Remove plt.show() statements
     code_clean = re.sub(r"plt\.show\(\).*?(\n|$)", '', code_clean)
     
@@ -110,28 +176,59 @@ def execute_code_from_markdown(code_str, dataframe=None):
     # Remove reading the csv file if it's already in the context
     modified_code = re.sub(r"df\s*=\s*pd\.read_csv\([\"\'].*?[\"\']\).*?(\n|$)", '', modified_code)
     
-    # Remove the df = pd.DataFrame() if it's already in the context
-    modified_code = re.sub(r"df\s*=\s*pd\.DataFrame\(\s*\).*?(\n|$)", '', modified_code)
-    
-    # Remove any data = ... statements including sample data creation
-    modified_code = re.sub(r"data\s*=\s*.*?(\n|$)", '', modified_code)
-    
-    # Remove any dictionary/list assignments that look like sample data
-    modified_code = re.sub(r"data\s*=\s*\{.*?\}.*?(\n|$)", '', modified_code)
-    modified_code = re.sub(r"data\s*=\s*\[.*?\].*?(\n|$)", '', modified_code)
-    
-    # Remove dictionary key-value pairs with array data (like 'Date': [...], 'Price': [...])
-    modified_code = re.sub(r"[\'\"][\w\s\&\%\$]+[\'\"]\s*:\s*\[.*?\],?", '', modified_code, flags=re.DOTALL)
-    
-    # Remove sample DataFrame creation blocks that include braces
-    modified_code = re.sub(r"\{\s*[\'\"][\w\s\&\%\$]+[\'\"]\s*:\s*\[.*?\],?(\s*[\'\"][\w\s\&\%\$]+[\'\"]\s*:\s*\[.*?\],?)*\s*\}", '', modified_code, flags=re.DOTALL)
-    
-    # Remove df = pd.DataFrame(data) statements based on the image
-    modified_code = re.sub(r"df\s*=\s*pd\.DataFrame\(data\).*?(\n|$)", '', modified_code)
-    modified_code = re.sub(r"df\s*=\s*pd\.DataFrame\(\{.*?\}\).*?(\n|$)", '', modified_code, flags=re.DOTALL)
-    
+    # Only match assignments at top level (not indented)
+    # 1. Remove 'df = pd.DataFrame()' if it's at the top level
+    modified_code = re.sub(
+        r"^df\s*=\s*pd\.DataFrame\(\s*\)\s*(#.*)?$",
+        '',
+        modified_code,
+        flags=re.MULTILINE
+    )
+
+    # 2. Remove top-level `data = ...` assignments
+    modified_code = re.sub(
+        r"^data\s*=\s*.+$",
+        '',
+        modified_code,
+        flags=re.MULTILINE
+    )
+
+    # 3. Remove top-level dictionary assignments like data = { ... }
+    modified_code = re.sub(
+        r"^data\s*=\s*\{.*?\}\s*(#.*)?$",
+        '',
+        modified_code,
+        flags=re.DOTALL | re.MULTILINE
+    )
+
+    # 4. Remove top-level list assignments like data = [ ... ]
+    modified_code = re.sub(
+        r"^data\s*=\s*\[.*?\]\s*(#.*)?$",
+        '',
+        modified_code,
+        flags=re.DOTALL | re.MULTILINE
+    )
+
+    # 5. Remove dict key-value pairs with list values like "Date": [...], anywhere in code
+    # Use with caution: this will break JSON/dict syntax if you're not post-processing
+    modified_code = re.sub(
+        r"[ \t]*[\'\"][^\'\"]+[\'\"]\s*:\s*\[.*?\],?",
+        '',
+        modified_code,
+        flags=re.DOTALL
+    )
+
+    # 6. Remove full dict blocks that look like sample dataframes:
+    #    {'Date': [...], 'Price': [...], ...}
+    modified_code = re.sub(
+        r"\{\s*(?:[\'\"][^\'\"]+[\'\"]\s*:\s*\[.*?\],?\s*)+\}",
+        '',
+        modified_code,
+        flags=re.DOTALL
+    )
+
     # Remove sample dataframe lines with multiple array values
-    modified_code = re.sub(r"# Sample DataFrames?.*?(\n|$)", '', modified_code, flags=re.MULTILINE)
+    modified_code = re.sub(r"^# Sample DataFrames?.*?(\n|$)", '', modified_code, flags=re.MULTILINE | re.IGNORECASE)
     
     # Remove standalone curly braces (often leftover from data structure removal)
     modified_code = re.sub(r"^\s*}\s*$", '', modified_code, flags=re.MULTILINE)
@@ -153,6 +250,8 @@ def execute_code_from_markdown(code_str, dataframe=None):
             modified_code
         )
 
+    # Remove the main block if it exists
+    modified_code = remove_main_block(modified_code)
 
     try:
         with stdoutIO() as s:

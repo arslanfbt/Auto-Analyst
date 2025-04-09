@@ -15,7 +15,7 @@ from src.utils.logger import Logger
 from src.agents.agents import dataset_description_agent
 import dspy
 
-logger = Logger("session_routes", see_time=True, console_log=False)
+logger = Logger("session_routes", see_time=False, console_log=False)
 
 # Add session header for dependency
 X_SESSION_ID = APIKeyHeader(name="X-Session-ID", auto_error=False)
@@ -91,8 +91,10 @@ async def update_model_settings(
             elif settings.provider.lower() == "anthropic":
                 settings.api_key = os.getenv("ANTHROPIC_API_KEY")
         
-        # update session state
+        # Get session state to update model config
         session_state = app_state.get_session_state(session_id)
+        
+        # Update only the session's model config
         session_state["model_config"] = {
             "provider": settings.provider,
             "model": settings.model,
@@ -101,15 +103,7 @@ async def update_model_settings(
             "max_tokens": settings.max_tokens
         }
 
-        # Update app state model config too, for tracking in streaming chat
-        app_state.model_config = {
-            "provider": settings.provider,
-            "model": settings.model,
-            "temperature": settings.temperature,
-            "max_tokens": settings.max_tokens
-        }
-
-        # Configure model with temperature and max_tokens
+        # Create the LM instance to test the configuration, but don't set it globally
         import dspy
         
         if settings.provider.lower() == "groq":
@@ -134,10 +128,10 @@ async def update_model_settings(
                 max_tokens=settings.max_tokens
             )
 
-        # Test the model configuration
+        # Test the model configuration without setting it globally
         try:
             lm("Hello, are you working?")
-            dspy.configure(lm=lm)
+            # REMOVED: dspy.configure(lm=lm) - no longer set globally
             return {"message": "Model settings updated successfully"}
         except Exception as model_error:
             if "auth" in str(model_error).lower() or "api" in str(model_error).lower():
@@ -162,14 +156,23 @@ async def update_model_settings(
         )
 
 @router.get("/api/model-settings")
-async def get_model_settings(app_state = Depends(get_app_state)):
-    """Get current model settings"""
+async def get_model_settings(
+    app_state = Depends(get_app_state),
+    session_id: str = Depends(get_session_id_dependency)
+):
+    """Get current model settings for the specific session"""
+    # Get the session state for this specific user
+    session_state = app_state.get_session_state(session_id)
+    
+    # Get model config from session state, or use global config as fallback
+    model_config = session_state.get("model_config", app_state.model_config)
+    
     return {
-        "provider": app_state.model_config["provider"],
-        "model": app_state.model_config["model"],
-        "hasCustomKey": bool(os.getenv("CUSTOM_API_KEY")),
-        "temperature": app_state.model_config["temperature"],
-        "maxTokens": app_state.model_config["max_tokens"]
+        "provider": model_config.get("provider", "openai"),
+        "model": model_config.get("model", "gpt-4o-mini"),
+        "hasCustomKey": bool(model_config.get("api_key")) or bool(os.getenv("CUSTOM_API_KEY")),
+        "temperature": model_config.get("temperature", 0.7),
+        "maxTokens": model_config.get("max_tokens", 6000)
     }
 
 @router.post("/api/preview-csv")
@@ -337,6 +340,10 @@ async def create_dataset_description(
         session_state = app_state.get_session_state(session_id)
         df = session_state["current_df"]
         
+        # Get any existing description provided by the user
+        existing_description = request.get("existingDescription", "")
+        
+        
         # Convert dataframe to a string representation for the agent
         dataset_info = {
             "columns": df.columns.tolist(),
@@ -344,8 +351,23 @@ async def create_dataset_description(
             "stats": df.describe().to_dict()
         }
         
-        # Generate description
-        description = dspy.ChainOfThought(dataset_description_agent)(dataset=str(dataset_info))
+        # Get session-specific model
+        from app import get_session_lm
+        session_lm = get_session_lm(session_state)
+        
+        # Generate description using session model
+        with dspy.settings.context(lm=session_lm):
+            # If there's an existing description, have the agent improve it
+            if existing_description:
+                description = dspy.ChainOfThought(dataset_description_agent)(
+                    dataset=str(dataset_info),
+                    existing_description=existing_description
+                )
+            else:
+                description = dspy.ChainOfThought(dataset_description_agent)(
+                    dataset=str(dataset_info)
+                )
+        
         return {"description": description.description}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to generate description: {str(e)}")

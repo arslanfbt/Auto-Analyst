@@ -14,7 +14,7 @@ from src.agents.retrievers.retrievers import make_data
 from src.managers.chat_manager import ChatManager
 
 # Initialize logger
-logger = Logger("session_manager", see_time=True, console_log=False)
+logger = Logger("session_manager", see_time=False, console_log=False)
 
 class SessionManager:
     """
@@ -88,6 +88,15 @@ class SessionManager:
         Returns:
             Dictionary containing session state
         """
+        # Get default model config from environment
+        default_model_config = {
+            "provider": os.getenv("MODEL_PROVIDER", "openai"),
+            "model": os.getenv("MODEL_NAME", "gpt-4o-mini"),
+            "api_key": os.getenv("OPENAI_API_KEY"),
+            "temperature": float(os.getenv("TEMPERATURE", 1.0)),
+            "max_tokens": int(os.getenv("MAX_TOKENS", 6000))
+        }
+        
         if session_id not in self._sessions:
             # Check if we need to create a brand new session
             logger.log_message(f"Creating new session state for session_id: {session_id}", level=logging.INFO)
@@ -100,6 +109,7 @@ class SessionManager:
                 "make_data": self._make_data,
                 "description": self._dataset_description,
                 "name": self._default_name,
+                "model_config": default_model_config,
                 "creation_time": time.time()
             }
         else:
@@ -120,6 +130,8 @@ class SessionManager:
                 session["name"] = self._default_name
             if "description" not in session:
                 session["description"] = self._dataset_description
+            if "model_config" not in session:
+                session["model_config"] = default_model_config
             
             # Update last accessed time
             session["last_accessed"] = time.time()
@@ -152,6 +164,15 @@ class SessionManager:
             retrievers = self.initialize_retrievers(self.styling_instructions, [str(data_dict)])
             ai_system = auto_analyst(agents=list(self.available_agents.values()), retrievers=retrievers)
             
+            # Get default model config for new sessions
+            default_model_config = {
+                "provider": os.getenv("MODEL_PROVIDER", "openai"),
+                "model": os.getenv("MODEL_NAME", "gpt-4o-mini"),
+                "api_key": os.getenv("OPENAI_API_KEY"),
+                "temperature": float(os.getenv("TEMPERATURE", 1.0)),
+                "max_tokens": int(os.getenv("MAX_TOKENS", 6000))
+            }
+            
             # Create a completely fresh session state for the new dataset
             # This ensures no remnants of the previous dataset remain
             session_state = {
@@ -160,15 +181,19 @@ class SessionManager:
                 "ai_system": ai_system,
                 "make_data": data_dict,
                 "description": desc,
-                "name": name
+                "name": name,
+                "model_config": default_model_config,  # Initialize with default
             }
             
-            # Preserve user_id and chat_id if they exist in the current session
+            # Preserve user_id, chat_id, and model_config if they exist in the current session
             if session_id in self._sessions:
                 if "user_id" in self._sessions[session_id]:
                     session_state["user_id"] = self._sessions[session_id]["user_id"]
                 if "chat_id" in self._sessions[session_id]:
                     session_state["chat_id"] = self._sessions[session_id]["chat_id"]
+                if "model_config" in self._sessions[session_id]:
+                    # Preserve the user's model configuration
+                    session_state["model_config"] = self._sessions[session_id]["model_config"]
             
             # Replace the entire session with the new state
             self._sessions[session_id] = session_state
@@ -186,6 +211,15 @@ class SessionManager:
             session_id: The session identifier
         """
         try:
+            # Get default model config from environment
+            default_model_config = {
+                "provider": os.getenv("MODEL_PROVIDER", "openai"),
+                "model": os.getenv("MODEL_NAME", "gpt-4o-mini"),
+                "api_key": os.getenv("OPENAI_API_KEY"),
+                "temperature": float(os.getenv("TEMPERATURE", 1.0)),
+                "max_tokens": int(os.getenv("MAX_TOKENS", 6000))
+            }
+            
             # Clear any custom data associated with the session first
             if session_id in self._sessions:
                 del self._sessions[session_id]
@@ -198,7 +232,8 @@ class SessionManager:
                 "ai_system": self._default_ai_system,
                 "description": self._dataset_description,
                 "name": self._default_name, # Explicitly set the default name
-                "make_data": None # Clear any custom make_data
+                "make_data": None, # Clear any custom make_data
+                "model_config": default_model_config # Initialize with default model config
             }
             logger.log_message(f"Reset session {session_id} to default dataset: {self._default_name}", level=logging.INFO)
         except Exception as e:
