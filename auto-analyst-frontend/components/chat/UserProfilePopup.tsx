@@ -58,7 +58,7 @@ const UserProfilePopup: FC<UserProfilePopupProps> = ({ isOpen, onClose, onSettin
   return (
     <motion.div
       ref={popupRef}
-      className="absolute top-10 right-0 w-64 bg-white rounded-xl shadow-xl border border-gray-200 overflow-hidden z-[9999]"
+      className="absolute top-10 right-0 w-64 bg-white rounded-xl shadow-2xl border border-gray-200 overflow-hidden z-[20000]"
       initial={{ opacity: 0, y: -10 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -10 }}
