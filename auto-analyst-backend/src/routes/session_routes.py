@@ -36,6 +36,7 @@ async def get_session_id_dependency(request: Request):
 class ResetSessionRequest(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
+    preserveModelSettings: Optional[bool] = False
 
 @router.post("/upload_dataframe")
 async def upload_dataframe(
@@ -207,8 +208,6 @@ async def preview_csv(app_state = Depends(get_app_state), session_id: str = Depe
         name = session_state.get("name", "Dataset")
         description = session_state.get("description", "No description available")
         
-        # Log what we're returning
-        logger.log_message(f"Preview for session {session_id}, dataset name: {name}, raw description: '{description}'", level=logging.INFO)
         
         # Try to get the description from make_data if available
         if "make_data" in session_state and session_state["make_data"]:
@@ -250,9 +249,6 @@ async def preview_csv(app_state = Depends(get_app_state), session_id: str = Depe
             "name": name,
             "description": description
         }
-        
-        # Log what we're returning
-        logger.log_message(f"Returning preview data with name: '{name}', description: '{description}'", level=logging.INFO)
         
         return preview_data
     except Exception as e:
@@ -297,7 +293,32 @@ async def reset_session(
 ):
     """Reset session to use default dataset with optional new description"""
     try:
+        # Check if we need to preserve model settings
+        preserve_settings = False
+        if request_data and request_data.preserveModelSettings:
+            preserve_settings = True
+            
+        # Get the current model settings before reset if needed
+        model_config = None
+        if preserve_settings:
+            try:
+                session_state = app_state.get_session_state(session_id)
+                if "model_config" in session_state:
+                    model_config = session_state["model_config"]
+            except Exception as e:
+                logger.log_message(f"Failed to get model settings: {str(e)}", level=logging.WARNING)
+        
+        # Now reset the session
         app_state.reset_session_to_default(session_id)
+        
+        # Restore model settings if requested
+        if preserve_settings and model_config:
+            try:
+                session_state = app_state.get_session_state(session_id)
+                session_state["model_config"] = model_config
+                logger.log_message(f"Preserved model settings for session {session_id}", level=logging.INFO)
+            except Exception as e:
+                logger.log_message(f"Failed to restore model settings: {str(e)}", level=logging.ERROR)
         
         # Get name and description from either query params or request body
         if request_data:
@@ -316,7 +337,8 @@ async def reset_session(
         return {
             "message": "Session reset to default dataset",
             "session_id": session_id,
-            "dataset": "Housing.csv"
+            "dataset": "Housing.csv",
+            "model_settings_preserved": preserve_settings
         }
     except Exception as e:
         logger.log_message(f"Failed to reset session: {str(e)}", level=logging.ERROR)
@@ -390,16 +412,12 @@ async def get_session_info(
         current_description = session_state.get("description", "")
         default_name = getattr(session_manager, "_default_name", "Housing Dataset")
         
-        logger.log_message(f"Session info - current name: '{current_name}', default name: '{default_name}'", level=logging.INFO)
-        logger.log_message(f"Session info - session state keys: {list(session_state.keys())}", level=logging.INFO)
-        
         # More robust detection of custom dataset
         is_custom = False
         
         # Check by name
         if current_name and current_name != default_name:
             is_custom = True
-            logger.log_message(f"Custom dataset detected by name: {current_name}", level=logging.INFO)
         
         # Also check by checking if we have a dataframe that's different from default
         if "current_df" in session_state and session_state["current_df"] is not None:
@@ -410,7 +428,6 @@ async def get_session_info(
                     default_col_count = len(session_manager._default_df.columns)
                     if custom_col_count != default_col_count:
                         is_custom = True
-                        logger.log_message(f"Custom dataset detected by column count: {custom_col_count} vs {default_col_count}", level=logging.INFO)
             except Exception as e:
                 logger.log_message(f"Error comparing datasets: {str(e)}", level=logging.ERROR)
         
@@ -425,7 +442,6 @@ async def get_session_info(
             "session_keys": list(session_state.keys())  # For debugging
         }
         
-        logger.log_message(f"Session info response: {response_data}", level=logging.INFO)
         return response_data
     except Exception as e:
         logger.log_message(f"Error getting session info: {str(e)}", level=logging.ERROR)

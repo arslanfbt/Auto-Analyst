@@ -549,14 +549,39 @@ export default function AccountPage() {
                                 ${subscription?.amount || '0.00'}/{subscription?.interval || 'month'}
                               </span>
                             </div>
-                            <div className="flex justify-between">
-                              <span className="text-gray-600">Next billing:</span>
-                              <span className="font-medium text-gray-900">{subscription?.renewalDate || '2025-04-19'}</span>
+                            <div className="flex justify-between mb-2">
+                              <span className="text-gray-600">Billing cycle:</span>
+                              <span className="font-medium text-gray-900 capitalize">{subscription?.interval || 'monthly'}</span>
+                            </div>
+                            {subscription?.plan?.toLowerCase() !== 'free' && (
+                              <div className="flex justify-between mb-2">
+                                <span className="text-gray-600">Next billing date:</span>
+                                <span className="font-medium text-gray-900">
+                                  {subscription?.renewalDate ? 
+                                    new Date(subscription.renewalDate).toLocaleDateString('en-US', {
+                                      year: 'numeric',
+                                      month: 'long',
+                                      day: 'numeric'
+                                    }) : 
+                                    'Not available'}
+                                </span>
+                              </div>
+                            )}
+                            <div className="flex justify-between mb-2">
+                              <span className="text-gray-600">Next credits reset:</span>
+                              <span className="font-medium text-gray-900">
+                                {credits?.resetDate ? 
+                                  new Date(credits.resetDate).toLocaleDateString('en-US', {
+                                    year: 'numeric',
+                                    month: 'long',
+                                    day: 'numeric'
+                                  }) : 
+                                  'Not available'}
+                              </span>
                             </div>
                             {subscription?.interval === 'year' && (
-                              <div className="flex justify-between mb-2">
-                                <span className="text-gray-600">Next credits reset:</span>
-                                <span className="font-medium text-gray-900">{credits?.resetDate || credits?.nextMonthlyReset || 'N/A'}</span>
+                              <div className="mt-2 px-3 py-2 bg-[#FFE5E5] border border-[#FFCACA] rounded-md text-xs text-[#FF7F7F]">
+                                <span className="font-medium">Note:</span> Your subscription renews yearly, but credits reset monthly.
                               </div>
                             )}
                           </div>
@@ -684,12 +709,39 @@ export default function AccountPage() {
                           <div className="mt-4 pt-4 border-t border-gray-200">
                             <div className="flex justify-between mb-2">
                               <span className="text-gray-600">Billing period:</span>
-                              <span className="text-gray-900">Monthly</span>
+                              <span className="text-gray-900 capitalize">{subscription?.interval || 'Monthly'}</span>
                             </div>
+                            {subscription?.plan?.toLowerCase() !== 'free' && (
+                              <div className="flex justify-between mb-2">
+                                <span className="text-gray-600">Next billing date:</span>
+                                <span className="text-gray-900">
+                                  {subscription?.renewalDate ? 
+                                    new Date(subscription.renewalDate).toLocaleDateString('en-US', {
+                                      year: 'numeric',
+                                      month: 'long',
+                                      day: 'numeric'
+                                    }) : 
+                                    'Not available'}
+                                </span>
+                              </div>
+                            )}
                             <div className="flex justify-between mb-2">
-                              <span className="text-gray-600">Next billing date:</span>
-                              <span className="text-gray-900">{subscription?.renewalDate || '2025-04-19'}</span>
+                              <span className="text-gray-600">Next credits reset:</span>
+                              <span className="text-gray-900">
+                                {credits?.resetDate ? 
+                                  new Date(credits.resetDate).toLocaleDateString('en-US', {
+                                    year: 'numeric',
+                                    month: 'long',
+                                    day: 'numeric'
+                                  }) : 
+                                  'Not available'}
+                              </span>
                             </div>
+                            {subscription?.interval === 'year' && (
+                              <div className="mt-3 px-3 py-2 bg-blue-50 border border-blue-100 rounded-md text-xs text-blue-700">
+                                <span className="font-medium">Note:</span> Your subscription renews yearly, but credits reset monthly.
+                              </div>
+                            )}
                             <div className="flex justify-between mb-2">
                               <span className="text-gray-600">Payment method:</span>
                               <span className="text-gray-900">Credit Card •••• 4242</span>

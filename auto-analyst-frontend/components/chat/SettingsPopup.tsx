@@ -3,19 +3,13 @@ import { X, CheckCircle, AlertCircle, Info, Settings } from 'lucide-react';
 import API_URL from '@/config/api'
 import { useSessionStore } from '@/lib/store/sessionStore'
 import { getModelCreditCost } from '@/lib/model-tiers'
+import { useModelSettings, ModelSettings } from '@/lib/hooks/useModelSettings';
 
 interface SettingsPopupProps {
   isOpen: boolean;
   onClose: () => void;
-  initialSettings?: {
-    provider: string;
-    model: string;
-    hasCustomKey: boolean;
-    apiKey: string;
-    temperature: number;
-    maxTokens: number;
-  };
-  onSettingsUpdated?: (settings: any) => void;
+  initialSettings?: ModelSettings;
+  onSettingsUpdated?: (settings: ModelSettings) => void;
 }
 
 // Define model providers and their models
@@ -72,8 +66,7 @@ const MODEL_PROVIDERS = [
 const BASE_URL = API_URL;
 
 const SettingsPopup: React.FC<SettingsPopupProps> = ({ isOpen, onClose, initialSettings, onSettingsUpdated }) => {
-  // Get sessionId from the session store
-  const { sessionId } = useSessionStore();
+  const { updateModelSettings } = useModelSettings();
   
   const [selectedProvider, setSelectedProvider] = useState(initialSettings?.provider || MODEL_PROVIDERS[0].name);
   const [selectedModel, setSelectedModel] = useState(initialSettings?.model || MODEL_PROVIDERS[0].models[0].id);
@@ -83,15 +76,15 @@ const SettingsPopup: React.FC<SettingsPopupProps> = ({ isOpen, onClose, initialS
   const [showAdvanced, setShowAdvanced] = useState(false);
   
   // Convert string to number for temperature if needed
-  const [temperature, setTemperature] = useState(() => {
+  const [temperature, setTemperature] = useState<number>(() => {
     const defaultTemp = initialSettings?.temperature || 0;
-    return typeof defaultTemp === 'string' ? parseFloat(defaultTemp) : defaultTemp;
+    return typeof defaultTemp === 'string' ? parseFloat(defaultTemp as string) : (defaultTemp as number);
   });
   
   // Convert string to number for maxTokens if needed
-  const [maxTokens, setMaxTokens] = useState(() => {
+  const [maxTokens, setMaxTokens] = useState<number>(() => {
     const defaultTokens = initialSettings?.maxTokens || 1000;
-    return typeof defaultTokens === 'string' ? parseInt(defaultTokens) : defaultTokens;
+    return typeof defaultTokens === 'string' ? parseInt(defaultTokens as string) : (defaultTokens as number);
   });
 
   // Update selected model when provider changes
@@ -114,8 +107,14 @@ const SettingsPopup: React.FC<SettingsPopupProps> = ({ isOpen, onClose, initialS
       setSelectedProvider(initialSettings.provider);
       setUseCustomAPI(initialSettings.hasCustomKey);
       setApiKey(initialSettings.apiKey);
-      setTemperature(initialSettings.temperature);
-      setMaxTokens(initialSettings.maxTokens);
+      
+      // Handle temperature with proper type conversion
+      const temp = initialSettings.temperature;
+      setTemperature(typeof temp === 'string' ? parseFloat(temp) : (temp as number));
+      
+      // Handle maxTokens with proper type conversion
+      const tokens = initialSettings.maxTokens;
+      setMaxTokens(typeof tokens === 'string' ? parseInt(tokens) : (tokens as number));
     }
   }, [initialSettings]);
 
@@ -131,28 +130,8 @@ const SettingsPopup: React.FC<SettingsPopupProps> = ({ isOpen, onClose, initialS
         return;
       }
 
-      const response = await fetch(`${BASE_URL}/settings/model`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Session-ID': sessionId || '',
-        },
-        body: JSON.stringify({
-          provider: selectedProvider,
-          model: selectedModel,
-          api_key: useCustomAPI ? apiKey.trim() : '',
-          temperature: temperature,
-          max_tokens: maxTokens,
-        }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || errorData.message || 'Failed to update settings');
-      }
-
-      // Create settings object that we'll pass to parent component
-      const updatedSettings = {
+      // Create settings object that we'll pass to hook and parent component
+      const updatedSettings: ModelSettings = {
         provider: selectedProvider,
         model: selectedModel,
         hasCustomKey: useCustomAPI,
@@ -161,17 +140,24 @@ const SettingsPopup: React.FC<SettingsPopupProps> = ({ isOpen, onClose, initialS
         maxTokens: maxTokens,
       };
 
-      setNotification({ type: 'success', message: 'Settings updated successfully!' });
+      // Use the hook to update settings
+      const success = await updateModelSettings(updatedSettings);
       
-      // Call the callback if provided
-      if (onSettingsUpdated) {
-        onSettingsUpdated(updatedSettings);
+      if (success) {
+        setNotification({ type: 'success', message: 'Settings updated successfully!' });
+        
+        // Call the callback if provided
+        if (onSettingsUpdated) {
+          onSettingsUpdated(updatedSettings);
+        }
+        
+        setTimeout(() => {
+          setNotification(null);
+          onClose();
+        }, 2000);
+      } else {
+        throw new Error('Failed to update settings');
       }
-      
-      setTimeout(() => {
-        setNotification(null);
-        onClose();
-      }, 2000);
     } catch (error) {
       setNotification({ 
         type: 'error', 

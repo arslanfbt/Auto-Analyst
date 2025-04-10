@@ -72,6 +72,7 @@
     "zustand": "^5.0.3"
   },
   "devDependencies": {
+    "@tailwindcss/typography": "^0.5.16",
     "@types/date-fns": "^2.5.3",
     "@types/debounce": "^1.2.4",
     "@types/node": "^20",

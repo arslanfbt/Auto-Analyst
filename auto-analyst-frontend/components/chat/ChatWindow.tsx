@@ -31,9 +31,17 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const [localMessages, setLocalMessages] = useState<ChatMessage[]>(messages)
 
+  // Update local messages when prop messages change
   useEffect(() => {
     setLocalMessages(messages)
   }, [messages])
+
+  // Force immediate update when transitioning from welcome to chat view
+  useEffect(() => {
+    if (!showWelcome && messages.length > 0) {
+      setLocalMessages(messages)
+    }
+  }, [showWelcome, messages])
 
   useEffect(() => {
     scrollToBottom()
@@ -164,7 +172,11 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
         ) : (
           <div className="max-w-4xl mx-auto py-8 px-4">
             <div className="space-y-8">
-              {localMessages.flatMap((message, index) => renderMessage(message, index))}
+              {messages.length > 0 ? (
+                messages.flatMap((message, index) => renderMessage(message, index))
+              ) : (
+                <div className="text-center text-gray-500">No messages yet</div>
+              )}
             </div>
           </div>
         )}

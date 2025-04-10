@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef, forwardRef, useImperativeHandle } from "react"
 import { motion, AnimatePresence } from "framer-motion"
-import { Send, Paperclip, X, Square, Loader2, CheckCircle2, XCircle, Eye, CreditCard } from 'lucide-react'
+import { Send, Paperclip, X, Square, Loader2, CheckCircle2, XCircle, Eye, CreditCard, Edit, FileText } from 'lucide-react'
 import AgentHint from './AgentHint'
 import { Button } from "../ui/button"
 import { Textarea } from "../ui/textarea"
@@ -22,6 +22,8 @@ import { useCredits } from '@/lib/contexts/credit-context'
 import API_URL from '@/config/api'
 import Link from 'next/link'
 import DatasetResetPopup from './DatasetResetPopup'
+import ReactMarkdown from 'react-markdown'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
 // const PREVIEW_API_URL = 'http://localhost:8000';
 const PREVIEW_API_URL = API_URL;
@@ -80,12 +82,13 @@ const ChatInput = forwardRef<
   });
   const [uploadSuccess, setUploadSuccess] = useState(false);
   const { sessionId, setSessionId } = useSessionStore()
-  const { remainingCredits, isChatBlocked } = useCredits()
+  const { remainingCredits, isChatBlocked, creditResetDate, checkCredits } = useCredits()
   const [showCreditInfo, setShowCreditInfo] = useState(false)
   const [showDatasetResetPopup, setShowDatasetResetPopup] = useState(false)
   const [datasetMismatch, setDatasetMismatch] = useState(false)
   // Replace session flag with a set of chat IDs that have shown the popup
   const popupShownForChatIdsRef = useRef<Set<number>>(new Set());
+  const [descriptionTab, setDescriptionTab] = useState<"edit" | "preview">("edit")
 
   // Expose handlePreviewDefaultDataset to parent
   useImperativeHandle(ref, () => ({
@@ -95,6 +98,37 @@ const ChatInput = forwardRef<
 
   // Use a ref to track localStorage changes
   const lastUploadedFileRef = useRef<string | null>(null);
+
+  // Check isInputDisabled on mount to ensure consistent UI state
+  useEffect(() => {
+    const checkDisabledStatus = () => {
+      const isDisabled = isInputDisabled();
+      console.log(`[ChatInput] Input disabled on mount: ${isDisabled}, isChatBlocked: ${isChatBlocked}`);
+    };
+    checkDisabledStatus();
+  }, []);
+
+  // Add a periodic check for credit state to ensure UI is consistent
+  useEffect(() => {
+    // Skip this check for non-logged in users
+    if (!session) return;
+    
+    // Initial UI consistency check
+    const forceUiUpdate = () => {
+      // Force React to re-render the component if isChatBlocked changes
+      setMessage(prevMessage => {
+        return prevMessage;
+      });
+    };
+    
+    // Check every 3 seconds to keep UI in sync with credit context
+    const intervalId = setInterval(() => {
+      // Doesn't actually change state, just forces a re-render
+      forceUiUpdate();
+    }, 3000);
+    
+    return () => clearInterval(intervalId);
+  }, [session, isChatBlocked]);
 
   // Add an improved effect to handle chat switches and preserve dataset info
   useEffect(() => {
@@ -977,18 +1011,44 @@ const ChatInput = forwardRef<
 
   // Helper function to determine if input should be fully disabled
   const isInputDisabled = () => {
-    return disabled || isLoading || isChatBlocked
+    if (isChatBlocked) {
+      console.log("[ChatInput] Input disabled due to insufficient credits");
+      return true;
+    }
+    return disabled || isLoading || false;
   }
 
-  // Calculate reset date (first day of next month)
+  // Get the appropriate reset date from Redis or fall back to first day of next month
   const getResetDate = () => {
-    const now = new Date()
-    const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1)
+    // Log the raw value for debugging
+    console.log(`[ChatInput] Credit reset date from context: ${creditResetDate}`);
+    
+    // Use the actual reset date from Redis if available
+    if (creditResetDate) {
+      try {
+        const resetDate = new Date(creditResetDate);
+        if (!isNaN(resetDate.getTime())) {
+          console.log(`[ChatInput] Using actual reset date from Redis: ${resetDate.toISOString()}`);
+          return resetDate.toLocaleDateString('en-US', { 
+            year: 'numeric', 
+            month: 'long', 
+            day: 'numeric' 
+          });
+        }
+      } catch (error) {
+        console.error('[ChatInput] Error parsing reset date:', error);
+      }
+    }
+    
+    // Fall back to first day of next month if no date from Redis or invalid date
+    console.log('[ChatInput] No valid reset date from Redis, using first day of next month');
+    const now = new Date();
+    const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
     return nextMonth.toLocaleDateString('en-US', { 
       year: 'numeric', 
       month: 'long', 
       day: 'numeric' 
-    })
+    });
   }
 
   // Add a function to generate dataset description automatically
@@ -1381,22 +1441,47 @@ const ChatInput = forwardRef<
                     <label className="block text-sm font-medium text-gray-800 mb-1">
                       Description
                     </label>
-                    <div className="relative">
-                      <textarea
-                        value={datasetDescription.description}
-                        onChange={(e) => setDatasetDescription(prev => ({ ...prev, description: e.target.value }))}
-                        className="w-full px-3 py-2 pr-28 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-[#FF7F7F] focus:border-transparent text-gray-800"
-                        rows={3}
-                        placeholder="Describe what this dataset contains and its purpose"
-                      />
-                      <button
-                        type="button"
-                        onClick={generateDatasetDescription}
-                        className="absolute right-2 top-2 px-2 py-1 text-xs font-medium bg-gray-100 text-gray-700 rounded hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-[#FF7F7F]"
-                      >
-                        Auto-generate
-                      </button>
-                    </div>
+                    <Tabs value={descriptionTab} onValueChange={(value) => setDescriptionTab(value as "edit" | "preview")} className="w-full">
+                      <div className="flex justify-between items-center mb-2">
+                        <TabsList className="grid grid-cols-2 w-40">
+                          <TabsTrigger value="edit" className="flex items-center gap-1">
+                            <Edit className="w-3 h-3" />
+                            Edit
+                          </TabsTrigger>
+                          <TabsTrigger value="preview" className="flex items-center gap-1">
+                            <FileText className="w-3 h-3" />
+                            Preview
+                          </TabsTrigger>
+                        </TabsList>
+                        <button
+                          type="button"
+                          onClick={generateDatasetDescription}
+                          className="px-2 py-1 text-xs font-medium bg-gray-100 text-gray-700 rounded hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-[#FF7F7F]"
+                        >
+                          Auto-generate
+                        </button>
+                      </div>
+                      <TabsContent value="edit" className="mt-0">
+                        <textarea
+                          value={datasetDescription.description}
+                          onChange={(e) => setDatasetDescription(prev => ({ ...prev, description: e.target.value }))}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-[#FF7F7F] focus:border-transparent text-gray-800"
+                          rows={5}
+                          placeholder="Describe what this dataset contains and its purpose"
+                        />
+                      </TabsContent>
+                      <TabsContent value="preview" className="mt-0">
+                        <div className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm bg-white min-h-[132px] prose prose-sm max-w-none overflow-y-auto">
+                          {datasetDescription.description ? (
+                            <ReactMarkdown>
+                              {datasetDescription.description}
+                            </ReactMarkdown>
+                          ) : (
+                            <p className="text-gray-400 italic">No description provided</p>
+                          )}
+                        </div>
+                      </TabsContent>
+                    </Tabs>
                   </div>
                 </div>
 
