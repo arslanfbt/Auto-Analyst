@@ -12,6 +12,7 @@ import axios from "axios"
 import { useSessionStore } from '@/lib/store/sessionStore'
 import API_URL from '@/config/api'
 import { format } from 'date-fns'
+import { useModelSettings } from '@/lib/hooks/useModelSettings'
 
 const PREVIEW_API_URL = API_URL;
 
@@ -36,14 +37,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, onNewChat, chatHisto
   const { data: session } = useSession()
   const router = useRouter()
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
-  const [modelSettings, setModelSettings] = useState({
-    provider: process.env.NEXT_PUBLIC_DEFAULT_MODEL_PROVIDER || 'openai',
-    model: process.env.NEXT_PUBLIC_DEFAULT_MODEL || 'gpt-4o-mini',
-    hasCustomKey: false,
-    apiKey: process.env.NEXT_PUBLIC_OPENAI_API_KEY || '',
-    temperature: process.env.NEXT_PUBLIC_DEFAULT_TEMPERATURE || 0.7,
-    maxTokens: process.env.NEXT_PUBLIC_DEFAULT_MAX_TOKENS || 6000
-  });
+  const { modelSettings } = useModelSettings()
   const { sessionId } = useSessionStore()
   const [isAdmin, setIsAdmin] = useState(false)
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
@@ -52,25 +46,6 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, onNewChat, chatHisto
   useEffect(() => {
     setIsAdmin(localStorage.getItem('isAdmin') === 'true')
   }, [])
-
-  useEffect(() => {
-    // Fetch current model settings when settings popup is opened
-    if (isSettingsOpen) {
-      const fetchModelSettings = async () => {
-        try {
-          const response = await axios.get(`${PREVIEW_API_URL}/api/model-settings`, {
-            headers: {
-              'X-Session-ID': sessionId
-            }
-          });
-          setModelSettings(response.data);
-        } catch (error) {
-          console.error('Failed to fetch model settings:', error);
-        }
-      };
-      fetchModelSettings();
-    }
-  }, [isSettingsOpen, sessionId]);
 
   const handleNewChat = async () => {
     if (sessionId) {
@@ -86,14 +61,18 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, onNewChat, chatHisto
         console.log("Dataset check before new chat:", sessionInfoResponse.data);
         const hasCustomDataset = sessionInfoResponse.data && sessionInfoResponse.data.is_custom_dataset;
         
+        // Important: Do NOT reset model settings when starting a new chat
         if (!hasCustomDataset) {
-          // If no custom dataset, we can reset session directly
-          console.log("No custom dataset, resetting session directly");
-          await axios.post(`${PREVIEW_API_URL}/reset-session`, null, {
-            headers: {
-              'X-Session-ID': sessionId,
-            },
-          });
+          // If no custom dataset, we can reset session data but KEEP model settings
+          console.log("No custom dataset, resetting session data only");
+          await axios.post(`${PREVIEW_API_URL}/reset-session`, 
+            { preserveModelSettings: true }, // Add flag to preserve model settings
+            {
+              headers: {
+                'X-Session-ID': sessionId,
+              },
+            }
+          );
         } else {
           console.log("Custom dataset detected, ChatInterface will handle dataset choice");
           // We'll let ChatInterface handle the custom dataset flow
@@ -351,7 +330,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, onNewChat, chatHisto
       <SettingsPopup 
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
-        initialSettings={modelSettings as any}
+        initialSettings={modelSettings}
       />
 
       {isDeleteModalOpen && (
