@@ -96,6 +96,42 @@ const ChatInput = forwardRef<
   // Use a ref to track localStorage changes
   const lastUploadedFileRef = useRef<string | null>(null);
 
+  // Add an effect to update the local state when isChatBlocked changes
+  useEffect(() => {
+    console.log(`[ChatInput] isChatBlocked state changed: ${isChatBlocked}`);
+  }, [isChatBlocked]);
+
+  // Check isInputDisabled on mount to ensure consistent UI state
+  useEffect(() => {
+    const checkDisabledStatus = () => {
+      const isDisabled = isInputDisabled();
+      console.log(`[ChatInput] Input disabled on mount: ${isDisabled}, isChatBlocked: ${isChatBlocked}`);
+    };
+    checkDisabledStatus();
+  }, []);
+
+  // Add a periodic check for credit state to ensure UI is consistent
+  useEffect(() => {
+    // Skip this check for non-logged in users
+    if (!session) return;
+    
+    // Initial UI consistency check
+    const forceUiUpdate = () => {
+      // Force React to re-render the component if isChatBlocked changes
+      setMessage(prevMessage => {
+        return prevMessage;
+      });
+    };
+    
+    // Check every 3 seconds to keep UI in sync with credit context
+    const intervalId = setInterval(() => {
+      // Doesn't actually change state, just forces a re-render
+      forceUiUpdate();
+    }, 3000);
+    
+    return () => clearInterval(intervalId);
+  }, [session, isChatBlocked]);
+
   // Add an improved effect to handle chat switches and preserve dataset info
   useEffect(() => {
     // When sessionId changes (switching chats), check for dataset info
@@ -977,7 +1013,11 @@ const ChatInput = forwardRef<
 
   // Helper function to determine if input should be fully disabled
   const isInputDisabled = () => {
-    return disabled || isLoading || isChatBlocked
+    if (isChatBlocked) {
+      console.log("[ChatInput] Input disabled due to insufficient credits");
+      return true;
+    }
+    return disabled || isLoading || false;
   }
 
   // Calculate reset date (first day of next month)

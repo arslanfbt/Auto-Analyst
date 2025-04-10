@@ -680,71 +680,29 @@ const ChatInterface: React.FC = () => {
 
   // Then keep the handleSendMessage function as is
   const handleSendMessage = useCallback(async (message: string) => {
-    if (isLoading || !message.trim()) return
-
-    // If a dataset was recently uploaded, mark it so consent popup doesn't appear
-    // during this message processing flow
-    if (recentlyUploadedDataset) {
-      console.log("Dataset was just uploaded, suppressing consent popup for this message");
-      // Ensure the popup won't show during this entire message flow
-      datasetPopupShownRef.current = true;
-      if (activeChatId) {
-        popupShownForChatIdsRef.current.add(activeChatId);
-      }
-      // We'll keep the flag true until the message is fully processed
-    }
-
-    // No need to refresh model settings here as the hook will handle it
-    // The rest of the function can stay the same
-
-    // Get current chat ID or create a real one when the user sends a message
-    let currentChatId = activeChatId;
-    let isFirstMessage = false;
+    // Don't allow empty messages
+    if (!message.trim()) return;
     
-    // For signed-in or admin users, ensure we have a real database chat ID
-    if (session || isAdmin) {
-      const existingChat = chatHistories.find(chat => chat.chat_id === currentChatId);
-      
-      // If the currentChatId is a temporary one (not in chat histories), create a real chat
-      if (!existingChat) {
-        isFirstMessage = true;
-        try {
-          console.log("Creating new chat on first message with user_id:", userId, "isAdmin:", isAdmin);
-          const response = await axios.post(`${API_URL}/chats/`, { 
-            user_id: userId,
-            is_admin: isAdmin 
-          }, { 
-            headers: { 'X-Session-ID': sessionId } 
-          });
-          
-          console.log("New chat created:", response.data);
-          currentChatId = response.data.chat_id;
-          // Wait for the state to be updated
-          await new Promise(resolve => {
-            setActiveChatId(currentChatId);
-            resolve(true);
-          });
-        } catch (error) {
-          console.error("Failed to create new chat:", error);
-          return;
-        }
-      }
-
-      // Save user message to the database
+    // Determine if this is the first message in a new chat
+    const isFirstMessage = storedMessages.length === 0;
+    let currentChatId = activeChatId;
+    
+    // For the first message, create a new chat
+    if (isFirstMessage) {
       try {
-        await axios.post(`${API_URL}/chats/${currentChatId}/messages`, {
-          content: message,
-          sender: 'user'
-        }, {
-          params: { user_id: userId, is_admin: isAdmin },
-          headers: { 'X-Session-ID': sessionId }
-        });
+        if (session?.user) {
+          const response = await axios.post(`${API_URL}/chats`, {
+            user_id: userId
+          });
+          currentChatId = response.data.chat_id;
+          setActiveChatId(currentChatId);
+        }
       } catch (error) {
-        console.error('Failed to save user message:', error);
+        console.error("Error creating new chat:", error);
       }
     }
-
-    // Add user message to local state for all users
+    
+    // Add the user message to the chat
     addMessage({
       text: message,
       sender: "user",
@@ -755,11 +713,45 @@ const ChatInterface: React.FC = () => {
     if (!session) {
       incrementQueries();
     }
-
-    setIsLoading(true);
     
     // Store original message for later use with chat title generation
     const originalQuery = message;
+
+    // Check if the user has sufficient credits BEFORE processing the query
+    if (session && !isAdmin) {
+      try {
+        // Get the model that will be used for this query
+        let modelName = modelSettings.model || "gpt-3.5-turbo";
+        
+        // Calculate required credits based on model tier
+        const creditCost = getModelCreditCost(modelName);
+        console.log(`[Credits] Required credits for ${modelName}: ${creditCost}`);
+        
+        // Check if user has enough credits - this call also sets isChatBlocked=true if insufficient
+        const hasEnough = await hasEnoughCredits(creditCost);
+        
+        if (!hasEnough) {
+          console.log(`[Credits] Insufficient credits for operation. Required: ${creditCost}, Available: ${remainingCredits}`);
+          
+          // Store the required credits amount for the modal
+          setRequiredCredits(creditCost);
+          
+          // Show the insufficient credits modal
+          setInsufficientCreditsModalOpen(true);
+          
+          // Ensure chat remains blocked
+          await checkCredits();
+          
+          // Stop processing here if not enough credits
+          return;
+        }
+      } catch (error) {
+        console.error("Error checking credits:", error);
+        // Continue anyway to avoid blocking experience
+      }
+    }
+
+    setIsLoading(true);
 
     try {
       // Create an abort controller for this request
@@ -805,29 +797,6 @@ const ChatInterface: React.FC = () => {
           // Extract the query text by removing the @mentions
           const cleanQuery = message.replace(agentRegex, '').trim()
           await processAgentMessage(combinedAgentName, cleanQuery, controller, currentChatId)
-        }
-      }
-
-      // Check if the user has sufficient credits
-      if (session && !isAdmin) {
-        try {
-          // Get the model that will be used for this query
-          let modelName = modelSettings.model || "gpt-3.5-turbo";
-          
-          // Calculate required credits based on model tier
-          const creditCost = getModelCreditCost(modelName);
-          console.log(`[Credits] Required credits for ${modelName}: ${creditCost}`);
-          
-          // Check if user has enough credits
-          const hasEnough = await hasEnoughCredits(creditCost);
-          if (!hasEnough) {
-            setRequiredCredits(creditCost);
-            setInsufficientCreditsModalOpen(true);
-            return;
-          }
-        } catch (error) {
-          console.error("Error checking credits:", error);
-          // Continue anyway to avoid blocking experience
         }
       }
 
@@ -1375,7 +1344,15 @@ const ChatInterface: React.FC = () => {
         
         <InsufficientCreditsModal
           isOpen={insufficientCreditsModalOpen}
-          onClose={() => setInsufficientCreditsModalOpen(false)}
+          onClose={() => {
+            // When the modal is closed, keep the blocked state but hide the modal
+            setInsufficientCreditsModalOpen(false);
+            
+            // Force a credits check to ensure the blocked state is maintained
+            checkCredits().then(() => {
+              console.log("[ChatInterface] Credits checked after modal closed");
+            });
+          }}
           requiredCredits={requiredCredits}
         />
 

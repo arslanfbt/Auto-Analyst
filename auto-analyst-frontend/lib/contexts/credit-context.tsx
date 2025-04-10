@@ -8,7 +8,7 @@ interface CreditContextType {
   remainingCredits: number
   isLoading: boolean
   checkCredits: () => Promise<void>
-  hasEnoughCredits: (amount: number) => boolean
+  hasEnoughCredits: (amount: number) => Promise<boolean>
   deductCredits: (amount: number) => Promise<boolean>
   isChatBlocked: boolean
   creditResetDate: string | null
@@ -36,12 +36,15 @@ export function CreditProvider({ children }: { children: ReactNode }) {
   const getUserId = (): string => {
     if (session?.user?.email) {
       return session.user.email
-    } else if (localStorage.getItem('isAdmin') === 'true') {
+    } else if (typeof window !== 'undefined' && localStorage.getItem('isAdmin') === 'true') {
       return 'admin-user'
     } else {
       // Guest user - use a browser fingerprint or session ID
-      const guestId = localStorage.getItem('guestUserId') || `guest-${Date.now()}`
-      if (!localStorage.getItem('guestUserId')) {
+      const guestId = typeof window !== 'undefined' ? 
+        (localStorage.getItem('guestUserId') || `guest-${Date.now()}`) : 
+        `guest-${Date.now()}`;
+      
+      if (typeof window !== 'undefined' && !localStorage.getItem('guestUserId')) {
         localStorage.setItem('guestUserId', guestId)
       }
       return guestId
@@ -73,21 +76,30 @@ export function CreditProvider({ children }: { children: ReactNode }) {
         console.log(`[Credits] Current credits for ${userId}: ${currentCredits}`);
       } catch (error) {
         console.error('[Credits] Error fetching credits:', error);
-        // Use cached credits as fallback
-        const cachedCredits = localStorage.getItem(`user_credits_${userId}`);
-        if (cachedCredits) {
-          currentCredits = parseInt(cachedCredits);
+        // Use cached credits as fallback if available
+        if (typeof window !== 'undefined') {
+          const cachedCredits = localStorage.getItem(`user_credits_${userId}`);
+          if (cachedCredits) {
+            currentCredits = parseInt(cachedCredits);
+          }
         }
       }
       
-      // Update local storage with current credits
-      localStorage.setItem(`user_credits_${userId}`, currentCredits.toString());
-      localStorage.setItem(`user_credits_updated_${userId}`, Date.now().toString());
-      
-      // Update state
+      // Store credits in state
       setRemainingCredits(currentCredits);
-      setIsChatBlocked(currentCredits <= 0);
       
+      // Determine if chat should be blocked based on available credits
+      const shouldBeBlocked = currentCredits <= 0;
+      console.log(`[Credits] Should chat be blocked? ${shouldBeBlocked} (credits: ${currentCredits})`);
+      
+      // Update isChatBlocked state
+      setIsChatBlocked(shouldBeBlocked);
+      
+      // Update local storage with current credits for caching only
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(`user_credits_${userId}`, currentCredits.toString());
+        localStorage.setItem(`user_credits_updated_${userId}`, Date.now().toString());
+      }
     } catch (error) {
       console.error('Error checking credits:', error);
       // Ultimate fallback
@@ -99,8 +111,16 @@ export function CreditProvider({ children }: { children: ReactNode }) {
   };
 
   // Check if user has enough credits without deducting
-  const hasEnoughCredits = (amount: number): boolean => {
-    return remainingCredits >= amount
+  const hasEnoughCredits = async (amount: number): Promise<boolean> => {
+    const hasEnough = remainingCredits >= amount;
+    
+    // If not enough credits, block chat input immediately
+    if (!hasEnough) {
+      setIsChatBlocked(true);
+      console.log('[Credits] Chat blocked due to insufficient credits');
+    }
+    
+    return hasEnough;
   }
 
   // Deduct credits for an operation
@@ -124,7 +144,7 @@ export function CreditProvider({ children }: { children: ReactNode }) {
         console.log(`[CREDIT-CONTEXT] Redis deduction result: ${success}`);
       } catch (redisError) {
         console.error('[CREDIT-CONTEXT] Redis deduction error:', redisError);
-        // Fall back to local storage if Redis fails
+        // Fall back to local state if Redis fails
         success = true;
       }
       
@@ -134,11 +154,16 @@ export function CreditProvider({ children }: { children: ReactNode }) {
         console.log(`[CREDIT-CONTEXT] Updating local credits: ${remainingCredits} -> ${newBalance}`);
         
         setRemainingCredits(newBalance);
-        setIsChatBlocked(newBalance <= 0);
         
-        // Always keep localStorage in sync
-        localStorage.setItem(`user_credits_${userId}`, newBalance.toString());
-        localStorage.setItem(`user_credits_updated_${userId}`, Date.now().toString());
+        // Block chat if new balance is zero or negative
+        const shouldBlock = newBalance <= 0;
+        setIsChatBlocked(shouldBlock);
+        
+        // Keep local storage in sync for caching purposes only
+        if (typeof window !== 'undefined') {
+          localStorage.setItem(`user_credits_${userId}`, newBalance.toString());
+          localStorage.setItem(`user_credits_updated_${userId}`, Date.now().toString());
+        }
       }
       
       return success;
@@ -150,13 +175,14 @@ export function CreditProvider({ children }: { children: ReactNode }) {
 
   // Initialize credits on component mount or when session changes
   useEffect(() => {
-    checkCredits()
+    // Fetch credits data immediately
+    checkCredits();
     
     // Refresh credits periodically (every 5 minutes)
-    const intervalId = setInterval(checkCredits, 5 * 60 * 1000)
+    const intervalId = setInterval(checkCredits, 5 * 60 * 1000);
     
-    return () => clearInterval(intervalId)
-  }, [session])
+    return () => clearInterval(intervalId);
+  }, [session]);
 
   const fetchCredits = useCallback(async () => {
     setIsLoading(true);
@@ -182,6 +208,10 @@ export function CreditProvider({ children }: { children: ReactNode }) {
         plan: data.subscription?.plan || 'Free Plan',
         subscription: data.subscription
       });
+      
+      // Make sure we update the isChatBlocked state based on the new data
+      setIsChatBlocked(data.credits.total - data.credits.used <= 0);
+      
       setError(null);
     } catch (err: any) {
       console.error('Error fetching credits:', err);

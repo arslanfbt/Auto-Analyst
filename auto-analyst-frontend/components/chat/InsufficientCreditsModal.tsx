@@ -4,6 +4,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Button } from '@/components/ui/button'
 import { AlertTriangle } from 'lucide-react'
 import Link from 'next/link'
+import { useCredits } from '@/lib/contexts/credit-context'
+import { useEffect, useCallback } from 'react'
 
 interface InsufficientCreditsModalProps {
   isOpen: boolean
@@ -16,8 +18,60 @@ export default function InsufficientCreditsModal({
   onClose, 
   requiredCredits 
 }: InsufficientCreditsModalProps) {
+  // Get the credit context to manage the blocked state
+  const { checkCredits, remainingCredits, hasEnoughCredits } = useCredits()
+  
+  // Force ensure chat is blocked when modal opens
+  useEffect(() => {
+    if (isOpen) {
+      console.log("[Credits Modal] Modal opened - checking credits and ensuring chat is blocked");
+      
+      // Check if we have sufficient credits (this will set isChatBlocked=true if not enough)
+      const checkCreditBalance = async () => {
+        // Force a credit check to get latest data
+        await checkCredits();
+        
+        // Double check against required amount and block if insufficient
+        // This will set isChatBlocked to true in the context
+        await hasEnoughCredits(requiredCredits);
+      };
+      
+      checkCreditBalance();
+    }
+  }, [isOpen, checkCredits, hasEnoughCredits, requiredCredits]);
+  
+  // Create a custom close handler to maintain the blocked state
+  const handleClose = useCallback(() => {
+    console.log("[Credits Modal] Modal closing - ensuring chat remains blocked");
+    
+    // Force another credit check when closing to ensure block state persists
+    // This should happen after the modal closes to avoid UI glitches
+    const maintainBlockedState = async () => {
+      // Call the parent's onClose handler
+      onClose();
+      
+      // Small delay to let the UI update first
+      setTimeout(async () => {
+        // Force a fresh credit check which should reflect insufficient credits
+        await checkCredits();
+        
+        // Double check the required amount to ensure block state is applied
+        await hasEnoughCredits(requiredCredits);
+      }, 100);
+    };
+    
+    maintainBlockedState();
+  }, [onClose, checkCredits, hasEnoughCredits, requiredCredits]);
+
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
+    <Dialog 
+      open={isOpen} 
+      onOpenChange={(open) => {
+        if (!open) {
+          handleClose();
+        }
+      }}
+    >
       <DialogContent className="sm:max-w-md border-gray-200 bg-white">
         <DialogHeader className="flex flex-col items-center">
           <AlertTriangle className="h-12 w-12 text-[#FF7F7F] mb-4" />
@@ -32,6 +86,9 @@ export default function InsufficientCreditsModal({
           </p>
           <p className="text-center text-gray-700 mb-4">
             This operation requires <span className="font-bold text-[#FF7F7F]">{requiredCredits} credits</span>.
+          </p>
+          <p className="text-center text-gray-700 mb-4">
+            Your current balance: <span className="font-bold">{remainingCredits} credits</span>
           </p>
           
           <div className="bg-gray-50 p-4 rounded-lg mb-4 border border-gray-200">
@@ -56,12 +113,12 @@ export default function InsufficientCreditsModal({
         <DialogFooter className="flex flex-col sm:flex-row gap-2">
           <Button
             variant="outline"
-            onClick={onClose}
+            onClick={handleClose}
             className="sm:flex-1 bg-white border-[#FF7F7F] text-[#FF7F7F] hover:bg-[#FFE5E5] hover:text-[#FF6666]"
           >
             Close
           </Button>
-          <Link href="/pricing" className="sm:flex-1">
+          <Link href="/pricing" className="sm:flex-1" onClick={handleClose}>
             <Button 
               variant="default"
               className="w-full bg-[#FF7F7F] hover:bg-[#FF6666] text-white transition-colors"
