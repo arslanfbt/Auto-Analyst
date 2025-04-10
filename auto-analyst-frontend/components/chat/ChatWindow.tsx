@@ -157,7 +157,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
     <div className="h-full overflow-hidden flex flex-col">
       <div 
         ref={chatWindowRef}
-        className="flex-1 overflow-y-auto z-[100]"
+        className="flex-1 overflow-y-auto"
       >
         {showWelcome ? (
           <WelcomeSection onSampleQueryClick={onSendMessage} />

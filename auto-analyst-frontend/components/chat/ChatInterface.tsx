@@ -1250,7 +1250,7 @@ const ChatInterface: React.FC = () => {
       >
         {mounted && !session && !hasFreeTrial() && <FreeTrialOverlay />}
         
-        <header className="bg-white/70 backdrop-blur-sm p-4 flex justify-between items-center border-b border-gray-200 relative z-[1000]">
+        <header className="bg-white/70 backdrop-blur-sm p-4 flex justify-between items-center border-b border-gray-200 relative z-10">
           <div className="flex items-center gap-4">
             {(session || isAdmin) && !isSidebarOpen && (
               <button
@@ -1299,7 +1299,7 @@ const ChatInterface: React.FC = () => {
                   )}
                 </div>
                 
-                <div className="absolute right-0 z-[10000]">
+                <div className="relative z-50">
                   <UserProfilePopup 
                     isOpen={isUserProfileOpen}
                     onClose={() => setIsUserProfileOpen(false)}
