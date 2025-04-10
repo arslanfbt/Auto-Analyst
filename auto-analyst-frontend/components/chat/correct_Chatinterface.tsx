@@ -34,7 +34,6 @@ import {
 } from "@/components/ui/dialog"
 import { Button } from "../ui/button"
 import DatasetResetPopup from './DatasetResetPopup'
-import { useModelSettings } from '@/lib/hooks/useModelSettings'
 
 interface PlotlyMessage {
   type: "plotly"
@@ -68,7 +67,7 @@ interface ChatHistory {
   user_id?: number;
 }
 
-const ChatInterface: React.FC = () => {
+const CorrectChatInterface: React.FC = () => {
   const router = useRouter()
   const { data: session, status } = useSession()
   const { hasConsented } = useCookieConsentStore()
@@ -95,7 +94,14 @@ const ChatInterface: React.FC = () => {
   const [requiredCredits, setRequiredCredits] = useState(0)
   const [isUserProfileOpen, setIsUserProfileOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const { modelSettings } = useModelSettings();
+  const [modelSettings, setModelSettings] = useState({
+    provider: process.env.NEXT_PUBLIC_DEFAULT_MODEL_PROVIDER || 'openai',
+    model: process.env.NEXT_PUBLIC_DEFAULT_MODEL || 'gpt-4o-mini',
+    hasCustomKey: false,
+    apiKey: process.env.NEXT_PUBLIC_OPENAI_API_KEY || '',
+    temperature: process.env.NEXT_PUBLIC_DEFAULT_TEMPERATURE || 0.7,
+    maxTokens: process.env.NEXT_PUBLIC_DEFAULT_MAX_TOKENS || 6000
+  });
   const [showDatasetResetConfirm, setShowDatasetResetConfirm] = useState(false);
   const [hasUploadedDataset, setHasUploadedDataset] = useState(false);
   const [tempChatIdForReset, setTempChatIdForReset] = useState<number | null>(null);
@@ -190,13 +196,10 @@ const ChatInterface: React.FC = () => {
             // Mark this as a new login session so popup appears in silent mode
             setIsNewLoginSession(true);
             
-            // Reset the session to use the default dataset but preserve model settings
-            await axios.post(`${API_URL}/reset-session`, 
-              { preserveModelSettings: true }, // Add flag to preserve model settings
-              {
-                headers: { 'X-Session-ID': sessionId }
-              }
-            );
+            // Reset the session to use the default dataset without asking for confirmation
+            await axios.post(`${API_URL}/reset-session`, null, {
+              headers: { 'X-Session-ID': sessionId }
+            });
             
             // Reset local dataset state
             setHasUploadedDataset(false);
@@ -678,6 +681,32 @@ const ChatInterface: React.FC = () => {
     }
   }
 
+  // Updated fetchModelSettings function to use the correct endpoint
+  const fetchModelSettings = async () => {
+    try {
+      // Change from /settings/model to /api/model-settings to match the backend
+      const response = await axios.get(`${API_URL}/api/model-settings`, {
+        headers: { 'X-Session-ID': sessionId }
+      });
+      
+      if (response.data) {
+        setModelSettings({
+          provider: response.data.provider,
+          model: response.data.model,
+          hasCustomKey: !!response.data.api_key,
+          apiKey: response.data.api_key || '',
+          temperature: response.data.temperature,
+          maxTokens: response.data.maxTokens // Note: backend uses maxTokens not max_tokens
+        });
+        
+        // Log the model that was successfully fetched
+        console.log(`[Settings] Fetched model settings: ${response.data.model}`);
+      }
+    } catch (error) {
+      console.error('Failed to fetch model settings:', error);
+    }
+  };
+
   // Then keep the handleSendMessage function as is
   const handleSendMessage = useCallback(async (message: string) => {
     if (isLoading || !message.trim()) return
@@ -692,6 +721,37 @@ const ChatInterface: React.FC = () => {
         popupShownForChatIdsRef.current.add(activeChatId);
       }
       // We'll keep the flag true until the message is fully processed
+    }
+
+    // First, refresh model settings to ensure we have the latest
+    try {
+      await fetchModelSettings();
+    } catch (error) {
+      console.error("Error refreshing model settings:", error);
+      // Continue with existing settings if refresh fails
+    }
+
+    // Check if the user has sufficient credits
+    if (session && !isAdmin) {
+      try {
+        // Get the model that will be used for this query
+        let modelName = modelSettings.model || "gpt-3.5-turbo";
+        
+        // Calculate required credits based on model tier
+        const creditCost = getModelCreditCost(modelName);
+        console.log(`[Credits] Required credits for ${modelName}: ${creditCost}`);
+        
+        // Check if user has enough credits
+        const hasEnough = await hasEnoughCredits(creditCost);
+        if (!hasEnough) {
+          setRequiredCredits(creditCost);
+          setInsufficientCreditsModalOpen(true);
+          return;
+        }
+      } catch (error) {
+        console.error("Error checking credits:", error);
+        // Continue anyway to avoid blocking experience
+      }
     }
 
     // Get current chat ID or create a real one when the user sends a message
@@ -757,40 +817,6 @@ const ChatInterface: React.FC = () => {
     
     // Store original message for later use with chat title generation
     const originalQuery = message;
-
-    // Check if the user has sufficient credits BEFORE processing the query
-    if (session && !isAdmin) {
-      try {
-        // Get the model that will be used for this query
-        let modelName = modelSettings.model || "gpt-4o-mini";
-        
-        // Calculate required credits based on model tier
-        const creditCost = getModelCreditCost(modelName);
-        console.log(`[Credits] Required credits for ${modelName}: ${creditCost}`);
-        
-        // Check if user has enough credits - this call also sets isChatBlocked=true if insufficient
-        const hasEnough = await hasEnoughCredits(creditCost);
-        
-        if (!hasEnough) {
-          console.log(`[Credits] Insufficient credits for operation. Required: ${creditCost}, Available: ${remainingCredits}`);
-          
-          // Store the required credits amount for the modal
-          setRequiredCredits(creditCost);
-          
-          // Show the insufficient credits modal
-          setInsufficientCreditsModalOpen(true);
-          
-          // Ensure chat remains blocked
-          await checkCredits();
-          
-          // Stop processing here if not enough credits
-          return;
-        }
-      } catch (error) {
-        console.error("Error checking credits:", error);
-        // Continue anyway to avoid blocking experience
-      }
-    }
 
     try {
       // Create an abort controller for this request
@@ -942,7 +968,7 @@ const ChatInterface: React.FC = () => {
         setRecentlyUploadedDataset(false);
       }
     }
-  }, [addMessage, clearMessages, incrementQueries, session, isAdmin, activeChatId, userId, sessionId, modelSettings, hasEnoughCredits, processRegularMessage, processAgentMessage, fetchChatHistories, checkCredits, recentlyUploadedDataset, chatHistories]);
+  }, [addMessage, clearMessages, incrementQueries, session, isAdmin, activeChatId, userId, sessionId, modelSettings, hasEnoughCredits, processRegularMessage, processAgentMessage, fetchChatHistories, checkCredits, recentlyUploadedDataset]);
 
   const handleFileUpload = async (file: File) => {
     // More thorough CSV validation
@@ -1049,10 +1075,10 @@ const ChatInterface: React.FC = () => {
     }
   }, [mounted]);
 
-  // Update useEffect with isSettingsOpen dependency
+  // Use the fetchModelSettings function in the useEffect hook
   useEffect(() => {
     if (isSettingsOpen) {
-      // No need for explicit fetch as the hook handles it
+      fetchModelSettings();
     }
   }, [isSettingsOpen]);
 
@@ -1121,13 +1147,10 @@ const ChatInterface: React.FC = () => {
         // User chose to reset to default dataset
         console.log("Resetting to default dataset");
         
-        // Reset the session to use the default dataset but preserve model settings
-        const resetResponse = await axios.post(`${API_URL}/reset-session`, 
-          { preserveModelSettings: true }, // Add flag to preserve model settings
-          {
-            headers: { 'X-Session-ID': sessionId }
-          }
-        );
+        // Reset the session to use the default dataset
+        const resetResponse = await axios.post(`${API_URL}/reset-session`, null, {
+          headers: { 'X-Session-ID': sessionId }
+        });
         
         console.log("Reset response:", resetResponse.data);
         
@@ -1289,7 +1312,7 @@ const ChatInterface: React.FC = () => {
       >
         {mounted && !session && !hasFreeTrial() && <FreeTrialOverlay />}
         
-        <header className="bg-white/70 backdrop-blur-sm p-4 flex justify-between items-center border-b border-gray-200 relative z-10">
+        <header className="bg-white/70 backdrop-blur-sm p-4 flex justify-between items-center border-b border-gray-200">
           <div className="flex items-center gap-4">
             {(session || isAdmin) && !isSidebarOpen && (
               <button
@@ -1338,7 +1361,7 @@ const ChatInterface: React.FC = () => {
                   )}
                 </div>
                 
-                <div className="relative z-50">
+                <div className="relative">
                   <UserProfilePopup 
                     isOpen={isUserProfileOpen}
                     onClose={() => setIsUserProfileOpen(false)}
@@ -1375,23 +1398,18 @@ const ChatInterface: React.FC = () => {
         <SettingsPopup 
           isOpen={isSettingsOpen}
           onClose={() => setIsSettingsOpen(false)}
-          initialSettings={modelSettings}
-          onSettingsUpdated={() => {
-            console.log("Settings updated");
+          initialSettings={modelSettings as any}
+          onSettingsUpdated={(updatedSettings) => {
+            // Update the local modelSettings state immediately when settings are saved
+            setModelSettings(updatedSettings);
+            // Also refresh from server to ensure we have the latest settings
+            fetchModelSettings();
           }}
         />
         
         <InsufficientCreditsModal
           isOpen={insufficientCreditsModalOpen}
-          onClose={() => {
-            // When the modal is closed, keep the blocked state but hide the modal
-            setInsufficientCreditsModalOpen(false);
-            
-            // Force a credits check to ensure the blocked state is maintained
-            checkCredits().then(() => {
-              console.log("[ChatInterface] Credits checked after modal closed");
-            });
-          }}
+          onClose={() => setInsufficientCreditsModalOpen(false)}
           requiredCredits={requiredCredits}
         />
 
@@ -1407,4 +1425,4 @@ const ChatInterface: React.FC = () => {
   )
 }
 
-export default ChatInterface
+export default CorrectChatInterface
