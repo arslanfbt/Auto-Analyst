@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef, forwardRef, useImperativeHandle } from "react"
 import { motion, AnimatePresence } from "framer-motion"
-import { Send, Paperclip, X, Square, Loader2, CheckCircle2, XCircle, Eye, CreditCard } from 'lucide-react'
+import { Send, Paperclip, X, Square, Loader2, CheckCircle2, XCircle, Eye, CreditCard, Edit, FileText } from 'lucide-react'
 import AgentHint from './AgentHint'
 import { Button } from "../ui/button"
 import { Textarea } from "../ui/textarea"
@@ -22,6 +22,8 @@ import { useCredits } from '@/lib/contexts/credit-context'
 import API_URL from '@/config/api'
 import Link from 'next/link'
 import DatasetResetPopup from './DatasetResetPopup'
+import ReactMarkdown from 'react-markdown'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
 // const PREVIEW_API_URL = 'http://localhost:8000';
 const PREVIEW_API_URL = API_URL;
@@ -86,6 +88,7 @@ const ChatInput = forwardRef<
   const [datasetMismatch, setDatasetMismatch] = useState(false)
   // Replace session flag with a set of chat IDs that have shown the popup
   const popupShownForChatIdsRef = useRef<Set<number>>(new Set());
+  const [descriptionTab, setDescriptionTab] = useState<"edit" | "preview">("edit")
 
   // Expose handlePreviewDefaultDataset to parent
   useImperativeHandle(ref, () => ({
@@ -1438,22 +1441,47 @@ const ChatInput = forwardRef<
                     <label className="block text-sm font-medium text-gray-800 mb-1">
                       Description
                     </label>
-                    <div className="relative">
-                      <textarea
-                        value={datasetDescription.description}
-                        onChange={(e) => setDatasetDescription(prev => ({ ...prev, description: e.target.value }))}
-                        className="w-full px-3 py-2 pr-28 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-[#FF7F7F] focus:border-transparent text-gray-800"
-                        rows={3}
-                        placeholder="Describe what this dataset contains and its purpose"
-                      />
-                      <button
-                        type="button"
-                        onClick={generateDatasetDescription}
-                        className="absolute right-2 top-2 px-2 py-1 text-xs font-medium bg-gray-100 text-gray-700 rounded hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-[#FF7F7F]"
-                      >
-                        Auto-generate
-                      </button>
-                    </div>
+                    <Tabs value={descriptionTab} onValueChange={(value) => setDescriptionTab(value as "edit" | "preview")} className="w-full">
+                      <div className="flex justify-between items-center mb-2">
+                        <TabsList className="grid grid-cols-2 w-40">
+                          <TabsTrigger value="edit" className="flex items-center gap-1">
+                            <Edit className="w-3 h-3" />
+                            Edit
+                          </TabsTrigger>
+                          <TabsTrigger value="preview" className="flex items-center gap-1">
+                            <FileText className="w-3 h-3" />
+                            Preview
+                          </TabsTrigger>
+                        </TabsList>
+                        <button
+                          type="button"
+                          onClick={generateDatasetDescription}
+                          className="px-2 py-1 text-xs font-medium bg-gray-100 text-gray-700 rounded hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-[#FF7F7F]"
+                        >
+                          Auto-generate
+                        </button>
+                      </div>
+                      <TabsContent value="edit" className="mt-0">
+                        <textarea
+                          value={datasetDescription.description}
+                          onChange={(e) => setDatasetDescription(prev => ({ ...prev, description: e.target.value }))}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-[#FF7F7F] focus:border-transparent text-gray-800"
+                          rows={5}
+                          placeholder="Describe what this dataset contains and its purpose"
+                        />
+                      </TabsContent>
+                      <TabsContent value="preview" className="mt-0">
+                        <div className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm bg-white min-h-[132px] prose prose-sm max-w-none overflow-y-auto">
+                          {datasetDescription.description ? (
+                            <ReactMarkdown>
+                              {datasetDescription.description}
+                            </ReactMarkdown>
+                          ) : (
+                            <p className="text-gray-400 italic">No description provided</p>
+                          )}
+                        </div>
+                      </TabsContent>
+                    </Tabs>
                   </div>
                 </div>
 
