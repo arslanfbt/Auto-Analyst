@@ -38,9 +38,32 @@ class SessionManager:
         self._make_data = None
         self._default_name = "Housing Dataset"  # Default dataset name
         
-        self._dataset_description = """This dataset focuses on the real estate market, containing 545 entries detailing numerous aspects of residential properties, such as their selling prices and structural features. Each record includes essential numeric attributes like `price`, `area`, `bedrooms`, `bathrooms`, `stories`, and `parking`, allowing for thorough quantitative analysis. The dataset also includes binary features like `mainroad`, `guestroom`, `basement`, `hotwaterheating`, `airconditioning`, `prefarea`, and `furnishingstatus`, adding qualitative dimensions that affect property desirability and value.
+        self._dataset_description = """This real estate dataset comprises 545 entries of residential properties, featuring essential characteristics that facilitate market analysis, price estimation, and buyer preferences. The dataset includes the following columns:
 
-        Statistical summaries reveal that the average price of properties is approximately 4.77 million, with a substantial standard deviation indicating a diverse market. The average area of the properties is about 5,151 square feet, while the typical layout features about three bedrooms and one bathroom. Understanding these patterns can assist stakeholders in making strategic decisions in areas such as pricing and investment. Overall, this dataset proves invaluable for realtors, investors, and analysts seeking to grasp market dynamics and property features that drive value."""
+1. **price**: The sale price of the property (numeric).
+2. **area**: The total area of the property in square feet (numeric).
+3. **bedrooms**: The number of bedrooms in the property (integer).
+4. **bathrooms**: The number of bathrooms in the property (integer).
+5. **stories**: The number of stories in the house (integer).
+6. **mainroad**: Indicates if the property is located on a main road ('yes' or 'no').
+7. **guestroom**: Indicates the presence of a guest room ('yes' or 'no').
+8. **basement**: Indicates if there is a basement ('yes' or 'no').
+9. **hotwaterheating**: Indicates if the property has hot water heating ('yes' or 'no').
+10. **airconditioning**: Indicates if the property has air conditioning ('yes' or 'no').
+11. **parking**: The number of parking spots available (integer).
+12. **prefarea**: Indicates if the property is located in a preferred area ('yes' or 'no').
+13. **furnishingstatus**: The condition of the property in terms of furnishings (categorical).
+
+The dataset serves as a valuable resource for analyzing real estate trends, identifying factors influencing property pricing, and understanding buyer requirements across different residential layouts.
+
+TECHNICAL CONSIDERATIONS FOR ANALYSIS:
+- The **price** and **area** columns are numeric but may need validation to ensure all entries are numeric values and free from formatting issues.
+- The **mainroad**, **guestroom**, **basement**, **hotwaterheating**, **airconditioning**, **prefarea**, and **furnishingstatus** columns contain categorical data; ensure to encode these variables for any machine learning model or analysis.
+- The **bedrooms**, **bathrooms**, **stories**, and **parking** columns are stored as integers; confirm that there are no erroneous string entries that could cause processing errors.
+- Empty or null values should be handled appropriately, with a review of their occurrence to decide on imputation or deletion strategies.
+- It is advisable to check for any outlier values, especially in the **price** and **area** columns, which may skew analysis results.
+
+The refined description aims to equip both users and analysis agents with essential contextual information about the dataset as well as actionable insights for conducting robust analyses."""
         self.styling_instructions = styling_instructions
         self.available_agents = available_agents
         self.chat_manager = ChatManager(db_url='sqlite:///chat_database.db')
