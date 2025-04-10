@@ -80,7 +80,7 @@ const ChatInput = forwardRef<
   });
   const [uploadSuccess, setUploadSuccess] = useState(false);
   const { sessionId, setSessionId } = useSessionStore()
-  const { remainingCredits, isChatBlocked } = useCredits()
+  const { remainingCredits, isChatBlocked, creditResetDate, checkCredits } = useCredits()
   const [showCreditInfo, setShowCreditInfo] = useState(false)
   const [showDatasetResetPopup, setShowDatasetResetPopup] = useState(false)
   const [datasetMismatch, setDatasetMismatch] = useState(false)
@@ -95,11 +95,6 @@ const ChatInput = forwardRef<
 
   // Use a ref to track localStorage changes
   const lastUploadedFileRef = useRef<string | null>(null);
-
-  // Add an effect to update the local state when isChatBlocked changes
-  useEffect(() => {
-    console.log(`[ChatInput] isChatBlocked state changed: ${isChatBlocked}`);
-  }, [isChatBlocked]);
 
   // Check isInputDisabled on mount to ensure consistent UI state
   useEffect(() => {
@@ -1020,15 +1015,37 @@ const ChatInput = forwardRef<
     return disabled || isLoading || false;
   }
 
-  // Calculate reset date (first day of next month)
+  // Get the appropriate reset date from Redis or fall back to first day of next month
   const getResetDate = () => {
-    const now = new Date()
-    const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1)
+    // Log the raw value for debugging
+    console.log(`[ChatInput] Credit reset date from context: ${creditResetDate}`);
+    
+    // Use the actual reset date from Redis if available
+    if (creditResetDate) {
+      try {
+        const resetDate = new Date(creditResetDate);
+        if (!isNaN(resetDate.getTime())) {
+          console.log(`[ChatInput] Using actual reset date from Redis: ${resetDate.toISOString()}`);
+          return resetDate.toLocaleDateString('en-US', { 
+            year: 'numeric', 
+            month: 'long', 
+            day: 'numeric' 
+          });
+        }
+      } catch (error) {
+        console.error('[ChatInput] Error parsing reset date:', error);
+      }
+    }
+    
+    // Fall back to first day of next month if no date from Redis or invalid date
+    console.log('[ChatInput] No valid reset date from Redis, using first day of next month');
+    const now = new Date();
+    const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
     return nextMonth.toLocaleDateString('en-US', { 
       year: 'numeric', 
       month: 'long', 
       day: 'numeric' 
-    })
+    });
   }
 
   // Add a function to generate dataset description automatically

@@ -61,6 +61,7 @@ export function CreditProvider({ children }: { children: ReactNode }) {
       console.log(`[Credits] Checking credits for user ID: ${userId}`);
       
       let currentCredits = 100; // Default
+      let resetDate = null;
       
       try {
         // First try to get from API endpoint for most up-to-date data
@@ -68,10 +69,34 @@ export function CreditProvider({ children }: { children: ReactNode }) {
         if (response.ok) {
           const data = await response.json();
           currentCredits = data.total === 999999 ? Infinity : data.total - data.used;
+          resetDate = data.resetDate; // Get reset date from API
           console.log('[Credits] API credits data:', data);
+          console.log('[Credits] Reset date from API:', resetDate);
         } else {
           // Fall back to direct Redis access
           currentCredits = await creditUtils.getRemainingCredits(userId);
+          
+          // Try to get reset date from Redis directly
+          try {
+            // We need to fetch the raw hash to get the resetDate field
+            const creditsKey = `user:${userId}:credits`;
+            const creditsHash = await fetch('/api/redis/hgetall', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ key: creditsKey })
+            }).then(res => res.json());
+            
+            if (creditsHash && creditsHash.resetDate) {
+              resetDate = creditsHash.resetDate;
+              console.log('[Credits] Reset date from Redis hash:', resetDate);
+            } else {
+              resetDate = creditUtils.getNextMonthFirstDay();
+              console.log('[Credits] Using calculated next month date:', resetDate);
+            }
+          } catch (resetError) {
+            console.error('[Credits] Error fetching reset date:', resetError);
+            resetDate = creditUtils.getNextMonthFirstDay();
+          }
         }
         console.log(`[Credits] Current credits for ${userId}: ${currentCredits}`);
       } catch (error) {
@@ -87,6 +112,17 @@ export function CreditProvider({ children }: { children: ReactNode }) {
       
       // Store credits in state
       setRemainingCredits(currentCredits);
+      
+      // Update the credits state to include the reset date
+      if (resetDate) {
+        setCreditsState(prev => ({
+          ...prev,
+          resetDate: resetDate,
+          remaining: currentCredits,
+          lastUpdate: new Date().toISOString()
+        }));
+        console.log(`[Credits] Updated credits state with reset date: ${resetDate}`);
+      }
       
       // Determine if chat should be blocked based on available credits
       const shouldBeBlocked = currentCredits <= 0;
@@ -175,11 +211,32 @@ export function CreditProvider({ children }: { children: ReactNode }) {
 
   // Initialize credits on component mount or when session changes
   useEffect(() => {
-    // Fetch credits data immediately
-    checkCredits();
+    if (session?.user) {
+      // Fetch comprehensive credit data first
+      fetchCredits().then(() => {
+        console.log('[Credits] Comprehensive credit data fetched');
+      });
+      
+      // Also fetch simple credit data as a fallback
+      checkCredits();
+    } else {
+      // Just check credits for non-logged in users
+      checkCredits();
+    }
     
     // Refresh credits periodically (every 5 minutes)
-    const intervalId = setInterval(checkCredits, 5 * 60 * 1000);
+    const intervalId = setInterval(() => {
+      if (session?.user) {
+        // For logged in users, alternate between comprehensive and simple fetches
+        if (Math.random() > 0.5) {
+          fetchCredits();
+        } else {
+          checkCredits();
+        }
+      } else {
+        checkCredits();
+      }
+    }, 5 * 60 * 1000);
     
     return () => clearInterval(intervalId);
   }, [session]);
@@ -197,25 +254,38 @@ export function CreditProvider({ children }: { children: ReactNode }) {
       }
       
       const data = await response.json();
+      console.log('[Credits] Comprehensive data from API:', data);
       
-      // Update context with new data structure
-      setCreditsState({
-        total: data.credits.total,
-        used: data.credits.used,
-        remaining: data.credits.total - data.credits.used,
-        resetDate: data.credits.resetDate,
-        lastUpdate: data.credits.lastUpdate,
-        plan: data.subscription?.plan || 'Free Plan',
-        subscription: data.subscription
-      });
-      
-      // Make sure we update the isChatBlocked state based on the new data
-      setIsChatBlocked(data.credits.total - data.credits.used <= 0);
+      if (data.credits) {
+        // Update context with new data structure
+        setCreditsState({
+          total: data.credits.total,
+          used: data.credits.used,
+          remaining: data.credits.total - data.credits.used,
+          resetDate: data.credits.resetDate,
+          lastUpdate: data.credits.lastUpdate || new Date().toISOString(),
+          plan: data.subscription?.plan || 'Free Plan',
+          subscription: data.subscription
+        });
+        
+        // Log the reset date for debugging
+        console.log('[Credits] Reset date from comprehensive data:', data.credits.resetDate);
+        
+        // Also update the remaining credits for calculations
+        const currentCredits = data.credits.total - data.credits.used;
+        setRemainingCredits(currentCredits);
+        
+        // Make sure we update the isChatBlocked state based on the new data
+        setIsChatBlocked(currentCredits <= 0);
+      }
       
       setError(null);
     } catch (err: any) {
-      console.error('Error fetching credits:', err);
+      console.error('Error fetching comprehensive credits:', err);
       setError(err.message || 'Failed to fetch credit data');
+      
+      // Fall back to simple credit check if comprehensive fetch fails
+      checkCredits();
     } finally {
       setIsLoading(false);
     }
