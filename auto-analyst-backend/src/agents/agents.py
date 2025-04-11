@@ -461,26 +461,7 @@ class auto_analyst(dspy.Module):
         for i, a in enumerate(agents):
             name = a.__pydantic_core_schema__['schema']['model_name']
             self.agents[name] = dspy.ChainOfThought(a)
-            # parse agent inputs safely handling edge cases
-            agent_str = str(agents[i].__pydantic_core_schema__['cls'])
-            try:
-                # Handle cases when the string format might change or vary
-                if '(' in agent_str:
-                    # Extract the part between ( and the first -> ORR )
-                    params_part = agent_str.split('(', 1)[1]
-                    if '->' in params_part:
-                        params_part = params_part.split('->', 1)[0]
-                    if ')' in params_part:
-                        params_part = params_part.split(')', 1)[0]
-                    
-                    # Split by comma and clean up
-                    self.agent_inputs[name] = {x.strip() for x in params_part.split(',') if x.strip()}
-                else:
-                    # Default empty set if no parameters found
-                    self.agent_inputs[name] = set()
-            except (IndexError, Exception):
-                # Fallback to empty set if parsing fails
-                self.agent_inputs[name] = set()
+            self.agent_inputs[name] = {x.strip() for x in str(agents[i].__pydantic_core_schema__['cls']).split('->')[0].split('(')[1].split(',')}
             self.agent_desc.append(str(a.__pydantic_core_schema__['cls']))
         
         # Initialize coordination agents
