@@ -453,6 +453,15 @@ async def chat_with_all(
                 }) + "\n"
 
                 async for agent_name, inputs, response in session_state["ai_system"].execute_plan(enhanced_query, plan_response):
+                    
+                    if agent_name == "plan_not_found":
+                        yield json.dumps({
+                            "agent": "Analytical Planner",
+                            "content": "**No plan found**\n\nPlease try again with a different query or try using a different model.",
+                            "status": "error"
+                        }) + "\n"
+                        return
+                    
                     formatted_response = format_response_to_markdown(
                         {agent_name: response}, 
                         dataframe=session_state["current_df"]
@@ -528,7 +537,7 @@ async def chat_with_all(
                 )
            
         except Exception as e:
-            logger.log_message(f"Error in generate_responses: {str(e)}", level=logging.ERROR)
+            logger.log_message(f"Error in generate_responses: {plan_descrition} | {total_response}", level=logging.ERROR)
             yield json.dumps({
                 "agent": "planner",
                 "content": f"An error occurred while generating responses. Please try again!\n{str(e)}",

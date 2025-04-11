@@ -267,11 +267,16 @@ def execute_code_from_markdown(code_str, dataframe=None):
 def format_response_to_markdown(api_response, agent_name = None, dataframe=None):
     try:
         markdown = []
-        
+                
         # Handle error responses
         if isinstance(api_response, dict) and "error" in api_response:
             return f"**Error**: {api_response['error']}"
-                        
+        
+        if isinstance(api_response, dict):
+            for key in api_response:
+                if "error" in api_response[key]:
+                    return f"**Error**: Rate limit exceeded. Please try switching models from the settings."
+                # You can add more checks here if needed for other keys
         if "response" in api_response and isinstance(api_response['response'], str):
             if any(err in api_response['response'].lower() for err in ["auth", "api", "lm"]):
                 return "**Error**: Authentication failed. Please check your API key in settings and try again."
@@ -305,7 +310,7 @@ def format_response_to_markdown(api_response, agent_name = None, dataframe=None)
                         markdown.append("### Plotly JSON Outputs\n")
                         for idx, json_output in enumerate(json_outputs):
                             if len(json_output) > 1000000:  # If JSON is larger than 1MB
-                                logger.warning(f"Large JSON output detected: {len(json_output)} bytes")
+                                logger.log_message(f"Large JSON output detected: {len(json_output)} bytes", level=logging.WARNING)
                             markdown.append(f"```plotly\n{json_output}\n```\n")
 
             if 'summary' in content:
@@ -320,7 +325,7 @@ def format_response_to_markdown(api_response, agent_name = None, dataframe=None)
                     clean_code = format_code_block(content['refined_complete_code']) 
                     output, json_outputs = execute_code_from_markdown(clean_code, dataframe)
                 except Exception as e:
-                    logger.error(f"Error in execute_code_from_markdown: {str(e)}")
+                    logger.log_message(f"Error in execute_code_from_markdown: {str(e)}", level=logging.ERROR)
                     markdown.append(f"**Error**: {str(e)}")
                     # continue
                 
@@ -340,12 +345,13 @@ def format_response_to_markdown(api_response, agent_name = None, dataframe=None)
             #         markdown.append(f"### Memory\n{api_response[f'memory_{agent_name}']}\n")
 
     except Exception as e:
-        logger.error(f"Error in format_response_to_markdown: {str(e)}")
+        logger.log_message(f"Error in format_response_to_markdown: {str(e)}", level=logging.ERROR)
         return f"{str(e)}"
+    logger.log_message(f"Generated markdown content for agent '{agent_name}' at {time.strftime('%Y-%m-%d %H:%M:%S')}: {api_response}, length: {len(markdown)}", level=logging.INFO)
     
     
     if not markdown or len(markdown) <= 1:
-        logger.log_message(f"Generated markdown content for agent '{agent_name}' at {time.strftime('%Y-%m-%d %H:%M:%S')}: {markdown}, length: {len(markdown)}", level=logging.DEBUG)
+        logger.log_message(f"Generated markdown (ERROR) content for agent '{agent_name}' at {time.strftime('%Y-%m-%d %H:%M:%S')}: {markdown}, length: {len(markdown)}", level=logging.INFO)
         return "Please provide a valid query..."
         
     return '\n'.join(markdown)

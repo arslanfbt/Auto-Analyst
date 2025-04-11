@@ -458,11 +458,29 @@ class auto_analyst(dspy.Module):
         self.agent_inputs = {}
         self.agent_desc = []
         
-        # Create modules from agent signatures
         for i, a in enumerate(agents):
             name = a.__pydantic_core_schema__['schema']['model_name']
             self.agents[name] = dspy.ChainOfThought(a)
-            self.agent_inputs[name] = {x.strip() for x in str(agents[i].__pydantic_core_schema__['cls']).split('->')[0].split('(')[1].split(',')}
+            # parse agent inputs safely handling edge cases
+            agent_str = str(agents[i].__pydantic_core_schema__['cls'])
+            try:
+                # Handle cases when the string format might change or vary
+                if '(' in agent_str:
+                    # Extract the part between ( and the first -> ORR )
+                    params_part = agent_str.split('(', 1)[1]
+                    if '->' in params_part:
+                        params_part = params_part.split('->', 1)[0]
+                    if ')' in params_part:
+                        params_part = params_part.split(')', 1)[0]
+                    
+                    # Split by comma and clean up
+                    self.agent_inputs[name] = {x.strip() for x in params_part.split(',') if x.strip()}
+                else:
+                    # Default empty set if no parameters found
+                    self.agent_inputs[name] = set()
+            except (IndexError, Exception):
+                # Fallback to empty set if parsing fails
+                self.agent_inputs[name] = set()
             self.agent_desc.append(str(a.__pydantic_core_schema__['cls']))
         
         # Initialize coordination agents
@@ -507,9 +525,11 @@ class auto_analyst(dspy.Module):
         dict_['goal'] = query
         
         plan_text = plan['plan'].replace('Plan','').replace(':','').strip()
-        plan_list = plan_text.split('->')
+        plan_list = [agent.strip() for agent in plan_text.split('->') if agent.strip()]
 
-        
+        if len(plan_list) == 0:
+            yield "plan_not_found",  dict(plan), {"error": "No plan found"}
+            return
         # Execute agents in parallel
         futures = []
         for agent_name in plan_list:
@@ -530,9 +550,22 @@ class auto_analyst(dspy.Module):
                 yield agent_name, inputs, {"error": str(e)}
         # Execute code combiner after all agents complete
         code_list = [result['code'] for _, result in completed_results if 'code' in result]
-        with dspy.settings.context(lm=dspy.LM(model="anthropic/claude-3-7-sonnet-latest", max_tokens=12000, temperature=1.0)):
-            combiner_result = self.code_combiner_agent(agent_code_list=str(code_list), dataset=dict_['dataset'])
-        yield 'code_combiner_agent', str(code_list), dict(combiner_result)
+        try:
+            with dspy.settings.context(lm=dspy.LM(model="anthropic/claude-3-7-sonnet-latest", max_tokens=12000, temperature=1.0)):
+                combiner_result = self.code_combiner_agent(agent_code_list=str(code_list), dataset=dict_['dataset'])
+                yield 'code_combiner_agent', str(code_list), dict(combiner_result)
+        except:
+            try: 
+                with dspy.settings.context(lm=dspy.GROQ(model="deepseek-r1-distill-llama-70b", max_tokens=12000, temperature=1.0)):
+                    combiner_result = self.code_combiner_agent(agent_code_list=str(code_list), dataset=dict_['dataset'])
+                    yield 'code_combiner_agent', str(code_list), dict(combiner_result)
+            except:
+                try: 
+                    with dspy.settings.context(lm=dspy.GROQ(model="qwen-2.5-coder-32b", max_tokens=12000, temperature=1.0)):
+                        combiner_result = self.code_combiner_agent(agent_code_list=str(code_list), dataset=dict_['dataset'])
+                        yield 'code_combiner_agent', str(code_list), dict(combiner_result)
+                except:
+                    yield 'code_combiner_agent', str(code_list), {"error": "Error in code combiner"}
 
 # Agent to make a Chat history name from a query
 class chat_history_name_agent(dspy.Signature):
