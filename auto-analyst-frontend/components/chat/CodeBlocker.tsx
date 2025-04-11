@@ -11,6 +11,7 @@ import PlotlyChart from "@/components/chat/PlotlyChart"
 import axios from "axios"
 import { useSessionStore } from '@/lib/store/sessionStore'
 import API_URL from '@/config/api'
+import MonacoEditor from '@monaco-editor/react'
 
 interface CodeBlockProps {
   language: string
@@ -243,11 +244,20 @@ const CodeBlock: React.FC<CodeBlockProps> = ({ language, value, onExecute, agent
             )}
             <div>
               {isEditing ? (
-                <textarea
+                <MonacoEditor
+                  height="min(60vh, 600px)"
+                  language={language === "output" ? "plaintext" : language}
+                  theme="vs-dark"
                   value={editedCode}
-                  onChange={(e) => setEditedCode(e.target.value)}
-                  className="w-full bg-[#1E1E1E] text-gray-300 font-mono text-sm p-4 focus:outline-none resize-none"
-                  style={{ minHeight: "200px" }}
+                  onChange={(value: string | undefined) => setEditedCode(value || "")}
+                  options={{
+                    minimap: { enabled: false },
+                    scrollBeyondLastLine: false,
+                    fontSize: 14,
+                    lineNumbers: "off",
+                    folding: false,
+                    automaticLayout: true
+                  }}
                 />
               ) : (
                 <SyntaxHighlighter
@@ -258,6 +268,7 @@ const CodeBlock: React.FC<CodeBlockProps> = ({ language, value, onExecute, agent
                     margin: 0,
                     padding: "1.25rem",
                     background: "#1E1E1E",
+                    minHeight: "min(60vh, 600px)"
                   }}
                 >
                   {editedCode}
