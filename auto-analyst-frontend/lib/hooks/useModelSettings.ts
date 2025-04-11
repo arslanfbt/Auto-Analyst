@@ -12,7 +12,7 @@ export interface ModelSettings {
   maxTokens: number | string
 }
 
-// Helper functions for localStorage
+// Helper functions for localStorage with mobile support
 const saveSettingsToLocalStorage = (settings: ModelSettings) => {
   try {
     // Don't save API key to localStorage for security
@@ -21,18 +21,52 @@ const saveSettingsToLocalStorage = (settings: ModelSettings) => {
       apiKey: '', // Clear API key
       hasCustomKey: settings.hasCustomKey, // Keep flag but not the actual key
     }
-    localStorage.setItem('userModelSettings', JSON.stringify(safeSettings))
+    
+    // Check if localStorage is available
+    if (typeof window !== 'undefined' && window.localStorage) {
+      try {
+        window.localStorage.setItem('userModelSettings', JSON.stringify(safeSettings))
+      } catch (storageError) {
+        // Handle storage errors (e.g., quota exceeded)
+        console.warn('Failed to save settings to localStorage:', storageError)
+        // Fallback to sessionStorage if localStorage fails
+        if (window.sessionStorage) {
+          window.sessionStorage.setItem('userModelSettings', JSON.stringify(safeSettings))
+        }
+      }
+    }
   } catch (error) {
-    console.error('Failed to save settings to localStorage:', error)
+    console.error('Failed to save settings:', error)
   }
 }
 
 const getSettingsFromLocalStorage = (): Partial<ModelSettings> | null => {
   try {
-    const settings = localStorage.getItem('userModelSettings')
+    if (typeof window === 'undefined') return null
+    
+    let settings = null
+    
+    // Try localStorage first
+    if (window.localStorage) {
+      try {
+        settings = window.localStorage.getItem('userModelSettings')
+      } catch (storageError) {
+        console.warn('Failed to read from localStorage:', storageError)
+      }
+    }
+    
+    // If localStorage fails or is empty, try sessionStorage
+    if (!settings && window.sessionStorage) {
+      try {
+        settings = window.sessionStorage.getItem('userModelSettings')
+      } catch (storageError) {
+        console.warn('Failed to read from sessionStorage:', storageError)
+      }
+    }
+    
     return settings ? JSON.parse(settings) : null
   } catch (error) {
-    console.error('Failed to get settings from localStorage:', error)
+    console.error('Failed to get settings:', error)
     return null
   }
 }
@@ -41,14 +75,17 @@ export function useModelSettings() {
   const { sessionId } = useSessionStore()
   
   // Initialize with localStorage or defaults
-  const localSettings = getSettingsFromLocalStorage()
-  const [modelSettings, setModelSettings] = useState<ModelSettings>({
-    provider: localSettings?.provider || process.env.NEXT_PUBLIC_DEFAULT_MODEL_PROVIDER || 'openai',
-    model: localSettings?.model || process.env.NEXT_PUBLIC_DEFAULT_MODEL || 'gpt-4o-mini',
-    hasCustomKey: localSettings?.hasCustomKey || false,
-    apiKey: process.env.NEXT_PUBLIC_OPENAI_API_KEY || '', // Never load API key from localStorage
-    temperature: localSettings?.temperature || process.env.NEXT_PUBLIC_DEFAULT_TEMPERATURE || 0.7,
-    maxTokens: localSettings?.maxTokens || process.env.NEXT_PUBLIC_DEFAULT_MAX_TOKENS || 6000
+  const [modelSettings, setModelSettings] = useState<ModelSettings>(() => {
+    // Use a function to initialize state to avoid multiple localStorage reads
+    const localSettings = getSettingsFromLocalStorage()
+    return {
+      provider: localSettings?.provider || process.env.NEXT_PUBLIC_DEFAULT_MODEL_PROVIDER || 'openai',
+      model: localSettings?.model || process.env.NEXT_PUBLIC_DEFAULT_MODEL || 'gpt-4o-mini',
+      hasCustomKey: localSettings?.hasCustomKey || false,
+      apiKey: process.env.NEXT_PUBLIC_OPENAI_API_KEY || '', // Never load API key from localStorage
+      temperature: localSettings?.temperature || process.env.NEXT_PUBLIC_DEFAULT_TEMPERATURE || 0.7,
+      maxTokens: localSettings?.maxTokens || process.env.NEXT_PUBLIC_DEFAULT_MAX_TOKENS || 6000
+    }
   })
   
   const [isLoading, setIsLoading] = useState(false)
