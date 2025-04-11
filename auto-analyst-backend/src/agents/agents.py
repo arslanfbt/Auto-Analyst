@@ -3,6 +3,9 @@ import src.agents.memory_agents as m
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 class analytical_planner(dspy.Signature):
     # The planner agent which routes the query to Agent(s)
@@ -534,19 +537,19 @@ class auto_analyst(dspy.Module):
         try:
             with dspy.settings.context(lm=dspy.LM(model="anthropic/claude-3-7-sonnet-latest", max_tokens=12000, temperature=1.0)):
                 combiner_result = self.code_combiner_agent(agent_code_list=str(code_list), dataset=dict_['dataset'])
-                yield 'code_combiner_agent', str(code_list), dict(combiner_result)
+                yield 'code_combiner_agent__claude', str(code_list), dict(combiner_result)
         except:
             try: 
-                with dspy.settings.context(lm=dspy.GROQ(model="deepseek-r1-distill-llama-70b", max_tokens=12000, temperature=1.0)):
+                with dspy.settings.context(lm=dspy.GROQ(model="qwen-2.5-coder-32b", max_tokens=12000, temperature=1.0, api_key=os.getenv("GROQ_API_KEY"))):
                     combiner_result = self.code_combiner_agent(agent_code_list=str(code_list), dataset=dict_['dataset'])
-                    yield 'code_combiner_agent', str(code_list), dict(combiner_result)
+                    yield 'code_combiner_agent__qwen', str(code_list), dict(combiner_result)
             except:
                 try: 
-                    with dspy.settings.context(lm=dspy.GROQ(model="qwen-2.5-coder-32b", max_tokens=12000, temperature=1.0)):
+                    with dspy.settings.context(lm=dspy.GROQ(model="deepseek-r1-distill-llama-70b", max_tokens=12000, temperature=1.0, api_key=os.getenv("GROQ_API_KEY"))):
                         combiner_result = self.code_combiner_agent(agent_code_list=str(code_list), dataset=dict_['dataset'])
-                        yield 'code_combiner_agent', str(code_list), dict(combiner_result)
-                except:
-                    yield 'code_combiner_agent', str(code_list), {"error": "Error in code combiner"}
+                        yield 'code_combiner_agent__deepseek', str(code_list), dict(combiner_result)
+                except Exception as e:
+                    yield 'code_combiner_agent__none', str(code_list), {"error": "Error in code combiner: "+str(e)}
 
 # Agent to make a Chat history name from a query
 class chat_history_name_agent(dspy.Signature):

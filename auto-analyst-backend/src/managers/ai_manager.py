@@ -52,7 +52,8 @@ costs = {
                 "gemma-7b-it": {"input": 0.00007, "output": 0.00007},
                 "gemma2-9b-it": {"input": 0.0002, "output": 0.0002},
                 "llama3-groq-70b-8192-tool-use-preview": {"input": 0.00089, "output": 0.00089},
-                "llama3-groq-8b-8192-tool-use-preview": {"input": 0.00019, "output": 0.00019}
+                "llama3-groq-8b-8192-tool-use-preview": {"input": 0.00019, "output": 0.00019},
+                "qwen-2.5-coder-32b": {"input": 0.0015, "output": 0.003}
             }
         }
         

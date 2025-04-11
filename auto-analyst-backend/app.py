@@ -474,12 +474,12 @@ async def chat_with_all(
                             "status": "error"
                         }) + "\n"
                         return
-                    if agent_name != "code_combiner_agent":
+                    if "code_combiner_agent" in agent_name:
                         total_response += str(response) if response else ""
                         total_inputs += str(inputs) if inputs else ""
 
                     yield json.dumps({
-                        "agent": agent_name,
+                        "agent": agent_name.split("__")[0] if "__" in agent_name else agent_name,
                         "content": formatted_response,
                         "status": "success" if response else "error"
                     }) + "\n"
@@ -490,7 +490,7 @@ async def chat_with_all(
 
                 # Track the code combiner agent response
                 if "refined_complete_code" in response:
-                    model_name = "claude-3-5-sonnet-latest"
+                    model_name = agent_name.split("__")[0] if "__" in agent_name else agent_name
                     provider = app.state.ai_manager.get_provider_for_model(model_name)
                     input_tokens = len(app.state.ai_manager.tokenizer.encode(str(inputs)))
                     completion_tokens = len(app.state.ai_manager.tokenizer.encode(str(response)))

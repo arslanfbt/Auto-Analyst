@@ -37,7 +37,8 @@ costs = {
         "gemma-7b-it": {"input": 0.00007, "output": 0.00007},
         "gemma2-9b-it": {"input": 0.0002, "output": 0.0002},
         "llama3-groq-70b-8192-tool-use-preview": {"input": 0.00089, "output": 0.00089},
-        "llama3-groq-8b-8192-tool-use-preview": {"input": 0.00019, "output": 0.00019}
+        "llama3-groq-8b-8192-tool-use-preview": {"input": 0.00019, "output": 0.00019},
+        "qwen-2.5-coder-32b": {"input": 0.0015, "output": 0.003}
     }
 }
         
@@ -139,6 +140,7 @@ print(json.dumps(model_tiers, indent=4))
             "claude-3-opus-latest",
             "claude-3-7-sonnet-latest",
             "claude-3-5-sonnet-latest",
+            "qwen-2.5-coder-32b",
             "claude-3-5-haiku-latest",
             "deepseek-r1-distill-qwen-32b",
             "deepseek-r1-distill-llama-70b",
