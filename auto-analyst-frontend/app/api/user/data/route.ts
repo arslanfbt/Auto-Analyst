@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getToken } from 'next-auth/jwt'
-import redis, { KEYS } from '@/lib/redis'
+import redis, { KEYS, subscriptionUtils } from '@/lib/redis'
 
 // Define subscription plan options to match pricing.tsx tiers
 const SUBSCRIPTION_PLANS = {
@@ -42,17 +42,18 @@ export async function GET(request: NextRequest) {
     
     // Get force flag to bypass caching
     const searchParams = request.nextUrl.searchParams
-    const forceRefresh = searchParams.get('force') === 'true'
-    console.log(`Fetching user data for ${userEmail} (${userId}) with force=${forceRefresh}`)
+    const forceRefresh = searchParams.get('force') === 'true' || searchParams.get('refresh') === 'true'
+    
+    // Check if we should force a credits check/refresh
+    if (forceRefresh) {
+      await subscriptionUtils.refreshCreditsIfNeeded(userId)
+    }
     
     // Get timestamp query param (for cache busting)
     const timestamp = searchParams.get('_t') || Date.now()
-    console.log(`Request timestamp: ${timestamp}`)
     
     // Check subscription data in Redis (hash-based storage)
-    console.log(`Checking subscription data in Redis...`)
     const subscriptionData = await redis.hgetall(KEYS.USER_SUBSCRIPTION(userId)) || {}
-    console.log('Subscription data from Redis:', subscriptionData)
     
     // Determine plan key mapping
     let planKey = 'FREE'
@@ -70,7 +71,13 @@ export async function GET(request: NextRequest) {
     const amount = subscriptionData.amount ? parseFloat(subscriptionData.amount as string) : planDetails.amount
     const purchaseDate = subscriptionData.purchaseDate || new Date().toISOString()
     const interval = subscriptionData.interval || planDetails.interval
-    const status = subscriptionData.status || 'inactive'
+    let status = subscriptionData.status || 'inactive'
+    
+    // Override status for Free plans - Free plans should always be active
+    if (planKey === 'FREE' || planDetails.name === 'Free') {
+      status = 'active'
+    }
+    
     const stripeCustomerId = subscriptionData.stripeCustomerId || ''
     const stripeSubscriptionId = subscriptionData.stripeSubscriptionId || ''
     
@@ -78,9 +85,7 @@ export async function GET(request: NextRequest) {
     let renewalDate = subscriptionData.renewalDate as string || calculateRenewalDate(purchaseDate as string, interval as string)
     
     // Get credit data from Redis
-    console.log(`Checking credit data in Redis...`)
     const creditsData = await redis.hgetall(KEYS.USER_CREDITS(userId)) || {}
-    console.log('Credits data from Redis:', creditsData)
     
     // Set default credit values if not found
     const creditsUsed = creditsData.used ? parseInt(creditsData.used as string) : 0
@@ -162,7 +167,6 @@ export async function GET(request: NextRequest) {
       }
     }
     
-    console.log('Returning user data:', userData)
     return NextResponse.json(userData)
   } catch (error) {
     console.error('Error fetching user data:', error)
