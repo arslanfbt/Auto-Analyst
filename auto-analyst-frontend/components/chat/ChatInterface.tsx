@@ -95,7 +95,7 @@ const ChatInterface: React.FC = () => {
   const [requiredCredits, setRequiredCredits] = useState(0)
   const [isUserProfileOpen, setIsUserProfileOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const { modelSettings } = useModelSettings();
+  const { modelSettings, syncSettingsToBackend } = useModelSettings();
   const [showDatasetResetConfirm, setShowDatasetResetConfirm] = useState(false);
   const [hasUploadedDataset, setHasUploadedDataset] = useState(false);
   const [tempChatIdForReset, setTempChatIdForReset] = useState<number | null>(null);
@@ -265,6 +265,14 @@ const ChatInterface: React.FC = () => {
 
   // Define createNewChat function that was removed
   const createNewChat = useCallback(async () => {
+    // Sync model settings to ensure backend uses the right model
+    try {
+      await syncSettingsToBackend();
+      console.log('Model settings synced during new chat creation');
+    } catch (error) {
+      console.error('Failed to sync model settings:', error);
+    }
+    
     // Clear local messages state
     clearMessages();
     setShowWelcome(true);
@@ -273,11 +281,19 @@ const ChatInterface: React.FC = () => {
     const tempId = Date.now(); // Use timestamp as temporary ID
     setActiveChatId(tempId);
     return tempId;
-  }, [clearMessages]);
+  }, [clearMessages, syncSettingsToBackend]);
 
   // Define loadChat before it's used in the fetchChatHistories dependency array
   const loadChat = useCallback(async (chatId: number) => {
     try {
+      // Sync model settings to ensure backend uses the right model
+      try {
+        await syncSettingsToBackend();
+        console.log('Model settings synced during chat loading');
+      } catch (error) {
+        console.error('Failed to sync model settings:', error);
+      }
+      
       // Before loading the chat, check if there's a dataset mismatch
       // that might happen when switching between chats
       try {
@@ -379,7 +395,7 @@ const ChatInterface: React.FC = () => {
     } catch (error) {
       console.error(`Failed to load chat ${chatId}:`, error);
     }
-  }, [addMessage, clearMessages, userId, sessionId, recentlyUploadedDataset]);
+  }, [addMessage, clearMessages, userId, sessionId, recentlyUploadedDataset, syncSettingsToBackend]);
 
   // Now fetchChatHistories can use loadChat in its dependency array
   const fetchChatHistories = useCallback(async (userIdParam?: number) => {
@@ -417,7 +433,7 @@ const ChatInterface: React.FC = () => {
     } finally {
       setIsLoadingHistory(false);
     }
-  }, [session, userId, activeChatId, sessionId, loadChat, isAdmin]);
+  }, [session, userId, activeChatId, sessionId, loadChat, isAdmin, syncSettingsToBackend]);
 
   const handleNewChat = useCallback(async () => {
     // Clean up empty chats before creating a new one
@@ -433,6 +449,14 @@ const ChatInterface: React.FC = () => {
       } catch (error) {
         console.error('Failed to clean up empty chats:', error);
       }
+    }
+    
+    // Ensure model settings are synced to backend
+    try {
+      await syncSettingsToBackend();
+      console.log('Model settings synced during new chat creation');
+    } catch (error) {
+      console.error('Failed to sync model settings:', error);
     }
     
     // Set a temporary ID - real chat will be created on first message
@@ -482,7 +506,7 @@ const ChatInterface: React.FC = () => {
     setActiveChatId(tempId);
     fetchChatHistories();
     
-  }, [clearMessages, fetchChatHistories, userId, sessionId, session, isAdmin, recentlyUploadedDataset]);
+  }, [clearMessages, fetchChatHistories, userId, sessionId, session, isAdmin, recentlyUploadedDataset, syncSettingsToBackend]);
 
   const handleStopGeneration = () => {
     if (abortController) {
@@ -694,7 +718,16 @@ const ChatInterface: React.FC = () => {
       // We'll keep the flag true until the message is fully processed
     }
 
-    // Get current chat ID or create a real one when the user sends a message
+    // Sync model settings to ensure backend uses the correct model
+    try {
+      await syncSettingsToBackend();
+    } catch (error) {
+      console.error('Failed to sync model settings before sending message:', error);
+    }
+    
+    const controller = new AbortController();
+    setAbortController(controller);
+    
     let currentChatId = activeChatId;
     let isFirstMessage = false;
     
@@ -793,10 +826,6 @@ const ChatInterface: React.FC = () => {
     }
 
     try {
-      // Create an abort controller for this request
-      const controller = new AbortController();
-      setAbortController(controller);
-
       // Match all @agent mentions in the query
       const agentRegex = /@(\w+)/g
       const matches = [...message.matchAll(agentRegex)]
@@ -942,7 +971,7 @@ const ChatInterface: React.FC = () => {
         setRecentlyUploadedDataset(false);
       }
     }
-  }, [addMessage, clearMessages, incrementQueries, session, isAdmin, activeChatId, userId, sessionId, modelSettings, hasEnoughCredits, processRegularMessage, processAgentMessage, fetchChatHistories, checkCredits, recentlyUploadedDataset, chatHistories]);
+  }, [addMessage, clearMessages, incrementQueries, session, isAdmin, activeChatId, userId, sessionId, modelSettings, hasEnoughCredits, processRegularMessage, processAgentMessage, fetchChatHistories, checkCredits, recentlyUploadedDataset, chatHistories, syncSettingsToBackend]);
 
   const handleFileUpload = async (file: File) => {
     // More thorough CSV validation
@@ -1112,7 +1141,7 @@ const ChatInterface: React.FC = () => {
         checkSessionDataset();
       }, 100);
     }
-  }, [sessionId, activeChatId, recentlyUploadedDataset]);
+  }, [sessionId, activeChatId, recentlyUploadedDataset, syncSettingsToBackend]);
   
   // Also fix the reset confirmation handler to properly update dataset state
   const handleDatasetResetConfirm = async (shouldReset: boolean) => {

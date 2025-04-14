@@ -241,7 +241,21 @@ export const subscriptionUtils = {
   async isSubscriptionActive(userId: string): Promise<boolean> {
     try {
       const subscriptionData = await redis.hgetall(KEYS.USER_SUBSCRIPTION(userId));
-      if (!subscriptionData || !subscriptionData.status) {
+      
+      // Check if this is a Free plan (missing data is treated as Free)
+      const isFree = 
+        !subscriptionData || 
+        !subscriptionData.planType || 
+        subscriptionData.planType === 'FREE' || 
+        (subscriptionData.plan && (subscriptionData.plan as string).includes('Free'));
+      
+      // Free plans are always considered active
+      if (isFree) {
+        return true;
+      }
+      
+      // For paid plans, check status and expiration
+      if (!subscriptionData.status) {
         return false;
       }
       
@@ -271,20 +285,15 @@ export const subscriptionUtils = {
   // Check if a user can use credits based on their subscription
   async canUseCredits(userId: string): Promise<boolean> {
     try {
-      // First check if subscription is active
-      const isActive = await this.isSubscriptionActive(userId);
-      if (!isActive) {
-        // Check remaining credits for free users
-        const remainingCredits = await creditUtils.getRemainingCredits(userId);
-        return remainingCredits > 0;
-      }
-      
-      // Paid users may have monthly renewal of credits
-      // Check if credits need to be refreshed based on last update
+      // Always check if credits need to be refreshed first, regardless of plan type
       await this.refreshCreditsIfNeeded(userId);
       
-      // Check remaining credits
+      // Then check if subscription is active
+      const isActive = await this.isSubscriptionActive(userId);
+      
+      // Check remaining credits - applies to both free and paid plans
       const remainingCredits = await creditUtils.getRemainingCredits(userId);
+      
       return remainingCredits > 0;
     } catch (error) {
       console.error('Error checking if user can use credits:', error);
@@ -298,19 +307,39 @@ export const subscriptionUtils = {
       const subscriptionData = await redis.hgetall(KEYS.USER_SUBSCRIPTION(userId));
       const creditsData = await redis.hgetall(KEYS.USER_CREDITS(userId));
       
-      if (!subscriptionData || !creditsData) {
+      if (!creditsData) {
         return false;
       }
       
-      // Updated: For yearly subscriptions, we need to check if it's time for monthly credit refresh
-      // Even though billing interval is yearly, credits refresh monthly
-      if (subscriptionData.status === 'active') {
+      // Check if this is a Free plan (if no subscription data or planType is FREE)
+      const isFree = !subscriptionData || 
+                     !subscriptionData.planType || 
+                     subscriptionData.planType === 'FREE' ||
+                     (subscriptionData.plan && (subscriptionData.plan as string).includes('Free'));
+      
+      // For Free plans, we should consider them as 'active' for credits refresh purposes
+      const shouldProcess = isFree || subscriptionData.status === 'active';
+      
+      // Treat all plans (including Free) similarly for credit refreshes
+      if (shouldProcess) {
         const now = new Date();
-        const lastUpdate = creditsData.lastUpdate ? new Date(creditsData.lastUpdate as string) : null;
+        
+        // Parse the reset date - handle both YYYY-MM-DD and ISO string formats
+        let resetDate = null;
+        if (creditsData.resetDate) {
+          try {
+            // Try to parse the date, accounting for different formats
+            const resetStr = creditsData.resetDate as string;
+            resetDate = resetStr.includes('T') 
+              ? new Date(resetStr) 
+              : new Date(`${resetStr}T00:00:00Z`);
+          } catch (e) {
+            resetDate = null;
+          }
+        }
         
         // Get plan information
-        const planName = subscriptionData.plan as string;
-        const planType = subscriptionData.planType as string;
+        const planType = isFree ? 'FREE' : (subscriptionData.planType as string);
         
         // Determine credit amount based on plan type
         let creditAmount = 100; // Default free plan
@@ -320,20 +349,18 @@ export const subscriptionUtils = {
           creditAmount = 999999; // Effectively unlimited
         }
         
-        // If last update was more than a month ago or is missing, refresh credits
-        // This applies to both monthly and yearly subscriptions
-        if (!lastUpdate || this.isMonthDifference(lastUpdate, now)) {
-          console.log(`Refreshing monthly credits for user ${userId} with ${subscriptionData.interval} plan`);
-          
-          // Calculate next reset date - one month from now
-          const resetDate = new Date(now);
-          resetDate.setMonth(resetDate.getMonth() + 1);
+        // If we've passed the reset date, refresh credits
+        // This applies to both free and paid plans
+        if (!resetDate || now >= resetDate) {
+          // Calculate next reset date - one month from current reset date or now
+          const nextResetDate = new Date(resetDate || now);
+          nextResetDate.setMonth(nextResetDate.getMonth() + 1);
           
           // Update credits data
           const newCreditData = {
             total: creditAmount.toString(),
             used: '0',
-            resetDate: resetDate.toISOString().split('T')[0],
+            resetDate: nextResetDate.toISOString().split('T')[0],
             lastUpdate: now.toISOString()
           };
           
@@ -375,11 +402,16 @@ export const subscriptionUtils = {
     try {
       const now = new Date();
       
+      // Calculate the reset date for one month from now
+      const resetDate = new Date(now);
+      resetDate.setMonth(resetDate.getMonth() + 1);
+      
       // Update subscription data
+      // Note: Free plan status should always be 'active' regardless of payment history
       const subscriptionData = {
         plan: 'Free Plan',
         planType: 'FREE',
-        status: 'active',
+        status: 'active', // Free plans are always active
         amount: '0',
         interval: 'month',
         purchaseDate: now.toISOString(),
@@ -393,7 +425,7 @@ export const subscriptionUtils = {
       const creditData = {
         total: '100',
         used: '0',
-        resetDate: '',
+        resetDate: resetDate.toISOString().split('T')[0],
         lastUpdate: now.toISOString()
       };
       

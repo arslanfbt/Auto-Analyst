@@ -82,34 +82,37 @@ else:
 # Function to get model config from session or use default
 def get_session_lm(session_state):
     """Get the appropriate LM instance for a session, or default if not configured"""
-    model_config = session_state.get("model_config", DEFAULT_MODEL_CONFIG)
+    # First check if we have a valid session-specific model config 
+    if session_state and isinstance(session_state, dict) and "model_config" in session_state:
+        model_config = session_state["model_config"]
+        if model_config and isinstance(model_config, dict) and "model" in model_config:
+            # Found valid session-specific model config, use it
+            provider = model_config.get("provider", "openai").lower()
+            
+            if provider == "groq":
+                return dspy.GROQ(
+                    model=model_config.get("model", DEFAULT_MODEL_CONFIG["model"]),
+                    api_key=model_config.get("api_key", DEFAULT_MODEL_CONFIG["api_key"]),
+                    temperature=model_config.get("temperature", DEFAULT_MODEL_CONFIG["temperature"]),
+                    max_tokens=model_config.get("max_tokens", DEFAULT_MODEL_CONFIG["max_tokens"])
+                )
+            elif provider == "anthropic":
+                return dspy.LM(
+                    model=model_config.get("model", DEFAULT_MODEL_CONFIG["model"]),
+                    api_key=model_config.get("api_key", DEFAULT_MODEL_CONFIG["api_key"]),
+                    temperature=model_config.get("temperature", DEFAULT_MODEL_CONFIG["temperature"]),
+                    max_tokens=model_config.get("max_tokens", DEFAULT_MODEL_CONFIG["max_tokens"])
+                )
+            else:  # OpenAI is the default
+                return dspy.LM(
+                    model=model_config.get("model", DEFAULT_MODEL_CONFIG["model"]),
+                    api_key=model_config.get("api_key", DEFAULT_MODEL_CONFIG["api_key"]),
+                    temperature=model_config.get("temperature", DEFAULT_MODEL_CONFIG["temperature"]),
+                    max_tokens=model_config.get("max_tokens", DEFAULT_MODEL_CONFIG["max_tokens"])
+                )
     
-    if not model_config:
-        return default_lm
-        
-    provider = model_config.get("provider", "openai").lower()
-    
-    if provider == "groq":
-        return dspy.GROQ(
-            model=model_config.get("model", DEFAULT_MODEL_CONFIG["model"]),
-            api_key=model_config.get("api_key", DEFAULT_MODEL_CONFIG["api_key"]),
-            temperature=model_config.get("temperature", DEFAULT_MODEL_CONFIG["temperature"]),
-            max_tokens=model_config.get("max_tokens", DEFAULT_MODEL_CONFIG["max_tokens"])
-        )
-    elif provider == "anthropic":
-        return dspy.LM(
-            model=model_config.get("model", DEFAULT_MODEL_CONFIG["model"]),
-            api_key=model_config.get("api_key", DEFAULT_MODEL_CONFIG["api_key"]),
-            temperature=model_config.get("temperature", DEFAULT_MODEL_CONFIG["temperature"]),
-            max_tokens=model_config.get("max_tokens", DEFAULT_MODEL_CONFIG["max_tokens"])
-        )
-    else:  # OpenAI is the default
-        return dspy.LM(
-            model=model_config.get("model", DEFAULT_MODEL_CONFIG["model"]),
-            api_key=model_config.get("api_key", DEFAULT_MODEL_CONFIG["api_key"]),
-            temperature=model_config.get("temperature", DEFAULT_MODEL_CONFIG["temperature"]),
-            max_tokens=model_config.get("max_tokens", DEFAULT_MODEL_CONFIG["max_tokens"])
-        )
+    # If no valid session config, use default
+    return default_lm
 
 # Initialize retrievers with empty data first
 def initialize_retrievers(styling_instructions: List[str], doc: List[str]):
@@ -147,6 +150,8 @@ class AppState:
     def __init__(self):
         self._session_manager = SessionManager(styling_instructions, AVAILABLE_AGENTS)
         self.model_config = DEFAULT_MODEL_CONFIG.copy()
+        # Update the SessionManager with the current model_config
+        self._session_manager._app_model_config = self.model_config
         self.ai_manager = AI_Manager()
         self.chat_name_agent = chat_history_name_agent
     
@@ -229,7 +234,6 @@ async def chat_with_agent(
     if "chat_id" in request_obj.query_params:
         try:
             chat_id_param = int(request_obj.query_params.get("chat_id"))
-            logger.log_message(f"Using provided chat_id {chat_id_param} from request", level=logging.INFO)
             # Update session state with this chat ID
             session_state["chat_id"] = chat_id_param
         except (ValueError, TypeError):
@@ -245,7 +249,6 @@ async def chat_with_agent(
         try:
             user_id = int(request_obj.query_params["user_id"])
             session_state["user_id"] = user_id
-            logger.log_message(f"Updated session state with user_id {user_id} from request", level=logging.INFO)
         except (ValueError, TypeError):
             raise HTTPException(
                 status_code=400,
@@ -453,6 +456,15 @@ async def chat_with_all(
                 }) + "\n"
 
                 async for agent_name, inputs, response in session_state["ai_system"].execute_plan(enhanced_query, plan_response):
+                    
+                    if agent_name == "plan_not_found":
+                        yield json.dumps({
+                            "agent": "Analytical Planner",
+                            "content": "**No plan found**\n\nPlease try again with a different query or try using a different model.",
+                            "status": "error"
+                        }) + "\n"
+                        return
+                    
                     formatted_response = format_response_to_markdown(
                         {agent_name: response}, 
                         dataframe=session_state["current_df"]
@@ -465,28 +477,33 @@ async def chat_with_all(
                             "status": "error"
                         }) + "\n"
                         return
-                    if agent_name != "code_combiner_agent":
+                    if "code_combiner_agent" in agent_name:
+                        logger.log_message(f"[>] Code combiner response: {response}", level=logging.INFO)
                         total_response += str(response) if response else ""
                         total_inputs += str(inputs) if inputs else ""
 
                     yield json.dumps({
-                        "agent": agent_name,
+                        "agent": agent_name.split("__")[0] if "__" in agent_name else agent_name,
                         "content": formatted_response,
                         "status": "success" if response else "error"
                     }) + "\n"
-
             if session_state.get("user_id"):
                 overall_processing_time_ms = int((time.time() - overall_start_time) * 1000)
                 prompt_size = len(enhanced_query)  # Use enhanced_query size instead of request.query
 
                 # Track the code combiner agent response
                 if "refined_complete_code" in response:
-                    model_name = "claude-3-5-sonnet-latest"
+                    model_name = agent_name.split("__")[1] if "__" in agent_name else agent_name
+                    if model_name == "qwen":
+                        model_name = "qwen-2.5-coder-32br"
+                    elif model_name == "deepseek":
+                        model_name = "deepseek-r1-distill-llama-70b"
+                    else:
+                        model_name = "claude-3-7-sonnet-latest"
                     provider = app.state.ai_manager.get_provider_for_model(model_name)
                     input_tokens = len(app.state.ai_manager.tokenizer.encode(str(inputs)))
                     completion_tokens = len(app.state.ai_manager.tokenizer.encode(str(response)))
                     code_combiner_cost = app.state.ai_manager.calculate_cost(model_name, input_tokens, completion_tokens)
-
                     app.state.ai_manager.save_usage_to_db(
                         user_id=session_state.get("user_id"),
                         chat_id=session_state.get("chat_id"),
@@ -528,7 +545,7 @@ async def chat_with_all(
                 )
            
         except Exception as e:
-            logger.log_message(f"Error in generate_responses: {str(e)}", level=logging.ERROR)
+            logger.log_message(f"Error in generate_responses: {plan_descrition} | {total_response}", level=logging.ERROR)
             yield json.dumps({
                 "agent": "planner",
                 "content": f"An error occurred while generating responses. Please try again!\n{str(e)}",

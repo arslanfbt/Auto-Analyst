@@ -42,6 +42,7 @@ const MODEL_PROVIDERS = [
     models: [
       { id: 'deepseek-r1-distill-qwen-32b', name: 'DeepSeek R1 Distill Qwen 32b' }, 
       { id: 'deepseek-r1-distill-llama-70b', name: 'DeepSeek R1 Distill Llama 70b' }, 
+      { id: 'qwen-2.5-coder-32b', name: 'Qwen 2.5 Coder 32b' },
       { id: 'llama-3.3-70b-versatile', name: 'Llama 3.3 70b' }, 
       { id: 'llama3-8b-8192', name: 'Llama 3 8b' }, 
       { id: 'gemma2-9b-it', name: 'Gemma 2 9b' }, 

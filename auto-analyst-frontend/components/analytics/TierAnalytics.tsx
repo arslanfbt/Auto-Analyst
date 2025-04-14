@@ -69,6 +69,7 @@ const MODEL_TIERS = {
       "claude-3-opus-latest",
       "claude-3-7-sonnet-latest",
       "claude-3-5-sonnet-latest",
+      "qwen-2.5-coder-32b",
       "claude-3-5-haiku-latest",
       "deepseek-r1-distill-qwen-32b",
       "deepseek-r1-distill-llama-70b",

@@ -47,9 +47,29 @@ class ChatManager:
             "claude-3-haiku-20240307": {"input": 0.00025, "output": 0.00125},
             "claude-3-5-sonnet-latest": {"input": 0.003, "output": 0.015},
             # Groq models
-            "llama-3-70b-8192": {"input": 0.0007, "output": 0.0007},
-            "llama-3-8b-8192": {"input": 0.0002, "output": 0.0002},
-            "mixtral-8x7b-32768": {"input": 0.0006, "output": 0.0006},
+            "deepseek-r1-distill-qwen-32b": {"input": 0.00075, "output": 0.00099},
+            "deepseek-r1-distill-llama-70b": {"input": 0.00075, "output": 0.00099},
+            "llama-3.3-70b-versatile": {"input": 0.00059, "output": 0.00079},
+            "llama-3.3-70b-specdec": {"input": 0.00059, "output": 0.00099},
+            "llama2-70b-4096": {"input": 0.0007, "output": 0.0008},
+            "llama3-8b-8192": {"input": 0.00005, "output": 0.00008},
+            "llama-3.2-1b-preview": {"input": 0.00004, "output": 0.00004},
+            "llama-3.2-3b-preview": {"input": 0.00006, "output": 0.00006},
+            "llama-3.2-11b-text-preview": {"input": 0.00018, "output": 0.00018},
+            "llama-3.2-11b-vision-preview": {"input": 0.00018, "output": 0.00018},
+            "llama-3.2-90b-text-preview": {"input": 0.0009, "output": 0.0009},
+            "llama-3.2-90b-vision-preview": {"input": 0.0009, "output": 0.0009},
+            "llama3-70b-8192": {"input": 0.00059, "output": 0.00079},
+            "llama-3.1-8b-instant": {"input": 0.00005, "output": 0.00008},
+            "llama-3.1-70b-versatile": {"input": 0.00059, "output": 0.00079},
+            "llama-3.1-405b-reasoning": {"input": 0.00059, "output": 0.00079},
+            "mixtral-8x7b-32768": {"input": 0.00024, "output": 0.00024},
+            "gemma-7b-it": {"input": 0.00007, "output": 0.00007},
+            "gemma2-9b-it": {"input": 0.0002, "output": 0.0002},
+            "llama3-groq-70b-8192-tool-use-preview": {"input": 0.00089, "output": 0.00089},
+            "llama3-groq-8b-8192-tool-use-preview": {"input": 0.00019, "output": 0.00019},
+            "qwen-2.5-coder-32b": {"input": 0.0015, "output": 0.003}
+            
         }
         
         # Add model providers mapping

@@ -4,31 +4,29 @@ import { Newspaper } from "lucide-react";
 
 export default function Footer() {
   return (
-    <footer className="bg-gray-900 text-white py-12">
+    <footer className="bg-gray-900 text-white py-8">
       <div className="container mx-auto px-4">
-        <div className="grid md:grid-cols-4 gap-8">
-          <div>
-            <div className="flex items-center gap-2">
-              <Image
-                src="https://4q2e4qu710mvgubg.public.blob.vercel-storage.com/Auto-analysts%20icon%20small-S682Oi8nbFhOADUHXJSD9d0KtSWKCe.png"
-                alt="Auto-Analyst Logo"
-                width={150}
-                height={40}
-                className="mb-2"
-                style={{ width: "40px", height: "auto" }}
-              />
-              <h1 className="text-2xl font-bold">Auto-Analyst</h1>
-            </div>
-            <p className="text-gray-300">
-              Transforming data into actionable insights
-            </p>
-            <div className="mt-4 text-sm text-gray-400 flex items-center gap-1">
+        <div className="flex flex-col items-center gap-4">
+          <div className="flex items-center gap-2">
+            <Image
+              src="https://4q2e4qu710mvgubg.public.blob.vercel-storage.com/Auto-analysts%20icon%20small-S682Oi8nbFhOADUHXJSD9d0KtSWKCe.png"
+              alt="Auto-Analyst Logo"
+              width={120}
+              height={32}
+              className="mb-1"
+              style={{ width: "32px", height: "auto" }}
+            />
+            <h1 className="text-xl font-bold">Auto-Analyst</h1>
+          </div>
+
+          <div className="flex flex-col items-center gap-2">
+            <div className="text-xs text-gray-400 flex items-center gap-1">
               Made by{" "}
               <Image
                 src="https://4q2e4qu710mvgubg.public.blob.vercel-storage.com/20x20%20icon-5zjC17IFXIcvOzFbGSHl5b0hIQT1s3.png"
                 alt="FireBirdTech Logo"
-                width={20}
-                height={20}
+                width={16}
+                height={16}
               />{" "}
               <a
                 href="https://www.firebird-technologies.com/"
@@ -39,67 +37,32 @@ export default function Footer() {
                 FireBirdTech
               </a>
             </div>
+
+            <div className="flex items-center gap-3">
+              <a 
+                href="/pricing" 
+                className="text-gray-400 hover:text-[#FF7F7F] transition-colors text-sm"
+              >
+                Pricing
+              </a>
+              <a
+                href="https://www.firebird-technologies.com/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1 text-gray-400 hover:text-[#FF7F7F] transition-colors text-sm"
+                title="Follow us on Substack"
+              >
+                <Newspaper className="w-4 h-4" />
+                <span>Follow our Blog</span>
+              </a>
+            </div>
           </div>
 
-          <div>
-            <h4 className="font-semibold mb-4">Product</h4>
-            <ul className="space-y-2 text-gray-400">
-              <li>Features</li>
-              <li>
-                <a 
-                  href="/pricing" 
-                  className="hover:text-[#FF7F7F] transition-colors"
-                >
-                  Pricing
-                </a>
-              </li>
-              <li>Documentation</li>
-              <li>API</li>
-            </ul>
+          <div className="mt-6 pt-6 border-t border-gray-800">
+            <p className="text-xs text-gray-400">
+              &copy; {new Date().getFullYear()} Auto-Analyst. All rights reserved.
+            </p>
           </div>
-          <div>
-            <h4 className="font-semibold mb-4">Company</h4>
-            <ul className="space-y-2 text-gray-400">
-              <li>About</li>
-              <li>
-                <a
-                  href="https://www.firebird-technologies.com/p/building-auto-analyst-a-data-analytics"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="hover:text-[#FF7F7F] transition-colors"
-                >
-                  Blog
-                </a>
-              </li>
-              <li>Careers</li>
-              <li>Contact</li>
-            </ul>
-          </div>
-          <div>
-            <h4 className="font-semibold mb-4">Legal</h4>
-            <ul className="space-y-2 text-gray-400">
-              <li>Privacy</li>
-              <li>Terms</li>
-              <li>Security</li>
-            </ul>
-          </div>
-        </div>
-
-        <div className="mt-8 pt-8 border-t border-gray-800 flex justify-between items-center">
-          <p>
-            &copy; {new Date().getFullYear()} Auto-Analyst. All rights reserved.
-          </p>
-
-          <a
-            href="https://www.firebird-technologies.com/"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-2 text-gray-400 hover:text-[#FF7F7F] transition-colors"
-            title="Follow us on Substack"
-          >
-            <Newspaper className="w-5 h-5" />
-            <span className="text-sm">Follow our Blog</span>
-          </a>
         </div>
       </div>
     </footer>

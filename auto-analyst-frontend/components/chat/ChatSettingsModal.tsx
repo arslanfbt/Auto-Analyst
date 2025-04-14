@@ -1,5 +1,6 @@
 "use client"
 
+import { useEffect } from 'react'
 import { useModelSettings } from "@/lib/hooks/useModelSettings"
 import SettingsPopup from './SettingsPopup'
 
@@ -10,6 +11,13 @@ interface ChatSettingsModalProps {
 
 const ChatSettingsModal = ({ isOpen, onClose }: ChatSettingsModalProps) => {
   const { modelSettings, fetchModelSettings } = useModelSettings()
+  
+  // Fetch latest settings when modal is opened
+  useEffect(() => {
+    if (isOpen) {
+      fetchModelSettings();
+    }
+  }, [isOpen, fetchModelSettings]);
   
   return (
     <SettingsPopup 

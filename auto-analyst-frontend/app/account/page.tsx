@@ -146,14 +146,12 @@ export default function AccountPage() {
     try {
       // Add a timestamp parameter to bypass cache
       const timestamp = new Date().getTime()
-      console.log('Refreshing user data...')
-      const response = await fetch(`/api/user/data?_t=${timestamp}`)
+      const response = await fetch(`/api/user/data?_t=${timestamp}&refresh=true`)
       if (!response.ok) {
         throw new Error('Failed to refresh user data')
       }
       
       const freshData = await response.json()
-      console.log('Received fresh user data:', freshData)
       
       setProfile(freshData.profile)
       setSubscription(freshData.subscription)
@@ -304,7 +302,7 @@ export default function AccountPage() {
     return (
       <div className="mt-8 p-4 border border-gray-200 rounded-md bg-gray-50">
         <h3 className="text-sm font-semibold mb-2 text-gray-900">Debug Info</h3>
-        <div className="flex space-x-2">
+        <div className="flex flex-wrap space-x-2 mb-3">
           <Button 
             variant="outline" 
             size="sm" 
@@ -326,22 +324,36 @@ export default function AccountPage() {
             Check Redis Data
           </Button>
           
-          <Button 
-            variant="outline" 
-            size="sm" 
+          <Button
+            variant="outline"
+            size="sm"
             className="bg-[#FF7F7F] hover:bg-[#FF6666] text-white"
-            onClick={refreshUserData}
+            onClick={async () => {
+              try {
+                // Call the fix-status API
+                const res = await fetch('/api/user/fix-status');
+                const data = await res.json();
+                console.log('Fix status result:', data);
+                
+                // Refresh the account data to see the changes
+                refreshUserData();
+                
+                toast({
+                  title: data.success ? 'Status fixed' : 'No change needed',
+                  description: data.message,
+                });
+              } catch (err) {
+                console.error('Error fixing plan status:', err);
+                toast({
+                  title: 'Error',
+                  description: 'Failed to fix plan status',
+                  variant: 'destructive'
+                });
+              }
+            }}
           >
-            Force Refresh
+            Fix Free Plan Status
           </Button>
-        </div>
-        
-        <div className="mt-4 text-xs font-mono overflow-x-auto text-gray-500">
-          <p>Session User ID: {session?.user?.id || 'Unknown'}</p>
-          <p>Email: {session?.user?.email || 'Unknown'}</p>
-          <p>Loaded Credits: {JSON.stringify(credits)}</p>
-          <p>Loaded Subscription: {JSON.stringify(subscription)}</p>
-          <p>Last Updated: {lastUpdated.toLocaleString()}</p>
         </div>
       </div>
     );
