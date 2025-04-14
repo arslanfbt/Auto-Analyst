@@ -8,10 +8,9 @@ import tiktoken
 from src.routes.analytics_routes import handle_new_model_usage
 import asyncio
 
-# Configure logging
-logging.basicConfig(level=logging.INFO, 
-                    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
+from src.utils.logger import Logger
+
+logger = Logger(name="ai_manager", see_time=True, console_log=True)
 
 # Cost per 1K tokens for different models
 costs = {
@@ -68,7 +67,7 @@ class AI_Manager:
             import tiktoken
             self.tokenizer = tiktoken.get_encoding("cl100k_base")
         except ImportError:
-            logger.warning("Tiktoken not available, using simple tokenizer")
+            logger.log_message("Tiktoken not available, using simple tokenizer", level=logging.WARNING)
             self.tokenizer = SimpleTokenizer()
             
     def save_usage_to_db(self, user_id, chat_id, model_name, provider, 
@@ -77,9 +76,6 @@ class AI_Manager:
                        is_streaming=False):
         """Save model usage data to the database"""
         try:
-            # Add debug logging
-            logger.info(f"Saving model usage: user_id={user_id}, chat_id={chat_id}, model={model_name}")
-            
             session = session_factory()
             
             usage = ModelUsage(
@@ -107,7 +103,7 @@ class AI_Manager:
             
         except Exception as e:
             session.rollback()
-            logger.error(f"Error saving usage data to database for chat {chat_id}: {str(e)}")
+            logger.log_message(f"Error saving usage data to database for chat {chat_id}: {str(e)}", level=logging.ERROR)
         finally:
             session.close()
         
@@ -121,8 +117,8 @@ class AI_Manager:
         output_tokens_in_thousands = output_tokens / 1000
         
         # Default cost if model not found
-        # logger.info(f"[>] Model: {model_name}, Costs: {costs[self.get_provider_for_model(model_name)][model_name]}")
         model_provider = self.get_provider_for_model(model_name)    
+        
         return input_tokens_in_thousands * costs[model_provider][model_name]["input"] + output_tokens_in_thousands * costs[model_provider][model_name]["output"]
 
     def get_provider_for_model(self, model_name):
@@ -131,7 +127,6 @@ class AI_Manager:
             return "Unknown"
 
         model_name = model_name.lower()
-        # Use a generator expression to find the provider more efficiently
         return next((provider for provider, models in costs.items() 
                      if any(model_name in model for model in models)), "Unknown")
 

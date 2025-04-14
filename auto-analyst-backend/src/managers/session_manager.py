@@ -111,14 +111,18 @@ The refined description aims to equip both users and analysis agents with essent
         Returns:
             Dictionary containing session state
         """
-        # Get default model config from environment
-        default_model_config = {
-            "provider": os.getenv("MODEL_PROVIDER", "openai"),
-            "model": os.getenv("MODEL_NAME", "gpt-4o-mini"),
+        # Use the global model config from app_state when available
+        # Get the most up-to-date model config
+        if hasattr(self, '_app_model_config') and self._app_model_config:
+            default_model_config = self._app_model_config
+        else:
+            default_model_config = {
+                "provider": os.getenv("MODEL_PROVIDER", "openai"),
+                "model": os.getenv("MODEL_NAME", "gpt-4o-mini"),
             "api_key": os.getenv("OPENAI_API_KEY"),
-            "temperature": float(os.getenv("TEMPERATURE", 1.0)),
-            "max_tokens": int(os.getenv("MAX_TOKENS", 6000))
-        }
+                "temperature": float(os.getenv("TEMPERATURE", 1.0)),
+                "max_tokens": int(os.getenv("MAX_TOKENS", 6000))
+            }
         
         if session_id not in self._sessions:
             # Check if we need to create a brand new session
@@ -139,6 +143,9 @@ The refined description aims to equip both users and analysis agents with essent
             # Verify dataset integrity in existing session
             session = self._sessions[session_id]
             
+            # Always update model_config to match global settings
+            session["model_config"] = default_model_config
+            
             # If dataset is somehow missing, restore it
             if "current_df" not in session or session["current_df"] is None:
                 logger.log_message(f"Restoring missing dataset for session {session_id}", level=logging.WARNING)
@@ -153,8 +160,6 @@ The refined description aims to equip both users and analysis agents with essent
                 session["name"] = self._default_name
             if "description" not in session:
                 session["description"] = self._dataset_description
-            if "model_config" not in session:
-                session["model_config"] = default_model_config
             
             # Update last accessed time
             session["last_accessed"] = time.time()

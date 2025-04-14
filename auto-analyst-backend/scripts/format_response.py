@@ -225,8 +225,8 @@ def execute_code_from_markdown(code_str, dataframe=None):
         flags=re.DOTALL
     )
 
-    # 6. Remove full dict blocks that look like sample dataframes:
-    #    {'Date': [...], 'Price': [...], ...}
+    # # 6. Remove full dict blocks that look like sample dataframes:
+    # #    {'Date': [...], 'Price': [...], ...}
     modified_code = re.sub(
         r"\{\s*(?:[\'\"][^\'\"]+[\'\"]\s*:\s*\[.*?\],?\s*)+\}",
         '',
@@ -234,20 +234,16 @@ def execute_code_from_markdown(code_str, dataframe=None):
         flags=re.DOTALL
     )
 
-    # Remove sample dataframe lines with multiple array values
+    # # Remove sample dataframe lines with multiple array values
     modified_code = re.sub(r"^# Sample DataFrames?.*?(\n|$)", '', modified_code, flags=re.MULTILINE | re.IGNORECASE)
     
-    # Remove standalone curly braces (often leftover from data structure removal)
-    modified_code = re.sub(r"^\s*}\s*$", '', modified_code, flags=re.MULTILINE)
     
-    # Remove any lines that contain just whitespace and single characters (likely leftover from removals)
-    modified_code = re.sub(r"^\s*[{}]\s*$", '', modified_code, flags=re.MULTILINE)
-    
-    # Remove empty lines that might have been created after cleaning
+    # # Remove empty lines that might have been created after cleaning
     modified_code = re.sub(r"\n\s*\n+", "\n\n", modified_code)
     
-    # Remove plt.show() statements
+    # # Remove plt.show() statements
     modified_code = re.sub(r"plt\.show\(\).*?(\n|$)", '', modified_code)
+    
 
     # Only add df = pd.read_csv() if no dataframe was provided and the code contains pd.read_csv
     if dataframe is None and 'pd.read_csv' not in modified_code:
@@ -259,7 +255,7 @@ def execute_code_from_markdown(code_str, dataframe=None):
 
     # Remove the main block if it exists
     modified_code = remove_main_block(modified_code)
-
+    # return modified_code    
     try:
         with stdoutIO() as s:
             exec(modified_code, context)  # Execute the modified code
@@ -274,8 +270,7 @@ def execute_code_from_markdown(code_str, dataframe=None):
 def format_response_to_markdown(api_response, agent_name = None, dataframe=None):
     try:
         markdown = []
-        logger.log_message(f"Formatting response to markdown for agent '{agent_name}' at {time.strftime('%Y-%m-%d %H:%M:%S')}: {api_response}, length: {len(api_response)}", level=logging.INFO)
-        
+
         if isinstance(api_response, dict):
             for key in api_response:
                 if "error" in api_response[key]:
@@ -332,7 +327,6 @@ def format_response_to_markdown(api_response, agent_name = None, dataframe=None)
                     markdown.append(f"• {line.strip().replace('•', '').replace('-', '')}\n")
 
             if 'refined_complete_code' in content and 'summary' in content:
-                logger.log_message(f"Refined complete code: {content['refined_complete_code']}", level=logging.INFO)
                 try:
                     if content['refined_complete_code'] is not None and content['refined_complete_code'] != "":
                         clean_code = format_code_block(content['refined_complete_code']) 
@@ -348,7 +342,7 @@ def format_response_to_markdown(api_response, agent_name = None, dataframe=None)
                     # continue
                 
                 markdown.append(f"### Refined Complete Code\n{markdown_code}\n")
-
+                
                 if output:
                     markdown.append("### Execution Output\n")
                     markdown.append(f"```output\n{output}\n```\n")
@@ -357,7 +351,6 @@ def format_response_to_markdown(api_response, agent_name = None, dataframe=None)
                     markdown.append("### Plotly JSON Outputs\n")
                     for idx, json_output in enumerate(json_outputs):
                         markdown.append(f"```plotly\n{json_output}\n```\n")
-                logger.log_message(f"Refined complete code executed, {markdown}", level=logging.INFO)
             # if agent_name is not None:  
             #     if f"memory_{agent_name}" in api_response:
             #         markdown.append(f"### Memory\n{api_response[f'memory_{agent_name}']}\n")
@@ -365,9 +358,7 @@ def format_response_to_markdown(api_response, agent_name = None, dataframe=None)
     except Exception as e:
         logger.log_message(f"Error in format_response_to_markdown: {str(e)}", level=logging.ERROR)
         return f"{str(e)}"
-    
-    logger.log_message(f"Generated markdown content for agent '{agent_name}' at {time.strftime('%Y-%m-%d %H:%M:%S')}: {markdown}, length: {len(markdown)}", level=logging.INFO)
-    
+        
     
     if not markdown or len(markdown) <= 1:
         logger.log_message(f"Generated markdown (ERROR) content for agent '{agent_name}' at {time.strftime('%Y-%m-%d %H:%M:%S')}: {markdown}, length: {len(markdown)}", level=logging.INFO)

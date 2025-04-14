@@ -334,7 +334,6 @@ export const subscriptionUtils = {
               ? new Date(resetStr) 
               : new Date(`${resetStr}T00:00:00Z`);
           } catch (e) {
-            console.error(`Error parsing reset date: ${creditsData.resetDate}`, e);
             resetDate = null;
           }
         }

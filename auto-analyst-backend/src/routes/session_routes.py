@@ -95,14 +95,23 @@ async def update_model_settings(
         # Get session state to update model config
         session_state = app_state.get_session_state(session_id)
         
-        # Update only the session's model config
-        session_state["model_config"] = {
+        # Create the model config
+        model_config = {
             "provider": settings.provider,
             "model": settings.model,
             "api_key": settings.api_key,
             "temperature": settings.temperature,
             "max_tokens": settings.max_tokens
         }
+        
+        # Update only the session's model config
+        session_state["model_config"] = model_config
+        
+        # Also update the global model_config in app_state
+        app_state.model_config = model_config
+        
+        # Update SessionManager's app_model_config
+        app_state._session_manager._app_model_config = model_config
 
         # Create the LM instance to test the configuration, but don't set it globally
         import dspy
@@ -165,9 +174,10 @@ async def get_model_settings(
     # Get the session state for this specific user
     session_state = app_state.get_session_state(session_id)
     
-    # Get model config from session state, or use global config as fallback
-    model_config = session_state.get("model_config", app_state.model_config)
+    # Get model config from session state, with default fallbacks if needed
+    model_config = session_state.get("model_config", {})
     
+    # Use values from model_config with fallbacks to defaults
     return {
         "provider": model_config.get("provider", "openai"),
         "model": model_config.get("model", "gpt-4o-mini"),

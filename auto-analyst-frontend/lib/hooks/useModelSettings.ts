@@ -133,26 +133,41 @@ export function useModelSettings() {
       const localSettings = getSettingsFromLocalStorage()
       if (!localSettings) return false
       
-      await axios.post(`${API_URL}/settings/model`, {
-        provider: localSettings.provider,
-        model: localSettings.model,
+      // Ensure we have complete settings with defaults for any missing values
+      const completeSettings = {
+        provider: localSettings.provider || 'openai',
+        model: localSettings.model || 'gpt-4o-mini',
         api_key: '', // Never send API key from localStorage
-        temperature: localSettings.temperature,
-        max_tokens: localSettings.maxTokens
-      }, {
+        temperature: localSettings.temperature || 0.7,
+        max_tokens: localSettings.maxTokens || 6000
+      }
+      
+      const response = await axios.post(`${API_URL}/settings/model`, completeSettings, {
         headers: {
           'Content-Type': 'application/json',
           'X-Session-ID': sessionId
         }
       })
       
-      console.log(`[Settings] Synced model settings to backend: ${localSettings.model}`)
+      console.log(`[Settings] Synced model settings to backend: ${completeSettings.model}`)
+      
+      // If the sync was successful, update local state to match what we sent
+      if (response.status === 200) {
+        setModelSettings(prev => ({
+          ...prev,
+          provider: completeSettings.provider,
+          model: completeSettings.model,
+          temperature: completeSettings.temperature,
+          maxTokens: completeSettings.max_tokens
+        }))
+      }
+      
       return true
     } catch (error) {
       console.error('Failed to sync settings to backend:', error)
       return false
     }
-  }, [sessionId])
+  }, [sessionId, setModelSettings])
 
   const updateModelSettings = useCallback(async (updatedSettings: Partial<ModelSettings>) => {
     if (!sessionId) return
@@ -203,19 +218,39 @@ export function useModelSettings() {
   // Initial fetch when session ID is available
   useEffect(() => {
     if (sessionId) {
-      // First try to sync local settings to backend when session ID changes
-      syncSettingsToBackend().then(() => {
-        // Then fetch the latest settings from the backend
-        fetchModelSettings()
-      })
+      // First check if we have local settings that need to be synced
+      const localSettings = getSettingsFromLocalStorage();
+      
+      if (localSettings && localSettings.model) {
+        // If we have local settings, immediately sync them to the backend
+        // This ensures backend uses the same model as shown in frontend after refresh
+        console.log(`[Settings] Syncing local settings to backend: ${localSettings.model}`);
+        syncSettingsToBackend()
+          .then(success => {
+            if (success) {
+              console.log('[Settings] Successfully synced local settings to backend');
+            } else {
+              console.warn('[Settings] Failed to sync local settings, fetching from backend instead');
+              fetchModelSettings();
+            }
+          })
+          .catch(error => {
+            console.error('[Settings] Error syncing settings:', error);
+            fetchModelSettings();
+          });
+      } else {
+        // If no local settings, fetch from backend
+        fetchModelSettings();
+      }
     }
-  }, [sessionId, syncSettingsToBackend, fetchModelSettings])
+  }, [sessionId, fetchModelSettings, syncSettingsToBackend]);
 
   return {
     modelSettings,
     isLoading,
     error,
     fetchModelSettings,
-    updateModelSettings
+    updateModelSettings,
+    syncSettingsToBackend
   }
 } 

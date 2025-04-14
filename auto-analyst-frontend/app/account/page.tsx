@@ -144,7 +144,7 @@ export default function AccountPage() {
   const refreshUserData = async () => {
     setIsRefreshing(true)
     try {
-      // Add a timestamp parameter to bypass cache and trigger a refresh
+      // Add a timestamp parameter to bypass cache
       const timestamp = new Date().getTime()
       const response = await fetch(`/api/user/data?_t=${timestamp}&refresh=true`)
       if (!response.ok) {
@@ -322,6 +322,37 @@ export default function AccountPage() {
             }}
           >
             Check Redis Data
+          </Button>
+          
+          <Button
+            variant="outline"
+            size="sm"
+            className="bg-[#FF7F7F] hover:bg-[#FF6666] text-white"
+            onClick={async () => {
+              try {
+                // Call the fix-status API
+                const res = await fetch('/api/user/fix-status');
+                const data = await res.json();
+                console.log('Fix status result:', data);
+                
+                // Refresh the account data to see the changes
+                refreshUserData();
+                
+                toast({
+                  title: data.success ? 'Status fixed' : 'No change needed',
+                  description: data.message,
+                });
+              } catch (err) {
+                console.error('Error fixing plan status:', err);
+                toast({
+                  title: 'Error',
+                  description: 'Failed to fix plan status',
+                  variant: 'destructive'
+                });
+              }
+            }}
+          >
+            Fix Free Plan Status
           </Button>
         </div>
       </div>

@@ -1,10 +1,13 @@
 import os
 import time
 import logging
+from dotenv import load_dotenv
+
+load_dotenv()
 
 class Logger:
     def __init__(self, name: str, see_time: bool = False, console_log: bool = False, level: int = logging.INFO):
-        self.is_dev = os.getenv("ENV", "development") == "development"
+        self.is_dev = os.getenv("ENV", "production") == "development"
         self.logger = logging.getLogger(name)
         self.logger.setLevel(level)
 
