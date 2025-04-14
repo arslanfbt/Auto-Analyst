@@ -19,9 +19,9 @@ const API_URL = process.env.QSTASH_URL || 'https://qstash.upstash.io';
 const API_TOKEN = process.env.QSTASH_TOKEN;
 
 // Configuration
-const CRON_EXPRESSION = '15 * * * *'; // Daily at midnight UTC
-const API_ENDPOINT = process.env.NEXTAUTH_URL 
-  ? `https://1ea3-111-88-174-152.ngrok-free.app/api/cron/process-renewals` 
+const CRON_EXPRESSION = '10 0 * * *'; // Daily at midnight UTC
+const API_ENDPOINT = process.env.NEXT_PUBLIC_API_URL 
+  ? `${process.env.NEXTAUTH_URL}/api/cron/process-renewals` 
   : 'http://localhost:3000/api/cron/process-renewals';
 const SCHEDULE_ID = 'subscription-renewals';
 
@@ -41,7 +41,8 @@ const requestOptions = {
     'Authorization': `Bearer ${API_TOKEN}`,
     'Upstash-Cron': CRON_EXPRESSION,
     'Upstash-Schedule-Id': SCHEDULE_ID,
-    'Upstash-Retries': '3'
+    'Upstash-Retries': '3',
+    'Upstash-Method': 'GET' // Explicitly tell QStash to use GET method when calling our endpoint
   }
 };
 
@@ -64,6 +65,7 @@ const req = https.request(requestOptions, (res) => {
       console.log('Schedule ID:', SCHEDULE_ID);
       console.log('Cron Expression:', CRON_EXPRESSION);
       console.log('Target Endpoint:', API_ENDPOINT);
+      console.log('HTTP Method: GET (explicitly configured)');
       
       try {
         const responseData = JSON.parse(data);
