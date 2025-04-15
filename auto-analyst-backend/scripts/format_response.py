@@ -66,76 +66,75 @@ def format_code_backticked_block(code_str):
     code_clean = re.sub(r'\n```$', '', code_clean)
     # Only match assignments at top level (not indented)
     # 1. Remove 'df = pd.DataFrame()' if it's at the top level
-    code_clean = re.sub(
+  
+  
+    # Remove reading the csv file if it's already in the context
+    modified_code = re.sub(r"df\s*=\s*pd\.read_csv\([\"\'].*?[\"\']\).*?(\n|$)", '', code_clean)
+    
+    # Only match assignments at top level (not indented)
+    # 1. Remove 'df = pd.DataFrame()' if it's at the top level
+    modified_code = re.sub(
         r"^df\s*=\s*pd\.DataFrame\(\s*\)\s*(#.*)?$",
         '',
-        code_clean,
+        modified_code,
         flags=re.MULTILINE
     )
 
     # 2. Remove top-level `data = ...` assignments
-    code_clean = re.sub(
+    modified_code = re.sub(
         r"^data\s*=\s*.+$",
         '',
-        code_clean,
+        modified_code,
         flags=re.MULTILINE
     )
 
     # 3. Remove top-level dictionary assignments like data = { ... }
-    code_clean = re.sub(
+    modified_code = re.sub(
         r"^data\s*=\s*\{.*?\}\s*(#.*)?$",
         '',
-        code_clean,
+        modified_code,
         flags=re.DOTALL | re.MULTILINE
     )
 
     # 4. Remove top-level list assignments like data = [ ... ]
-    code_clean = re.sub(
+    modified_code = re.sub(
         r"^data\s*=\s*\[.*?\]\s*(#.*)?$",
         '',
-        code_clean,
+        modified_code,
         flags=re.DOTALL | re.MULTILINE
     )
 
     # 5. Remove dict key-value pairs with list values like "Date": [...], anywhere in code
     # Use with caution: this will break JSON/dict syntax if you're not post-processing
-    code_clean = re.sub(
+    modified_code = re.sub(
         r"[ \t]*[\'\"][^\'\"]+[\'\"]\s*:\s*\[.*?\],?",
         '',
-        code_clean,
+        modified_code,
         flags=re.DOTALL
     )
 
-    # 6. Remove full dict blocks that look like sample dataframes:
-    #    {'Date': [...], 'Price': [...], ...}
-    code_clean = re.sub(
+    # # 6. Remove full dict blocks that look like sample dataframes:
+    # #    {'Date': [...], 'Price': [...], ...}
+    modified_code = re.sub(
         r"\{\s*(?:[\'\"][^\'\"]+[\'\"]\s*:\s*\[.*?\],?\s*)+\}",
         '',
-        code_clean,
+        modified_code,
         flags=re.DOTALL
     )
 
-    # Remove plt.show() statements
-    code_clean = re.sub(r"plt\.show\(\).*?(\n|$)", '', code_clean)
+    # # Remove sample dataframe lines with multiple array values
+    modified_code = re.sub(r"^# Sample DataFrames?.*?(\n|$)", '', modified_code, flags=re.MULTILINE | re.IGNORECASE)
     
-    # Remove df = pd.DataFrame(data) statements based on the image
-    code_clean = re.sub(r"df\s*=\s*pd\.DataFrame\(data\).*?(\n|$)", '', code_clean)
-    code_clean = re.sub(r"df\s*=\s*pd\.DataFrame\(\{.*?\}\).*?(\n|$)", '', code_clean, flags=re.DOTALL)
     
-    # Remove sample dataframe lines with multiple array values
-    code_clean = re.sub(r"# Sample DataFrames?.*?(\n|$)", '', code_clean, flags=re.MULTILINE)
+    # # Remove empty lines that might have been created after cleaning
+    modified_code = re.sub(r"\n\s*\n+", "\n\n", modified_code)
     
-    # Remove standalone curly braces (often leftover from data structure removal)
-    code_clean = re.sub(r"^\s*}\s*$", '', code_clean, flags=re.MULTILINE)
+    # # Remove plt.show() statements
+    modified_code = re.sub(r"plt\.show\(\).*?(\n|$)", '', modified_code)
     
-    # Remove any lines that contain just whitespace and single characters (likely leftover from removals)
-    code_clean = re.sub(r"^\s*[{}]\s*$", '', code_clean, flags=re.MULTILINE)
-    
-    # Remove empty lines that might have been created after cleaning
-    code_clean = re.sub(r"\n\s*\n+", "\n\n", code_clean)
     
     # remove main
-    code_clean = remove_main_block(code_clean)
+    code_clean = remove_main_block(modified_code)
     
     return f'```python\n{code_clean}\n```'
 
@@ -254,8 +253,11 @@ def execute_code_from_markdown(code_str, dataframe=None):
         )
 
     # Remove the main block if it exists
-    modified_code = remove_main_block(modified_code)
-    # return modified_code    
+    # modified_code = remove_main_block(modified_code)
+    # with open("modified_code.txt", "a") as f:
+    #     f.write("----------------------------------------\n")
+    #     f.write(modified_code)
+    #     f.write("\n\n")
     try:
         with stdoutIO() as s:
             exec(modified_code, context)  # Execute the modified code

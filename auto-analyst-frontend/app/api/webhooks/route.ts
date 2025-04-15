@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import Stripe from 'stripe'
 import { Readable } from 'stream'
-import redis, { creditUtils, KEYS } from '@/lib/redis'
+import redis, { creditUtils, KEYS, subscriptionUtils } from '@/lib/redis'
 import { sendSubscriptionConfirmation, sendPaymentConfirmationEmail } from '@/lib/email'
 
 // Use the correct App Router configuration instead of the default body parser
@@ -217,15 +217,88 @@ export async function POST(request: NextRequest) {
       case 'customer.subscription.updated': {
         const subscription = event.data.object as Stripe.Subscription
         // Handle subscription update logic
-        console.log('Subscription updated event received, but not fully implemented')
-        break
+        console.log('Subscription updated event received', subscription.id)
+        
+        // Get user ID from subscription metadata
+        const userId = subscription.metadata?.userId
+        if (!userId) {
+          console.error('No user ID found in subscription metadata')
+          return NextResponse.json({ error: 'User ID missing from subscription metadata' }, { status: 400 })
+        }
+        
+        // Check subscription status and update accordingly
+        if (subscription.status === 'active') {
+          // Get the subscription data from Redis
+          const subscriptionData = await redis.hgetall(KEYS.USER_SUBSCRIPTION(userId))
+          
+          if (!subscriptionData) {
+            console.error(`No subscription data found for user ${userId}`)
+            return NextResponse.json({ error: 'Subscription data not found' }, { status: 400 })
+          }
+          
+          // Calculate next renewal date from Stripe's current_period_end
+          const currentPeriodEnd = new Date(subscription.current_period_end * 1000)
+          
+          // If this is a STANDARD plan, update the renewal date and reset credits
+          if (subscriptionData.planType === 'STANDARD') {
+            console.log(`Updating STANDARD subscription for user ${userId} with new renewal date ${currentPeriodEnd.toISOString().split('T')[0]}`)
+            
+            // Update subscription with new renewal date from Stripe
+            await redis.hset(KEYS.USER_SUBSCRIPTION(userId), {
+              status: 'active',
+              renewalDate: currentPeriodEnd.toISOString().split('T')[0],
+              lastUpdated: new Date().toISOString()
+            })
+            
+            // Reset the credits for the new subscription period
+            const now = new Date()
+            const resetDate = new Date(now)
+            resetDate.setMonth(resetDate.getMonth() + 1)
+            
+            const creditData = {
+              total: '500', // STANDARD plan credits
+              used: '0',
+              resetDate: resetDate.toISOString().split('T')[0],
+              lastUpdate: now.toISOString()
+            }
+            
+            await redis.hset(KEYS.USER_CREDITS(userId), creditData)
+            
+            console.log(`Successfully renewed credits for STANDARD subscription user ${userId}`)
+          } else if (subscriptionData.planType === 'PRO') {
+            // For PRO plans, just update the renewal date
+            console.log(`Updating PRO subscription for user ${userId} with new renewal date ${currentPeriodEnd.toISOString().split('T')[0]}`)
+            
+            await redis.hset(KEYS.USER_SUBSCRIPTION(userId), {
+              status: 'active',
+              renewalDate: currentPeriodEnd.toISOString().split('T')[0],
+              lastUpdated: new Date().toISOString()
+            })
+          }
+        } else if (['canceled', 'unpaid', 'past_due'].includes(subscription.status)) {
+          // Handle cancelled or failed payment subscriptions
+          console.log(`Subscription ${subscription.id} for user ${subscription.metadata?.userId} has status ${subscription.status}, downgrading to free plan`)
+          
+          const userId = subscription.metadata?.userId
+          if (userId) {
+            await subscriptionUtils.downgradeToFreePlan(userId)
+          }
+        }
+        
+        return NextResponse.json({ received: true })
       }
         
       case 'customer.subscription.deleted': {
         const subscription = event.data.object as Stripe.Subscription
-        // Handle subscription cancellation/deletion
-        console.log('Subscription deleted event received, but not fully implemented')
-        break
+        console.log(`Subscription ${subscription.id} deleted for user ${subscription.metadata?.userId}`)
+        
+        // Handle subscription deletion - downgrade to free plan
+        const userId = subscription.metadata?.userId
+        if (userId) {
+          await subscriptionUtils.downgradeToFreePlan(userId)
+        }
+        
+        return NextResponse.json({ received: true })
       }
         
       // Add more event types as needed

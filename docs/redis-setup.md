@@ -59,10 +59,10 @@ Stored as a **hash** at `user:{userId}:credits`
 ```
 HGETALL user:12345:credits
 {
-  "used": "150",
+  "used": "75",
   "total": "500",
   "resetDate": "2025-04-01",
-  "lastUpdate": "2025-03-20T14:30:00Z"
+  "lastUpdate": "2025-03-15T09:32:41Z"
 }
 ```
 
@@ -109,6 +109,50 @@ HGETALL user:12345:profile
 3. **Handling Yearly Subscriptions:**  
    - Adds `nextMonthlyReset` for yearly plans  
    - Ensures credits reset monthly even in yearly billing cycles  
+
+## 🔄 **Subscription Renewal Process**
+
+The application includes an automated subscription renewal system specifically for STANDARD plan users:
+
+### **How It Works**
+
+1. When a STANDARD plan user's renewal date is reached, their subscription is automatically renewed with the same plan details.
+2. The renewal process:
+   - Updates the renewal date to the next period (adds one month or one year)
+   - Resets their credits (to 500 for STANDARD plan)
+   - Maintains the subscription status as "active"
+
+### **Setting Up the Cron Job**
+
+To ensure that subscriptions are checked and renewed regularly:
+
+1. A cron job should be set up to call the renewal API endpoint:
+   - Endpoint: `/api/cron/process-renewals`
+   - HTTP Method: GET
+   - Required header: `x-cron-auth-key: [your-configured-key]`
+
+2. Environment Configuration:
+   - Add `CRON_AUTH_KEY` to your environment variables with a secure, random value
+   - This key must be included in the request header for security
+
+3. Recommended Schedule:
+   - Run daily (e.g., `0 0 * * *` in cron syntax - runs at midnight every day)
+   - This ensures subscriptions are renewed promptly when their renewal date is reached
+
+4. Upstash Cron Setup:
+   ```bash
+   # Example using curl to test the endpoint
+   curl -X GET https://yourdomain.com/api/cron/process-renewals \
+     -H "x-cron-auth-key: your-configured-key"
+   ```
+
+5. Logging:
+   - The renewal process logs detailed information about:
+     - Total subscriptions processed
+     - Number of subscriptions renewed
+     - Number of subscriptions downgraded (for non-STANDARD plans that expire)
+
+Note: PRO plan subscriptions that expire are downgraded to the FREE plan, while STANDARD plan subscriptions are automatically renewed.
 
 ---
 

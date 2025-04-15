@@ -545,7 +545,7 @@ async def chat_with_all(
                 )
            
         except Exception as e:
-            logger.log_message(f"Error in generate_responses: {plan_descrition} | {total_response}", level=logging.ERROR)
+            logger.log_message(f"Error in generate_responses: {total_response}", level=logging.ERROR)
             yield json.dumps({
                 "agent": "planner",
                 "content": f"An error occurred while generating responses. Please try again!\n{str(e)}",
