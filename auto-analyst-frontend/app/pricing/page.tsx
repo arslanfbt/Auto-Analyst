@@ -22,9 +22,14 @@ const pricingTiers = [
       price: 0,
       priceId: null, // No price ID for free tier
     },
+    daily: {
+      price: 0,
+      priceId: null, // No price ID for free tier
+    },
     credits: {
       monthly: 100,
       yearly: 100,
+      daily: 5,
     },
     features: [
       'Basic data analysis',
@@ -38,16 +43,21 @@ const pricingTiers = [
     name: 'Standard',
     monthly: {
       price: 15,
-      priceId: process.env.NEXT_PUBLIC_STRIPE_STANDARD_PRICE_ID,
+      priceId: process.env.NEXT_PUBLIC_STRIPE_MONTHLY_PRICE_ID,
     },
     yearly: {
       price: 126, // $15 * 12 months = $180, with 30% discount = $126
-      priceId: process.env.NEXT_PUBLIC_STRIPE_STANDARD_YEARLY_PRICE_ID,
+      priceId: process.env.NEXT_PUBLIC_STRIPE_YEARLY_PRICE_ID,
       savings: 54, // $180 - $126 = $54 savings
+    },
+    daily: {
+      price: 0.5,
+      priceId: process.env.NEXT_PUBLIC_STRIPE_DAILY_PRICE_ID,
     },
     credits: {
       monthly: 500,
       yearly: 500,
+      daily: 15,
     },
     features: [
       'Advanced data analysis',
@@ -67,9 +77,14 @@ const pricingTiers = [
       price: null, // Custom pricing
       priceId: null, // No direct subscription
     },
+    daily: {
+      price: null, // Custom pricing
+      priceId: null, // No direct subscription
+    },
     credits: {
       monthly: 'Unlimited',
       yearly: 'Unlimited',
+      daily: 'Unlimited',
     },
     features: [
       'Everything in Standard',
@@ -89,7 +104,7 @@ export default function PricingPage() {
   const { data: session } = useSession();
   const [selectedTier, setSelectedTier] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
-  const [billingCycle, setBillingCycle] = useState<'monthly' | 'yearly'>('yearly');
+  const [billingCycle, setBillingCycle] = useState<'monthly' | 'yearly' | 'daily'>('yearly');
   const router = useRouter();
   const searchParams = useSearchParams();
   const [referringPage, setReferringPage] = useState<string>('home');
@@ -206,6 +221,16 @@ export default function PricingPage() {
           </div>
           <div className="relative bg-white p-0.5 rounded-lg shadow-sm flex">
             <button
+              onClick={() => setBillingCycle('daily')}
+              className={`relative px-6 py-2 text-sm font-medium rounded-md focus:outline-none ${
+                billingCycle === 'daily'
+                  ? 'bg-[#FF7F7F] text-white'
+                  : 'text-gray-700'
+              }`}
+            >
+              Daily (Test)
+            </button>
+            <button
               onClick={() => setBillingCycle('monthly')}
               className={`relative px-6 py-2 text-sm font-medium rounded-md focus:outline-none ${
                 billingCycle === 'monthly'
@@ -283,9 +308,9 @@ export default function PricingPage() {
                 )}
                 
                 <p className="mt-4 text-lg text-gray-500">
-                  {typeof tier.credits[billingCycle] === 'string' 
-                    ? tier.credits[billingCycle] 
-                    : <>{tier.credits[billingCycle].toLocaleString()} credits</>}
+                  {typeof tier.credits?.[billingCycle] === 'string' 
+                    ? tier.credits?.[billingCycle] 
+                    : <>{tier.credits?.[billingCycle]?.toLocaleString() || '0'} credits</>}
                 </p>
                 
                 <ul className="mt-6 space-y-4">
@@ -341,9 +366,9 @@ export default function PricingPage() {
                   <td className="py-4 px-6 border-b text-gray-700 font-medium">Credits</td>
                   {pricingTiers.map((tier) => (
                     <td key={`${tier.name}-credits`} className="py-4 px-6 border-b text-center">
-                      {typeof tier.credits[billingCycle] === 'string' 
+                      {typeof tier.credits?.[billingCycle] === 'string' 
                         ? <InfinityIcon className="h-5 w-5 text-[#FF7F7F] mx-auto" />
-                        : tier.credits[billingCycle].toLocaleString()}
+                        : tier.credits?.[billingCycle]?.toLocaleString() || '0'}
                     </td>
                   ))}
                 </tr>

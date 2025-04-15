@@ -558,34 +558,37 @@ class chat_history_name_agent(dspy.Signature):
     name = dspy.OutputField(desc="A name for the chat history (max 3 words)")
 
 class dataset_description_agent(dspy.Signature):
-    """You are an AI agent that generates a detailed description of a given dataset for both users and analysis agents.  
+    """You are an AI agent that generates a detailed description of a given dataset for both users and analysis agents.
+Your description should serve two key purposes:
+1. Provide users with context about the dataset's purpose, structure, and key attributes.
+2. Give analysis agents critical data handling instructions to prevent common errors.
 
-    Your description should serve two key purposes:
-    1. Provide users with context about the dataset's purpose, structure, and key attributes
-    2. Give analysis agents critical data handling instructions to prevent common errors
+For data handling instructions, you must always include Python data types and address the following:
+- Data type warnings (e.g., numeric columns stored as strings that need conversion).
+- Null value handling recommendations.
+- Format inconsistencies that require preprocessing.
+- Explicit warnings about columns that appear numeric but are stored as strings (e.g., '10' vs 10).
+- Explicit Python data types for each major column (e.g., int, float, str, bool, datetime).
+- Columns with numeric values that should be treated as categorical (e.g., zip codes, IDs).
+- Any date parsing or standardization required (e.g., MM/DD/YYYY to datetime).
+- Any other technical considerations that would affect downstream analysis or modeling.
 
-    For data handling instructions, you must include:
-    - Data type warnings (e.g., numeric columns stored as strings that need conversion)
-    - Null value handling recommendations
-    - Format inconsistencies that require preprocessing
-    - Explicit warnings about columns that appear numeric but are stored as strings (e.g., '10' vs 10)
-    - Any other technical considerations that would affect analysis
+If an existing description is provided, enhance it with both business context and technical guidance for analysis agents, preserving accurate information from the existing description or what the user has written.
 
-    Example:  
-    This housing dataset contains property details including price, square footage, bedrooms, and location data.
-    It provides insights into real estate market trends across different neighborhoods and property types.
-    
-    TECHNICAL CONSIDERATIONS FOR ANALYSIS:
-    - Price column appears numeric but is stored as strings with '$' prefix - requires str.replace('$','') and float conversion
-    - Square footage values stored as strings with 'sq ft' suffix - needs extraction and numeric conversion
-    - Zip codes are numeric values but should be treated as categorical data
-    - 15% of properties have null values in the 'year_built' column - consider imputation or filtering
-    - Date columns use MM/DD/YYYY format and require parsing before time-based analysis
+Ensure the description is comprehensive and provides actionable insights for both users and analysis agents.
 
-    If an existing description is provided, enhance it with both business context and technical guidance
-    for analysis agents, preserving accurate information from the existing description or what the user has written.
+Example:
+This housing dataset contains property details including price, square footage, bedrooms, and location data.
+It provides insights into real estate market trends across different neighborhoods and property types.
 
-    Ensure the description is comprehensive and provides actionable insights for both users and analysis agents.
+TECHNICAL CONSIDERATIONS FOR ANALYSIS:
+- price (str): Appears numeric but is stored as strings with a '$' prefix and commas (e.g., "$350,000"). Requires cleaning with str.replace('$','').replace(',','') and conversion to float.
+- square_footage (str): Contains unit suffix like 'sq ft' (e.g., "1,200 sq ft"). Remove suffix and commas before converting to int.
+- bedrooms (int): Correctly typed but may contain null values (~5% missing) – consider imputation or filtering.
+- zip_code (int): Numeric column but should be treated as str or category to preserve leading zeros and prevent unintended numerical analysis.
+- year_built (float): May contain missing values (~15%) – consider mean/median imputation or exclusion depending on use case.
+- listing_date (str): Dates stored in "MM/DD/YYYY" format – convert to datetime using pd.to_datetime().
+- property_type (str): Categorical column with inconsistent capitalization (e.g., "Condo", "condo", "CONDO") – normalize to lowercase for consistent grouping.
     """
     dataset = dspy.InputField(desc="The dataset to describe, including headers, sample data, null counts, and data types.")
     existing_description = dspy.InputField(desc="An existing description to improve upon (if provided).", default="")

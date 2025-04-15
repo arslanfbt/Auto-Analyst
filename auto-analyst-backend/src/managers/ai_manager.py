@@ -118,6 +118,7 @@ class AI_Manager:
         
         # Default cost if model not found
         model_provider = self.get_provider_for_model(model_name)    
+        # logger.log_message(f"[> ] Model Name: {model_name}, Model Provider: {model_provider}")
         
         return input_tokens_in_thousands * costs[model_provider][model_name]["input"] + output_tokens_in_thousands * costs[model_provider][model_name]["output"]
 

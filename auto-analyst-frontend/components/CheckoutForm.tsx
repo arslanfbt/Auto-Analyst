@@ -15,7 +15,7 @@ import { Button } from './ui/button'
 interface CheckoutFormProps {
   planName: string
   amount: number
-  interval: 'month' | 'year'
+  interval: 'month' | 'year' | 'day'
   clientSecret: string
 }
 
