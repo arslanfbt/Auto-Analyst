@@ -51,11 +51,15 @@ export default function CheckoutPage() {
         name: 'Standard',
         monthly: {
           price: 15,
-          priceId: process.env.NEXT_PUBLIC_STRIPE_STANDARD_PRICE_ID,
+          priceId: process.env.NEXT_PUBLIC_STRIPE_MONTHLY_PRICE_ID,
         },
         yearly: {
           price: 126,
-          priceId: process.env.NEXT_PUBLIC_STRIPE_STANDARD_YEARLY_PRICE_ID,
+          priceId: process.env.NEXT_PUBLIC_STRIPE_YEARLY_PRICE_ID,
+        },
+        daily: {
+          price: 0.5,
+          priceId: process.env.NEXT_PUBLIC_STRIPE_DAILY_PRICE_ID,
         },
       },
       {
@@ -74,12 +78,12 @@ export default function CheckoutPage() {
     const selectedPlan = pricingTiers.find(p => p.name.toLowerCase() === plan)
     
     if (selectedPlan) {
-      const billing = cycle === 'yearly' ? 'yearly' : 'monthly'
+      const billing = cycle === 'yearly' ? 'yearly' : cycle === 'daily' ? 'daily' : 'monthly'
       const planData = {
         name: selectedPlan.name,
-        amount: selectedPlan[billing].price,
-        cycle: billing === 'yearly' ? 'year' : 'month',
-        priceId: selectedPlan[billing].priceId || '',
+        amount: selectedPlan[billing]?.price || 0,
+        cycle: billing === 'yearly' ? 'year' : billing === 'daily' ? 'day' : 'month',
+        priceId: selectedPlan[billing]?.priceId || '',
       }
       
       setPlanDetails(planData)
@@ -97,7 +101,6 @@ export default function CheckoutPage() {
             priceId: planData.priceId,
             userId: session.user?.email,
             planName: planData.name,
-            amount: planData.amount,
             interval: planData.cycle,
           }),
         })
@@ -187,7 +190,7 @@ export default function CheckoutPage() {
                     <CheckoutForm 
                       planName={planDetails.name}
                       amount={planDetails.amount}
-                      interval={planDetails.cycle as 'month' | 'year'}
+                      interval={planDetails.cycle as 'month' | 'year' | 'day'}
                       clientSecret={clientSecret}
                     />
                   </Elements>
@@ -204,7 +207,7 @@ export default function CheckoutPage() {
                       <span className="text-gray-900">${planDetails.amount}</span>
                     </div>
                     <p className="text-sm text-gray-500">
-                      Billed {planDetails.cycle === 'year' ? 'yearly' : 'monthly'}
+                      Billed {planDetails.cycle === 'year' ? 'yearly' : planDetails.cycle === 'day' ? 'daily' : 'monthly'}
                     </p>
                   </div>
                   

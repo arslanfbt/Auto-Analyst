@@ -303,42 +303,24 @@ export const subscriptionUtils = {
         return false;
       }
       
-      // Check if we have a Stripe subscription ID
-      const stripeSubscriptionId = subscriptionData.stripeSubscriptionId;
-      if (!stripeSubscriptionId) {
-        console.error(`No Stripe subscription ID found for user ${userId}`);
-        return false;
+      // Calculate new renewal date based on current interval
+      const interval = subscriptionData.interval as string || 'month';
+      let newRenewalDate = new Date();
+      
+      if (interval === 'month') {
+        newRenewalDate.setMonth(now.getMonth() + 1);
+      } else if (interval === 'year') {
+        newRenewalDate.setFullYear(now.getFullYear() + 1);
       }
       
-      // Import Stripe subscription check functions dynamically to avoid circular dependencies
-      const { isStripeSubscriptionActive, getSubscriptionPeriod } = await import('@/lib/stripe');
-      
-      // Check if the subscription is still active in Stripe
-      const isActive = await isStripeSubscriptionActive(stripeSubscriptionId as string);
-      if (!isActive) {
-        console.error(`Stripe subscription ${stripeSubscriptionId} is not active for user ${userId}. Downgrading to free plan.`);
-        await this.downgradeToFreePlan(userId);
-        return false;
-      }
-      
-      // Get the subscription period information from Stripe
-      const periodInfo = await getSubscriptionPeriod(stripeSubscriptionId as string);
-      if (!periodInfo) {
-        console.error(`Could not retrieve subscription period for user ${userId}`);
-        return false;
-      }
-      
-      // Use the subscription period from Stripe for accuracy
-      const currentPeriodEnd = periodInfo.currentPeriodEnd;
-      
-      // Calculate reset date for credits - one month from now
+      // Calculate reset date for credits
       const resetDate = new Date(now);
       resetDate.setMonth(resetDate.getMonth() + 1);
       
-      // Update subscription with new renewal date from Stripe
+      // Update subscription with new renewal date
       await redis.hset(KEYS.USER_SUBSCRIPTION(userId), {
         status: 'active',
-        renewalDate: currentPeriodEnd.toISOString().split('T')[0],
+        renewalDate: newRenewalDate.toISOString().split('T')[0],
         lastUpdated: now.toISOString()
       });
       
@@ -363,7 +345,7 @@ export const subscriptionUtils = {
         console.log(`Subscription renewed for user ${userId} but no email found to send notification`);
       }
       
-      console.log(`Successfully renewed STANDARD subscription for user ${userId} with Stripe subscription ${stripeSubscriptionId}`);
+      console.log(`Successfully renewed STANDARD subscription for user ${userId}`);
       return true;
     } catch (error) {
       console.error('Error renewing STANDARD subscription:', error);
@@ -561,10 +543,6 @@ export const subscriptionUtils = {
       let processed = 0;
       let renewed = 0;
       let downgraded = 0;
-      let stripeChecked = 0;
-      
-      // Import Stripe subscription check functions dynamically to avoid circular dependencies
-      const { isStripeSubscriptionActive } = await import('@/lib/stripe');
       
       // Check each subscription
       for (const key of subscriptionKeys) {
@@ -581,31 +559,6 @@ export const subscriptionUtils = {
           }
           
           processed++;
-          
-          // Check if this is a paid subscription
-          const isPaidPlan = ['STANDARD', 'PRO'].includes(subscriptionData.planType as string);
-          
-          // If paid plan, check the Stripe subscription status first
-          if (isPaidPlan && subscriptionData.stripeSubscriptionId) {
-            stripeChecked++;
-            
-            // Check if the subscription is active in Stripe
-            const stripeSubscriptionId = subscriptionData.stripeSubscriptionId as string;
-            try {
-              const isActive = await isStripeSubscriptionActive(stripeSubscriptionId);
-              
-              // If not active in Stripe, downgrade to free plan
-              if (!isActive) {
-                console.log(`Stripe subscription ${stripeSubscriptionId} for user ${userId} is not active. Downgrading to free plan.`);
-                await this.downgradeToFreePlan(userId);
-                downgraded++;
-                continue; // Skip further processing for this user
-              }
-            } catch (stripeError) {
-              console.error(`Error checking Stripe subscription ${stripeSubscriptionId}:`, stripeError);
-              // Continue with normal processing even if Stripe check fails
-            }
-          }
           
           // Check if this is a STANDARD plan with renewal date that has passed
           if (subscriptionData.planType === 'STANDARD' && 
@@ -636,7 +589,7 @@ export const subscriptionUtils = {
         }
       }
       
-      console.log(`Subscription check complete: ${processed} processed, ${stripeChecked} Stripe checked, ${renewed} renewed, ${downgraded} downgraded`);
+      console.log(`Subscription check complete: ${processed} processed, ${renewed} renewed, ${downgraded} downgraded`);
     } catch (error) {
       console.error('Error checking subscriptions and renewals:', error);
     }

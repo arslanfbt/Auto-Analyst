@@ -19,10 +19,10 @@ export async function POST(request: NextRequest) {
     }
     
     const body = await request.json()
-    const { priceId, userId, planName, amount, interval } = body
+    const { priceId, userId, planName, interval } = body
     
-    if (!amount || !planName || !interval) {
-      return NextResponse.json({ message: 'Plan details are required' }, { status: 400 })
+    if (!priceId || !planName || !interval) {
+      return NextResponse.json({ message: 'Price ID and plan details are required' }, { status: 400 })
     }
 
     // Create a customer or retrieve existing one
@@ -50,34 +50,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ message: 'Unable to create or retrieve customer' }, { status: 400 })
     }
 
-    // Create a price on the fly
-    const product = await stripe.products.create({
-      name: `${planName} Plan`,
-      metadata: {
-        planName,
-      },
-    })
-
-    const price = await stripe.prices.create({
-      product: product.id,
-      unit_amount: amount * 100, // Convert to cents
-      currency: 'usd',
-      recurring: {
-        interval: interval === 'year' ? 'year' : 'month',
-      },
-    })
-
-    // Create a subscription with the newly created price
+    // Create a subscription with the provided price ID
     const subscription = await stripe.subscriptions.create({
       customer: customerId,
-      items: [{ price: price.id }],
+      items: [{ price: priceId }],
       payment_behavior: 'default_incomplete',
       payment_settings: { save_default_payment_method: 'on_subscription' },
       expand: ['latest_invoice.payment_intent'],
       metadata: {
         userId: userId || 'anonymous',
         planName,
-        amount: amount.toString(),
         interval,
       },
     })
