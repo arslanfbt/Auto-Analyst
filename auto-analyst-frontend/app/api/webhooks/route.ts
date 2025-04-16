@@ -95,10 +95,19 @@ async function updateUserSubscription(userId: string, session: Stripe.Checkout.S
     })
     
     // Update credit information
+    let resetDate = creditUtils.getNextMonthFirstDay();
+    
+    // For daily plans, set reset date to tomorrow
+    if (interval === 'day') {
+      const tomorrow = new Date();
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      resetDate = tomorrow.toISOString().split('T')[0];
+    }
+    
     await redis.hset(KEYS.USER_CREDITS(userId), {
       total: creditAmount.toString(),
       used: '0',
-      resetDate: creditUtils.getNextMonthFirstDay(),
+      resetDate: resetDate,
       lastUpdate: now.toISOString()
     })
     
@@ -122,7 +131,7 @@ async function updateUserSubscription(userId: string, session: Stripe.Checkout.S
         interval,
         renewalDate.toISOString().split('T')[0],
         creditAmount,
-        creditUtils.getNextMonthFirstDay()
+        resetDate
       )
     } else {
       console.log(`No email found for user ${userId}, cannot send confirmation email`)
