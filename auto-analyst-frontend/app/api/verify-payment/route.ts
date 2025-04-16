@@ -153,7 +153,12 @@ export async function POST(request: NextRequest) {
       let creditAmount = 100
       
       // Updated price ranges to match actual pricing in pricing.tsx
-      if (amount >= 10 && amount < 25) {
+      if (amount === 0.75) {
+        // Standard daily plan ($0.75/day)
+        planName = 'Standard Plan (Daily)'
+        planType = 'STANDARD'
+        creditAmount = 15
+      } else if (amount >= 10 && amount < 25) {
         // Standard monthly plan ($15/month)
         planName = 'Standard Plan' 
         planType = 'STANDARD'
@@ -176,7 +181,12 @@ export async function POST(request: NextRequest) {
       }
       
       // Determine the interval based on amount
-      const interval = (amount >= 100) ? 'year' : 'month'
+      let interval = (amount >= 100) ? 'year' : 'month'
+      
+      // Special case for daily plan
+      if (amount === 0.75) {
+        interval = 'day'
+      }
       
       console.log(`Determined plan: ${planName} (${interval}) with ${creditAmount} credits`)
       
@@ -185,8 +195,10 @@ export async function POST(request: NextRequest) {
       let renewalDate = new Date()
       if (interval === 'month') {
         renewalDate.setMonth(now.getMonth() + 1)
-      } else {
+      } else if (interval === 'year') {
         renewalDate.setFullYear(now.getFullYear() + 1)
+      } else if (interval === 'day') {
+        renewalDate.setDate(now.getDate() + 1)
       }
       
       // Save subscription data to Redis
@@ -206,9 +218,15 @@ export async function POST(request: NextRequest) {
       console.log('Storing fallback subscription data:', subscriptionData)
       await redis.hset(KEYS.USER_SUBSCRIPTION(userId), subscriptionData)
       
-      // Calculate next credits reset date (one month from purchase date)
+      // Calculate next credits reset date (one month from current date)
       const creditResetDate = new Date(now);
-      creditResetDate.setMonth(creditResetDate.getMonth() + 1);
+      
+      // Adjust reset date based on interval
+      if (interval === 'day') {
+        creditResetDate.setDate(creditResetDate.getDate() + 1);
+      } else {
+        creditResetDate.setMonth(creditResetDate.getMonth() + 1);
+      }
       
       // Update credits
       const creditData = {
@@ -294,6 +312,8 @@ async function updateUserSubscriptionFromSession(userId: string, session: Stripe
       renewalDate.setMonth(now.getMonth() + 1)
     } else if (interval === 'year') {
       renewalDate.setFullYear(now.getFullYear() + 1)
+    } else if (interval === 'day') {
+      renewalDate.setDate(now.getDate() + 1)
     }
     
     // Determine plan type and credits allocation with more robust matching
@@ -309,7 +329,12 @@ async function updateUserSubscriptionFromSession(userId: string, session: Stripe
       creditAmount = 999999 // Unlimited
     } else if (planNameUpper.includes('STANDARD')) {
       planType = 'STANDARD'
-      creditAmount = 500
+      // Check if it's daily billing
+      if (interval === 'day') {
+        creditAmount = 15 // Daily credits
+      } else {
+        creditAmount = 500 // Regular Standard plan credits
+      }
     }
     
     console.log(`Mapped plan type: ${planType} with ${creditAmount} credits`)
@@ -335,7 +360,13 @@ async function updateUserSubscriptionFromSession(userId: string, session: Stripe
     
     // Calculate next credits reset date (one month from current date)
     const creditResetDate = new Date(now);
-    creditResetDate.setMonth(creditResetDate.getMonth() + 1);
+    
+    // Adjust reset date based on interval
+    if (interval === 'day') {
+      creditResetDate.setDate(creditResetDate.getDate() + 1);
+    } else {
+      creditResetDate.setMonth(creditResetDate.getMonth() + 1);
+    }
     
     // Update credits
     const creditData = {
@@ -371,4 +402,4 @@ async function updateUserSubscriptionFromSession(userId: string, session: Stripe
     console.error('Error updating subscription from session:', error)
     return false
   }
-} 
+}

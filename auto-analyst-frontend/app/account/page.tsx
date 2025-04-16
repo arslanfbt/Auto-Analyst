@@ -73,6 +73,7 @@ export default function AccountPage() {
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [lastUpdated, setLastUpdated] = useState<Date>(new Date())
   const [confirmDowngradeOpen, setConfirmDowngradeOpen] = useState(false)
+  const [confirmCancelOpen, setConfirmCancelOpen] = useState(false)
   const [targetPlan, setTargetPlan] = useState<string>('free')
 
   // Main heading styles - Updated for consistency
@@ -215,31 +216,14 @@ export default function AccountPage() {
   }, []);
 
   const getSubscriptionStatusDisplay = (status: string) => {
-    switch (status?.toLowerCase()) {
-      case 'active':
-        return (
-          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-            <svg className="mr-1.5 h-2 w-2 text-green-400" fill="currentColor" viewBox="0 0 8 8">
-              <circle cx="4" cy="4" r="3" />
-            </svg>
-            Active
-          </span>
-        );
-      case 'inactive':
-        return (
-          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
-            <svg className="mr-1.5 h-2 w-2 text-yellow-400" fill="currentColor" viewBox="0 0 8 8">
-              <circle cx="4" cy="4" r="3" />
-            </svg>
-            Inactive
-          </span>
-        );
-      default:
-        return (
-          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
-            {status || 'Unknown'}
-          </span>
-        );
+    if (status === 'active') {
+      return <span className="text-green-600 font-medium">Active</span>
+    } else if (status === 'inactive') {
+      return <span className="text-gray-600 font-medium">Inactive</span>
+    } else if (status === 'canceling') {
+      return <span className="text-amber-600 font-medium">Canceling</span>
+    } else {
+      return <span className="text-gray-600 font-medium">{status}</span>
     }
   };
 
@@ -277,7 +261,7 @@ export default function AccountPage() {
     return (
       <div className="space-y-4">
         <div className="flex justify-between items-center">
-          <span className="text-gray-700">Credits used this month</span>
+          <span className="text-gray-700">Credits used {subscription?.interval === 'day' ? 'today' : 'this month'}</span>
           <span className="font-medium">{used} / {totalDisplay}</span>
         </div>
         <Progress value={usagePercentage} className="h-2" />
@@ -419,6 +403,55 @@ export default function AccountPage() {
     
     if (planName.includes('standard')) return 'Free Plan'
     return 'Standard Plan'
+  }
+
+  // Add function to handle subscription cancellation
+  const handleCancelSubscription = () => {
+    setConfirmCancelOpen(true)
+  }
+  
+  // Add function to execute the cancellation after confirmation
+  const executeCancellation = async () => {
+    setIsRefreshing(true)
+    try {
+      const response = await fetch('/api/user/cancel-subscription', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        }
+      })
+      
+      if (!response.ok) {
+        throw new Error('Failed to cancel subscription')
+      }
+      
+      const result = await response.json()
+      console.log('Subscription cancellation result:', result)
+      
+      // Refresh user data to reflect the changes
+      await refreshUserData()
+      
+      toast({
+        title: 'Subscription canceled',
+        description: 'Your subscription will remain active until the end of your current billing period',
+      })
+    } catch (error) {
+      console.error('Error canceling subscription:', error)
+      toast({
+        title: 'Failed to cancel subscription',
+        description: 'Please try again later or contact support',
+        variant: 'destructive',
+      })
+    } finally {
+      setIsRefreshing(false)
+      setConfirmCancelOpen(false)
+    }
+  }
+  
+  // Helper to determine if current subscription can be canceled
+  const canCancel = () => {
+    if (!subscription) return false
+    return subscription.status === 'active' && subscription.plan.toLowerCase() !== 'free'
   }
 
   if (status === 'loading' || loading) {
@@ -563,7 +596,13 @@ export default function AccountPage() {
                             </div>
                             <div className="flex justify-between mb-2">
                               <span className="text-gray-600">Billing cycle:</span>
-                              <span className="font-medium text-gray-900 capitalize">{subscription?.interval || 'monthly'}</span>
+                              <span className="font-medium text-gray-900 capitalize">
+                                {(() => {
+                                  if (subscription?.interval === 'day') return 'Daily';
+                                  if (subscription?.interval === 'year') return 'Yearly';
+                                  return 'Monthly';
+                                })()}
+                              </span>
                             </div>
                             {subscription?.plan?.toLowerCase() !== 'free' && (
                               <div className="flex justify-between mb-2">
@@ -721,7 +760,13 @@ export default function AccountPage() {
                           <div className="mt-4 pt-4 border-t border-gray-200">
                             <div className="flex justify-between mb-2">
                               <span className="text-gray-600">Billing period:</span>
-                              <span className="text-gray-900 capitalize">{subscription?.interval || 'Monthly'}</span>
+                              <span className="text-gray-900 capitalize">
+                                {(() => {
+                                  if (subscription?.interval === 'day') return 'Daily';
+                                  if (subscription?.interval === 'year') return 'Yearly';
+                                  return 'Monthly';
+                                })()}
+                              </span>
                             </div>
                             {subscription?.plan?.toLowerCase() !== 'free' && (
                               <div className="flex justify-between mb-2">
@@ -754,10 +799,10 @@ export default function AccountPage() {
                                 <span className="font-medium">Note:</span> Your subscription renews yearly, but credits reset monthly.
                               </div>
                             )}
-                            <div className="flex justify-between mb-2">
+                            {/* <div className="flex justify-between mb-2">
                               <span className="text-gray-600">Payment method:</span>
                               <span className="text-gray-900">Credit Card •••• 4242</span>
-                            </div>
+                            </div> */}
                           </div>
                         </div>
                         
@@ -790,7 +835,12 @@ export default function AccountPage() {
                           <Button
                             variant="ghost"
                             className="text-white bg-[#FF7F7F] hover:bg-[#FF6666]"
+                            onClick={handleCancelSubscription}
+                            disabled={!canCancel() || isRefreshing}
                           >
+                            {isRefreshing ? (
+                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            ) : null}
                             Cancel Subscription
                           </Button>
                         </div>
@@ -988,6 +1038,28 @@ export default function AccountPage() {
                     Confirm Downgrade
                   </>
                 )}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        {/* Add confirmation dialog for cancellation */}
+        <AlertDialog open={confirmCancelOpen} onOpenChange={setConfirmCancelOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Cancel your subscription?</AlertDialogTitle>
+              <AlertDialogDescription>
+                Your subscription will remain active until the end of your current billing period.
+                After that, your account will be downgraded to the Free plan with 100 credits per month.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>No, keep my subscription</AlertDialogCancel>
+              <AlertDialogAction 
+                onClick={executeCancellation}
+                className="bg-[#FF7F7F] hover:bg-[#FF6666]"
+              >
+                Yes, cancel subscription
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>

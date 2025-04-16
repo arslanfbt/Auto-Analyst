@@ -266,18 +266,10 @@ export const subscriptionUtils = {
           const renewalDate = new Date(subscriptionData.renewalDate as string);
           const now = new Date();
           if (renewalDate < now) {
-            // Handle based on plan type
-            if (subscriptionData.planType === 'STANDARD') {
-              // Renew STANDARD subscription automatically
-              console.log(`Renewal date reached for STANDARD user ${userId}. Renewing subscription.`);
-              await this.renewStandardSubscription(userId);
-              return true;
-            } else {
-              // For other plans (like PRO), downgrade to free plan
-              console.log(`Subscription expired for user ${userId}. Downgrading to Free plan.`);
-              await this.downgradeToFreePlan(userId);
-              return false;
-            }
+            // Subscription has expired, downgrade to free plan
+            console.log(`Subscription expired for user ${userId}. Downgrading to Free plan.`);
+            await this.downgradeToFreePlan(userId);
+            return false;
           }
         }
         return true;
@@ -286,69 +278,6 @@ export const subscriptionUtils = {
       return false;
     } catch (error) {
       console.error('Error checking subscription status:', error);
-      return false;
-    }
-  },
-  
-  // Renew a STANDARD subscription
-  async renewStandardSubscription(userId: string): Promise<boolean> {
-    try {
-      const now = new Date();
-      
-      // Fetch current subscription data
-      const subscriptionData = await redis.hgetall(KEYS.USER_SUBSCRIPTION(userId));
-      
-      if (!subscriptionData) {
-        console.error(`No subscription data found for user ${userId}`);
-        return false;
-      }
-      
-      // Calculate new renewal date based on current interval
-      const interval = subscriptionData.interval as string || 'month';
-      let newRenewalDate = new Date();
-      
-      if (interval === 'month') {
-        newRenewalDate.setMonth(now.getMonth() + 1);
-      } else if (interval === 'year') {
-        newRenewalDate.setFullYear(now.getFullYear() + 1);
-      }
-      
-      // Calculate reset date for credits
-      const resetDate = new Date(now);
-      resetDate.setMonth(resetDate.getMonth() + 1);
-      
-      // Update subscription with new renewal date
-      await redis.hset(KEYS.USER_SUBSCRIPTION(userId), {
-        status: 'active',
-        renewalDate: newRenewalDate.toISOString().split('T')[0],
-        lastUpdated: now.toISOString()
-      });
-      
-      // Reset the credits for the new subscription period
-      const creditData = {
-        total: '500', // STANDARD plan credits
-        used: '0',
-        resetDate: resetDate.toISOString().split('T')[0],
-        lastUpdate: now.toISOString()
-      };
-      
-      await redis.hset(KEYS.USER_CREDITS(userId), creditData);
-      
-      // Get user email to send confirmation
-      const userEmail = await redis.hget(KEYS.USER_PROFILE(userId), 'email');
-      
-      if (userEmail) {
-        // If we have email notification functionality, we'd call it here
-        // For example: await sendSubscriptionRenewalConfirmation(userEmail, ...);
-        console.log(`Subscription renewed for user ${userId} with email ${userEmail}`);
-      } else {
-        console.log(`Subscription renewed for user ${userId} but no email found to send notification`);
-      }
-      
-      console.log(`Successfully renewed STANDARD subscription for user ${userId}`);
-      return true;
-    } catch (error) {
-      console.error('Error renewing STANDARD subscription:', error);
       return false;
     }
   },
@@ -530,71 +459,5 @@ export const subscriptionUtils = {
     } catch (error) {
       console.error('Error checking expired subscriptions:', error);
     }
-  },
-  
-  // New improved version that handles both expirations and renewals
-  // This should be called periodically (via a cron job or similar)
-  async checkSubscriptionsAndRenewals(): Promise<void> {
-    try {
-      // Get all subscription keys
-      const subscriptionKeys = await redis.keys('user:*:subscription');
-      console.log(`Processing ${subscriptionKeys.length} subscriptions for expiration/renewal checks`);
-      
-      let processed = 0;
-      let renewed = 0;
-      let downgraded = 0;
-      
-      // Check each subscription
-      for (const key of subscriptionKeys) {
-        try {
-          // Extract user ID from the key
-          const userId = key.split(':')[1];
-          
-          // Get subscription data
-          const subscriptionData = await redis.hgetall(key);
-          
-          // Skip processing if no valid data
-          if (!subscriptionData || !subscriptionData.status) {
-            continue;
-          }
-          
-          processed++;
-          
-          // Check if this is a STANDARD plan with renewal date that has passed
-          if (subscriptionData.planType === 'STANDARD' && 
-              subscriptionData.status === 'active' && 
-              subscriptionData.renewalDate) {
-            
-            const renewalDate = new Date(subscriptionData.renewalDate as string);
-            const now = new Date();
-            
-            if (renewalDate < now) {
-              console.log(`Renewing STANDARD subscription for user ${userId}`);
-              await this.renewStandardSubscription(userId);
-              renewed++;
-            }
-          } 
-          // Otherwise check if subscription is active (will handle downgrading expired non-STANDARD plans)
-          else {
-            const wasActive = subscriptionData.status === 'active';
-            const isActive = await this.isSubscriptionActive(userId);
-            
-            // If it was active but no longer is, it was downgraded
-            if (wasActive && !isActive) {
-              downgraded++;
-            }
-          }
-        } catch (e) {
-          console.error(`Error processing subscription for key ${key}:`, e);
-        }
-      }
-      
-      console.log(`Subscription check complete: ${processed} processed, ${renewed} renewed, ${downgraded} downgraded`);
-    } catch (error) {
-      console.error('Error checking subscriptions and renewals:', error);
-    }
   }
 };
-
-// Export the scheduled task for external use (e.g., from cron jobs)
-export const checkSubscriptionsAndRenewals = subscriptionUtils.checkSubscriptionsAndRenewals.bind(subscriptionUtils);

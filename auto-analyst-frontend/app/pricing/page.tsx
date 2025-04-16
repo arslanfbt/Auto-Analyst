@@ -51,7 +51,7 @@ const pricingTiers = [
       savings: 54, // $180 - $126 = $54 savings
     },
     daily: {
-      price: 0.5,
+      price: 0.75,
       priceId: process.env.NEXT_PUBLIC_STRIPE_DAILY_PRICE_ID,
     },
     credits: {
@@ -282,16 +282,18 @@ export default function PricingPage() {
                   <span className="text-5xl font-extrabold tracking-tight text-gray-900">
                     {tier.name === 'Enterprise' 
                       ? '' 
-                      : `$${billingCycle === 'monthly' 
-                          ? tier.monthly.price
-                          : tier.name === 'Standard'
-                            ? (tier.yearly.price ? (tier.yearly.price / 12).toFixed(2) : '0.00') // Show monthly equivalent of yearly price
-                            : tier.yearly.price}`}
+                      : `$${billingCycle === 'daily'
+                          ? tier.daily.price
+                          : billingCycle === 'monthly' 
+                            ? tier.monthly.price
+                            : tier.name === 'Standard'
+                              ? (tier.yearly.price ? (tier.yearly.price / 12).toFixed(2) : '0.00') // Show monthly equivalent of yearly price
+                              : tier.yearly.price}`}
                   </span>
                   <span className="ml-1 text-xl font-medium text-gray-500">
                     {tier.monthly.price === 0 || tier.name === 'Enterprise'
                       ? '' 
-                      : `/${billingCycle === 'monthly' ? 'mo' : (tier.name === 'Standard' ? 'mo' : 'yr')}`}
+                      : `/${billingCycle === 'daily' ? 'day' : billingCycle === 'monthly' ? 'mo' : (tier.name === 'Standard' ? 'mo' : 'yr')}`}
                   </span>
                 </div>
                 
