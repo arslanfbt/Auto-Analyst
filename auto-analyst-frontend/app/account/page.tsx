@@ -745,7 +745,7 @@ export default function AccountPage() {
                             <div>
                               <h3 className="text-xl font-medium text-gray-900">{subscription?.plan || 'Standard Plan'}</h3>
                               <p className="text-gray-600 mt-1">
-                                ${subscription?.amount || '15.00'}/{subscription?.interval || 'month'}
+                                ${subscription?.amount || '0.00'}/{subscription?.interval || 'month'}
                               </p>
                             </div>
                             <div className={`px-3 py-1 rounded-full text-sm font-medium ${

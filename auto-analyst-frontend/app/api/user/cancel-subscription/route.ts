@@ -49,7 +49,21 @@ export async function POST(request: NextRequest) {
         status: 'canceling', // 'canceling' means it will end at period end
         canceledAt: now.toISOString(),
         lastUpdated: now.toISOString(),
+        // Add a flag to indicate this is pending cancellation and should get free credits next reset
+        pendingDowngrade: 'true',
+        nextPlanType: 'FREE'
       })
+      
+      // Get current credit data
+      const creditData = await redis.hgetall(KEYS.USER_CREDITS(userId))
+      if (creditData && creditData.resetDate) {
+        // Mark that the next credit reset should only give 100 credits
+        await redis.hset(KEYS.USER_CREDITS(userId), {
+          nextTotalCredits: '100', // This will be used at the next reset
+          pendingDowngrade: 'true',
+          lastUpdate: now.toISOString()
+        })
+      }
       
       // Send cancellation confirmation email
       // This would be implemented in a real application

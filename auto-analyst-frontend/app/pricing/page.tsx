@@ -51,13 +51,13 @@ const pricingTiers = [
       savings: 54, // $180 - $126 = $54 savings
     },
     daily: {
-      price: 0.75,
+      price: 5,
       priceId: process.env.NEXT_PUBLIC_STRIPE_DAILY_PRICE_ID,
     },
     credits: {
       monthly: 500,
       yearly: 500,
-      daily: 15,
+      daily: 500,
     },
     features: [
       'Advanced data analysis',

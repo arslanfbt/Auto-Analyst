@@ -317,8 +317,22 @@ export const subscriptionUtils = {
                      subscriptionData.planType === 'FREE' ||
                      (subscriptionData.plan && (subscriptionData.plan as string).includes('Free'));
       
+      // Check if the subscription is pending cancellation/downgrade or inactive
+      const isPendingDowngrade = 
+        (subscriptionData && (
+          subscriptionData.pendingDowngrade === 'true' ||
+          subscriptionData.status === 'inactive'
+        )) ||
+        (creditsData && creditsData.pendingDowngrade === 'true');
+      
       // For Free plans, we should consider them as 'active' for credits refresh purposes
-      const shouldProcess = isFree || subscriptionData.status === 'active';
+      // Also, subscriptions in 'canceling' or 'inactive' state should still get their credits refreshed
+      const shouldProcess = isFree || 
+                         (subscriptionData && (
+                           subscriptionData.status === 'active' || 
+                           subscriptionData.status === 'canceling' ||
+                           subscriptionData.status === 'inactive'
+                         ));
       
       // Treat all plans (including Free) similarly for credit refreshes
       if (shouldProcess) {
@@ -338,15 +352,20 @@ export const subscriptionUtils = {
           }
         }
         
-        // Get plan information
-        const planType = isFree ? 'FREE' : (subscriptionData.planType as string);
-        
-        // Determine credit amount based on plan type
+        // Determine credit amount based on plan type or pending downgrade
         let creditAmount = 100; // Default free plan
-        if (planType === 'STANDARD') {
-          creditAmount = 500;
-        } else if (planType === 'PRO') {
-          creditAmount = 999999; // Effectively unlimited
+        
+        if (isPendingDowngrade || (subscriptionData && subscriptionData.status === 'inactive')) {
+          // If inactive or pending downgrade, use 100 credits (Free plan)
+          creditAmount = 100;
+        } else if (!isFree) {
+          // Use regular plan type logic for non-free, non-downgrading plans
+          const planType = subscriptionData.planType as string;
+          if (planType === 'STANDARD') {
+            creditAmount = 500;
+          } else if (planType === 'PRO') {
+            creditAmount = 999999; // Effectively unlimited
+          }
         }
         
         // If we've passed the reset date, refresh credits
@@ -356,16 +375,36 @@ export const subscriptionUtils = {
           const nextResetDate = new Date(resetDate || now);
           nextResetDate.setMonth(nextResetDate.getMonth() + 1);
           
-          // Update credits data
-          const newCreditData = {
+          // Prepare credit data - remove pendingDowngrade and nextTotalCredits if present
+          const newCreditData: any = {
             total: creditAmount.toString(),
             used: '0',
             resetDate: nextResetDate.toISOString().split('T')[0],
             lastUpdate: now.toISOString()
           };
           
-          // Save to Redis
-          await redis.hset(KEYS.USER_CREDITS(userId), newCreditData);
+          // If this was a pending downgrade or an inactive subscription, complete the downgrade
+          if (isPendingDowngrade) {
+            // Remove the pending flags
+            delete newCreditData.pendingDowngrade;
+            delete newCreditData.nextTotalCredits;
+            
+            // If subscription is in canceling state or inactive, complete the downgrade
+            if (subscriptionData && (
+                subscriptionData.status === 'canceling' || 
+                subscriptionData.status === 'inactive'
+            )) {
+              await this.downgradeToFreePlan(userId);
+            }
+          }
+          
+          // Save to Redis (only update credit data if not fully downgraded)
+          if (!subscriptionData || (
+              subscriptionData.status !== 'canceling' && 
+              subscriptionData.status !== 'inactive'
+          )) {
+            await redis.hset(KEYS.USER_CREDITS(userId), newCreditData);
+          }
           
           return true;
         }
@@ -421,10 +460,16 @@ export const subscriptionUtils = {
         stripeSubscriptionId: ''
       };
       
-      // Set free credits (100)
+      // Get current used credits to preserve them
+      const currentCredits = await redis.hgetall(KEYS.USER_CREDITS(userId));
+      const usedCredits = currentCredits && currentCredits.used 
+        ? parseInt(currentCredits.used as string) 
+        : 0;
+      
+      // Set free credits (100) but preserve used credits
       const creditData = {
         total: '100',
-        used: '0',
+        used: Math.min(usedCredits, 100).toString(), // Used credits shouldn't exceed new total
         resetDate: resetDate.toISOString().split('T')[0],
         lastUpdate: now.toISOString()
       };

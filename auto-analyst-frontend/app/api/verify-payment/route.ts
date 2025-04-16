@@ -154,11 +154,11 @@ export async function POST(request: NextRequest) {
       let interval = 'month'
       
       // Updated price ranges to match actual pricing in pricing.tsx
-      if (amount === 0.75) {
-        // Daily Standard plan ($0.75/day)
+      if (amount === 5) {
+        // Daily Standard plan ($5/day)
         planName = 'Standard Plan (Daily)'
         planType = 'STANDARD'
-        creditAmount = 15
+        creditAmount = 500
         interval = 'day'
       } else if (amount >= 10 && amount < 25) {
         // Standard monthly plan ($15/month)
@@ -328,7 +328,7 @@ async function updateUserSubscriptionFromSession(userId: string, session: Stripe
       planType = 'STANDARD'
       // Check if it's daily billing
       if (interval === 'day') {
-        creditAmount = 15 // Daily credits
+        creditAmount = 500 // Daily credits
       } else {
         creditAmount = 500 // Regular Standard plan credits
       }
