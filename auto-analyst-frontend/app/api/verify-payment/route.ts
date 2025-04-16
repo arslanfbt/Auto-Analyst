@@ -151,13 +151,15 @@ export async function POST(request: NextRequest) {
       let planName = 'Free Plan'
       let planType = 'FREE'
       let creditAmount = 100
+      let interval = 'month'
       
       // Updated price ranges to match actual pricing in pricing.tsx
-      if (amount === 0.75) {
-        // Standard daily plan ($0.75/day)
+      if (amount === 5) {
+        // Daily Standard plan ($5/day)
         planName = 'Standard Plan (Daily)'
         planType = 'STANDARD'
-        creditAmount = 15
+        creditAmount = 500
+        interval = 'day'
       } else if (amount >= 10 && amount < 25) {
         // Standard monthly plan ($15/month)
         planName = 'Standard Plan' 
@@ -173,21 +175,16 @@ export async function POST(request: NextRequest) {
         planName = 'Standard Plan (Yearly)'
         planType = 'STANDARD'
         creditAmount = 500
+        interval = 'year'
       } else if (amount >= 200 && amount < 500) {
         // Pro yearly plan ($243.60/year)
         planName = 'Pro Plan (Yearly)'
         planType = 'PRO'
         creditAmount = 999999 // Unlimited
+        interval = 'year'
       }
       
-      // Determine the interval based on amount
-      let interval = (amount >= 100) ? 'year' : 'month'
-      
-      // Special case for daily plan
-      if (amount === 0.75) {
-        interval = 'day'
-      }
-      
+      // Don't determine interval based on amount anymore - it's set above
       console.log(`Determined plan: ${planName} (${interval}) with ${creditAmount} credits`)
       
       // Create subscription data
@@ -331,7 +328,7 @@ async function updateUserSubscriptionFromSession(userId: string, session: Stripe
       planType = 'STANDARD'
       // Check if it's daily billing
       if (interval === 'day') {
-        creditAmount = 15 // Daily credits
+        creditAmount = 500 // Daily credits
       } else {
         creditAmount = 500 // Regular Standard plan credits
       }
@@ -402,4 +399,4 @@ async function updateUserSubscriptionFromSession(userId: string, session: Stripe
     console.error('Error updating subscription from session:', error)
     return false
   }
-}
+} 

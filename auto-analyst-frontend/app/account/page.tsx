@@ -745,7 +745,7 @@ export default function AccountPage() {
                             <div>
                               <h3 className="text-xl font-medium text-gray-900">{subscription?.plan || 'Standard Plan'}</h3>
                               <p className="text-gray-600 mt-1">
-                                ${subscription?.amount || '15.00'}/{subscription?.interval || 'month'}
+                                ${subscription?.amount || '0.00'}/{subscription?.interval || 'month'}
                               </p>
                             </div>
                             <div className={`px-3 py-1 rounded-full text-sm font-medium ${
@@ -799,10 +799,10 @@ export default function AccountPage() {
                                 <span className="font-medium">Note:</span> Your subscription renews yearly, but credits reset monthly.
                               </div>
                             )}
-                            {/* <div className="flex justify-between mb-2">
+                            <div className="flex justify-between mb-2">
                               <span className="text-gray-600">Payment method:</span>
                               <span className="text-gray-900">Credit Card •••• 4242</span>
-                            </div> */}
+                            </div>
                           </div>
                         </div>
                         

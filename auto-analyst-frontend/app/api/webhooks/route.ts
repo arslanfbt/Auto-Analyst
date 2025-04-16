@@ -73,7 +73,7 @@ async function updateUserSubscription(userId: string, session: Stripe.Checkout.S
     } else if (planName.toLowerCase().includes('standard')) {
       // Check if it's daily billing
       if (interval === 'day') {
-        creditAmount = 15 // Daily credits
+        creditAmount = 500 // Daily credits
       } else {
         creditAmount = 500 // Regular Standard plan credits
       }
@@ -95,10 +95,19 @@ async function updateUserSubscription(userId: string, session: Stripe.Checkout.S
     })
     
     // Update credit information
+    let resetDate = creditUtils.getNextMonthFirstDay();
+    
+    // For daily plans, set reset date to tomorrow
+    if (interval === 'day') {
+      const tomorrow = new Date();
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      resetDate = tomorrow.toISOString().split('T')[0];
+    }
+    
     await redis.hset(KEYS.USER_CREDITS(userId), {
       total: creditAmount.toString(),
       used: '0',
-      resetDate: creditUtils.getNextMonthFirstDay(),
+      resetDate: resetDate,
       lastUpdate: now.toISOString()
     })
     
@@ -122,7 +131,7 @@ async function updateUserSubscription(userId: string, session: Stripe.Checkout.S
         interval,
         renewalDate.toISOString().split('T')[0],
         creditAmount,
-        creditUtils.getNextMonthFirstDay()
+        resetDate
       )
     } else {
       console.log(`No email found for user ${userId}, cannot send confirmation email`)
@@ -226,8 +235,104 @@ export async function POST(request: NextRequest) {
       case 'customer.subscription.updated': {
         const subscription = event.data.object as Stripe.Subscription
         // Handle subscription update logic
-        console.log('Subscription updated event received, but not fully implemented')
-        break
+        console.log('Subscription updated event received:', subscription.id)
+        
+        // Check if the subscription status has changed to canceled or unpaid
+        if (subscription.status === 'canceled' || subscription.status === 'unpaid') {
+          // Get the customer ID from the subscription
+          const customerId = subscription.customer as string
+          if (!customerId) {
+            console.error('No customer ID found in subscription')
+            return NextResponse.json({ error: 'No customer ID found' }, { status: 400 })
+          }
+          
+          // Look up the user by customer ID in our database
+          const userKey = await redis.get(`stripe:customer:${customerId}`)
+          if (!userKey) {
+            console.error(`No user found for Stripe customer ${customerId}`)
+            return NextResponse.json({ received: true })
+          }
+          
+          const userId = userKey.toString()
+          console.log(`Found user ${userId} for Stripe customer ${customerId}`)
+          
+          // Get current subscription data
+          const subscriptionData = await redis.hgetall(KEYS.USER_SUBSCRIPTION(userId))
+          
+          // If the subscription is canceled, mark it as such in our database
+          if (subscription.status === 'canceled') {
+            // Update subscription status to indicate it's being canceled
+            await redis.hset(KEYS.USER_SUBSCRIPTION(userId), {
+              status: 'canceling',
+              lastUpdated: new Date().toISOString(),
+              // Add flags to ensure next month they only get free tier credits
+              pendingDowngrade: 'true',
+              nextPlanType: 'FREE'
+            })
+            
+            // Mark the credits to be downgraded on next reset
+            await redis.hset(KEYS.USER_CREDITS(userId), {
+              nextTotalCredits: '100',
+              pendingDowngrade: 'true',
+              lastUpdate: new Date().toISOString()
+            })
+            
+            console.log(`Updated subscription status to canceling for user ${userId}`)
+          } else if (subscription.status === 'unpaid') {
+            // Handle unpaid subscriptions by marking them as inactive
+            await redis.hset(KEYS.USER_SUBSCRIPTION(userId), {
+              status: 'inactive',
+              lastUpdated: new Date().toISOString(),
+              // Add flags to ensure next reset they only get free tier credits
+              pendingDowngrade: 'true',
+              nextPlanType: 'FREE'
+            })
+            
+            // Mark the credits to be downgraded on next reset
+            await redis.hset(KEYS.USER_CREDITS(userId), {
+              nextTotalCredits: '100',
+              pendingDowngrade: 'true',
+              lastUpdate: new Date().toISOString()
+            })
+            
+            console.log(`Updated subscription status to inactive for user ${userId} due to unpaid status`)
+          }
+        } 
+        // Check if the subscription has changed plans
+        else if (subscription.items && subscription.items.data.length > 0) {
+          // Get the customer ID from the subscription
+          const customerId = subscription.customer as string
+          
+          // Look up the user by customer ID in our database
+          const userKey = await redis.get(`stripe:customer:${customerId}`)
+          if (!userKey) {
+            console.log(`No user found for Stripe customer ${customerId}`)
+            return NextResponse.json({ received: true })
+          }
+          
+          const userId = userKey.toString()
+          
+          // Get the price ID from the subscription item
+          const priceId = subscription.items.data[0].price.id
+          
+          // Fetch price and product details to determine the plan
+          const price = await stripe.prices.retrieve(priceId)
+          const product = await stripe.products.retrieve(price.product as string)
+          
+          // Update subscription with new plan details - this will be used at next credit reset
+          await updateUserSubscription(userId, {
+            id: subscription.id,
+            customer: customerId,
+            customer_email: '',
+            // Add metadata to help with plan identification
+            metadata: {
+              userId: userId,
+              planName: product.name
+            }
+          } as any)
+        }
+        
+        return NextResponse.json({ received: true })
       }
         
       case 'customer.subscription.deleted': {
@@ -262,6 +367,10 @@ export async function POST(request: NextRequest) {
         // Downgrade to Free plan
         const now = new Date()
         
+        // Calculate next reset date (1 month from now)
+        const resetDate = new Date(now)
+        resetDate.setMonth(resetDate.getMonth() + 1)
+        
         // Update subscription data
         await redis.hset(KEYS.USER_SUBSCRIPTION(userId), {
           plan: 'Free Plan',
@@ -275,10 +384,17 @@ export async function POST(request: NextRequest) {
           stripeSubscriptionId: ''
         })
         
-        // Set credits to Free plan level (100)
+        // Get current used credits to preserve them
+        const currentCredits = await redis.hgetall(KEYS.USER_CREDITS(userId))
+        const usedCredits = currentCredits && currentCredits.used 
+          ? parseInt(currentCredits.used as string) 
+          : 0
+        
+        // Set credits to Free plan level (100), but preserve used credits
         await redis.hset(KEYS.USER_CREDITS(userId), {
           total: '100',
-          resetDate: new Date(now.getFullYear(), now.getMonth() + 1, 1).toISOString().split('T')[0],
+          used: Math.min(usedCredits, 100).toString(), // Used credits shouldn't exceed new total
+          resetDate: resetDate.toISOString().split('T')[0],
           lastUpdate: now.toISOString()
         })
         
