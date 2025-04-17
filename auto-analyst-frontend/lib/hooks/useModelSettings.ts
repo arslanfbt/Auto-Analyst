@@ -170,14 +170,16 @@ export function useModelSettings() {
   }, [sessionId, setModelSettings])
 
   const updateModelSettings = useCallback(async (updatedSettings: Partial<ModelSettings>) => {
-    if (!sessionId) return
+    if (!sessionId) {
+      return false;
+    }
     
     setIsLoading(true)
     setError(null)
     
     try {
       // Use the correct endpoint for updating settings
-      await axios.post(`${API_URL}/settings/model`, {
+      const response = await axios.post(`${API_URL}/settings/model`, {
         provider: updatedSettings.provider,
         model: updatedSettings.model,
         api_key: updatedSettings.apiKey,

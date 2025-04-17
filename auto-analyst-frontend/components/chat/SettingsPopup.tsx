@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { X, CheckCircle, AlertCircle, Info, Settings } from 'lucide-react';
 import API_URL from '@/config/api'
 import { useSessionStore } from '@/lib/store/sessionStore'
@@ -68,6 +68,23 @@ const BASE_URL = API_URL;
 
 const SettingsPopup: React.FC<SettingsPopupProps> = ({ isOpen, onClose, initialSettings, onSettingsUpdated }) => {
   const { updateModelSettings } = useModelSettings();
+  const { sessionId, setSessionId } = useSessionStore();
+  
+  // Function to ensure we have a session ID
+  const ensureSessionId = useCallback(() => {
+    if (!sessionId) {
+      // Generate a temporary session ID if none exists
+      const tempId = `temp-${Date.now()}`;
+      setSessionId(tempId);
+    }
+  }, [sessionId, setSessionId]);
+  
+  // Check session ID on load
+  useEffect(() => {
+    if (!sessionId) {
+      ensureSessionId();
+    }
+  }, [sessionId, ensureSessionId]);
   
   const [selectedProvider, setSelectedProvider] = useState(initialSettings?.provider || MODEL_PROVIDERS[0].name);
   const [selectedModel, setSelectedModel] = useState(initialSettings?.model || MODEL_PROVIDERS[0].models[0].id);
@@ -122,6 +139,18 @@ const SettingsPopup: React.FC<SettingsPopupProps> = ({ isOpen, onClose, initialS
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
+      // Ensure we have a session ID
+      ensureSessionId();
+      
+      // Check for session ID first
+      if (!sessionId) {
+        setNotification({ 
+          type: 'error', 
+          message: 'Session ID is missing. Please refresh the page and try again.'
+        });
+        return;
+      }
+      
       // Validate API key if custom API is enabled
       if (useCustomAPI && !apiKey.trim()) {
         setNotification({ 

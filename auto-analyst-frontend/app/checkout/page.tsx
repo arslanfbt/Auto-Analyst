@@ -58,7 +58,7 @@ export default function CheckoutPage() {
           priceId: process.env.NEXT_PUBLIC_STRIPE_YEARLY_PRICE_ID,
         },
         daily: {
-          price: 5,
+          price: 0.75,
           priceId: process.env.NEXT_PUBLIC_STRIPE_DAILY_PRICE_ID,
         },
       },
