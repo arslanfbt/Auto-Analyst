@@ -588,10 +588,12 @@ For data handling instructions, you must always include Python data types and ad
 - Columns with numeric values that should be treated as categorical (e.g., zip codes, IDs).
 - Any date parsing or standardization required (e.g., MM/DD/YYYY to datetime).
 - Any other technical considerations that would affect downstream analysis or modeling.
+- List all columns and their data types with exact case sensitive spelling
 
 If an existing description is provided, enhance it with both business context and technical guidance for analysis agents, preserving accurate information from the existing description or what the user has written.
 
 Ensure the description is comprehensive and provides actionable insights for both users and analysis agents.
+
 
 Example:
 This housing dataset contains property details including price, square footage, bedrooms, and location data.

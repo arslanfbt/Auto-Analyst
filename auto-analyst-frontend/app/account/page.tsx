@@ -799,10 +799,10 @@ export default function AccountPage() {
                                 <span className="font-medium">Note:</span> Your subscription renews yearly, but credits reset monthly.
                               </div>
                             )}
-                            <div className="flex justify-between mb-2">
+                            {/* <div className="flex justify-between mb-2">
                               <span className="text-gray-600">Payment method:</span>
                               <span className="text-gray-900">Credit Card •••• 4242</span>
-                            </div>
+                            </div> */}
                           </div>
                         </div>
                         
