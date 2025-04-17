@@ -154,7 +154,7 @@ export async function POST(request: NextRequest) {
       let interval = 'month'
       
       // Updated price ranges to match actual pricing in pricing.tsx
-      if (amount === 5) {
+      if (amount === 0.75) {
         // Daily Standard plan ($5/day)
         planName = 'Standard Plan (Daily)'
         planType = 'STANDARD'
