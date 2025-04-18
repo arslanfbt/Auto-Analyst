@@ -178,7 +178,9 @@ export default function PricingPage() {
     }
     
     if (!session) {
-      router.push('/login?redirect=/pricing');
+      // Encode the entire checkout URL with plan parameters for proper redirection after login
+      const checkoutUrl = `/checkout?plan=${plan}&cycle=${cycle}`;
+      router.push(`/login?redirect=${encodeURIComponent(checkoutUrl)}`);
       return;
     }
     
@@ -333,15 +335,12 @@ export default function PricingPage() {
                       ? 'bg-[#FF7F7F] hover:bg-[#FF6666] text-white'
                       : 'bg-white text-gray-900 border border-gray-300 hover:bg-gray-50'
                   }`}
-                  disabled={!session && tier.name !== 'Free' && tier.name !== 'Enterprise'}
                 >
                   {tier.name === 'Free' 
                     ? 'Get Started' 
                     : tier.name === 'Enterprise'
                       ? 'Contact Sales'
-                      : session 
-                        ? 'Subscribe' 
-                        : 'Sign in to Subscribe'}
+                      : 'Subscribe'}
                 </button>
               </div>
             </motion.div>
