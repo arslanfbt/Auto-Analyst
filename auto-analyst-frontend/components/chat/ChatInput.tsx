@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef, forwardRef, useImperativeHandle } from "react"
 import { motion, AnimatePresence } from "framer-motion"
-import { Send, Paperclip, X, Square, Loader2, CheckCircle2, XCircle, Eye, CreditCard, Edit, FileText } from 'lucide-react'
+import { Send, Paperclip, X, Square, Loader2, CheckCircle2, XCircle, Eye, CreditCard, Edit, FileText, MessageSquare } from 'lucide-react'
 import AgentHint from './AgentHint'
 import { Button } from "../ui/button"
 import { Textarea } from "../ui/textarea"
@@ -24,6 +24,7 @@ import Link from 'next/link'
 import DatasetResetPopup from './DatasetResetPopup'
 import ReactMarkdown from 'react-markdown'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import FeedbackPopup from "./FeedbackPopup"
 
 // const PREVIEW_API_URL = 'http://localhost:8000';
 const PREVIEW_API_URL = API_URL;
@@ -89,6 +90,7 @@ const ChatInput = forwardRef<
   // Replace session flag with a set of chat IDs that have shown the popup
   const popupShownForChatIdsRef = useRef<Set<number>>(new Set());
   const [descriptionTab, setDescriptionTab] = useState<"edit" | "preview">("edit")
+  const [showFeedbackPopup, setShowFeedbackPopup] = useState(false)
 
   // Expose handlePreviewDefaultDataset to parent
   useImperativeHandle(ref, () => ({
@@ -1210,8 +1212,9 @@ const ChatInput = forwardRef<
                 </div>
               )}
 
-              {fileUpload && (
-                <div className="max-w-3xl mx-auto mb-2">
+              {/* Dataset info and button row */}
+              <div className="max-w-3xl mx-auto mb-2 flex flex-wrap items-center gap-2">
+                {fileUpload && (
                   <div 
                     className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs ${
                       fileUpload.status === 'error' ? 'bg-red-50 border border-red-200' : 'bg-blue-50 border border-blue-200'
@@ -1259,11 +1262,9 @@ const ChatInput = forwardRef<
                       </button>
                     )}
                   </div>
-                </div>
-              )}
+                )}
 
-              {!fileUpload && (
-                <div className="max-w-3xl mx-auto mb-2">
+                {!fileUpload && (
                   <button
                     onClick={handlePreviewDefaultDataset}
                     className="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-blue-600 bg-blue-50 border border-blue-200 rounded-md hover:bg-blue-100 transition-colors"
@@ -1271,8 +1272,16 @@ const ChatInput = forwardRef<
                     <Eye className="w-4 h-4" />
                     Preview Default Dataset
                   </button>
-                </div>
-              )}
+                )}
+                
+                <button
+                  onClick={() => setShowFeedbackPopup(true)}
+                  className="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-gray-600 bg-gray-50 border border-gray-200 rounded-md hover:bg-gray-100 transition-colors"
+                >
+                  <MessageSquare className="w-4 h-4" />
+                  Send Feedback
+                </button>
+              </div>
 
               {/* Credit exhaustion message with reset date */}
               {isChatBlocked && (
@@ -1585,6 +1594,12 @@ const ChatInput = forwardRef<
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Feedback Popup */}
+      <FeedbackPopup 
+        isOpen={showFeedbackPopup}
+        onClose={() => setShowFeedbackPopup(false)}
+      />
 
       {/* Dataset Reset Popup */}
       <DatasetResetPopup

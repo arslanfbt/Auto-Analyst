@@ -80,54 +80,8 @@ def format_code_backticked_block(code_str):
         flags=re.MULTILINE
     )
 
-    # 2. Remove top-level `data = ...` assignments
-    modified_code = re.sub(
-        r"^data\s*=\s*.+$",
-        '',
-        modified_code,
-        flags=re.MULTILINE
-    )
-
-    # 3. Remove top-level dictionary assignments like data = { ... }
-    modified_code = re.sub(
-        r"^data\s*=\s*\{.*?\}\s*(#.*)?$",
-        '',
-        modified_code,
-        flags=re.DOTALL | re.MULTILINE
-    )
-
-    # 4. Remove top-level list assignments like data = [ ... ]
-    modified_code = re.sub(
-        r"^data\s*=\s*\[.*?\]\s*(#.*)?$",
-        '',
-        modified_code,
-        flags=re.DOTALL | re.MULTILINE
-    )
-
-    # 5. Remove dict key-value pairs with list values like "Date": [...], anywhere in code
-    # Use with caution: this will break JSON/dict syntax if you're not post-processing
-    modified_code = re.sub(
-        r"[ \t]*[\'\"][^\'\"]+[\'\"]\s*:\s*\[.*?\],?",
-        '',
-        modified_code,
-        flags=re.DOTALL
-    )
-
-    # # 6. Remove full dict blocks that look like sample dataframes:
-    # #    {'Date': [...], 'Price': [...], ...}
-    modified_code = re.sub(
-        r"\{\s*(?:[\'\"][^\'\"]+[\'\"]\s*:\s*\[.*?\],?\s*)+\}",
-        '',
-        modified_code,
-        flags=re.DOTALL
-    )
-
     # # Remove sample dataframe lines with multiple array values
     modified_code = re.sub(r"^# Sample DataFrames?.*?(\n|$)", '', modified_code, flags=re.MULTILINE | re.IGNORECASE)
-    
-    
-    # # Remove empty lines that might have been created after cleaning
-    modified_code = re.sub(r"\n\s*\n+", "\n\n", modified_code)
     
     # # Remove plt.show() statements
     modified_code = re.sub(r"plt\.show\(\).*?(\n|$)", '', modified_code)
@@ -191,55 +145,11 @@ def execute_code_from_markdown(code_str, dataframe=None):
         flags=re.MULTILINE
     )
 
-    # 2. Remove top-level `data = ...` assignments
-    modified_code = re.sub(
-        r"^data\s*=\s*.+$",
-        '',
-        modified_code,
-        flags=re.MULTILINE
-    )
 
-    # 3. Remove top-level dictionary assignments like data = { ... }
-    modified_code = re.sub(
-        r"^data\s*=\s*\{.*?\}\s*(#.*)?$",
-        '',
-        modified_code,
-        flags=re.DOTALL | re.MULTILINE
-    )
-
-    # 4. Remove top-level list assignments like data = [ ... ]
-    modified_code = re.sub(
-        r"^data\s*=\s*\[.*?\]\s*(#.*)?$",
-        '',
-        modified_code,
-        flags=re.DOTALL | re.MULTILINE
-    )
-
-    # 5. Remove dict key-value pairs with list values like "Date": [...], anywhere in code
-    # Use with caution: this will break JSON/dict syntax if you're not post-processing
-    modified_code = re.sub(
-        r"[ \t]*[\'\"][^\'\"]+[\'\"]\s*:\s*\[.*?\],?",
-        '',
-        modified_code,
-        flags=re.DOTALL
-    )
-
-    # # 6. Remove full dict blocks that look like sample dataframes:
-    # #    {'Date': [...], 'Price': [...], ...}
-    modified_code = re.sub(
-        r"\{\s*(?:[\'\"][^\'\"]+[\'\"]\s*:\s*\[.*?\],?\s*)+\}",
-        '',
-        modified_code,
-        flags=re.DOTALL
-    )
 
     # # Remove sample dataframe lines with multiple array values
     modified_code = re.sub(r"^# Sample DataFrames?.*?(\n|$)", '', modified_code, flags=re.MULTILINE | re.IGNORECASE)
-    
-    
-    # # Remove empty lines that might have been created after cleaning
-    modified_code = re.sub(r"\n\s*\n+", "\n\n", modified_code)
-    
+        
     # # Remove plt.show() statements
     modified_code = re.sub(r"plt\.show\(\).*?(\n|$)", '', modified_code)
     
@@ -252,12 +162,6 @@ def execute_code_from_markdown(code_str, dataframe=None):
             modified_code
         )
 
-    # Remove the main block if it exists
-    # modified_code = remove_main_block(modified_code)
-    # with open("modified_code.txt", "a") as f:
-    #     f.write("----------------------------------------\n")
-    #     f.write(modified_code)
-    #     f.write("\n\n")
     try:
         with stdoutIO() as s:
             exec(modified_code, context)  # Execute the modified code
@@ -326,7 +230,8 @@ def format_response_to_markdown(api_response, agent_name = None, dataframe=None)
                 # remove code block from summary
                 markdown.append("### Summary\n")
                 for line in summary_lines:
-                    markdown.append(f"• {line.strip().replace('•', '').replace('-', '')}\n")
+                    if line != "":
+                        markdown.append(f"• {line.strip().replace('•', '').replace('-', '') if line.strip().startswith('•') or line.strip().startswith('-') else line.strip()}\n")
 
             if 'refined_complete_code' in content and 'summary' in content:
                 try:
