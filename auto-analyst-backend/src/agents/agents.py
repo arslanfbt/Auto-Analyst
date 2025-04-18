@@ -43,49 +43,40 @@ class goal_refiner_agent(dspy.Signature):
     refined_goal = dspy.OutputField(desc='Refined goal that helps the planner agent plan better')
 
 class preprocessing_agent(dspy.Signature):
-    # Doer Agent which performs pre-processing like cleaning data, make new columns etc
-    """ Given a user-defined analysis goal and a pre-loaded dataset df, 
-    I will generate Python code using NumPy and Pandas to build an exploratory analytics pipeline.
-    The goal is to simplify the preprocessing and introductory analysis of the dataset.
+    """You are a AI data-preprocessing agent. Generate clean and efficient Python code using NumPy and Pandas to perform introductory data preprocessing on a pre-loaded DataFrame df, based on the user's analysis goals.
 
-    IMPORTANT: You may be provided with previous interaction history. The section marked "### Current Query:" contains the user's current request. Any text in "### Previous Interaction History:" is for context only and is NOT part of the current request.
+    Preprocessing Requirements:
 
-    Task Requirements:
+    1. Identify Column Types
+    - Separate columns into numeric and categorical using:
+        categorical_columns = df.select_dtypes(include=[object, 'category']).columns.tolist()
+        numeric_columns = df.select_dtypes(include=[np.number]).columns.tolist()
 
-    Identify and separate numeric and categorical columns into two lists: numeric_columns and categorical_columns.
-    Handle null values in the dataset, applying the correct logic for numeric and categorical columns.
-    Convert string dates to datetime format.
-    Create a correlation matrix that only includes numeric columns.
-    Use the correct column names according to the dataset.
+    2. Handle Missing Values
+    - Numeric columns: Impute missing values using the mean of each column
+    - Categorical columns: Impute missing values using the mode of each column
 
-    The generated Python code should be concise, readable, and follow best practices for data preprocessing and introductory analysis. 
-    The code should be written using NumPy and Pandas libraries, and should not read the CSV file into the dataframe (it is already loaded as df).
-    When splitting numerical and categorical use this script:
+    3. Convert Date Strings to Datetime
+    - For any column suspected to represent dates (in string format), convert it to datetime using:
+        def safe_to_datetime(date):
+            try:
+                return pd.to_datetime(date, errors='coerce', cache=False)
+            except (ValueError, TypeError):
+                return pd.NaT
+        df['datetime_column'] = df['datetime_column'].apply(safe_to_datetime)
+    - Replace 'datetime_column' with the actual column names containing date-like strings
 
-    categorical_columns = df.select_dtypes(include=[object, 'category']).columns.tolist()
-    numeric_columns = df.select_dtypes(include=[np.number]).columns.tolist()
+    Important Notes:
+    - Do NOT create a correlation matrix — correlation analysis is outside the scope of preprocessing
+    - Do NOT generate any plots or visualizations
 
-    DONOT 
-
-    Use this to handle conversion to Datetime
-    def safe_to_datetime(date):
-        try:
-            return pd.to_datetime(date,errors='coerce', cache=False)
-        except (ValueError, TypeError):
-            return pd.NaT
-
-    df['datetime_column'] = df['datetime_column'].apply(safe_to_datetime)
-
-    If visualizing use plotly 
-
-    Provide a concise bullet-point summary of the preprocessing steps performed.
-    
-    Example Summary:
-    • Identified 5 numeric and 3 categorical columns
-    • Handled missing values by imputing means for numeric columns and mode for categorical columns
-    • Converted date strings to datetime format
-    • Created correlation matrix showing strong relationship between income and loan amount
-
+    Output Instructions:
+    1. Include the full preprocessing Python code
+    2. Provide a brief bullet-point summary of the steps performed. Example:
+    • Identified 5 numeric and 4 categorical columns
+    • Filled missing numeric values with column means
+    • Filled missing categorical values with column modes
+    • Converted 1 date column to datetime format
     """
     dataset = dspy.InputField(desc="Available datasets loaded in the system, use this df, column_names  set df as copy of df")
     goal = dspy.InputField(desc="The user defined goal could ")

@@ -1,7 +1,7 @@
 "use client"
 
-import { useState } from "react"
-import { useRouter } from "next/navigation"
+import { useState, useEffect } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
 import { signIn } from "next-auth/react"
 import { Button } from "@/components/ui/button"
 import { ArrowLeft } from "lucide-react"
@@ -9,20 +9,30 @@ import { ArrowLeft } from "lucide-react"
 export default function LoginPage() {
   const [adminPassword, setAdminPassword] = useState("")
   const [error, setError] = useState("")
+  const [redirectUrl, setRedirectUrl] = useState("/chat")
   const router = useRouter()
+  const searchParams = useSearchParams()
+
+  useEffect(() => {
+    // Get the redirect URL from the query parameters if it exists
+    const redirect = searchParams?.get('redirect')
+    if (redirect) {
+      setRedirectUrl(redirect)
+    }
+  }, [searchParams])
 
   const handleAdminSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (adminPassword === process.env.NEXT_PUBLIC_ADMIN_PASSWORD) {
       localStorage.setItem('isAdmin', 'true')
-      router.push("/chat")
+      router.push(redirectUrl)
     } else {
       setError("Invalid temporary code")
     }
   }
 
   const handleGoogleSignIn = () => {
-    signIn("google", { callbackUrl: "/chat" })
+    signIn("google", { callbackUrl: redirectUrl })
   }
 
   return (
