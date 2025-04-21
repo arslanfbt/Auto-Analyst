@@ -7,6 +7,17 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+AGENTS_WITH_DESCRIPTION = {
+    "preprocessing_agent": "Cleans and prepares a DataFrame using Pandas and NumPy—handles missing values, detects column types, and converts date strings to datetime.",
+    "statistical_analytics_agent": "Performs statistical analysis (e.g., regression, seasonal decomposition) using statsmodels, with proper handling of categorical data and missing values.",
+    "sk_learn_agent": "Trains and evaluates machine learning models using scikit-learn, including classification, regression, and clustering with feature importance insights.",
+    "data_viz_agent": "Generates interactive visualizations with Plotly, selecting the best chart type to reveal trends, comparisons, and insights based on the analysis goal."
+}
+
+def get_agent_description(agent_name):
+    return AGENTS_WITH_DESCRIPTION[agent_name.lower()] if agent_name.lower() in AGENTS_WITH_DESCRIPTION else "No description available for this agent"
+
+
 class analytical_planner(dspy.Signature):
     # The planner agent which routes the query to Agent(s)
     # The output is like this Agent1->Agent2 etc
@@ -221,7 +232,7 @@ class code_combiner_agent(dspy.Signature):
     IMPORTANT: You may be provided with previous interaction history. The section marked "### Current Query:" contains the user's current request. Any text in "### Previous Interaction History:" is for context only and is NOT part of the current request.
 
     Double check column_names/dtypes using dataset, also check if applied logic works for the datatype
-    df.copy = df.copy()
+    df = df.copy()
     Also add this to display Plotly chart
     fig.show()
 
@@ -306,24 +317,59 @@ class data_viz_agent(dspy.Signature):
     
 
 class code_fix(dspy.Signature):
-    # Called to fix unexecutable code
     """
-You are an AI specializing in fixing faulty data analytics code provided by another agent. Your task is to:  
+You are an expert AI developer and data analyst assistant, skilled at identifying and resolving issues in Python code related to data analytics. Another agent has attempted to generate Python code for a data analytics task but produced code that is broken or throws an error.
 
-1. Analyze the provided faulty code and the associated error message to understand the issue.  
-2. Fix **only** the faulty part of the code while keeping the rest unchanged.  
+Your task is to:
+1. Carefully examine the provided **faulty_code** and the corresponding **error** message.
+2. Identify the **exact cause** of the failure based on the error and surrounding context.
+3. Modify only the necessary portion(s) of the code to fix the issue.
+4. Ensure the **intended behavior** of the original code is preserved (e.g., if the code is meant to filter, group, or visualize data, that functionality must be preserved).
+5. Ensure the final output is **runnable**, **error-free**, and **logically consistent**.
 
-Additional requirements:  
-- Ensure the corrected code performs the intended analysis as described by the user.  
-- Output **only the corrected code** without any additional explanation or comments.  
-- Ensure the final code runs end-to-end without errors.  
+Strict instructions:
+- Do **not** modify any working parts of the code unnecessarily.
+- Do **not** change variable names, structure, or logic unless it directly contributes to resolving the issue.
+- Do **not** output anything besides the corrected, full version of the code (i.e., no explanations, comments, or logs).
+- Avoid introducing new dependencies or libraries unless absolutely required to fix the problem.
+- The output must be complete and executable as-is.
 
-Make your fixes precise and reliable.
+Be precise, minimal, and reliable. Prioritize functional correctness.
     """
-    faulty_code = dspy.InputField(desc="The faulty code that did not work")
-    error = dspy.InputField(desc="The error generated")
-    fixed_code= dspy.OutputField(desc="The fixed code")
+    faulty_code = dspy.InputField(desc="The faulty Python code used for data analytics")
+    prior_fixes = dspy.InputField(desc="If a fix for this code exists in our error retriever", default="use the error message")
+    error = dspy.InputField(desc="The error message thrown when running the code")
+    fixed_code = dspy.OutputField(desc="The corrected and executable version of the code")
 
+class code_edit(dspy.Signature):
+    """
+You are an expert AI code editor that specializes in modifying existing data analytics code based on user requests. The user provides a working or partially working code snippet and a natural language prompt describing the desired change.
+
+Your job is to:
+1. Analyze the provided original_code and the user_prompt.
+2. Modify only the part(s) of the code that are relevant to the user's request.
+3. Leave all unrelated parts of the code unchanged, unless the user explicitly requests a full rewrite or broader changes.
+4. Ensure that your changes maintain or improve the functionality and correctness of the code.
+
+Your edits may include:
+- Bug fixes or logic corrections (if requested)
+- Plot and visualization styling changes
+- Optimization or simplification
+- Code reformatting or restructuring (if asked for)
+- Adjusting data processing or analysis steps
+- Any other edits specifically described in the user prompt
+
+Strict requirements:
+- Do not change variable names, function structures, or logic outside the scope of the user's request.
+- Do not refactor, optimize, or rewrite unless explicitly instructed.
+- Ensure the edited code remains complete and executable.
+- Output only the modified code, without any additional explanation, comments, or extra formatting.
+
+Make your edits precise, minimal, and faithful to the user's instructions.
+    """
+    original_code = dspy.InputField(desc="The original code the user wants modified")
+    user_prompt = dspy.InputField(desc="The user instruction describing how the code should be changed")
+    edited_code = dspy.OutputField(desc="The updated version of the code reflecting the user's request")
 
 # The ind module is called when agent_name is 
 # explicitly mentioned in the query
@@ -341,7 +387,7 @@ class auto_analyst_ind(dspy.Module):
             name = a.__pydantic_core_schema__['schema']['model_name']
             self.agents[name] = dspy.ChainOfThoughtWithHint(a)
             self.agent_inputs[name] = {x.strip() for x in str(agents[i].__pydantic_core_schema__['cls']).split('->')[0].split('(')[1].split(',')}
-            self.agent_desc.append(str(a.__pydantic_core_schema__['cls']))
+            self.agent_desc.append(get_agent_description(name))
             
         # Initialize components
         self.memory_summarize_agent = dspy.ChainOfThought(m.memory_summarize_agent)
@@ -472,7 +518,7 @@ class auto_analyst(dspy.Module):
             name = a.__pydantic_core_schema__['schema']['model_name']
             self.agents[name] = dspy.ChainOfThought(a)
             self.agent_inputs[name] = {x.strip() for x in str(agents[i].__pydantic_core_schema__['cls']).split('->')[0].split('(')[1].split(',')}
-            self.agent_desc.append(str(a.__pydantic_core_schema__['cls']))
+            self.agent_desc.append({name: get_agent_description(name)})
         
         # Initialize coordination agents
         self.planner = dspy.ChainOfThought(analytical_planner)
@@ -530,7 +576,7 @@ class auto_analyst(dspy.Module):
         
         # yield "analytical_planner",  dict(plan)
 
-        # Yield results as they complete
+        # Yield results as they complete 
         completed_results = []
         for agent_name, inputs, future in futures:
             try:

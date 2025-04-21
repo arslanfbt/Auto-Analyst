@@ -4,7 +4,7 @@ import React, { useState, useEffect } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter"
 import { vscDarkPlus } from "react-syntax-highlighter/dist/esm/styles/prism"
-import { Code2, ChevronDown, ChevronUp, Copy, Check, Play, Edit2, Save, X } from "lucide-react"
+import { Code2, ChevronDown, ChevronUp, Copy, Check, Play, Edit2, Save, X, Wand2, Send } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import PlotlyChart from "@/components/chat/PlotlyChart"
@@ -12,6 +12,8 @@ import axios from "axios"
 import { useSessionStore } from '@/lib/store/sessionStore'
 import API_URL from '@/config/api'
 import MonacoEditor from '@monaco-editor/react'
+import { Textarea } from "@/components/ui/textarea"
+import { useToast } from "@/components/ui/use-toast"
 
 interface CodeBlockProps {
   language: string
@@ -21,6 +23,7 @@ interface CodeBlockProps {
 }
 
 const CodeBlock: React.FC<CodeBlockProps> = ({ language, value, onExecute, agentName }) => {
+  const { toast } = useToast()
   const { sessionId } = useSessionStore()
   const [isVisible, setIsVisible] = useState(language === "output")
   const [copied, setCopied] = useState(false)
@@ -29,6 +32,9 @@ const CodeBlock: React.FC<CodeBlockProps> = ({ language, value, onExecute, agent
   const [isExecuting, setIsExecuting] = useState(false)
   const [executionOutput, setExecutionOutput] = useState<string | null>(null)
   const [plotlyOutputs, setPlotlyOutputs] = useState<any[]>([])
+  const [showAIEditField, setShowAIEditField] = useState(false)
+  const [aiEditPrompt, setAIEditPrompt] = useState("")
+  const [isAIEditing, setIsAIEditing] = useState(false)
 
   useEffect(() => {
     if (language === "python" && agentName === "code_combiner_agent") {
@@ -39,10 +45,21 @@ const CodeBlock: React.FC<CodeBlockProps> = ({ language, value, onExecute, agent
   const copyToClipboard = async () => {
     try {
       await navigator.clipboard.writeText(editedCode)
+      toast({
+        title: "Copied to clipboard",
+        variant: "default",
+        duration: 2000, // 2 seconds
+      })
       setCopied(true)
       setTimeout(() => setCopied(false), 2000)
     } catch (err) {
       console.error("Failed to copy text: ", err)
+      toast({
+        title: "Copy failed",
+        description: "Could not copy to clipboard",
+        variant: "destructive",
+        duration: 3000, // 3 seconds
+      })
     }
   }
 
@@ -120,6 +137,58 @@ const CodeBlock: React.FC<CodeBlockProps> = ({ language, value, onExecute, agent
     setIsEditing(false)
   }
 
+  const handleAIEditRequest = async () => {
+    if (!aiEditPrompt.trim()) return
+    
+    setIsAIEditing(true)
+    try {
+      const BASE_URL = API_URL
+      const response = await axios.post(`${BASE_URL}/code/edit`, {
+        original_code: editedCode,
+        user_prompt: aiEditPrompt
+      }, {
+        headers: {
+          ...(sessionId && { 'X-Session-ID': sessionId }),
+        },
+      })
+
+      if (response.data && response.data.edited_code) {
+        setEditedCode(response.data.edited_code)
+        onExecute({ savedCode: response.data.edited_code }, () => {})
+        
+        // Show success message with auto-dismiss
+        toast({
+          title: "Code updated",
+          description: "AI successfully modified your code.",
+          variant: "default",
+          duration: 3000, // 3 seconds
+        })
+      }
+      
+      // Handle error message from backend
+      if (response.data && response.data.error) {
+        toast({
+          title: "Error modifying code",
+          description: response.data.error,
+          variant: "destructive",
+          duration: 5000, // 5 seconds
+        })
+      }
+    } catch (error) {
+      console.error("Error editing code with AI:", error)
+      toast({
+        title: "Error",
+        description: "Failed to modify code. Please try again.",
+        variant: "destructive",
+        duration: 5000, // 5 seconds
+      })
+    } finally {
+      setIsAIEditing(false)
+      setShowAIEditField(false)
+      setAIEditPrompt("")
+    }
+  }
+
   return (
     <div className="relative rounded-lg overflow-hidden my-4 bg-[#1E1E1E] hover:ring-1 hover:ring-gray-600">
       <div className="flex items-center justify-between px-4 py-2 border-b border-gray-700">
@@ -132,11 +201,28 @@ const CodeBlock: React.FC<CodeBlockProps> = ({ language, value, onExecute, agent
             {language === "python" && !isEditing && (
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Button variant="ghost" size="sm" onClick={handleEdit} className="text-gray-400 hover:bg-gray-400">
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    onClick={() => setShowAIEditField(!showAIEditField)} 
+                    className="text-[#FF7F7F] hover:bg-[#FF7F7F]/20"
+                  >
+                    <Wand2 className="w-4 h-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="bg-gray-900 text-white px-3 py-1 rounded shadow-lg">
+                  <p className="text-sm">edit with AI</p>
+                </TooltipContent>
+              </Tooltip>
+            )}
+            {language === "python" && !isEditing && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant="ghost" size="sm" onClick={handleEdit} className="text-gray-400 hover:bg-gray-600/30">
                     <Edit2 className="w-4 h-4" />
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent side="bottom" className="bg-gray-800 text-white px-3 py-1 rounded shadow-lg">
+                <TooltipContent side="bottom" className="bg-gray-900 text-white px-3 py-1 rounded shadow-lg">
                   <p className="text-sm">edit</p>
                 </TooltipContent>
               </Tooltip>
@@ -149,12 +235,12 @@ const CodeBlock: React.FC<CodeBlockProps> = ({ language, value, onExecute, agent
                     size="sm"
                     onClick={handleExecuteAndUpdate}
                     disabled={isExecuting}
-                    className="text-gray-400 hover:bg-gray-400"
+                    className="text-gray-400 hover:bg-gray-600/30"
                   >
                     <Play className="w-4 h-4" />
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent side="bottom" className="bg-gray-800 text-white px-3 py-1 rounded shadow-lg">
+                <TooltipContent side="bottom" className="bg-gray-900 text-white px-3 py-1 rounded shadow-lg">
                   <p className="text-sm">run</p>
                 </TooltipContent>
               </Tooltip>
@@ -167,12 +253,12 @@ const CodeBlock: React.FC<CodeBlockProps> = ({ language, value, onExecute, agent
                       variant="ghost"
                       size="sm"
                       onClick={handleSave}
-                      className="text-gray-400 hover:bg-gray-400"
+                      className="text-gray-400 hover:bg-gray-600/30"
                     >
                       <Save className="w-4 h-4" />
                     </Button>
                   </TooltipTrigger>
-                  <TooltipContent side="bottom" className="bg-gray-800 text-white px-3 py-1 rounded shadow-lg">
+                  <TooltipContent side="bottom" className="bg-gray-900 text-white px-3 py-1 rounded shadow-lg">
                     <p className="text-sm">save</p>
                   </TooltipContent>
                 </Tooltip>
@@ -182,12 +268,12 @@ const CodeBlock: React.FC<CodeBlockProps> = ({ language, value, onExecute, agent
                       variant="ghost"
                       size="sm"
                       onClick={handleCancel}
-                      className="text-gray-400 hover:bg-gray-400"
+                      className="text-gray-400 hover:bg-gray-600/30"
                     >
                       <X className="w-4 h-4" />
                     </Button>
                   </TooltipTrigger>
-                  <TooltipContent side="bottom" className="bg-gray-800 text-white px-3 py-1 rounded shadow-lg">
+                  <TooltipContent side="bottom" className="bg-gray-900 text-white px-3 py-1 rounded shadow-lg">
                     <p className="text-sm">cancel</p>
                   </TooltipContent>
                 </Tooltip>
@@ -200,12 +286,12 @@ const CodeBlock: React.FC<CodeBlockProps> = ({ language, value, onExecute, agent
                       variant="ghost"
                       size="sm"
                       onClick={() => setIsVisible(!isVisible)}
-                      className="text-gray-400 hover:bg-gray-200"
+                      className="text-gray-400 hover:bg-gray-600/30"
                     >
                       {isVisible ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                     </Button>
                   </TooltipTrigger>
-                  <TooltipContent side="bottom" className="bg-gray-800 text-white px-3 py-1 rounded shadow-lg hover:bg-gray-700">
+                  <TooltipContent side="bottom" className="bg-gray-900 text-white px-3 py-1 rounded shadow-lg hover:bg-gray-700">
                     <p className="text-sm">{isVisible ? "collapse" : "expand"}</p>
                   </TooltipContent>
                 </Tooltip>
@@ -214,6 +300,52 @@ const CodeBlock: React.FC<CodeBlockProps> = ({ language, value, onExecute, agent
           </TooltipProvider>
         </div>
       </div>
+      
+      {/* Inline AI Edit Input */}
+      {showAIEditField && (
+        <div className="flex flex-col px-4 py-2 bg-[#252525] border-b border-gray-700">
+          <Textarea
+            placeholder="Describe how to modify the code (e.g., Add error handling, optimize the loop, etc.)"
+            value={aiEditPrompt}
+            onChange={(e) => setAIEditPrompt(e.target.value)}
+            className="bg-[#303030] border-gray-700 text-white h-20 mb-2 resize-none"
+            disabled={isAIEditing}
+          />
+          <div className="flex justify-end space-x-2">
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              onClick={() => setShowAIEditField(false)}
+              className="border-gray-700 text-gray-400 hover:bg-gray-700/30 h-9"
+            >
+              <X className="w-4 h-4 mr-2" />
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              onClick={handleAIEditRequest}
+              disabled={isAIEditing || !aiEditPrompt.trim()}
+              className="bg-[#FF7F7F] text-white hover:bg-[#FF7F7F]/80 shadow-md h-9"
+            >
+              {isAIEditing ? (
+                <span className="flex items-center">
+                  <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  Processing...
+                </span>
+              ) : (
+                <>
+                  <Send className="w-4 h-4 mr-2"/>
+                  Apply
+                </>
+              )}
+            </Button>
+          </div>
+        </div>
+      )}
+      
       <AnimatePresence initial={false}>
         {isVisible && (
           <motion.div
@@ -231,12 +363,12 @@ const CodeBlock: React.FC<CodeBlockProps> = ({ language, value, onExecute, agent
                       variant="ghost"
                       size="sm"
                       onClick={copyToClipboard}
-                      className="absolute top-2 right-2 text-gray-400 hover:bg-gray-400 z-10"
+                      className="absolute top-2 right-2 text-gray-400 hover:bg-gray-600/30 z-10"
                     >
                       {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
                     </Button>
                   </TooltipTrigger>
-                  <TooltipContent side="bottom" className="bg-gray-800 text-white px-3 py-1 rounded shadow-lg">
+                  <TooltipContent side="bottom" className="bg-gray-900 text-white px-3 py-1 rounded shadow-lg">
                     <p className="text-sm">{copied ? "Copied!" : "copy"}</p>
                   </TooltipContent>
                 </Tooltip>
