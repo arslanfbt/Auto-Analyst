@@ -137,7 +137,7 @@ function dispatch(action: Action) {
 
 type Toast = Omit<ToasterToast, "id">
 
-function toast({ title, description, variant = "default" }: Toast) {
+function toast({ title, description, variant = "default", duration = 0, action }: Toast) {
   const id = genId()
 
   const update = (props: ToasterToast) =>
@@ -154,9 +154,18 @@ function toast({ title, description, variant = "default" }: Toast) {
       title: title || "Default Title",
       description: description || "Default Description",
       variant,
+      action,
       id,
+      duration,
     },
   })
+
+  // Auto-dismiss based on duration
+  if (duration > 0) {
+    setTimeout(() => {
+      dismiss()
+    }, duration)
+  }
 
   return {
     id,

@@ -391,12 +391,12 @@ async def create_dataset_description(
         with dspy.settings.context(lm=session_lm):
             # If there's an existing description, have the agent improve it
             if existing_description:
-                description = dspy.ChainOfThought(dataset_description_agent)(
+                description = dspy.Predict(dataset_description_agent)(
                     dataset=str(dataset_info),
                     existing_description=existing_description
                 )
             else:
-                description = dspy.ChainOfThought(dataset_description_agent)(
+                description = dspy.Predict(dataset_description_agent)(
                     dataset=str(dataset_info)
                 )
         
