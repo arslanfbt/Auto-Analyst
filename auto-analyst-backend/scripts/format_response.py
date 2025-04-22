@@ -231,7 +231,7 @@ def format_response_to_markdown(api_response, agent_name = None, dataframe=None)
                 markdown.append("### Summary\n")
                 for line in summary_lines:
                     if line != "":
-                        markdown.append(f"• {line.strip().replace('•', '').replace('-', '') if line.strip().startswith('•') or line.strip().startswith('-') else line.strip()}\n")
+                        markdown.append(f"• {line.strip().replace('•', '').replace('-', '').replace('*', '') if line.strip().startswith('•') or line.strip().startswith('-') or line.strip().startswith('*') else line.strip()}\n")
 
             if 'refined_complete_code' in content and 'summary' in content:
                 try:
@@ -245,7 +245,7 @@ def format_response_to_markdown(api_response, agent_name = None, dataframe=None)
                         output, json_outputs = execute_code_from_markdown(clean_code, dataframe)
                 except Exception as e:
                     logger.log_message(f"Error in execute_code_from_markdown: {str(e)}", level=logging.ERROR)
-                    markdown.append(f"**Error**: {str(e)}")
+                    markdown_code = f"**Error**: {str(e)}"
                     # continue
                 
                 markdown.append(f"### Refined Complete Code\n{markdown_code}\n")

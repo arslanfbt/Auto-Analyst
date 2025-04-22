@@ -40,8 +40,42 @@ class SessionManager:
         
         self._dataset_description = """This dataset contains residential property information with details about pricing, physical characteristics, and amenities. The data can be used for real estate market analysis, property valuation, and understanding the relationship between house features and prices.
 
-Key Fea
-te categorical encoding.
+Key Features:
+- Property prices range from 1.75M to 13.3M (currency units)
+- Living areas from 1,650 to 16,200 (square units)
+- Properties vary from 1-6 bedrooms and 1-4 bathrooms
+- Various amenities tracked including parking, air conditioning, and hot water heating
+
+TECHNICAL CONSIDERATIONS FOR ANALYSIS:
+
+Numeric Columns:
+- price (int): Large values suggesting currency units; range 1.75M-13.3M
+- area (int): Square units measurement; range 1,650-16,200
+- bedrooms (int): Discrete values 1-6
+- bathrooms (int): Discrete values 1-4
+- stories (int): Discrete values 1-4
+- parking (int): Discrete values 0-3
+
+Binary Categorical Columns (stored as str):
+- mainroad (str): 'yes'/'no' - Consider boolean conversion
+- guestroom (str): 'yes'/'no' - Consider boolean conversion
+- basement (str): 'yes'/'no' - Consider boolean conversion
+- hotwaterheating (str): 'yes'/'no' - Consider boolean conversion
+- airconditioning (str): 'yes'/'no' - Consider boolean conversion
+- prefarea (str): 'yes'/'no' - Consider boolean conversion
+
+Other Categorical:
+- furnishingstatus (str): Categories include 'furnished', 'semi-furnished' - Consider one-hot encoding
+
+Data Handling Recommendations:
+1. Binary variables should be converted to boolean or numeric (0/1) for analysis
+2. Consider normalizing price and area values for certain analyses
+3. Furnishing status will need categorical encoding for numerical analysis
+4. No null values detected in the dataset
+5. All numeric columns are properly typed as numbers (no string conversion needed)
+6. Consider treating bedrooms, bathrooms, stories, and parking as categorical despite numeric storage
+
+This dataset appears clean with consistent formatting and no missing values, making it suitable for immediate analysis with appropriate categorical encoding.
         """
         self.styling_instructions = styling_instructions
         self.available_agents = available_agents
@@ -98,7 +132,7 @@ te categorical encoding.
             default_model_config = {
                 "provider": os.getenv("MODEL_PROVIDER", "openai"),
                 "model": os.getenv("MODEL_NAME", "gpt-4o-mini"),
-            "api_key": os.getenv("OPENAI_API_KEY"),
+                "api_key": os.getenv("OPENAI_API_KEY"),
                 "temperature": float(os.getenv("TEMPERATURE", 1.0)),
                 "max_tokens": int(os.getenv("MAX_TOKENS", 6000))
             }

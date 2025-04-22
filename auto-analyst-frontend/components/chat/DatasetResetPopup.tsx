@@ -36,14 +36,14 @@ const DatasetResetPopup: React.FC<DatasetResetPopupProps> = ({
             <DialogTitle>Dataset Selection</DialogTitle>
           </div>
           <DialogDescription className="text-base font-normal space-y-4">
-            <p>
+            <div className="text-sm">
               You are currently using a custom dataset. Please note that the information shown may not be current. 
               This can happen if you refresh the page, change your session, or switch between different chats.
-            </p>
+            </div>
             <div className="bg-[#FFE5E5] p-3 rounded-md border border-[#FFCACA] flex gap-3">
               <Database className="h-5 w-5 text-[#FF7F7F] mt-0.5 flex-shrink-0" />
               <div>
-                <p className="text-sm font-medium text-gray-800">Please choose an option:</p>
+                <div className="text-sm font-medium text-gray-800">Please choose an option:</div>
                 <ul className="list-disc ml-5 mt-1 text-sm text-gray-700 space-y-1">
                   <li><strong>Keep current dataset</strong> - Continue using your uploaded data</li>
                   <li><strong>Use default dataset</strong> - Reset to the standard dataset</li>

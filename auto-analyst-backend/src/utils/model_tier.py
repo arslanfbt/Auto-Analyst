@@ -47,7 +47,8 @@ MODEL_TIERS = {
             "llama3-70b-8192",
             "llama-3.1-70b-versatile",
             "llama-3.1-405b-reasoning",
-            "llama3-groq-70b-8192-tool-use-preview"
+            "llama3-groq-70b-8192-tool-use-preview",
+            "gemini-2.5-pro-preview-03-25"
         ]
     }
 }

@@ -39,6 +39,9 @@ costs = {
         "llama3-groq-70b-8192-tool-use-preview": {"input": 0.00089, "output": 0.00089},
         "llama3-groq-8b-8192-tool-use-preview": {"input": 0.00019, "output": 0.00019},
         "qwen-2.5-coder-32b": {"input": 0.0015, "output": 0.003}
+    },
+    "gemini": {
+        "gemini-2.5-pro-preview-03-25": {"input": 0.00015, "output": 0.001}
     }
 }
         

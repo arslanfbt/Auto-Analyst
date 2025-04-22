@@ -493,12 +493,6 @@ class auto_analyst_ind(dspy.Module):
                 if 'code' in agent_dict:
                     code_list.append(agent_dict['code'])
             
-            # If we have code from multiple agents, combine them
-            # if len(code_list) > 1:
-            #     with dspy.settings.context(lm=dspy.LM(model="anthropic/claude-3-5-sonnet-latest", max_tokens=8000, temperature=1.0)):
-            #         combiner_result = self.code_combiner_agent(agent_code_list=str(code_list), dataset=dict_['dataset'])
-            #         results['code_combiner_agent'] = dict(combiner_result)
-            
             return results
             
         except Exception as e:
@@ -587,18 +581,23 @@ class auto_analyst(dspy.Module):
                 yield agent_name, inputs, {"error": str(e)}
         # Execute code combiner after all agents complete
         code_list = [result['code'] for _, result in completed_results if 'code' in result]
+        # max tokens is number of characters - number of words / 3
+        char_count = sum(len(code) for code in code_list)
+        word_count = sum(len(code.split()) for code in code_list)
+        max_tokens = int((char_count - word_count) / 3)
+        print(f"Max tokens: {max_tokens}")
         try:
-            with dspy.settings.context(lm=dspy.LM(model="anthropic/claude-3-7-sonnet-latest", max_tokens=12000, temperature=1.0)):
+            with dspy.context(lm=dspy.LM(model="gemini/gemini-2.5-pro-preview-03-25", api_key = os.environ['GEMINI_API_KEY'], max_tokens=max_tokens)):
                 combiner_result = self.code_combiner_agent(agent_code_list=str(code_list), dataset=dict_['dataset'])
-                yield 'code_combiner_agent__claude', str(code_list), dict(combiner_result)
+                yield 'code_combiner_agent__gemini', str(code_list), dict(combiner_result)
         except:
             try: 
-                with dspy.settings.context(lm=dspy.GROQ(model="qwen-2.5-coder-32b", max_tokens=12000, temperature=1.0, api_key=os.getenv("GROQ_API_KEY"))):
+                with dspy.context(lm=dspy.GROQ(model="qwen-2.5-coder-32b", max_tokens=max_tokens, temperature=1.0, api_key=os.getenv("GROQ_API_KEY"))):
                     combiner_result = self.code_combiner_agent(agent_code_list=str(code_list), dataset=dict_['dataset'])
                     yield 'code_combiner_agent__qwen', str(code_list), dict(combiner_result)
             except:
                 try: 
-                    with dspy.settings.context(lm=dspy.GROQ(model="deepseek-r1-distill-llama-70b", max_tokens=12000, temperature=1.0, api_key=os.getenv("GROQ_API_KEY"))):
+                    with dspy.context(lm=dspy.GROQ(model="deepseek-r1-distill-llama-70b", max_tokens=max_tokens, temperature=1.0, api_key=os.getenv("GROQ_API_KEY"))):
                         combiner_result = self.code_combiner_agent(agent_code_list=str(code_list), dataset=dict_['dataset'])
                         yield 'code_combiner_agent__deepseek', str(code_list), dict(combiner_result)
                 except Exception as e:

@@ -30,13 +30,8 @@ class CodeEditRequest(BaseModel):
     
 
 def edit_code_with_dspy(original_code: str, user_prompt: str):
-    lm = dspy.LM(
-        model="claude-3-5-sonnet-latest",
-        api_key=os.getenv("ANTHROPIC_API_KEY"),
-        temperature=0.5,
-        max_tokens=1000
-    )
-    with dspy.settings.context(lm=lm):
+    gemini = dspy.LM("gemini/gemini-2.5-pro-preview-03-25", api_key = os.environ['GEMINI_API_KEY'], max_tokens=2000)
+    with dspy.context(lm=gemini):
         code_editor = dspy.ChainOfThought(code_edit)
         result = code_editor(
             original_code=original_code,

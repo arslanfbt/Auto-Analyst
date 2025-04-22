@@ -53,6 +53,9 @@ costs = {
                 "llama3-groq-70b-8192-tool-use-preview": {"input": 0.00089, "output": 0.00089},
                 "llama3-groq-8b-8192-tool-use-preview": {"input": 0.00019, "output": 0.00019},
                 "qwen-2.5-coder-32b": {"input": 0.0015, "output": 0.003}
+            },
+            "gemini": {
+                "gemini-2.5-pro-preview-03-25": {"input": 0.00015, "output": 0.001}
             }
         }
         
@@ -118,7 +121,7 @@ class AI_Manager:
         
         # Default cost if model not found
         model_provider = self.get_provider_for_model(model_name)    
-        # logger.log_message(f"[> ] Model Name: {model_name}, Model Provider: {model_provider}")
+        logger.log_message(f"[> ] Model Name: {model_name}, Model Provider: {model_provider}")
         
         return input_tokens_in_thousands * costs[model_provider][model_name]["input"] + output_tokens_in_thousands * costs[model_provider][model_name]["output"]
 

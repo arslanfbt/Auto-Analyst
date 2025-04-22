@@ -91,6 +91,8 @@ async def update_model_settings(
                 settings.api_key = os.getenv("OPENAI_API_KEY")
             elif settings.provider.lower() == "anthropic":
                 settings.api_key = os.getenv("ANTHROPIC_API_KEY")
+            elif settings.provider.lower() == "gemini":
+                settings.api_key = os.getenv("GEMINI_API_KEY")
         
         # Get session state to update model config
         session_state = app_state.get_session_state(session_id)
@@ -115,8 +117,10 @@ async def update_model_settings(
 
         # Create the LM instance to test the configuration, but don't set it globally
         import dspy
+        logger.log_message(f"Model Config: {model_config}", level=logging.INFO)
         
         if settings.provider.lower() == "groq":
+            logger.log_message(f"Groq Model: {settings.model}", level=logging.INFO)
             lm = dspy.GROQ(
                 model=settings.model,
                 api_key=settings.api_key,
@@ -124,23 +128,35 @@ async def update_model_settings(
                 max_tokens=settings.max_tokens
             )
         elif settings.provider.lower() == "anthropic":
+            logger.log_message(f"Anthropic Model: {settings.model}", level=logging.INFO)
             lm = dspy.LM(
                 model=settings.model,
+                api_key=settings.api_key,
+                temperature=settings.temperature,
+                max_tokens=settings.max_tokens
+            )
+        elif settings.provider.lower() == "gemini":
+            logger.log_message(f"Gemini Model: {settings.model}, API Key: {settings.api_key}, Temperature: {settings.temperature}, Max Tokens: {settings.max_tokens}", level=logging.INFO)
+            lm = dspy.LM(
+                model=f"gemini/{settings.model}",
                 api_key=settings.api_key,
                 temperature=settings.temperature,
                 max_tokens=settings.max_tokens
             )
         else:  # OpenAI is the default
+            logger.log_message(f"OpenAI Model: {settings.model}", level=logging.INFO)
             lm = dspy.LM(
                 model=settings.model,
                 api_key=settings.api_key,
                 temperature=settings.temperature,
                 max_tokens=settings.max_tokens
             )
+        
 
         # Test the model configuration without setting it globally
         try:
-            lm("Hello, are you working?")
+            resp = lm("Hello, are you working?")
+            logger.log_message(f"Model Response: {resp}", level=logging.INFO)
             # REMOVED: dspy.configure(lm=lm) - no longer set globally
             return {"message": "Model settings updated successfully"}
         except Exception as model_error:
@@ -176,6 +192,7 @@ async def get_model_settings(
     
     # Get model config from session state, with default fallbacks if needed
     model_config = session_state.get("model_config", {})
+    logger.log_message(f"Get Model Settings Model Config: {model_config}", level=logging.INFO)
     
     # Use values from model_config with fallbacks to defaults
     return {
@@ -388,7 +405,7 @@ async def create_dataset_description(
         session_lm = get_session_lm(session_state)
         
         # Generate description using session model
-        with dspy.settings.context(lm=session_lm):
+        with dspy.context(lm=session_lm):
             # If there's an existing description, have the agent improve it
             if existing_description:
                 description = dspy.Predict(dataset_description_agent)(
@@ -428,7 +445,7 @@ async def get_session_info(
         # Check by name
         if current_name and current_name != default_name:
             is_custom = True
-        
+                    
         # Also check by checking if we have a dataframe that's different from default
         if "current_df" in session_state and session_state["current_df"] is not None:
             try:
@@ -451,6 +468,7 @@ async def get_session_info(
             "has_session": True,
             "session_keys": list(session_state.keys())  # For debugging
         }
+        
         
         return response_data
     except Exception as e:
