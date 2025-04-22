@@ -141,6 +141,13 @@ if DEFAULT_MODEL_CONFIG["provider"].lower() == "groq":
         temperature=DEFAULT_MODEL_CONFIG["temperature"],
         max_tokens=DEFAULT_MODEL_CONFIG["max_tokens"]
     )
+elif DEFAULT_MODEL_CONFIG["provider"].lower() == "gemini":
+    default_lm = dspy.LM(
+        model=f"gemini/{DEFAULT_MODEL_CONFIG['model']}",
+        api_key=DEFAULT_MODEL_CONFIG["api_key"],
+        temperature=DEFAULT_MODEL_CONFIG["temperature"],
+        max_tokens=DEFAULT_MODEL_CONFIG["max_tokens"]
+    )
 else:
     default_lm = dspy.LM(
         model=DEFAULT_MODEL_CONFIG["model"],
@@ -158,7 +165,7 @@ def get_session_lm(session_state):
         if model_config and isinstance(model_config, dict) and "model" in model_config:
             # Found valid session-specific model config, use it
             provider = model_config.get("provider", "openai").lower()
-            
+            logger.log_message(f"Model Config: {model_config}", level=logging.INFO)
             if provider == "groq":
                 return dspy.GROQ(
                     model=model_config.get("model", DEFAULT_MODEL_CONFIG["model"]),
@@ -169,6 +176,13 @@ def get_session_lm(session_state):
             elif provider == "anthropic":
                 return dspy.LM(
                     model=model_config.get("model", DEFAULT_MODEL_CONFIG["model"]),
+                    api_key=model_config.get("api_key", DEFAULT_MODEL_CONFIG["api_key"]),
+                    temperature=model_config.get("temperature", DEFAULT_MODEL_CONFIG["temperature"]),
+                    max_tokens=model_config.get("max_tokens", DEFAULT_MODEL_CONFIG["max_tokens"])
+                )
+            elif provider == "gemini":
+                return dspy.LM(
+                    model=f"gemini/{model_config.get('model', DEFAULT_MODEL_CONFIG['model'])}",
                     api_key=model_config.get("api_key", DEFAULT_MODEL_CONFIG["api_key"]),
                     temperature=model_config.get("temperature", DEFAULT_MODEL_CONFIG["temperature"]),
                     max_tokens=model_config.get("max_tokens", DEFAULT_MODEL_CONFIG["max_tokens"])
@@ -373,7 +387,7 @@ async def chat_with_agent(
         
         try:
             # Use session-specific model for this request
-            with dspy.settings.context(lm=session_lm):
+            with dspy.context(lm=session_lm):
                 response = agent(enhanced_query, agent_name)
         except Exception as agent_error:
             raise HTTPException(
@@ -500,7 +514,7 @@ async def chat_with_all(
                 enhanced_query = f"### Current Query:\n{request.query}\n\n{chat_context}"
             
             # Use the session model for this specific request
-            with dspy.settings.context(lm=session_lm):
+            with dspy.context(lm=session_lm):
                 loop = asyncio.get_event_loop()
                 plan_response = await loop.run_in_executor(
                     None,
@@ -569,7 +583,7 @@ async def chat_with_all(
                     elif model_name == "deepseek":
                         model_name = "deepseek-r1-distill-llama-70b"
                     else:
-                        model_name = "claude-3-7-sonnet-latest"
+                        model_name = "gemini-2.5-pro-preview-03-25"
                     provider = app.state.ai_manager.get_provider_for_model(model_name)
                     input_tokens = len(app.state.ai_manager.tokenizer.encode(str(inputs)))
                     completion_tokens = len(app.state.ai_manager.tokenizer.encode(str(response)))
@@ -671,11 +685,9 @@ async def chat_history_name(request: dict, session_id: str = Depends(get_session
     query = request.get("query")
     name = None
     
-    # Get session state to get model config
-    session_state = app.state.get_session_state(session_id)
-    session_lm = get_session_lm(session_state)
+    lm = dspy.LM(model="gpt-4o-mini", max_tokens=300, temperature=0.5)
     
-    with dspy.settings.context(lm=session_lm):
+    with dspy.context(lm=lm):
         name = app.state.get_chat_history_name_agent()(query=str(query))
         
     return {"name": name.name if name else "New Chat"}

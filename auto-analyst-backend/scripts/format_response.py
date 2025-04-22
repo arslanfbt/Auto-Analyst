@@ -231,7 +231,7 @@ def format_response_to_markdown(api_response, agent_name = None, dataframe=None)
                 markdown.append("### Summary\n")
                 for line in summary_lines:
                     if line != "":
-                        markdown.append(f"• {line.strip().replace('•', '').replace('-', '') if line.strip().startswith('•') or line.strip().startswith('-') else line.strip()}\n")
+                        markdown.append(f"• {line.strip().replace('•', '').replace('-', '').replace('*', '') if line.strip().startswith('•') or line.strip().startswith('-') or line.strip().startswith('*') else line.strip()}\n")
 
             if 'refined_complete_code' in content and 'summary' in content:
                 try:

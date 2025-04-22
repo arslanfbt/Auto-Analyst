@@ -61,6 +61,13 @@ const MODEL_PROVIDERS = [
       
     ],
     displayName: 'GROQ'
+  },
+  {
+    name: 'gemini',
+    models: [
+      { id: 'gemini-2.5-pro-preview-03-25', name: 'Gemini 2.5 Pro' },
+    ],
+    displayName: 'Google Gemini'
   }
 ];
 

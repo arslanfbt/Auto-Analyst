@@ -54,21 +54,15 @@ def make_data(df, desc):
     dict_ = {}
     dict_['df_name'] = "The data is loaded as df"
     dict_['Description'] = desc
-    dict_['dataframe_head_view'] = df.head(5).to_markdown()
-    dict_['all_column_names'] = str(list(df.columns))
+    dict_['dataframe_head_view'] = df.head(2).to_markdown()
+    dict_['all_column_names'] = str(list(df.columns[:20]))
 
     for c in df.columns:
-
         df[c] = correct_num(df,c)
-        
-
         try:
             dict_[c] = {'column_name':c,'type':str(type(df[c].iloc[0])), 'column_information':return_vals(df,c)}
         except:
-            dict_[c] = {'column_name':c,'type':str(type(df[c].iloc[0])), 'column_information':'NA'}
-
-    
-    
+            dict_[c] = {'column_name':c,'type':str(type(df[c].iloc[0])), 'column_information':'NA'}    
     return dict_
 
 
