@@ -584,7 +584,7 @@ class auto_analyst(dspy.Module):
         # max tokens is number of characters - number of words / 3
         char_count = sum(len(code) for code in code_list)
         word_count = sum(len(code.split()) for code in code_list)
-        max_tokens = (char_count - word_count) / 3
+        max_tokens = int((char_count - word_count) / 3)
         print(f"Max tokens: {max_tokens}")
         try:
             with dspy.context(lm=dspy.LM(model="gemini/gemini-2.5-pro-preview-03-25", api_key = os.environ['GEMINI_API_KEY'], max_tokens=max_tokens)):

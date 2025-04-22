@@ -245,7 +245,7 @@ def format_response_to_markdown(api_response, agent_name = None, dataframe=None)
                         output, json_outputs = execute_code_from_markdown(clean_code, dataframe)
                 except Exception as e:
                     logger.log_message(f"Error in execute_code_from_markdown: {str(e)}", level=logging.ERROR)
-                    markdown.append(f"**Error**: {str(e)}")
+                    markdown_code = f"**Error**: {str(e)}"
                     # continue
                 
                 markdown.append(f"### Refined Complete Code\n{markdown_code}\n")

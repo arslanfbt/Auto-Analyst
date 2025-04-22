@@ -445,7 +445,7 @@ async def get_session_info(
         # Check by name
         if current_name and current_name != default_name:
             is_custom = True
-        
+                    
         # Also check by checking if we have a dataframe that's different from default
         if "current_df" in session_state and session_state["current_df"] is not None:
             try:
@@ -468,6 +468,7 @@ async def get_session_info(
             "has_session": True,
             "session_keys": list(session_state.keys())  # For debugging
         }
+        
         
         return response_data
     except Exception as e:
