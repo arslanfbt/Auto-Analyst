@@ -241,18 +241,16 @@ class code_combiner_agent(dspy.Signature):
     Provide a concise bullet-point summary of the code integration performed.
     
     Example Summary:
-    • Integrated preprocessing, statistical analysis, and visualization code into single workflow
-    • Fixed variable scope issues between modules and standardized DataFrame handling
-    • Added error handling for missing columns
-    • Combined exploratory analysis with machine learning pipeline
-    • Optimized code by removing redundant data transformations
-    • Created an integrated dashboard with 3 visualizations showing data patterns and model predictions
+    • Integrated preprocessing, statistical analysis, and visualization code into a single workflow.
+    • Fixed variable scope issues, standardized DataFrame handling (e.g., using `df.copy()`), and corrected errors.
+    • Validated column names and data types against the dataset definition to prevent runtime issues.
+    • Ensured visualizations are displayed correctly (e.g., added `fig.show()`).
 
     """
     dataset = dspy.InputField(desc="Use this double check column_names, data types")
     agent_code_list =dspy.InputField(desc="A list of code given by each agent")
     refined_complete_code = dspy.OutputField(desc="Refined complete code base")
-    summary = dspy.OutputField(desc="A concise bullet-point summary of the code integration performed and improvements made")
+    summary = dspy.OutputField(desc="A concise 4 bullet-point summary of the code integration performed and improvements made")
     
     
 class data_viz_agent(dspy.Signature):
@@ -581,10 +579,10 @@ class auto_analyst(dspy.Module):
                 yield agent_name, inputs, {"error": str(e)}
         # Execute code combiner after all agents complete
         code_list = [result['code'] for _, result in completed_results if 'code' in result]
-        # max tokens is number of characters - number of words / 3
+        # max tokens is number of characters - number of words / 2
         char_count = sum(len(code) for code in code_list)
         word_count = sum(len(code.split()) for code in code_list)
-        max_tokens = int((char_count - word_count) / 3)
+        max_tokens = int((char_count - word_count) / 2)
         print(f"Max tokens: {max_tokens}")
         try:
             with dspy.context(lm=dspy.LM(model="gemini/gemini-2.5-pro-preview-03-25", api_key = os.environ['GEMINI_API_KEY'], max_tokens=max_tokens)):
