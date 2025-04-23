@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { X, CheckCircle, AlertCircle, Info, Settings } from 'lucide-react';
 import API_URL from '@/config/api'
 import { useSessionStore } from '@/lib/store/sessionStore'
-import { getModelCreditCost } from '@/lib/model-tiers'
+import { getModelCreditCost, MODEL_PROVIDERS_UI } from '@/lib/model-registry'
 import { useModelSettings, ModelSettings } from '@/lib/hooks/useModelSettings';
 
 interface SettingsPopupProps {
@@ -12,63 +12,8 @@ interface SettingsPopupProps {
   onSettingsUpdated?: (settings: ModelSettings) => void;
 }
 
-// Define model providers and their models
-const MODEL_PROVIDERS = [
-  {
-    name: 'openai',
-    models: [
-      { id: 'o1-mini', name: 'o1-mini' }, 
-      { id: 'o1', name: 'o1' }, 
-      { id: 'o3-mini', name: 'o3-mini' }, 
-      { id: 'gpt-4o', name: 'GPT-4o' }, 
-      { id: 'gpt-4o-mini', name: 'GPT-4o Mini' }, 
-      { id: 'gpt-4', name: 'GPT-4' }, 
-      { id: 'gpt-3.5-turbo', name: 'GPT-3.5 Turbo' }, 
-    ],
-    displayName: 'OpenAI'
-  },
-  {
-    name: 'anthropic',
-    models: [
-      { id: 'claude-3-opus-latest', name: 'Claude 3 Opus' }, 
-      { id: 'claude-3-5-sonnet-latest', name: 'Claude 3.5 Sonnet' }, 
-      { id: 'claude-3-haiku-latest', name: 'Claude 3 Haiku' }, 
-      { id: 'claude-3-7-sonnet-latest', name: 'Claude 3.7 Sonnet' }, 
-    ],
-    displayName: 'Anthropic'
-  },
-  {
-    name: 'groq',
-    models: [
-      { id: 'deepseek-r1-distill-qwen-32b', name: 'DeepSeek R1 Distill Qwen 32b' }, 
-      { id: 'deepseek-r1-distill-llama-70b', name: 'DeepSeek R1 Distill Llama 70b' }, 
-      { id: 'qwen-qwq-32b', name: 'Qwen QWQ 32b | Alibaba' },
-      { id: 'llama-3.3-70b-versatile', name: 'Llama 3.3 70b' }, 
-      { id: 'llama3-8b-8192', name: 'Llama 3 8b' }, 
-      { id: 'gemma2-9b-it', name: 'Gemma 2 9b' }, 
-      { id: 'qwen-2.5-32b', name: 'Qwen 2.5 32b' }, 
-      { id: 'mistral-saba-24b', name: 'Mistral Saba 24b' },
-      { id: 'llama-3.3-70b-specdec', name: 'Llama 3.3 70b SpecDec' },
-      { id: 'llama2-70b-4096', name: 'Llama 2 70b' },
-      { id: 'llama-3.2-1b-preview', name: 'Llama 3.2 1b' },
-      { id: 'llama-3.2-3b-preview', name: 'Llama 3.2 3b' },
-      { id: 'llama-3.2-11b-text-preview', name: 'Llama 3.2 11b Text' },
-      { id: 'llama-3.2-11b-vision-preview', name: 'Llama 3.2 11b Vision' },
-      { id: 'llama-3.2-90b-text-preview', name: 'Llama 3.2 90b Text' },
-      { id: 'llama3-groq-70b-8192-tool-use-preview', name: 'Llama 3.3 70b Tool Use' },
-      { id: 'llama3-groq-8b-8192-tool-use-preview', name: 'Llama 3.3 8b Tool Use' },
-      
-    ],
-    displayName: 'GROQ'
-  },
-  {
-    name: 'gemini',
-    models: [
-      { id: 'gemini-2.5-pro-preview-03-25', name: 'Gemini 2.5 Pro' },
-    ],
-    displayName: 'Google Gemini'
-  }
-];
+// Define model providers and their models - use the central registry
+const MODEL_PROVIDERS = MODEL_PROVIDERS_UI;
 
 const BASE_URL = API_URL;
 

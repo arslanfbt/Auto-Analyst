@@ -9,44 +9,9 @@ from src.routes.analytics_routes import handle_new_model_usage
 import asyncio
 
 from src.utils.logger import Logger
+from src.utils.model_registry import get_provider_for_model, calculate_cost
 
 logger = Logger(name="ai_manager", see_time=True, console_log=True)
-
-# Cost per 1K tokens for different models
-costs = {
-    "openai": {
-        "gpt-4": {"input": 0.03, "output": 0.06},  
-        "gpt-4o": {"input": 0.0025, "output": 0.01},  
-        "gpt-4.5-preview": {"input": 0.075, "output": 0.15},
-        "gpt-4o-mini": {"input": 0.00015, "output": 0.0006},  
-        "gpt-3.5-turbo": {"input": 0.0005, "output": 0.0015},  
-        "o1": {"input": 0.015, "output": 0.06},  
-        "o1-mini": {"input": 0.00011, "output": 0.00044},  
-        "o3-mini": {"input": 0.00011, "output": 0.00044}  
-    },
-    "anthropic": {
-        "claude-3-opus-latest": {"input": 0.015, "output": 0.075},  
-        "claude-3-7-sonnet-latest": {"input": 0.003, "output": 0.015},   
-        "claude-3-5-sonnet-latest": {"input": 0.003, "output": 0.015}, 
-        "claude-3-5-haiku-latest": {"input": 0.0008, "output": 0.0004},
-    },
-    "groq": {
-        "deepseek-r1-distill-llama-70b": {"input": 0.00075, "output": 0.00099},
-        "llama-3.3-70b-versatile": {"input": 0.00059, "output": 0.00079},
-        "llama3-8b-8192": {"input": 0.00005, "output": 0.00008},
-        "llama3-70b-8192": {"input": 0.00059, "output": 0.00079},
-        "llama-3.1-8b-instant": {"input": 0.00005, "output": 0.00008},
-        "mistral-saba-24b": {"input": 0.00079, "output": 0.00079},
-        "gemma2-9b-it": {"input": 0.0002, "output": 0.0002},
-        "qwen-qwq-32b": {"input": 0.00029, "output": 0.00039},
-        "meta-llama/llama-4-maverick-17b-128e-instruct": {"input": 0.0002, "output": 0.0006},
-        "meta-llama/llama-4-scout-17b-16e-instruct": {"input": 0.00011, "output": 0.00034},
-    },
-    "gemini": {
-        "gemini-2.5-pro-preview-03-25": {"input": 0.00015, "output": 0.001}
-    }
-}
-        
 
 class AI_Manager:
     """Manages AI model interactions and usage tracking"""
@@ -102,25 +67,18 @@ class AI_Manager:
         """Calculate the cost for using the model based on tokens"""
         if not model_name:
             return 0
-            
-        # Convert tokens to thousands
-        input_tokens_in_thousands = input_tokens / 1000
-        output_tokens_in_thousands = output_tokens / 1000
         
-        # Default cost if model not found
-        model_provider = self.get_provider_for_model(model_name)    
+        # Get provider for logging
+        model_provider = get_provider_for_model(model_name)    
         logger.log_message(f"[> ] Model Name: {model_name}, Model Provider: {model_provider}")
         
-        return input_tokens_in_thousands * costs[model_provider][model_name]["input"] + output_tokens_in_thousands * costs[model_provider][model_name]["output"]
+        # Use the centralized calculate_cost function
+        return calculate_cost(model_name, input_tokens, output_tokens)
 
     def get_provider_for_model(self, model_name):
         """Determine the provider based on model name"""
-        if not model_name:
-            return "Unknown"
-
-        model_name = model_name.lower()
-        return next((provider for provider, models in costs.items() 
-                     if any(model_name in model for model in models)), "Unknown")
+        # Use the centralized get_provider_for_model function
+        return get_provider_for_model(model_name)
 
 class SimpleTokenizer:
     """A very simple tokenizer implementation for fallback"""
