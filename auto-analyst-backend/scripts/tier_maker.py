@@ -17,28 +17,16 @@ costs = {
         "claude-3-5-haiku-latest": {"input": 0.0008, "output": 0.0004},
     },
     "groq": {
-        "deepseek-r1-distill-qwen-32b": {"input": 0.00075, "output": 0.00099},
         "deepseek-r1-distill-llama-70b": {"input": 0.00075, "output": 0.00099},
         "llama-3.3-70b-versatile": {"input": 0.00059, "output": 0.00079},
-        "llama-3.3-70b-specdec": {"input": 0.00059, "output": 0.00099},
-        "llama2-70b-4096": {"input": 0.0007, "output": 0.0008},
         "llama3-8b-8192": {"input": 0.00005, "output": 0.00008},
-        "llama-3.2-1b-preview": {"input": 0.00004, "output": 0.00004},
-        "llama-3.2-3b-preview": {"input": 0.00006, "output": 0.00006},
-        "llama-3.2-11b-text-preview": {"input": 0.00018, "output": 0.00018},
-        "llama-3.2-11b-vision-preview": {"input": 0.00018, "output": 0.00018},
-        "llama-3.2-90b-text-preview": {"input": 0.0009, "output": 0.0009},
-        "llama-3.2-90b-vision-preview": {"input": 0.0009, "output": 0.0009},
         "llama3-70b-8192": {"input": 0.00059, "output": 0.00079},
         "llama-3.1-8b-instant": {"input": 0.00005, "output": 0.00008},
-        "llama-3.1-70b-versatile": {"input": 0.00059, "output": 0.00079},
-        "llama-3.1-405b-reasoning": {"input": 0.00059, "output": 0.00079},
-        "mixtral-8x7b-32768": {"input": 0.00024, "output": 0.00024},
-        "gemma-7b-it": {"input": 0.00007, "output": 0.00007},
+        "mistral-saba-24b": {"input": 0.00079, "output": 0.00079},
         "gemma2-9b-it": {"input": 0.0002, "output": 0.0002},
-        "llama3-groq-70b-8192-tool-use-preview": {"input": 0.00089, "output": 0.00089},
-        "llama3-groq-8b-8192-tool-use-preview": {"input": 0.00019, "output": 0.00019},
-        "qwen-2.5-coder-32b": {"input": 0.0015, "output": 0.003}
+        "qwen-qwq-32b": {"input": 0.00029, "output": 0.00039},
+        "meta-llama/llama-4-maverick-17b-128e-instruct": {"input": 0.0002, "output": 0.0006},
+        "meta-llama/llama-4-scout-17b-16e-instruct": {"input": 0.00011, "output": 0.00034},
     },
     "gemini": {
         "gemini-2.5-pro-preview-03-25": {"input": 0.00015, "output": 0.001}
@@ -111,15 +99,9 @@ print(json.dumps(model_tiers, indent=4))
         "credits": 1,
         "models": [
             "llama3-8b-8192",
-            "llama-3.2-1b-preview",
-            "llama-3.2-3b-preview",
-            "llama-3.2-11b-text-preview",
-            "llama-3.2-11b-vision-preview",
             "llama-3.1-8b-instant",
-            "mixtral-8x7b-32768",
-            "gemma-7b-it",
             "gemma2-9b-it",
-            "llama3-groq-8b-8192-tool-use-preview"
+            "meta-llama/llama-4-scout-17b-16e-instruct"
         ]
     },
     "tier2": {
@@ -128,35 +110,31 @@ print(json.dumps(model_tiers, indent=4))
         "models": [
             "gpt-4o-mini",
             "o1-mini",
-            "o3-mini"
+            "o3-mini",
+            "qwen-qwq-32b",
+            "meta-llama/llama-4-maverick-17b-128e-instruct"
         ]
     },
     "tier3": {
         "name": "Premium",
         "credits": 5,
         "models": [
-            "gpt-3.5-turbo",
-            "gpt-4.5-preview",
             "gpt-4",
             "gpt-4o",
+            "gpt-4.5-preview",
+            "gpt-3.5-turbo",
             "o1",
             "claude-3-opus-latest",
             "claude-3-7-sonnet-latest",
             "claude-3-5-sonnet-latest",
-            "qwen-2.5-coder-32b",
             "claude-3-5-haiku-latest",
-            "deepseek-r1-distill-qwen-32b",
             "deepseek-r1-distill-llama-70b",
             "llama-3.3-70b-versatile",
-            "llama-3.3-70b-specdec",
-            "llama2-70b-4096",
-            "llama-3.2-90b-text-preview",
-            "llama-3.2-90b-vision-preview",
             "llama3-70b-8192",
-            "llama-3.1-70b-versatile",
-            "llama-3.1-405b-reasoning",
-            "llama3-groq-70b-8192-tool-use-preview"
+            "mistral-saba-24b",
+            "gemini-2.5-pro-preview-03-25"
         ]
     }
 }
+
 """

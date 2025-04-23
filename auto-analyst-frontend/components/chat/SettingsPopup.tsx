@@ -42,12 +42,12 @@ const MODEL_PROVIDERS = [
     models: [
       { id: 'deepseek-r1-distill-qwen-32b', name: 'DeepSeek R1 Distill Qwen 32b' }, 
       { id: 'deepseek-r1-distill-llama-70b', name: 'DeepSeek R1 Distill Llama 70b' }, 
-      { id: 'qwen-2.5-coder-32b', name: 'Qwen 2.5 Coder 32b' },
+      { id: 'qwen-qwq-32b', name: 'Qwen QWQ 32b | Alibaba' },
       { id: 'llama-3.3-70b-versatile', name: 'Llama 3.3 70b' }, 
       { id: 'llama3-8b-8192', name: 'Llama 3 8b' }, 
       { id: 'gemma2-9b-it', name: 'Gemma 2 9b' }, 
       { id: 'qwen-2.5-32b', name: 'Qwen 2.5 32b' }, 
-      { id: 'mixtral-8x7b-32768', name: 'Mixtral 8x7b' },
+      { id: 'mistral-saba-24b', name: 'Mistral Saba 24b' },
       { id: 'llama-3.3-70b-specdec', name: 'Llama 3.3 70b SpecDec' },
       { id: 'llama2-70b-4096', name: 'Llama 2 70b' },
       { id: 'llama-3.2-1b-preview', name: 'Llama 3.2 1b' },
@@ -55,7 +55,6 @@ const MODEL_PROVIDERS = [
       { id: 'llama-3.2-11b-text-preview', name: 'Llama 3.2 11b Text' },
       { id: 'llama-3.2-11b-vision-preview', name: 'Llama 3.2 11b Vision' },
       { id: 'llama-3.2-90b-text-preview', name: 'Llama 3.2 90b Text' },
-      { id: 'gemma-7b-it', name: 'Gemma 7b' },
       { id: 'llama3-groq-70b-8192-tool-use-preview', name: 'Llama 3.3 70b Tool Use' },
       { id: 'llama3-groq-8b-8192-tool-use-preview', name: 'Llama 3.3 8b Tool Use' },
       

@@ -579,7 +579,7 @@ async def chat_with_all(
                 if "refined_complete_code" in response:
                     model_name = agent_name.split("__")[1] if "__" in agent_name else agent_name
                     if model_name == "qwen":
-                        model_name = "qwen-2.5-coder-32br"
+                        model_name = "qwen-qwq-32b"
                     elif model_name == "deepseek":
                         model_name = "deepseek-r1-distill-llama-70b"
                     else:

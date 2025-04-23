@@ -590,7 +590,7 @@ class auto_analyst(dspy.Module):
                 yield 'code_combiner_agent__gemini', str(code_list), dict(combiner_result)
         except:
             try: 
-                with dspy.context(lm=dspy.GROQ(model="qwen-2.5-coder-32b", max_tokens=max_tokens, temperature=1.0, api_key=os.getenv("GROQ_API_KEY"))):
+                with dspy.context(lm=dspy.GROQ(model="qwen-qwq-32b", max_tokens=max_tokens, temperature=1.0, api_key=os.getenv("GROQ_API_KEY"))):
                     combiner_result = self.code_combiner_agent(agent_code_list=str(code_list), dataset=dict_['dataset'])
                     yield 'code_combiner_agent__qwen', str(code_list), dict(combiner_result)
             except:

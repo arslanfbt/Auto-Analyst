@@ -10,8 +10,7 @@ export const MODEL_TIERS = {
       "llama-3.2-11b-text-preview",
       "llama-3.2-11b-vision-preview",
       "llama-3.1-8b-instant",
-      "mixtral-8x7b-32768",
-      "gemma-7b-it",
+      "mistral-saba-24b",
       "gemma2-9b-it",
       "llama3-groq-8b-8192-tool-use-preview"
     ]
@@ -37,7 +36,7 @@ export const MODEL_TIERS = {
       "claude-3-opus-latest",
       "claude-3-7-sonnet-latest",
       "claude-3-5-sonnet-latest",
-      "qwen-2.5-coder-32b",
+      "qwen-qwq-32b",
       "claude-3-5-haiku-latest",
       "deepseek-r1-distill-qwen-32b",
       "deepseek-r1-distill-llama-70b",
