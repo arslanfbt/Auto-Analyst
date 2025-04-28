@@ -21,7 +21,7 @@ class ChatManager:
     Provides an interface between the application and the database for chat-related operations.
     """
     
-    def __init__(self, db_url: str = 'sqlite:///chat_database.db'):
+    def __init__(self, db_url):
         """
         Initialize the ChatManager with a database connection.
         

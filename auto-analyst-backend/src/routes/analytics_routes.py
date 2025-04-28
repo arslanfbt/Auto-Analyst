@@ -31,7 +31,7 @@ if os.getenv("ENVIRONMENT") == "production":
     logger.disable_logging()
 
 # Initialize chat manager
-chat_manager = ChatManager()
+chat_manager = ChatManager(db_url=os.getenv("DATABASE_URL"))
 
 # API Key security
 ADMIN_API_KEY = os.getenv("ADMIN_API_KEY", "default-admin-key-change-me")

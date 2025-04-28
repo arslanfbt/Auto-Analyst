@@ -12,6 +12,9 @@ from src.managers.user_manager import create_user, get_current_user
 from src.agents.agents import auto_analyst, auto_analyst_ind
 from src.agents.retrievers.retrievers import make_data
 from src.managers.chat_manager import ChatManager
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # Initialize logger
 logger = Logger("session_manager", see_time=False, console_log=False)
@@ -79,7 +82,7 @@ This dataset appears clean with consistent formatting and no missing values, mak
         """
         self.styling_instructions = styling_instructions
         self.available_agents = available_agents
-        self.chat_manager = ChatManager(db_url='sqlite:///chat_database.db')
+        self.chat_manager = ChatManager(db_url=os.getenv("DATABASE_URL"))
         
         self.initialize_default_dataset()
     

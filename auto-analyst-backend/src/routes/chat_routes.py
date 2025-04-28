@@ -10,6 +10,10 @@ from src.managers.chat_manager import ChatManager
 from src.managers.user_manager import get_current_user, User
 from src.schemas.chat_schemas import *
 from src.utils.logger import Logger
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # Initialize logger with console logging disabled
 logger = Logger("chat_routes", see_time=True, console_log=False)
@@ -18,7 +22,7 @@ logger = Logger("chat_routes", see_time=True, console_log=False)
 router = APIRouter(prefix="/chats", tags=["chats"])
 
 # Initialize chat manager
-chat_manager = ChatManager()
+chat_manager = ChatManager(db_url=os.getenv("DATABASE_URL"))
 
 # Initialize AI manager
 ai_manager = AI_Manager()
