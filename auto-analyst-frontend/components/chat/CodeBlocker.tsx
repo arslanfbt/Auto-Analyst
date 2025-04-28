@@ -190,8 +190,8 @@ const CodeBlock: React.FC<CodeBlockProps> = ({ language, value, onExecute, agent
   }
 
   return (
-    <div className="relative rounded-lg overflow-hidden my-4 bg-[#1E1E1E] hover:ring-1 hover:ring-gray-600">
-      <div className="flex items-center justify-between px-4 py-2 border-b border-gray-700">
+    <div className="relative rounded-lg overflow-hidden my-4 bg-[#1E1E1E] hover:ring-1 hover:ring-gray-600 w-full">
+      <div className="flex items-center justify-between px-4 py-2 border-b border-gray-700 w-full">
         <div className="flex items-center space-x-2">
           <Code2 className="w-4 h-4 text-gray-400" />
           <span className="text-sm font-medium text-gray-300">{language}</span>
@@ -353,7 +353,7 @@ const CodeBlock: React.FC<CodeBlockProps> = ({ language, value, onExecute, agent
             animate={{ height: "auto", opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
             transition={{ duration: 0.2 }}
-            className="relative"
+            className="relative w-full"
           >
             {!isEditing && (
               <TooltipProvider>
@@ -374,10 +374,10 @@ const CodeBlock: React.FC<CodeBlockProps> = ({ language, value, onExecute, agent
                 </Tooltip>
               </TooltipProvider>
             )}
-            <div>
+            <div className="w-full">
               {isEditing ? (
                 <MonacoEditor
-                  height="min(60vh, 600px)"
+                  height="400px"
                   language={language === "output" ? "plaintext" : language}
                   theme="vs-dark"
                   value={editedCode}
@@ -390,6 +390,7 @@ const CodeBlock: React.FC<CodeBlockProps> = ({ language, value, onExecute, agent
                     folding: false,
                     automaticLayout: true
                   }}
+                  className="min-h-[400px] w-full"
                 />
               ) : (
                 <SyntaxHighlighter
@@ -400,8 +401,12 @@ const CodeBlock: React.FC<CodeBlockProps> = ({ language, value, onExecute, agent
                     margin: 0,
                     padding: "1.25rem",
                     background: "#1E1E1E",
-                    minHeight: "min(60vh, 600px)"
+                    minHeight: "400px",
+                    maxHeight: "60vh",
+                    overflowY: "auto",
+                    width: "100%"
                   }}
+                  wrapLongLines={true}
                 >
                   {editedCode}
                 </SyntaxHighlighter>
@@ -409,13 +414,13 @@ const CodeBlock: React.FC<CodeBlockProps> = ({ language, value, onExecute, agent
 
               {/* Execution Output Section */}
               {(executionOutput || plotlyOutputs.length > 0) && (
-                <div className="border-t border-gray-700">
+                <div className="border-t border-gray-700 w-full">
                   <div className="px-4 py-2 text-sm font-medium text-gray-300">output</div>
                   {executionOutput && (
-                    <div className="px-5 py-4 text-gray-300 font-mono text-sm bg-[#1E1E1E] overflow-x-auto">{executionOutput}</div>
+                    <div className="px-5 py-4 text-gray-300 font-mono text-sm bg-[#1E1E1E] overflow-x-auto max-h-[400px] overflow-y-auto">{executionOutput}</div>
                   )}
                   {plotlyOutputs.map((plotlyOutput, index) => (
-                    <div key={index} className="px-5 py-4 bg-white overflow-x-auto">
+                    <div key={index} className="px-5 py-4 bg-white overflow-x-auto w-full">
                       <PlotlyChart data={plotlyOutput.data} layout={plotlyOutput.layout} />
                     </div>
                   ))}
@@ -425,6 +430,9 @@ const CodeBlock: React.FC<CodeBlockProps> = ({ language, value, onExecute, agent
           </motion.div>
         )}
       </AnimatePresence>
+      
+      {/* Empty div to maintain full width when collapsed */}
+      {!isVisible && <div className="w-full h-0 min-w-full"></div>}
     </div>
   )
 }

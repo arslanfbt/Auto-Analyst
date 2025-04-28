@@ -110,9 +110,9 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.3 }}
-                className="flex justify-start mb-8"
+                className="flex justify-start mb-8 w-full"
               >
-                <div className="relative max-w-[95%] rounded-2xl p-6 transition-shadow duration-200 hover:shadow-lg bg-white text-gray-900 shadow-md shadow-gray-200/50">
+                <div className="relative w-full rounded-2xl p-6 transition-shadow duration-200 hover:shadow-lg bg-white text-gray-900 shadow-md shadow-gray-200/50">
                   <div className="w-full my-4 overflow-x-auto">
                     <PlotlyChart data={plotlyData.data} layout={plotlyData.layout} />
                   </div>
@@ -143,10 +143,10 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.3 }}
-            className={`flex ${message.sender === "user" ? "justify-end" : "justify-start"} mb-8`}
+            className={`flex ${message.sender === "user" ? "justify-end" : "justify-start"} mb-8 ${message.sender !== "user" && part.includes("```") ? "w-full" : ""}`}
           >
             <div
-              className={`relative max-w-[95%] rounded-2xl p-6 transition-shadow duration-200 hover:shadow-lg ${
+              className={`relative ${message.sender === "user" || !part.includes("```") ? "max-w-[95%]" : "w-full"} rounded-2xl p-6 transition-shadow duration-200 hover:shadow-lg ${
                 message.sender === "user"
                   ? "bg-[#FF7F7F] text-white shadow-pink-200/50"
                   : "bg-white text-gray-900 shadow-md shadow-gray-200/50"

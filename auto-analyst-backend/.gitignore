@@ -17,3 +17,6 @@ logs/
 
 updated_code.py
 sample_code.py
+
+
+*.dump
