@@ -20,3 +20,9 @@ sample_code.py
 
 
 *.dump
+
+migrations/
+
+*.pyc
+alembic.ini
+

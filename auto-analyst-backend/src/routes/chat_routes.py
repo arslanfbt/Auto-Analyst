@@ -79,12 +79,14 @@ async def get_chats(
 
 @router.delete("/{chat_id}")
 async def delete_chat(chat_id: int, user_id: Optional[int] = None):
-    """Delete a chat and all its messages"""
+    """Delete a chat and all its messages while preserving model usage data"""
     try:
+        # Delete the chat using the updated chat_manager method
+        # which now preserves ModelUsage records
         success = chat_manager.delete_chat(chat_id, user_id)
         if not success:
             raise HTTPException(status_code=404, detail=f"Chat with ID {chat_id} not found or access denied")
-        return {"message": f"Chat {chat_id} deleted successfully"}
+        return {"message": f"Chat {chat_id} deleted successfully", "preserved_model_usage": True}
     except HTTPException:
         raise
     except Exception as e:
