@@ -248,7 +248,8 @@ def format_response_to_markdown(api_response, agent_name = None, dataframe=None)
                     markdown_code = f"**Error**: {str(e)}"
                     # continue
                 
-                markdown.append(f"### Refined Complete Code\n{markdown_code}\n")
+                if markdown_code is not None:
+                    markdown.append(f"### Refined Complete Code\n{markdown_code}\n")
                 
                 if output:
                     markdown.append("### Execution Output\n")

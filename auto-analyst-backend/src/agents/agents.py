@@ -321,7 +321,7 @@ You are an expert AI developer and data analyst assistant, skilled at identifyin
 Your task is to:
 1. Carefully examine the provided **faulty_code** and the corresponding **error** message.
 2. Identify the **exact cause** of the failure based on the error and surrounding context.
-3. Modify only the necessary portion(s) of the code to fix the issue.
+3. Modify only the necessary portion(s) of the code to fix the issue, utilizing the **dataset_context** to inform your corrections.
 4. Ensure the **intended behavior** of the original code is preserved (e.g., if the code is meant to filter, group, or visualize data, that functionality must be preserved).
 5. Ensure the final output is **runnable**, **error-free**, and **logically consistent**.
 
@@ -334,18 +334,18 @@ Strict instructions:
 
 Be precise, minimal, and reliable. Prioritize functional correctness.
     """
+    dataset_context = dspy.InputField(desc="The dataset context to be used for the code fix")
     faulty_code = dspy.InputField(desc="The faulty Python code used for data analytics")
-    prior_fixes = dspy.InputField(desc="If a fix for this code exists in our error retriever", default="use the error message")
+    # prior_fixes = dspy.InputField(desc="If a fix for this code exists in our error retriever", default="use the error message")
     error = dspy.InputField(desc="The error message thrown when running the code")
     fixed_code = dspy.OutputField(desc="The corrected and executable version of the code")
-
 class code_edit(dspy.Signature):
     """
-You are an expert AI code editor that specializes in modifying existing data analytics code based on user requests. The user provides a working or partially working code snippet and a natural language prompt describing the desired change.
+You are an expert AI code editor that specializes in modifying existing data analytics code based on user requests. The user provides a working or partially working code snippet, a natural language prompt describing the desired change, and dataset context information.
 
 Your job is to:
-1. Analyze the provided original_code and the user_prompt.
-2. Modify only the part(s) of the code that are relevant to the user's request.
+1. Analyze the provided original_code, user_prompt, and dataset_context.
+2. Modify only the part(s) of the code that are relevant to the user's request, using the dataset context to inform your edits.
 3. Leave all unrelated parts of the code unchanged, unless the user explicitly requests a full rewrite or broader changes.
 4. Ensure that your changes maintain or improve the functionality and correctness of the code.
 
@@ -363,11 +363,12 @@ Strict requirements:
 - Ensure the edited code remains complete and executable.
 - Output only the modified code, without any additional explanation, comments, or extra formatting.
 
-Make your edits precise, minimal, and faithful to the user's instructions.
+Make your edits precise, minimal, and faithful to the user's instructions, using the dataset context to guide your modifications.
     """
+    dataset_context = dspy.InputField(desc="The dataset context to be used for the code edit, including information about the dataset's shape, columns, types, and null values")
     original_code = dspy.InputField(desc="The original code the user wants modified")
     user_prompt = dspy.InputField(desc="The user instruction describing how the code should be changed")
-    edited_code = dspy.OutputField(desc="The updated version of the code reflecting the user's request")
+    edited_code = dspy.OutputField(desc="The updated version of the code reflecting the user's request, incorporating changes informed by the dataset context")
 
 # The ind module is called when agent_name is 
 # explicitly mentioned in the query
@@ -585,19 +586,19 @@ class auto_analyst(dspy.Module):
         max_tokens = int((char_count - word_count) / 2)
         print(f"Max tokens: {max_tokens}")
         try:
-            with dspy.context(lm=dspy.LM(model="gemini/gemini-2.5-pro-preview-03-25", api_key = os.environ['GEMINI_API_KEY'], max_tokens=max_tokens)):
+            with dspy.context(lm=dspy.LM(model="gemini/gemini-2.5-pro-preview-03-25", api_key = os.environ['GEMINI_API_KEY'], max_tokens=10000)):
                 combiner_result = self.code_combiner_agent(agent_code_list=str(code_list), dataset=dict_['dataset'])
                 yield 'code_combiner_agent__gemini', str(code_list), dict(combiner_result)
         except:
             try: 
-                with dspy.context(lm=dspy.GROQ(model="qwen-qwq-32b", max_tokens=max_tokens, temperature=1.0, api_key=os.getenv("GROQ_API_KEY"))):
+                with dspy.context(lm=dspy.LM(model="o3-mini", max_tokens=max_tokens, temperature=1.0, api_key=os.getenv("OPENAI_API_KEY"))):
                     combiner_result = self.code_combiner_agent(agent_code_list=str(code_list), dataset=dict_['dataset'])
-                    yield 'code_combiner_agent__qwen', str(code_list), dict(combiner_result)
+                    yield 'code_combiner_agent__openai', str(code_list), dict(combiner_result)
             except:
                 try: 
-                    with dspy.context(lm=dspy.GROQ(model="deepseek-r1-distill-llama-70b", max_tokens=max_tokens, temperature=1.0, api_key=os.getenv("GROQ_API_KEY"))):
+                    with dspy.context(lm=dspy.LM(model="claude-3-7-sonnet-latest", max_tokens=max_tokens, temperature=1.0, api_key=os.getenv("ANTHROPIC_API_KEY"))):
                         combiner_result = self.code_combiner_agent(agent_code_list=str(code_list), dataset=dict_['dataset'])
-                        yield 'code_combiner_agent__deepseek', str(code_list), dict(combiner_result)
+                        yield 'code_combiner_agent__anthropic', str(code_list), dict(combiner_result)
                 except Exception as e:
                     yield 'code_combiner_agent__none', str(code_list), {"error": "Error in code combiner: "+str(e)}
 

@@ -351,7 +351,7 @@ class ChatManager:
     
     def delete_chat(self, chat_id: int, user_id: Optional[int] = None) -> bool:
         """
-        Delete a chat and all its messages.
+        Delete a chat and all its messages while preserving model usage records.
         
         Args:
             chat_id: ID of the chat to delete
@@ -362,34 +362,37 @@ class ChatManager:
         """
         session = self.Session()
         try:
-            # Check if chat exists and belongs to the user if user_id is provided
-            if user_id is not None:
-                chat = session.query(Chat).filter(
-                    Chat.chat_id == chat_id,
-                    Chat.user_id == user_id
-                ).first()
-                if not chat:
-                    return False  # Chat not found or doesn't belong to the user
-            
-            # Delete all messages in the chat
-            session.query(Message).filter(Message.chat_id == chat_id).delete()
-            
-            # Delete the chat (with user_id filter if provided)
+            # Fetch chat with ownership check if user_id provided
             query = session.query(Chat).filter(Chat.chat_id == chat_id)
             if user_id is not None:
                 query = query.filter(Chat.user_id == user_id)
+
+            chat = query.first()
+            if not chat:
+                return False  # Chat not found or ownership mismatch
             
-            result = query.delete()
+            # ORM-based deletion with model_usage preservation
+            # The SET NULL in the foreign key should handle this, but we ensure it explicitly for both
+            # SQLite and PostgreSQL compatibility
+            
+            # For SQLite which might not respect ondelete="SET NULL" always:
+            # Update model_usage records to set chat_id to NULL
+            session.query(ModelUsage).filter(ModelUsage.chat_id == chat_id).update(
+                {"chat_id": None}, synchronize_session=False
+            )
+            
+            # Now delete the chat - relationships will handle cascading to messages
+            session.delete(chat)
             session.commit()
-            
-            return result > 0
+            return True
         except SQLAlchemyError as e:
             session.rollback()
             logger.log_message(f"Error deleting chat: {str(e)}", level=logging.ERROR)
             return False
         finally:
             session.close()
-    
+
+        
     def search_chats(self, query: str, user_id: Optional[int] = None, limit: int = 10) -> List[Dict[str, Any]]:
         """
         Search for chats containing the query string.
