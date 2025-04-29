@@ -4,10 +4,10 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from typing import Dict, Optional
 from pydantic import BaseModel
 
-from scripts.format_response import execute_code_from_markdown
+from scripts.format_response import execute_code_from_markdown, format_code_block
 from src.utils.logger import Logger
 from src.routes.session_routes import get_session_id_dependency
-from src.agents.agents import code_edit
+from src.agents.agents import code_edit, code_fix
 import dspy
 import os
 # Initialize router
@@ -28,6 +28,9 @@ class CodeEditRequest(BaseModel):
     original_code: str
     user_prompt: str
     
+class CodeFixRequest(BaseModel):
+    code: str
+    error: str
 
 def edit_code_with_dspy(original_code: str, user_prompt: str):
     gemini = dspy.LM("gemini/gemini-2.5-pro-preview-03-25", api_key = os.environ['GEMINI_API_KEY'], max_tokens=2000)
@@ -38,6 +41,16 @@ def edit_code_with_dspy(original_code: str, user_prompt: str):
             user_prompt=user_prompt
         )
         return result.edited_code
+
+def fix_code_with_dspy(code: str, error: str):
+    gemini = dspy.LM("gemini/gemini-2.5-pro-preview-03-25", api_key = os.environ['GEMINI_API_KEY'], max_tokens=2000)
+    with dspy.context(lm=gemini):
+        code_fixer = dspy.ChainOfThought(code_fix)
+        result = code_fixer(
+            faulty_code=code,
+            error=error
+        )
+        return result.fixed_code
 
 @router.post("/execute")
 async def execute_code(
@@ -115,9 +128,7 @@ async def edit_code(
         try:
             # Use the configured language model
             edited_code = edit_code_with_dspy(request_data.original_code, request_data.user_prompt)
-            
-            # # remove ```python from the beginning and end of the code
-            # edited_code = edited_code.replace("```python", "").replace("```", "")
+            edited_code = format_code_block(edited_code)
                 
             return {
                 "edited_code": edited_code,
@@ -133,4 +144,51 @@ async def edit_code(
             }
     except Exception as e:
         logger.log_message(f"Error editing code: {str(e)}", level=logging.ERROR)
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/fix")
+async def fix_code(
+    request_data: CodeFixRequest,
+    request: Request,
+    session_id: str = Depends(get_session_id_dependency)
+):
+    """
+    Fix code with errors using the code_fix agent
+    
+    Args:
+        request_data: Body containing code and error message
+        request: FastAPI Request object
+        session_id: Session identifier
+        
+    Returns:
+        Dictionary containing the fixed code
+    """
+    try:
+        # Check if code and error are provided
+        if not request_data.code or not request_data.error:
+            raise HTTPException(status_code=400, detail="Both code and error message are required")
+            
+        # Access app state via request
+        app_state = request.app.state
+        session_state = app_state.get_session_state(session_id)
+        
+        try:
+            # Use the code_fix agent to fix the code
+            fixed_code = fix_code_with_dspy(request_data.code, request_data.error)
+            fixed_code = format_code_block(fixed_code)
+                
+            return {
+                "fixed_code": fixed_code,
+            }
+        except Exception as e:
+            # Fallback if DSPy models are not initialized or there's an error
+            logger.log_message(f"Error with DSPy models: {str(e)}", level=logging.ERROR)
+            
+            # Return a helpful error message that doesn't expose implementation details
+            return {
+                "fixed_code": request_data.code,
+                "error": "Could not process fix request. Please try again later."
+            }
+    except Exception as e:
+        logger.log_message(f"Error fixing code: {str(e)}", level=logging.ERROR)
         raise HTTPException(status_code=500, detail=str(e))

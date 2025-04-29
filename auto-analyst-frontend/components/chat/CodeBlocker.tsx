@@ -4,7 +4,7 @@ import React, { useState, useEffect } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter"
 import { vscDarkPlus } from "react-syntax-highlighter/dist/esm/styles/prism"
-import { Code2, ChevronDown, ChevronUp, Copy, Check, Play, Edit2, Save, X, Wand2, Send } from "lucide-react"
+import { Code2, ChevronDown, ChevronUp, Copy, Check, Play, Edit2, Save, X, Wand2, Send, WrenchIcon, AlertTriangleIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import PlotlyChart from "@/components/chat/PlotlyChart"
@@ -35,6 +35,8 @@ const CodeBlock: React.FC<CodeBlockProps> = ({ language, value, onExecute, agent
   const [showAIEditField, setShowAIEditField] = useState(false)
   const [aiEditPrompt, setAIEditPrompt] = useState("")
   const [isAIEditing, setIsAIEditing] = useState(false)
+  const [hasError, setHasError] = useState(false)
+  const [isFixingCode, setIsFixingCode] = useState(false)
 
   useEffect(() => {
     if (language === "python" && agentName === "code_combiner_agent") {
@@ -68,6 +70,8 @@ const CodeBlock: React.FC<CodeBlockProps> = ({ language, value, onExecute, agent
 
     setIsExecuting(true)
     setPlotlyOutputs([])
+    setHasError(false)
+    setExecutionOutput(null)
 
     try {
       const BASE_URL = API_URL
@@ -83,10 +87,20 @@ const CodeBlock: React.FC<CodeBlockProps> = ({ language, value, onExecute, agent
       // Handle different types of responses
       if (response.data.error) {
         setExecutionOutput(response.data.error)
+        setHasError(true)
       } else {
         // Set text output if available
         if (response.data.output) {
           setExecutionOutput(response.data.output)
+          // Check if the output contains error indicators
+          const errorPatterns = [
+            "error", "exception", "traceback", "invalid", "failed", "syntax error", 
+            "name error", "type error", "value error", "index error"
+          ]
+          const hasErrorInOutput = errorPatterns.some(pattern => 
+            response.data.output.toLowerCase().includes(pattern.toLowerCase())
+          )
+          setHasError(hasErrorInOutput)
         }
 
         // Handle Plotly data if available
@@ -111,6 +125,7 @@ const CodeBlock: React.FC<CodeBlockProps> = ({ language, value, onExecute, agent
     } catch (error) {
       console.error("Error executing code:", error)
       setExecutionOutput(error instanceof Error ? error.message : "Failed to execute code")
+      setHasError(true)
       onExecute(
         {
           error: error instanceof Error ? error.message : "Failed to execute code",
@@ -129,6 +144,10 @@ const CodeBlock: React.FC<CodeBlockProps> = ({ language, value, onExecute, agent
 
   const handleSave = () => {
     setIsEditing(false)
+    // Clear previous execution outputs
+    setExecutionOutput(null)
+    setPlotlyOutputs([])
+    setHasError(false)
     onExecute({ savedCode: editedCode }, () => {})
   }
 
@@ -154,6 +173,10 @@ const CodeBlock: React.FC<CodeBlockProps> = ({ language, value, onExecute, agent
 
       if (response.data && response.data.edited_code) {
         setEditedCode(response.data.edited_code)
+        // Clear previous execution outputs
+        setExecutionOutput(null)
+        setPlotlyOutputs([])
+        setHasError(false)
         onExecute({ savedCode: response.data.edited_code }, () => {})
         
         // Show success message with auto-dismiss
@@ -186,6 +209,60 @@ const CodeBlock: React.FC<CodeBlockProps> = ({ language, value, onExecute, agent
       setIsAIEditing(false)
       setShowAIEditField(false)
       setAIEditPrompt("")
+    }
+  }
+
+  const handleFixCode = async () => {
+    if (!executionOutput || !hasError) return
+    
+    setIsFixingCode(true)
+    try {
+      const BASE_URL = API_URL
+      const response = await axios.post(`${BASE_URL}/code/fix`, {
+        code: editedCode,
+        error: executionOutput
+      }, {
+        headers: {
+          ...(sessionId && { 'X-Session-ID': sessionId }),
+        },
+      })
+
+      if (response.data && response.data.fixed_code) {
+        setEditedCode(response.data.fixed_code)
+        // Clear previous execution outputs
+        setExecutionOutput(null)
+        setPlotlyOutputs([])
+        setHasError(false)
+        onExecute({ savedCode: response.data.fixed_code }, () => {})
+        
+        // Show success message
+        toast({
+          title: "Code fixed",
+          description: "AI has attempted to fix your code. You may want to run it to see if the fix works.",
+          variant: "default",
+          duration: 3000, // 3 seconds
+        })
+      }
+      
+      // Handle error message from backend
+      else if (response.data && response.data.error) {
+        toast({
+          title: "Error fixing code",
+          description: response.data.error,
+          variant: "destructive",
+          duration: 5000, // 5 seconds
+        })
+      }
+    } catch (error) {
+      console.error("Error fixing code with AI:", error)
+      toast({
+        title: "Error",
+        description: "Failed to fix code. Please try again.",
+        variant: "destructive",
+        duration: 5000, // 5 seconds
+      })
+    } finally {
+      setIsFixingCode(false)
     }
   }
 
@@ -415,7 +492,37 @@ const CodeBlock: React.FC<CodeBlockProps> = ({ language, value, onExecute, agent
               {/* Execution Output Section */}
               {(executionOutput || plotlyOutputs.length > 0) && (
                 <div className="border-t border-gray-700 w-full">
-                  <div className="px-4 py-2 text-sm font-medium text-gray-300">output</div>
+                  <div className="flex items-center justify-between px-4 py-2">
+                    <div className="text-sm font-medium text-gray-300">output</div>
+                    {hasError && language === "python" && (
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={handleFixCode}
+                              disabled={isFixingCode}
+                              className="text-[#FF7F7F] hover:bg-[#FF7F7F]/6 hover:color-white hover:text-white"
+                            >
+                              {isFixingCode ? (
+                                <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                </svg>
+                              ) : (
+                                <WrenchIcon className="w-4 h-4 mr-1" />
+                              )}
+                              {isFixingCode ? " Fixing..." : "Fix Code"}
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent side="bottom" className="bg-gray-900 text-white px-3 py-1 rounded shadow-lg">
+                            <p className="text-sm">Auto-fix code error</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    )}
+                  </div>
                   {executionOutput && (
                     <div className="px-5 py-4 text-gray-300 font-mono text-sm bg-[#1E1E1E] overflow-x-auto max-h-[400px] overflow-y-auto">{executionOutput}</div>
                   )}

@@ -335,7 +335,7 @@ Strict instructions:
 Be precise, minimal, and reliable. Prioritize functional correctness.
     """
     faulty_code = dspy.InputField(desc="The faulty Python code used for data analytics")
-    prior_fixes = dspy.InputField(desc="If a fix for this code exists in our error retriever", default="use the error message")
+    # prior_fixes = dspy.InputField(desc="If a fix for this code exists in our error retriever", default="use the error message")
     error = dspy.InputField(desc="The error message thrown when running the code")
     fixed_code = dspy.OutputField(desc="The corrected and executable version of the code")
 
