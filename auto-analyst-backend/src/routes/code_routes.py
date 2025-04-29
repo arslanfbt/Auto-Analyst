@@ -69,7 +69,6 @@ def get_dataset_context(df):
                 sample_values = [round(v, 1) for v in sample_values]
             sample_str = ", ".join(str(v) for v in sample_values)
             context += f"  * {col}: {sample_str}\n"
-        logger.log_message(f"Dataset context: {context}", level=logging.INFO)
         return context
     except Exception as e:
         logger.log_message(f"Error generating dataset context: {str(e)}", level=logging.ERROR)
@@ -79,6 +78,10 @@ def edit_code_with_dspy(original_code: str, user_prompt: str, dataset_context: s
     gemini = dspy.LM("gemini/gemini-2.5-pro-preview-03-25", api_key = os.environ['GEMINI_API_KEY'], max_tokens=2000)
     with dspy.context(lm=gemini):
         code_editor = dspy.ChainOfThought(code_edit)
+        
+        logger.log_message(f"Dataset context: {dataset_context}", level=logging.INFO)
+        logger.log_message(f"Original code: {original_code}", level=logging.INFO)
+        logger.log_message(f"User prompt: {user_prompt}", level=logging.INFO)
         
         result = code_editor(
             dataset_context=dataset_context,
@@ -91,7 +94,9 @@ def fix_code_with_dspy(code: str, error: str, dataset_context: str = ""):
     gemini = dspy.LM("gemini/gemini-2.5-pro-preview-03-25", api_key = os.environ['GEMINI_API_KEY'], max_tokens=2000)
     with dspy.context(lm=gemini):
         code_fixer = dspy.ChainOfThought(code_fix)
-        
+        logger.log_message(f"FIX Dataset context: {dataset_context}", level=logging.INFO)
+        logger.log_message(f"FIX Original code: {code}", level=logging.INFO)
+        logger.log_message(f"FIX Error: {error}", level=logging.INFO)
         # Add dataset context information to help the agent understand the data
         result = code_fixer(
             dataset_context=dataset_context,
