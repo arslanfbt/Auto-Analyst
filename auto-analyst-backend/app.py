@@ -578,10 +578,10 @@ async def chat_with_all(
                 # Track the code combiner agent response
                 if "refined_complete_code" in response:
                     model_name = agent_name.split("__")[1] if "__" in agent_name else agent_name
-                    if model_name == "qwen":
-                        model_name = "qwen-qwq-32b"
-                    elif model_name == "deepseek":
-                        model_name = "deepseek-r1-distill-llama-70b"
+                    if model_name == "openai":
+                        model_name = "o3-mini"
+                    elif model_name == "anthropic":
+                        model_name = "claude-3-7-sonnet-latest"
                     else:
                         model_name = "gemini-2.5-pro-preview-03-25"
                     provider = app.state.ai_manager.get_provider_for_model(model_name)

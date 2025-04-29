@@ -32,23 +32,71 @@ class CodeFixRequest(BaseModel):
     code: str
     error: str
 
-def edit_code_with_dspy(original_code: str, user_prompt: str):
+def get_dataset_context(df):
+    """
+    Generate context information about the dataset
+    
+    Args:
+        df: The pandas dataframe
+         
+    Returns:
+        String with dataset information (columns, types, null values)
+    """
+    if df is None:
+        return "No dataset is currently loaded."
+    
+    try:
+        # Get basic dataframe info
+        col_types = df.dtypes.to_dict()
+        null_counts = df.isnull().sum().to_dict()
+        
+        # Format the context string
+        context = "Dataset context:\n"
+        context += f"- Shape: {df.shape[0]} rows, {df.shape[1]} columns\n"
+        context += "- Columns and types:\n"
+        
+        for col, dtype in col_types.items():
+            null_count = null_counts.get(col, 0)
+            null_percent = (null_count / len(df)) * 100 if len(df) > 0 else 0
+            context += f"  * {col} ({dtype}): {null_count} null values"
+        
+        # Add sample values for each column (first 2 non-null values)
+        context += "- Sample values:\n"
+        for col in df.columns:
+            sample_values = df[col].dropna().head(2).tolist()
+            # if float, round to 2 decimal places
+            if df[col].dtype == "float64":
+                sample_values = [round(v, 1) for v in sample_values]
+            sample_str = ", ".join(str(v) for v in sample_values)
+            context += f"  * {col}: {sample_str}\n"
+        logger.log_message(f"Dataset context: {context}", level=logging.INFO)
+        return context
+    except Exception as e:
+        logger.log_message(f"Error generating dataset context: {str(e)}", level=logging.ERROR)
+        return "Could not generate dataset context information."
+
+def edit_code_with_dspy(original_code: str, user_prompt: str, dataset_context: str = ""):
     gemini = dspy.LM("gemini/gemini-2.5-pro-preview-03-25", api_key = os.environ['GEMINI_API_KEY'], max_tokens=2000)
     with dspy.context(lm=gemini):
         code_editor = dspy.ChainOfThought(code_edit)
+        
         result = code_editor(
+            dataset_context=dataset_context,
             original_code=original_code,
-            user_prompt=user_prompt
+            user_prompt=user_prompt,
         )
         return result.edited_code
 
-def fix_code_with_dspy(code: str, error: str):
+def fix_code_with_dspy(code: str, error: str, dataset_context: str = ""):
     gemini = dspy.LM("gemini/gemini-2.5-pro-preview-03-25", api_key = os.environ['GEMINI_API_KEY'], max_tokens=2000)
     with dspy.context(lm=gemini):
         code_fixer = dspy.ChainOfThought(code_fix)
+        
+        # Add dataset context information to help the agent understand the data
         result = code_fixer(
+            dataset_context=dataset_context,
             faulty_code=code,
-            error=error
+            error=error,
         )
         return result.fixed_code
 
@@ -125,9 +173,16 @@ async def edit_code(
         app_state = request.app.state
         session_state = app_state.get_session_state(session_id)
         
+        # Get dataset context
+        dataset_context = get_dataset_context(session_state["current_df"])
+        
         try:
-            # Use the configured language model
-            edited_code = edit_code_with_dspy(request_data.original_code, request_data.user_prompt)
+            # Use the configured language model with dataset context
+            edited_code = edit_code_with_dspy(
+                request_data.original_code, 
+                request_data.user_prompt,
+                dataset_context
+            )
             edited_code = format_code_block(edited_code)
                 
             return {
@@ -172,9 +227,16 @@ async def fix_code(
         app_state = request.app.state
         session_state = app_state.get_session_state(session_id)
         
+        # Get dataset context
+        dataset_context = get_dataset_context(session_state["current_df"])
+        
         try:
-            # Use the code_fix agent to fix the code
-            fixed_code = fix_code_with_dspy(request_data.code, request_data.error)
+            # Use the code_fix agent to fix the code, with dataset context
+            fixed_code = fix_code_with_dspy(
+                request_data.code, 
+                request_data.error,
+                dataset_context
+            )
             fixed_code = format_code_block(fixed_code)
                 
             return {
