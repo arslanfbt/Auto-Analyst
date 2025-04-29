@@ -117,7 +117,6 @@ async def update_model_settings(
 
         # Create the LM instance to test the configuration, but don't set it globally
         import dspy
-        logger.log_message(f"Model Config: {model_config}", level=logging.INFO)
         
         if settings.provider.lower() == "groq":
             logger.log_message(f"Groq Model: {settings.model}", level=logging.INFO)
@@ -192,7 +191,6 @@ async def get_model_settings(
     
     # Get model config from session state, with default fallbacks if needed
     model_config = session_state.get("model_config", {})
-    logger.log_message(f"Get Model Settings Model Config: {model_config}", level=logging.INFO)
     
     # Use values from model_config with fallbacks to defaults
     return {

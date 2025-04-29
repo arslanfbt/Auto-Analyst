@@ -1016,6 +1016,12 @@ const ChatInterface: React.FC = () => {
       localStorage.setItem('suppressDatasetPopup', 'true');
       setTimeout(() => localStorage.removeItem('suppressDatasetPopup'), 5000);
       
+      // Show loading indicator
+      setIsLoading(true);
+      
+      // Clear any existing dataset state before upload to avoid mixing states
+      setHasUploadedDataset(false);
+      
       const baseUrl = API_URL
      
       const uploadResponse = await axios.post(`${baseUrl}/upload_dataframe`, formData, {
@@ -1026,6 +1032,14 @@ const ChatInterface: React.FC = () => {
         timeout: 30000,
         maxContentLength: 30 * 1024 * 1024,
       });
+      
+      // Store file information in localStorage for persistence
+      const fileInfo = {
+        name: file.name,
+        type: file.type,
+        lastModified: file.lastModified
+      };
+      localStorage.setItem('lastUploadedFile', JSON.stringify(fileInfo));
       
       // Update dataset state
       setRecentlyUploadedDataset(true);
@@ -1040,17 +1054,41 @@ const ChatInterface: React.FC = () => {
       popupShownForChatIdsRef.current.add(Date.now());
       datasetPopupShownRef.current = true;
       
-      // Refresh session info to avoid race conditions
+      // Ensure session state is consistently updated by waiting for backend processing
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      // Perform multiple checks to ensure backend state is updated
       try {
-        await axios.get(`${baseUrl}/api/session-info`, {
+        // First refresh attempt
+        const sessionCheckResponse = await axios.get(`${baseUrl}/api/session-info`, {
           headers: { 'X-Session-ID': sessionId }
         });
-        await new Promise(resolve => setTimeout(resolve, 100));
+        
+        // If session isn't yet showing custom dataset, wait and try again
+        if (!sessionCheckResponse.data.is_custom_dataset) {
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          
+          // Second refresh attempt
+          await axios.get(`${baseUrl}/api/session-info`, {
+            headers: { 'X-Session-ID': sessionId }
+          });
+        }
       } catch (error) {
         console.error("Error refreshing session info:", error);
       }
+      
+      // Add confirmation message
+      addMessage({
+        text: `File "${file.name}" uploaded successfully! You can now ask questions about this dataset.`,
+        sender: "ai"
+      });
 
     } catch (error) {
+      // Reset dataset state on error
+      setRecentlyUploadedDataset(false);
+      setHasUploadedDataset(false);
+      localStorage.removeItem('lastUploadedFile');
+      
       let errorMessage = "An error occurred while uploading the file.";
       
       if (axios.isAxiosError(error)) {
@@ -1067,6 +1105,8 @@ const ChatInterface: React.FC = () => {
       });
       
       throw error;
+    } finally {
+      setIsLoading(false);
     }
   }
 
@@ -1110,25 +1150,11 @@ const ChatInterface: React.FC = () => {
     }
   }, [isSettingsOpen]);
 
-  // Session info check for dataset state
+  // Update useEffect to better handle dataset state restoration
   useEffect(() => {
     if (sessionId) {
       const checkSessionDataset = async () => {
         try {
-          // Check for uploaded dataset in localStorage
-          const lastUploadedFile = localStorage.getItem('lastUploadedFile');
-          if (lastUploadedFile) {
-            setHasUploadedDataset(true);
-            datasetPopupShownRef.current = true;
-            
-            if (activeChatId) {
-              popupShownForChatIdsRef.current.add(activeChatId);
-            }
-            
-            localStorage.setItem('suppressDatasetPopup', 'true');
-            return;
-          }
-          
           // Skip check if we just uploaded a dataset
           if (recentlyUploadedDataset) {
             datasetPopupShownRef.current = true;
@@ -1142,22 +1168,38 @@ const ChatInterface: React.FC = () => {
             return;
           }
           
-          // Check session info for custom dataset
+          // Check for uploaded dataset in localStorage
+          const lastUploadedFile = localStorage.getItem('lastUploadedFile');
+          
+          // Double-check with the backend to confirm dataset state
           const response = await axios.get(`${API_URL}/api/session-info`, {
             headers: { 'X-Session-ID': sessionId }
           });
           
-          // Handle custom dataset detection
+          // Handle potential mismatches between localStorage and backend
           if (response.data && response.data.is_custom_dataset) {
+            // Backend has custom dataset
             setHasUploadedDataset(true);
+            
+            // If localStorage doesn't have file info but backend does, update localStorage
+            if (!lastUploadedFile && response.data.dataset_name) {
+              const fileInfo = {
+                name: response.data.dataset_name.endsWith('.csv') 
+                  ? response.data.dataset_name 
+                  : `${response.data.dataset_name}.csv`,
+                type: 'text/csv',
+                lastModified: new Date().getTime()
+              };
+              
+              localStorage.setItem('lastUploadedFile', JSON.stringify(fileInfo));
+            }
             
             // Show dataset popup if needed
             const currentChatId = activeChatId || Date.now();
             const shouldShowPopup = !datasetPopupShownRef.current && 
                 !popupShownForChatIdsRef.current.has(currentChatId) && 
                 !recentlyUploadedDataset &&
-                !localStorage.getItem('suppressDatasetPopup') &&
-                !localStorage.getItem('lastUploadedFile');
+                !localStorage.getItem('suppressDatasetPopup');
             
             if (shouldShowPopup) {
               datasetPopupShownRef.current = true;
@@ -1170,8 +1212,15 @@ const ChatInterface: React.FC = () => {
               setShowDatasetResetConfirm(true);
             }
           } else {
-            // Using default dataset
-            if (!recentlyUploadedDataset && !localStorage.getItem('lastUploadedFile')) {
+            // Backend shows default dataset
+            
+            // If localStorage thinks we have a custom dataset but backend doesn't, fix the mismatch
+            if (lastUploadedFile) {
+              localStorage.removeItem('lastUploadedFile');
+            }
+            
+            // Only update the UI state if we're not in the middle of dataset upload
+            if (!recentlyUploadedDataset) {
               setHasUploadedDataset(false);
             }
           }
@@ -1180,34 +1229,42 @@ const ChatInterface: React.FC = () => {
         }
       };
       
-      // Slight delay to ensure it runs after initial render
-      setTimeout(() => {
-        checkSessionDataset();
-      }, 100);
+      // Run check immediately without delay
+      checkSessionDataset();
     }
-  }, [sessionId, activeChatId, recentlyUploadedDataset, syncSettingsToBackend]);
+  }, [sessionId, activeChatId, recentlyUploadedDataset]);
   
   // Fix the dataset reset confirmation handler
   const handleDatasetResetConfirm = async (shouldReset: boolean) => {
     try {
       if (shouldReset) {
         // Reset to default dataset
+        setIsLoading(true);
+        
         await axios.post(`${API_URL}/reset-session`, 
           { preserveModelSettings: true },
           { headers: { 'X-Session-ID': sessionId } }
         );
         
+        // Ensure backend state is updated
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
+        // Clear local storage
+        localStorage.removeItem('lastUploadedFile');
+        
+        // Update local state
         setHasUploadedDataset(false);
         
         // Show default dataset preview
         if (chatInputRef.current) {
           chatInputRef.current.handlePreviewDefaultDataset();
-          localStorage.removeItem('lastUploadedFile');
-          
-          setTimeout(() => {
-            setHasUploadedDataset(false);
-          }, 100);
         }
+        
+        // Add confirmation message
+        addMessage({
+          text: "Dataset reset to default. You're now using the sample dataset.",
+          sender: "ai"
+        });
       } else {
         // Keep custom dataset
         try {
@@ -1218,7 +1275,8 @@ const ChatInterface: React.FC = () => {
           if (sessionResponse.data && sessionResponse.data.is_custom_dataset) {
             setHasUploadedDataset(true);
             
-            if (chatInputRef.current && sessionResponse.data.dataset_name) {
+            // Ensure localStorage matches backend
+            if (sessionResponse.data.dataset_name && !localStorage.getItem('lastUploadedFile')) {
               const datasetName = sessionResponse.data.dataset_name;
               
               const fileInfo = {
@@ -1228,11 +1286,6 @@ const ChatInterface: React.FC = () => {
               };
               
               localStorage.setItem('lastUploadedFile', JSON.stringify(fileInfo));
-              
-              setTimeout(() => {
-                setHasUploadedDataset(prev => !prev);
-                setTimeout(() => setHasUploadedDataset(true), 10);
-              }, 10);
             }
           }
         } catch (error) {
@@ -1258,6 +1311,8 @@ const ChatInterface: React.FC = () => {
       if (tempChatIdForReset) {
         popupShownForChatIdsRef.current.add(tempChatIdForReset);
       }
+    } finally {
+      setIsLoading(false);
     }
   };
 

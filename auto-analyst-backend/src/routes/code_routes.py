@@ -115,6 +115,9 @@ async def edit_code(
         try:
             # Use the configured language model
             edited_code = edit_code_with_dspy(request_data.original_code, request_data.user_prompt)
+            
+            # # remove ```python from the beginning and end of the code
+            # edited_code = edited_code.replace("```python", "").replace("```", "")
                 
             return {
                 "edited_code": edited_code,
