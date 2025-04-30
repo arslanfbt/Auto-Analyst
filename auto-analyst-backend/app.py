@@ -220,21 +220,11 @@ if not os.path.exists(housing_csv_path):
     logger.log_message(f"Housing.csv not found at {os.path.abspath(housing_csv_path)}", level=logging.ERROR)
     raise FileNotFoundError(f"Housing.csv not found at {os.path.abspath(housing_csv_path)}")
 
-
-# Available agents (for auto-analyst-ind)
 AVAILABLE_AGENTS = {
     "data_viz_agent": data_viz_agent,
     "sk_learn_agent": sk_learn_agent,
     "statistical_analytics_agent": statistical_analytics_agent,
     "preprocessing_agent": preprocessing_agent,
-}
-
-# Available agents (for auto-analyst)
-PLANNER_AGENTS = {
-    "planner_data_viz_agent": planner_data_viz_agent,
-    "planner_preprocessing_agent": planner_preprocessing_agent,
-    "planner_sk_learn_agent": planner_sk_learn_agent,
-    "planner_statistical_analytics_agent": planner_statistical_analytics_agent,
 }
 
 # Add session header
@@ -243,7 +233,7 @@ X_SESSION_ID = APIKeyHeader(name="X-Session-ID", auto_error=False)
 # Update AppState class to use SessionManager
 class AppState:
     def __init__(self):
-        self._session_manager = SessionManager(styling_instructions, PLANNER_AGENTS)
+        self._session_manager = SessionManager(styling_instructions, AVAILABLE_AGENTS)
         self.model_config = DEFAULT_MODEL_CONFIG.copy()
         # Update the SessionManager with the current model_config
         self._session_manager._app_model_config = self.model_config
@@ -303,6 +293,16 @@ app.add_middleware(
     expose_headers=["Content-Type", "Content-Length"]
 )
 
+# DSPy Configuration
+import dspy
+
+# Available agents
+AVAILABLE_AGENTS = {
+    "data_viz_agent": data_viz_agent,
+    "sk_learn_agent": sk_learn_agent,
+    "statistical_analytics_agent": statistical_analytics_agent,
+    "preprocessing_agent": preprocessing_agent,
+}
 
 
 @app.post("/chat/{agent_name}", response_model=dict)
@@ -472,7 +472,7 @@ async def chat_with_all(
     session_id: str = Depends(get_session_id_dependency)
 ):
     session_state = app.state.get_session_state(session_id)
-    # logger.log_message(f"Session state: {session_state}", level=logging.INFO)
+
     # Update session state with user_id and chat_id from request if provided
     for param in ["user_id", "chat_id"]:
         if param in request_obj.query_params:
@@ -492,7 +492,7 @@ async def chat_with_all(
 
     # Get session-specific model
     session_lm = get_session_lm(session_state)
-    # logger.log_message(f"Using language model: {session_lm.model}", level=logging.INFO)
+    logger.log_message(f"Using language model: {session_lm.model}", level=logging.INFO)
 
     async def generate_responses():
         overall_start_time = time.time()
@@ -515,7 +515,7 @@ async def chat_with_all(
             if chat_context:
                 enhanced_query = f"### Current Query:\n{request.query}\n\n{chat_context}"
             
-            # logger.log_message(f"Processing query: {enhanced_query[:100]}...", level=logging.INFO)
+            logger.log_message(f"Processing query: {enhanced_query[:100]}...", level=logging.INFO)
             
             try:
                 # Use the session model for this specific request
@@ -526,7 +526,7 @@ async def chat_with_all(
                 
                 # The response should now be a dictionary, not a generator
                 if not isinstance(all_responses, dict):
-                    # logger.log_message(f"Response type: {type(all_responses)}", level=logging.INFO)
+                    logger.log_message(f"Response type: {type(all_responses)}", level=logging.INFO)
                     # If it's not a dictionary, try to convert it
                     if hasattr(all_responses, 'toDict'):
                         all_responses = all_responses.toDict()
@@ -534,10 +534,10 @@ async def chat_with_all(
                         all_responses = all_responses.to_dict()
                     else:
                         # If we can't convert it, log an error
-                        # logger.log_message(f"Unexpected response type, cannot convert: {type(all_responses)}", level=logging.ERROR)
+                        logger.log_message(f"Unexpected response type, cannot convert: {type(all_responses)}", level=logging.ERROR)
                         raise ValueError(f"Unexpected response type: {type(all_responses)}")
                 
-                # logger.log_message(f"All Responses keys: {list(all_responses.keys()) if isinstance(all_responses, dict) else 'not a dict'}", level=logging.INFO)
+                logger.log_message(f"All Responses keys: {list(all_responses.keys()) if isinstance(all_responses, dict) else 'not a dict'}", level=logging.INFO)
                 
                 # First yield planner response
                 if isinstance(all_responses, dict) and 'analytical_planner' in all_responses:
@@ -546,7 +546,7 @@ async def chat_with_all(
                         {"analytical_planner": plan_response}, 
                         dataframe=session_state["current_df"]
                     )
-                    # logger.log_message(f"Plan Description: {plan_description}", level=logging.INFO)
+                    logger.log_message(f"Plan Description: {plan_description}", level=logging.INFO)
                     
                     if plan_description == "Please provide a valid query...":
                         yield json.dumps({
@@ -572,66 +572,34 @@ async def chat_with_all(
                 # Then yield all agent responses
                 agent_count = 0
                 for agent_name, response in all_responses.items():
-                    # logger.log_message(f"Processing agent: {agent_name}, response type: {type(response)}", level=logging.INFO)
+                    logger.log_message(f"Processing agent: {agent_name}, response type: {type(response)}", level=logging.INFO)
                     
                     if agent_name == 'analytical_planner':
-                        # logger.log_message("Skipping analytical_planner as already handled", level=logging.INFO)
+                        logger.log_message("Skipping analytical_planner as already handled", level=logging.INFO)
                         continue  # Already handled
                     
                     agent_count += 1
                     
                     # For code combiner, store the response for token calculation
                     if agent_name == 'code_combiner_agent':
-                        # logger.log_message(f"Found code_combiner_agent response", level=logging.INFO)
+                        logger.log_message(f"Found code_combiner_agent response", level=logging.INFO)
                         total_response += str(response)
                         
                         # Special handling for code_combiner_agent
                         if isinstance(response, dict) and 'combiner_results' in response:
-                            # logger.log_message(f"Extracting combiner_results for formatting", level=logging.INFO)
+                            logger.log_message(f"Extracting combiner_results for formatting", level=logging.INFO)
                             
                             # Extract the actual results from the nested structure
                             combiner_results = response['combiner_results']
                             if isinstance(combiner_results, dict):
                                 # Log the structure of the combiner_results
-                                # logger.log_message(f"Combiner results keys: {list(combiner_results.keys())}", level=logging.INFO)
+                                logger.log_message(f"Combiner results keys: {list(combiner_results.keys())}", level=logging.INFO)
                                 
-                                # We need to ensure combiner_results has at least code and summary fields
-                                # If not, try to extract them from the structure or create defaults
-                                if 'code' not in combiner_results or 'summary' not in combiner_results:
-                                    # logger.log_message(f"Reconstructing code_combiner results for UI display", level=logging.INFO)
-                                    
-                                    # Look for code in various possible locations
-                                    code = (
-                                        combiner_results.get('code') or 
-                                        combiner_results.get('refined_complete_code') or 
-                                        ''
-                                    )
-                                    
-                                    # Look for summary in various possible locations
-                                    summary = (
-                                        combiner_results.get('summary') or 
-                                        combiner_results.get('description') or 
-                                        combiner_results.get('explanation') or 
-                                        'Combined code from multiple agents.'
-                                    )
-                                    
-                                    # Create a properly structured result
-                                    properly_structured_results = {
-                                        'code': code,
-                                        'summary': summary
-                                    }
-                                    
-                                    # Use this for formatting
-                                    formatted_response = format_response_to_markdown(
-                                        {"code_combiner_agent": properly_structured_results}, 
-                                        dataframe=session_state["current_df"]
-                                    ) or "No response generated"
-                                else:
-                                    # Standard formatting if structure is already correct
-                                    formatted_response = format_response_to_markdown(
-                                        {"code_combiner_agent": combiner_results}, 
-                                        dataframe=session_state["current_df"]
-                                    ) or "No response generated"
+                                # Use the extracted combiner_results for formatting
+                                formatted_response = format_response_to_markdown(
+                                    {"code_combiner_agent": combiner_results}, 
+                                    dataframe=session_state["current_df"]
+                                ) or "No response generated"
                             else:
                                 formatted_response = f"Error formatting code combiner: unexpected result type {type(combiner_results)}"
                         else:
@@ -643,7 +611,7 @@ async def chat_with_all(
                             dataframe=session_state["current_df"]
                         ) or "No response generated"
                     
-                    # logger.log_message(f"Formatted response for {agent_name}: {formatted_response[:100]}...", level=logging.INFO)
+                    logger.log_message(f"Formatted response for {agent_name}: {formatted_response[:100]}...", level=logging.INFO)
 
                     if formatted_response == "Please provide a valid query...":
                         yield json.dumps({
@@ -653,26 +621,15 @@ async def chat_with_all(
                         }) + "\n"
                         continue
                     
-                    # Special handling for code_combiner_agent to ensure proper UI display
-                    if agent_name == "code_combiner_agent":
-                        # Use "Code Combiner" as the display name rather than the internal name
-                        yield json.dumps({
-                            "agent": "code_combiner_agent",  # UI-friendly name
-                            "content": formatted_response,
-                            "status": "success" if response else "error"
-                        }) + "\n"
-                        # logger.log_message(f"Sent code_combiner as 'Code Combiner' for UI display", level=logging.INFO)
-                    else:
-                        # Standard handling for other agents
-                        yield json.dumps({
-                            "agent": agent_name,
-                            "content": formatted_response,
-                            "status": "success" if response else "error"
-                        }) + "\n"
+                    yield json.dumps({
+                        "agent": agent_name,
+                        "content": formatted_response,
+                        "status": "success" if response else "error"
+                    }) + "\n"
                     
-                    # logger.log_message(f"Successfully yielded response for {agent_name}", level=logging.INFO)
+                    logger.log_message(f"Successfully yielded response for {agent_name}", level=logging.INFO)
                 
-                # logger.log_message(f"Processed {agent_count} agent responses (excluding planner)", level=logging.INFO)
+                logger.log_message(f"Processed {agent_count} agent responses (excluding planner)", level=logging.INFO)
                 
                 # Record usage statistics if user is logged in
                 if session_state.get("user_id"):
