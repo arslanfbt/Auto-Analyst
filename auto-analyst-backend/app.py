@@ -45,6 +45,7 @@ from src.utils.logger import Logger
 logger = Logger("app", see_time=True, console_log=False)
 load_dotenv()
 
+
 styling_instructions = [
     """
         Dont ignore any of these instructions.
@@ -219,11 +220,21 @@ if not os.path.exists(housing_csv_path):
     logger.log_message(f"Housing.csv not found at {os.path.abspath(housing_csv_path)}", level=logging.ERROR)
     raise FileNotFoundError(f"Housing.csv not found at {os.path.abspath(housing_csv_path)}")
 
+
+# Available agents (for auto-analyst-ind)
 AVAILABLE_AGENTS = {
     "data_viz_agent": data_viz_agent,
     "sk_learn_agent": sk_learn_agent,
     "statistical_analytics_agent": statistical_analytics_agent,
     "preprocessing_agent": preprocessing_agent,
+}
+
+# Available agents (for auto-analyst)
+PLANNER_AGENTS = {
+    "planner_data_viz_agent": planner_data_viz_agent,
+    "planner_preprocessing_agent": planner_preprocessing_agent,
+    "planner_sk_learn_agent": planner_sk_learn_agent,
+    "planner_statistical_analytics_agent": planner_statistical_analytics_agent,
 }
 
 # Add session header
@@ -232,7 +243,7 @@ X_SESSION_ID = APIKeyHeader(name="X-Session-ID", auto_error=False)
 # Update AppState class to use SessionManager
 class AppState:
     def __init__(self):
-        self._session_manager = SessionManager(styling_instructions, AVAILABLE_AGENTS)
+        self._session_manager = SessionManager(styling_instructions, PLANNER_AGENTS)
         self.model_config = DEFAULT_MODEL_CONFIG.copy()
         # Update the SessionManager with the current model_config
         self._session_manager._app_model_config = self.model_config
@@ -292,16 +303,6 @@ app.add_middleware(
     expose_headers=["Content-Type", "Content-Length"]
 )
 
-# DSPy Configuration
-import dspy
-
-# Available agents
-AVAILABLE_AGENTS = {
-    "data_viz_agent": data_viz_agent,
-    "sk_learn_agent": sk_learn_agent,
-    "statistical_analytics_agent": statistical_analytics_agent,
-    "preprocessing_agent": preprocessing_agent,
-}
 
 
 @app.post("/chat/{agent_name}", response_model=dict)
@@ -471,7 +472,7 @@ async def chat_with_all(
     session_id: str = Depends(get_session_id_dependency)
 ):
     session_state = app.state.get_session_state(session_id)
-
+    # logger.log_message(f"Session state: {session_state}", level=logging.INFO)
     # Update session state with user_id and chat_id from request if provided
     for param in ["user_id", "chat_id"]:
         if param in request_obj.query_params:
@@ -491,11 +492,11 @@ async def chat_with_all(
 
     # Get session-specific model
     session_lm = get_session_lm(session_state)
+    # logger.log_message(f"Using language model: {session_lm.model}", level=logging.INFO)
 
     async def generate_responses():
         overall_start_time = time.time()
         total_response = ""
-        total_inputs = ""
 
         try:
             # Add chat context from previous messages if chat_id is available
@@ -508,51 +509,141 @@ async def chat_with_all(
                 recent_messages = chat_manager.get_recent_chat_history(chat_id, limit=5)
                 # Extract response history
                 chat_context = chat_manager.extract_response_history(recent_messages)
+            
             # Append context to the query if available
             enhanced_query = request.query
             if chat_context:
                 enhanced_query = f"### Current Query:\n{request.query}\n\n{chat_context}"
             
-            # Use the session model for this specific request
-            with dspy.context(lm=session_lm):
-                loop = asyncio.get_event_loop()
-                plan_response = await loop.run_in_executor(
-                    None,
-                    session_state["ai_system"].get_plan,
-                    enhanced_query  # Use enhanced query with context
-                )
-
-                plan_descrition = format_response_to_markdown({"analytical_planner": plan_response}, dataframe=session_state["current_df"])
+            # logger.log_message(f"Processing query: {enhanced_query[:100]}...", level=logging.INFO)
+            
+            try:
+                # Use the session model for this specific request
+                dspy.settings.configure(lm=session_lm)
                 
-                # if plan_descrition is empty, yield and send error
-                if plan_descrition == "Please provide a valid query...":
-                    yield json.dumps({
-                        "agent": "Analytical Planner",
-                        "content": plan_descrition,
-                        "status": "error"
-                    }) + "\n"
-                    return
+                # Get responses from the auto_analyst
+                all_responses = await session_state["ai_system"](enhanced_query)
                 
-                yield json.dumps({
-                    "agent": "Analytical Planner",
-                    "content": plan_descrition,
-                    "status": "success" if plan_descrition else "error"
-                }) + "\n"
-
-                async for agent_name, inputs, response in session_state["ai_system"].execute_plan(enhanced_query, plan_response):
+                # The response should now be a dictionary, not a generator
+                if not isinstance(all_responses, dict):
+                    # logger.log_message(f"Response type: {type(all_responses)}", level=logging.INFO)
+                    # If it's not a dictionary, try to convert it
+                    if hasattr(all_responses, 'toDict'):
+                        all_responses = all_responses.toDict()
+                    elif hasattr(all_responses, 'to_dict'):
+                        all_responses = all_responses.to_dict()
+                    else:
+                        # If we can't convert it, log an error
+                        # logger.log_message(f"Unexpected response type, cannot convert: {type(all_responses)}", level=logging.ERROR)
+                        raise ValueError(f"Unexpected response type: {type(all_responses)}")
+                
+                # logger.log_message(f"All Responses keys: {list(all_responses.keys()) if isinstance(all_responses, dict) else 'not a dict'}", level=logging.INFO)
+                
+                # First yield planner response
+                if isinstance(all_responses, dict) and 'analytical_planner' in all_responses:
+                    plan_response = all_responses['analytical_planner']
+                    plan_description = format_response_to_markdown(
+                        {"analytical_planner": plan_response}, 
+                        dataframe=session_state["current_df"]
+                    )
+                    # logger.log_message(f"Plan Description: {plan_description}", level=logging.INFO)
                     
-                    if agent_name == "plan_not_found":
+                    if plan_description == "Please provide a valid query...":
                         yield json.dumps({
                             "agent": "Analytical Planner",
-                            "content": "**No plan found**\n\nPlease try again with a different query or try using a different model.",
+                            "content": plan_description,
                             "status": "error"
                         }) + "\n"
                         return
                     
-                    formatted_response = format_response_to_markdown(
-                        {agent_name: response}, 
-                        dataframe=session_state["current_df"]
-                    ) or "No response generated"
+                    yield json.dumps({
+                        "agent": "Analytical Planner",
+                        "content": plan_description,
+                        "status": "success" if plan_description else "error"
+                    }) + "\n"
+                
+                # Log the actual structure of all_responses for debugging
+                for key, value in all_responses.items():
+                    if key != 'analytical_planner':
+                        logger.log_message(f"Response key: {key}, Type: {type(value)}", level=logging.INFO)
+                        if isinstance(value, dict):
+                            logger.log_message(f"Dict keys for {key}: {list(value.keys())}", level=logging.INFO)
+                
+                # Then yield all agent responses
+                agent_count = 0
+                for agent_name, response in all_responses.items():
+                    # logger.log_message(f"Processing agent: {agent_name}, response type: {type(response)}", level=logging.INFO)
+                    
+                    if agent_name == 'analytical_planner':
+                        # logger.log_message("Skipping analytical_planner as already handled", level=logging.INFO)
+                        continue  # Already handled
+                    
+                    agent_count += 1
+                    
+                    # For code combiner, store the response for token calculation
+                    if agent_name == 'code_combiner_agent':
+                        # logger.log_message(f"Found code_combiner_agent response", level=logging.INFO)
+                        total_response += str(response)
+                        
+                        # Special handling for code_combiner_agent
+                        if isinstance(response, dict) and 'combiner_results' in response:
+                            # logger.log_message(f"Extracting combiner_results for formatting", level=logging.INFO)
+                            
+                            # Extract the actual results from the nested structure
+                            combiner_results = response['combiner_results']
+                            if isinstance(combiner_results, dict):
+                                # Log the structure of the combiner_results
+                                # logger.log_message(f"Combiner results keys: {list(combiner_results.keys())}", level=logging.INFO)
+                                
+                                # We need to ensure combiner_results has at least code and summary fields
+                                # If not, try to extract them from the structure or create defaults
+                                if 'code' not in combiner_results or 'summary' not in combiner_results:
+                                    # logger.log_message(f"Reconstructing code_combiner results for UI display", level=logging.INFO)
+                                    
+                                    # Look for code in various possible locations
+                                    code = (
+                                        combiner_results.get('code') or 
+                                        combiner_results.get('refined_complete_code') or 
+                                        ''
+                                    )
+                                    
+                                    # Look for summary in various possible locations
+                                    summary = (
+                                        combiner_results.get('summary') or 
+                                        combiner_results.get('description') or 
+                                        combiner_results.get('explanation') or 
+                                        'Combined code from multiple agents.'
+                                    )
+                                    
+                                    # Create a properly structured result
+                                    properly_structured_results = {
+                                        'code': code,
+                                        'summary': summary
+                                    }
+                                    
+                                    # Use this for formatting
+                                    formatted_response = format_response_to_markdown(
+                                        {"code_combiner_agent": properly_structured_results}, 
+                                        dataframe=session_state["current_df"]
+                                    ) or "No response generated"
+                                else:
+                                    # Standard formatting if structure is already correct
+                                    formatted_response = format_response_to_markdown(
+                                        {"code_combiner_agent": combiner_results}, 
+                                        dataframe=session_state["current_df"]
+                                    ) or "No response generated"
+                            else:
+                                formatted_response = f"Error formatting code combiner: unexpected result type {type(combiner_results)}"
+                        else:
+                            formatted_response = "Error: Invalid code combiner response format"
+                    else:
+                        # Normal handling for other agents
+                        formatted_response = format_response_to_markdown(
+                            {agent_name: response}, 
+                            dataframe=session_state["current_df"]
+                        ) or "No response generated"
+                    
+                    # logger.log_message(f"Formatted response for {agent_name}: {formatted_response[:100]}...", level=logging.INFO)
 
                     if formatted_response == "Please provide a valid query...":
                         yield json.dumps({
@@ -560,75 +651,125 @@ async def chat_with_all(
                             "content": formatted_response,
                             "status": "error"
                         }) + "\n"
-                        return
-                    if "code_combiner_agent" in agent_name:
-                        logger.log_message(f"[>] Code combiner response: {response}", level=logging.INFO)
-                        total_response += str(response) if response else ""
-                        total_inputs += str(inputs) if inputs else ""
-
-                    yield json.dumps({
-                        "agent": agent_name.split("__")[0] if "__" in agent_name else agent_name,
-                        "content": formatted_response,
-                        "status": "success" if response else "error"
-                    }) + "\n"
-            if session_state.get("user_id"):
-                overall_processing_time_ms = int((time.time() - overall_start_time) * 1000)
-                prompt_size = len(enhanced_query)  # Use enhanced_query size instead of request.query
-
-                # Track the code combiner agent response
-                if "refined_complete_code" in response:
-                    model_name = agent_name.split("__")[1] if "__" in agent_name else agent_name
-                    if model_name == "openai":
-                        model_name = "o3-mini"
-                    elif model_name == "anthropic":
-                        model_name = "claude-3-7-sonnet-latest"
+                        continue
+                    
+                    # Special handling for code_combiner_agent to ensure proper UI display
+                    if agent_name == "code_combiner_agent":
+                        # Use "Code Combiner" as the display name rather than the internal name
+                        yield json.dumps({
+                            "agent": "code_combiner_agent",  # UI-friendly name
+                            "content": formatted_response,
+                            "status": "success" if response else "error"
+                        }) + "\n"
+                        # logger.log_message(f"Sent code_combiner as 'Code Combiner' for UI display", level=logging.INFO)
                     else:
-                        model_name = "gemini-2.5-pro-preview-03-25"
+                        # Standard handling for other agents
+                        yield json.dumps({
+                            "agent": agent_name,
+                            "content": formatted_response,
+                            "status": "success" if response else "error"
+                        }) + "\n"
+                    
+                    # logger.log_message(f"Successfully yielded response for {agent_name}", level=logging.INFO)
+                
+                # logger.log_message(f"Processed {agent_count} agent responses (excluding planner)", level=logging.INFO)
+                
+                # Record usage statistics if user is logged in
+                if session_state.get("user_id"):
+                    overall_processing_time_ms = int((time.time() - overall_start_time) * 1000)
+                    prompt_size = len(enhanced_query)
+                    response_size = len(total_response)
+                    
+                    # Get model info from session state
+                    model_config = session_state.get("model_config", DEFAULT_MODEL_CONFIG)
+                    model_name = model_config.get("model", DEFAULT_MODEL_CONFIG["model"])
                     provider = app.state.ai_manager.get_provider_for_model(model_name)
-                    input_tokens = len(app.state.ai_manager.tokenizer.encode(str(inputs)))
-                    completion_tokens = len(app.state.ai_manager.tokenizer.encode(str(response)))
-                    code_combiner_cost = app.state.ai_manager.calculate_cost(model_name, input_tokens, completion_tokens)
+                    
+                    # Estimate tokens
+                    try:
+                        prompt_tokens = len(app.state.ai_manager.tokenizer.encode(enhanced_query))
+                        completion_tokens = len(app.state.ai_manager.tokenizer.encode(total_response))
+                        total_tokens = prompt_tokens + completion_tokens
+                    except:
+                        # Fallback estimation
+                        words = len(enhanced_query.split()) + len(total_response.split())
+                        total_tokens = int(words * 1.5)
+                        prompt_tokens = int(len(enhanced_query.split()) * 1.5)
+                        completion_tokens = total_tokens - prompt_tokens
+                    
+                    # Calculate cost
+                    cost = app.state.ai_manager.calculate_cost(model_name, prompt_tokens, completion_tokens)
+                    
+                    # Save usage to DB
                     app.state.ai_manager.save_usage_to_db(
                         user_id=session_state.get("user_id"),
                         chat_id=session_state.get("chat_id"),
                         model_name=model_name,
                         provider=provider,
-                        prompt_tokens=int(input_tokens),
+                        prompt_tokens=int(prompt_tokens),
                         completion_tokens=int(completion_tokens),
-                        total_tokens=int(input_tokens + completion_tokens),
+                        total_tokens=int(total_tokens),
                         query_size=prompt_size,
-                        response_size=len(total_response),
-                        cost=round(code_combiner_cost, 7),
+                        response_size=response_size,
+                        cost=round(cost, 7),
                         request_time_ms=overall_processing_time_ms,
                         is_streaming=True
                     )
-
-                # Get model info from session state
-                model_config = session_state.get("model_config", DEFAULT_MODEL_CONFIG)
-                model_name = model_config.get("model", DEFAULT_MODEL_CONFIG["model"])
-                provider = app.state.ai_manager.get_provider_for_model(model_name)
-                prompt_tokens = len(app.state.ai_manager.tokenizer.encode(total_inputs)) 
-                completion_tokens = len(app.state.ai_manager.tokenizer.encode(total_response))  
-                total_tokens = prompt_tokens + completion_tokens
-
-                cost = app.state.ai_manager.calculate_cost(model_name, prompt_tokens, completion_tokens)
-
-                app.state.ai_manager.save_usage_to_db(
-                    user_id=session_state.get("user_id"),
-                    chat_id=session_state.get("chat_id"),
-                    model_name=model_name,
-                    provider=provider,
-                    prompt_tokens=int(prompt_tokens),
-                    completion_tokens=int(completion_tokens),
-                    total_tokens=int(total_tokens),
-                    query_size=prompt_size,
-                    response_size=len(total_response),
-                    cost=round(cost, 7),
-                    request_time_ms=overall_processing_time_ms,
-                    is_streaming=True
-                )
-           
+                    
+                    # If code_combiner_agent is in the responses and has agent_name specified
+                    if 'code_combiner_agent' in all_responses and isinstance(all_responses['code_combiner_agent'], dict):
+                        code_combiner = all_responses['code_combiner_agent']
+                        if 'code_combiner_agent_name' in code_combiner:
+                            model_name = code_combiner['code_combiner_agent_name']
+                            if model_name == "o3-mini" or model_name == "openai":
+                                model_name = "o3-mini" 
+                            elif model_name == "claude-3-7-sonnet-latest" or model_name == "anthropic":
+                                model_name = "claude-3-7-sonnet-latest"
+                            else:
+                                model_name = "gemini-2.5-pro-preview-03-25"
+                                
+                            provider = app.state.ai_manager.get_provider_for_model(model_name)
+                            code_list = code_combiner.get('code_list', '')
+                            combiner_results = code_combiner.get('combiner_results', {})
+                            
+                            # Estimate tokens for code combiner
+                            try:
+                                input_tokens = len(app.state.ai_manager.tokenizer.encode(code_list))
+                                output_tokens = len(app.state.ai_manager.tokenizer.encode(str(combiner_results)))
+                                combiner_tokens = input_tokens + output_tokens
+                            except:
+                                # Fallback estimation
+                                combiner_tokens = int(len(str(code_list + str(combiner_results)).split()) * 1.5)
+                                input_tokens = int(len(str(code_list).split()) * 1.5)
+                                output_tokens = combiner_tokens - input_tokens
+                            
+                            code_combiner_cost = app.state.ai_manager.calculate_cost(model_name, input_tokens, output_tokens)
+                            
+                            # Save usage for code combiner
+                            app.state.ai_manager.save_usage_to_db(
+                                user_id=session_state.get("user_id"),
+                                chat_id=session_state.get("chat_id"),
+                                model_name=model_name,
+                                provider=provider,
+                                prompt_tokens=int(input_tokens),
+                                completion_tokens=int(output_tokens),
+                                total_tokens=int(combiner_tokens),
+                                query_size=len(code_list),
+                                response_size=len(str(combiner_results)),
+                                cost=round(code_combiner_cost, 7),
+                                request_time_ms=overall_processing_time_ms,
+                                is_streaming=True
+                            )
+            except Exception as e:
+                logger.log_message(f"Error executing AI system: {str(e)}", level=logging.ERROR)
+                yield json.dumps({
+                    "agent": "planner",
+                    "content": f"An error occurred while processing your request: {str(e)}",
+                    "status": "error"
+                }) + "\n"
+                return
         except Exception as e:
+            logger.log_message(f"Error in chat_with_all: {str(e)}", level=logging.ERROR)
             yield json.dumps({
                 "agent": "planner",
                 "content": f"An error occurred while generating responses. Please try again!\n{str(e)}",

@@ -13,6 +13,7 @@ from src.agents.agents import auto_analyst, auto_analyst_ind
 from src.agents.retrievers.retrievers import make_data
 from src.managers.chat_manager import ChatManager
 from dotenv import load_dotenv
+import dspy
 
 load_dotenv()
 
@@ -90,10 +91,12 @@ This dataset appears clean with consistent formatting and no missing values, mak
         """Initialize the default dataset and store it"""
         try:
             self._default_df = pd.read_csv("Housing.csv")
-            data_dict = make_data(self._default_df, self._dataset_description)
-            self._default_retrievers = self.initialize_retrievers(self.styling_instructions, [str(data_dict)])
-            self._default_ai_system = auto_analyst(agents=list(self.available_agents.values()), 
-                                                  retrievers=self._default_retrievers)
+            self._make_data = make_data(self._default_df, self._dataset_description)
+            logger.log_message(f"Make data: {self._make_data}", level=logging.INFO)
+            self._default_retrievers = self.initialize_retrievers(self.styling_instructions, [str(self._make_data)])
+            ai_system = auto_analyst(agents=list(self.available_agents.values()), 
+                                    retrievers=self._default_retrievers)
+            self._default_ai_system = dspy.asyncify(ai_system)
         except Exception as e:
             logger.log_message(f"Error initializing default dataset: {str(e)}", level=logging.ERROR)
             raise e
@@ -205,8 +208,11 @@ This dataset appears clean with consistent formatting and no missing values, mak
         """
         try:
             data_dict = make_data(df, desc)
+            self._make_data = data_dict
             retrievers = self.initialize_retrievers(self.styling_instructions, [str(data_dict)])
             ai_system = auto_analyst(agents=list(self.available_agents.values()), retrievers=retrievers)
+            # Wrap with dspy.asyncify for async compatibility
+            async_ai_system = dspy.asyncify(ai_system)
             
             # Get default model config for new sessions
             default_model_config = {
@@ -222,8 +228,8 @@ This dataset appears clean with consistent formatting and no missing values, mak
             session_state = {
                 "current_df": df,
                 "retrievers": retrievers,
-                "ai_system": ai_system,
-                "make_data": data_dict,
+                "ai_system": async_ai_system,
+                "make_data": self._make_data,
                 "description": desc,
                 "name": name,
                 "model_config": default_model_config,  # Initialize with default
