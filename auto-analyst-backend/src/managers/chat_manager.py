@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine, desc, func
+from sqlalchemy import create_engine, desc, func, exists
 from sqlalchemy.orm import sessionmaker, scoped_session
 from sqlalchemy.exc import SQLAlchemyError
 from src.db.schemas.models import Base, User, Chat, Message, ModelUsage
@@ -95,12 +95,15 @@ class ChatManager:
                 created_at=datetime.utcnow()
             )
             session.add(chat)
+            session.flush()  # Flush to get the ID before commit
+            
+            chat_id = chat.chat_id  # Get the ID now
             session.commit()
             
-            logger.log_message(f"Created new chat {chat.chat_id} for user {user_id}", level=logging.INFO)
+            logger.log_message(f"Created new chat {chat_id} for user {user_id}", level=logging.INFO)
             
             return {
-                "chat_id": chat.chat_id,
+                "chat_id": chat_id,
                 "user_id": chat.user_id,
                 "title": chat.title,
                 "created_at": chat.created_at.isoformat()
@@ -136,6 +139,13 @@ class ChatManager:
             if not chat:
                 raise ValueError(f"Chat with ID {chat_id} not found or access denied")
             
+            ##! Ensure content length is reasonable for PostgreSQL
+            # max_content_length = 10000  # PostgreSQL can handle large text but let's be cautious
+            # if content and len(content) > max_content_length:
+            #     logger.log_message(f"Truncating message content from {len(content)} to {max_content_length} characters", 
+            #                       level=logging.WARNING)
+            #     content = content[:max_content_length]
+            
             # Create a new message
             message = Message(
                 chat_id=chat_id,
@@ -144,6 +154,9 @@ class ChatManager:
                 timestamp=datetime.utcnow()
             )
             session.add(message)
+            session.flush()  # Flush to get the ID before commit
+            
+            message_id = message.message_id  # Get ID now
             
             # If this is the first AI response and chat title is still default,
             # update the chat title based on the first user query
@@ -168,7 +181,7 @@ class ChatManager:
             session.commit()
             
             return {
-                "message_id": message.message_id,
+                "message_id": message_id,
                 "chat_id": message.chat_id,
                 "content": message.content,
                 "sender": message.sender,
@@ -181,59 +194,7 @@ class ChatManager:
         finally:
             session.close()
     
-    def _update_chat_title(self, chat_id: int, first_response: str) -> None:
-        """
-        Update chat title based on the first bot response.
-        
-        Args:
-            chat_id: ID of the chat to update
-            first_response: First bot response content to generate title from
-        """
-        session = self.Session()
-        try:
-            # Get the user's query (the message before the bot response)
-            user_query = session.query(Message).filter(
-                Message.chat_id == chat_id,
-                Message.sender == 'user'
-            ).order_by(Message.timestamp.desc()).first()
-            
-            if not user_query:
-                logger.warning(f"No user query found for chat {chat_id}")
-                return
-            
-            # Call the chat_history_name endpoint to generate a title
-            try:
-                # This would typically be an internal API call
-                # For demonstration, we're showing how it would be structured
-                # In a real implementation, you might want to directly call the function
-                # that generates the title rather than making an HTTP request
-                response = requests.post(
-                    "http://localhost:8000/chat_history_name",
-                    json={"query": user_query.content},
-                    timeout=5
-                )
-                
-                if response.status_code == 200:
-                    title_data = response.json()
-                    new_title = title_data.get("name", "Chat")
-                    
-                    # Update chat title
-                    chat = session.query(Chat).filter(Chat.chat_id == chat_id).first()
-                    if chat:
-                        chat.title = new_title
-                        session.commit()
-                        # logger.info(f"Updated chat {chat_id} title to '{new_title}'")
-                else:
-                    logger.warning(f"Failed to generate title: {response.status_code}")
-            except Exception as e:
-                logger.log_message(f"Error calling chat_history_name endpoint: {str(e)}", level=logging.ERROR)
-                # Continue execution even if title generation fails
-        except SQLAlchemyError as e:
-            session.rollback()
-            logger.log_message(f"Error updating chat title: {str(e)}", level=logging.ERROR)
-        finally:
-            session.close()
-    
+
     def get_chat(self, chat_id: int, user_id: Optional[int] = None) -> Dict[str, Any]:
         """
         Get a chat by ID with all its messages.
@@ -252,7 +213,7 @@ class ChatManager:
             
             # If user_id is provided, ensure the chat belongs to this user
             if user_id is not None:
-                query = query.filter(Chat.user_id == user_id)
+                query = query.filter((Chat.user_id == user_id) | (Chat.user_id.is_(None)))
             
             chat = query.first()
             if not chat:
@@ -263,10 +224,11 @@ class ChatManager:
                 Message.chat_id == chat_id
             ).order_by(Message.timestamp).all()
             
+            # Create a safe serializable dictionary
             return {
                 "chat_id": chat.chat_id,
                 "title": chat.title,
-                "created_at": chat.created_at.isoformat(),
+                "created_at": chat.created_at.isoformat() if chat.created_at else None,
                 "user_id": chat.user_id,
                 "messages": [
                     {
@@ -274,7 +236,7 @@ class ChatManager:
                         "chat_id": msg.chat_id,
                         "content": msg.content,
                         "sender": msg.sender,
-                        "timestamp": msg.timestamp.isoformat()
+                        "timestamp": msg.timestamp.isoformat() if msg.timestamp else None
                     } for msg in messages
                 ]
             }
@@ -304,14 +266,18 @@ class ChatManager:
             if user_id is not None:
                 query = query.filter(Chat.user_id == user_id)
             
-            chats = query.order_by(Chat.created_at.desc()).limit(limit).offset(offset).all()
+            # Apply safe limits for both SQLite and PostgreSQL
+            safe_limit = min(max(1, limit), 100)  # Between 1 and 100
+            safe_offset = max(0, offset)          # At least 0
+            
+            chats = query.order_by(Chat.created_at.desc()).limit(safe_limit).offset(safe_offset).all()
             
             return [
                 {
                     "chat_id": chat.chat_id,
                     "user_id": chat.user_id,
                     "title": chat.title,
-                    "created_at": chat.created_at.isoformat()
+                    "created_at": chat.created_at.isoformat() if chat.created_at else None
                 } for chat in chats
             ]
         except SQLAlchemyError as e:
@@ -319,36 +285,7 @@ class ChatManager:
             return []
         finally:
             session.close()
-    
-    def _get_last_message(self, chat_id: int) -> Optional[Dict[str, Any]]:
-        """
-        Get the last message from a chat for preview purposes.
-        
-        Args:
-            chat_id: ID of the chat
-            
-        Returns:
-            Dictionary containing last message information or None
-        """
-        session = self.Session()
-        try:
-            last_message = session.query(Message).filter(
-                Message.chat_id == chat_id
-            ).order_by(desc(Message.timestamp)).first()
-            
-            if last_message:
-                return {
-                    "content": last_message.content[:100] + "..." if len(last_message.content) > 100 else last_message.content,
-                    "sender": last_message.sender,
-                    "timestamp": last_message.timestamp.isoformat()
-                }
-            return None
-        except SQLAlchemyError as e:
-            logger.log_message(f"Error retrieving last message: {str(e)}", level=logging.ERROR)
-            return None
-        finally:
-            session.close()
-    
+
     def delete_chat(self, chat_id: int, user_id: Optional[int] = None) -> bool:
         """
         Delete a chat and all its messages while preserving model usage records.
@@ -392,83 +329,8 @@ class ChatManager:
         finally:
             session.close()
 
-        
-    def search_chats(self, query: str, user_id: Optional[int] = None, limit: int = 10) -> List[Dict[str, Any]]:
-        """
-        Search for chats containing the query string.
-        
-        Args:
-            query: Search query string
-            user_id: Optional user ID to filter chats
-            limit: Maximum number of results to return
-            
-        Returns:
-            List of dictionaries containing matching chat information
-        """
-        session = self.Session()
-        try:
-            # Build base query to find messages containing the search term
-            message_query = session.query(Message.chat_id).filter(
-                Message.content.ilike(f"%{query}%")
-            ).distinct()
-            
-            # Apply user filter if provided
-            chat_query = session.query(Chat).filter(Chat.chat_id.in_(message_query))
-            if user_id is not None:
-                chat_query = chat_query.filter(Chat.user_id == user_id)
-            
-            # Get matching chats
-            chats = chat_query.order_by(desc(Chat.created_at)).limit(limit).all()
-            
-            # Format response
-            return [
-                {
-                    "chat_id": chat.chat_id,
-                    "title": chat.title,
-                    "created_at": chat.created_at.isoformat(),
-                    "user_id": chat.user_id,
-                    "matching_messages": self._get_matching_messages(chat.chat_id, query)
-                } for chat in chats
-            ]
-        except SQLAlchemyError as e:
-            logger.log_message(f"Error searching chats: {str(e)}", level=logging.ERROR)
-            raise
-        finally:
-            session.close()
-    
-    def _get_matching_messages(self, chat_id: int, query: str, limit: int = 3) -> List[Dict[str, Any]]:
-        """
-        Get messages from a chat that match the search query.
-        
-        Args:
-            chat_id: ID of the chat
-            query: Search query string
-            limit: Maximum number of matching messages to return
-            
-        Returns:
-            List of dictionaries containing matching message information
-        """
-        session = self.Session()
-        try:
-            matching_messages = session.query(Message).filter(
-                Message.chat_id == chat_id,
-                Message.content.ilike(f"%{query}%")
-            ).order_by(Message.timestamp).limit(limit).all()
-            
-            return [
-                {
-                    "message_id": msg.message_id,
-                    "content": msg.content,
-                    "sender": msg.sender,
-                    "timestamp": msg.timestamp.isoformat()
-                } for msg in matching_messages
-            ]
-        except SQLAlchemyError as e:
-            logger.log_message(f"Error retrieving matching messages: {str(e)}", level=logging.ERROR)
-            return []
-        finally:
-            session.close()
-    
+
+
     def get_or_create_user(self, username: str, email: str) -> Dict[str, Any]:
         """
         Get an existing user by email or create a new one if not found.
@@ -482,6 +344,17 @@ class ChatManager:
         """
         session = self.Session()
         try:
+            # Validate and sanitize inputs
+            if not email or not isinstance(email, str):
+                raise ValueError("Valid email is required")
+            
+            # Limit input length for PostgreSQL compatibility
+            max_length = 255  # Standard limit for varchar fields
+            if username and len(username) > max_length:
+                username = username[:max_length]
+            if email and len(email) > max_length:
+                email = email[:max_length]
+            
             # Try to find existing user by email
             user = session.query(User).filter(User.email == email).first()
             
@@ -489,14 +362,18 @@ class ChatManager:
                 # Create new user if not found
                 user = User(username=username, email=email)
                 session.add(user)
+                session.flush()  # Get ID before committing
+                user_id = user.user_id
                 session.commit()
                 logger.log_message(f"Created new user: {username} ({email})", level=logging.INFO)
+            else:
+                user_id = user.user_id
             
             return {
-                "user_id": user.user_id,
+                "user_id": user_id,
                 "username": user.username,
                 "email": user.email,
-                "created_at": user.created_at.isoformat()
+                "created_at": user.created_at.isoformat() if user.created_at else None
             }
         except SQLAlchemyError as e:
             session.rollback()
@@ -526,7 +403,11 @@ class ChatManager:
             
             # Update fields if provided
             if title is not None:
+                # Limit title length for PostgreSQL compatibility
+                if len(title) > 255:  # Assuming String column has a reasonable length
+                    title = title[:255]
                 chat.title = title
+                
             if user_id is not None:
                 chat.user_id = user_id
             
@@ -535,7 +416,7 @@ class ChatManager:
             return {
                 "chat_id": chat.chat_id,
                 "title": chat.title,
-                "created_at": chat.created_at.isoformat(),
+                "created_at": chat.created_at.isoformat() if chat.created_at else None,
                 "user_id": chat.user_id
             }
         except SQLAlchemyError as e:
@@ -556,16 +437,21 @@ class ChatManager:
             A generated title string
         """
         try:
+            # Validate input
+            if not query or not isinstance(query, str):
+                return "New Chat"
+                
             # Simple title generation - take first few words
-            words = query.split()
+            words = query.strip().split()
             if len(words) > 3:
                 title = "Chat about " + " ".join(words[0:3]) + "..."
             else:
-                title = "Chat about " + query
+                title = "Chat about " + query.strip()
             
-            # Limit title length
-            if len(title) > 40:
-                title = title[:37] + "..."
+            # Limit title length for PostgreSQL compatibility
+            max_title_length = 255
+            if len(title) > max_title_length:
+                title = title[:max_title_length-3] + "..."
             
             return title
         except Exception as e:
@@ -592,236 +478,35 @@ class ChatManager:
             elif not is_admin:
                 return 0  # Don't delete anything if not a user or admin
             
-            # For each chat, check if it has any messages
-            chats_to_delete = []
-            for chat in query.all():
-                message_count = session.query(Message).filter(
-                    Message.chat_id == chat.chat_id
-                ).count()
-                
-                if message_count == 0:
-                    chats_to_delete.append(chat.chat_id)
+            # Get chats with no messages using a subquery - works in both SQLite and PostgreSQL
+            empty_chats = query.filter(
+                ~exists().where(Message.chat_id == Chat.chat_id)
+            ).all()
             
-            # Delete the empty chats
-            if chats_to_delete:
-                deleted = session.query(Chat).filter(
-                    Chat.chat_id.in_(chats_to_delete)
-                ).delete(synchronize_session=False)
+            # Collect chat IDs to delete
+            chat_ids = [chat.chat_id for chat in empty_chats]
+            
+            deleted_count = 0
+            if chat_ids:
+                # Update model_usage records to set chat_id to NULL for any associated usage records
+                session.query(ModelUsage).filter(ModelUsage.chat_id.in_(chat_ids)).update(
+                    {"chat_id": None}, synchronize_session=False
+                )
+                
+                # Delete the empty chats one by one to ensure proper relationship handling
+                for chat_id in chat_ids:
+                    chat = session.query(Chat).filter(Chat.chat_id == chat_id).first()
+                    if chat:
+                        session.delete(chat)
+                        deleted_count += 1
                 
                 session.commit()
-                return deleted
-            return 0
+                
+            return deleted_count
         except SQLAlchemyError as e:
             session.rollback()
             logger.log_message(f"Error deleting empty chats: {str(e)}", level=logging.ERROR)
             return 0
-        finally:
-            session.close()
-
-    def save_ai_response(self, chat_id: int, content: str, user_id: Optional[int] = None, 
-                         model_name: str = "gpt-4o-mini", prompt: str = "", 
-                         prompt_tokens: Optional[int] = None, 
-                         completion_tokens: Optional[int] = None, 
-                         start_time: Optional[float] = None):
-        """
-        Save an AI response to a chat and track model usage.
-        
-        Args:
-            chat_id: ID of the chat to add the message to
-            content: AI response content
-            user_id: Optional user ID for tracking
-            model_name: Model used to generate the response
-            prompt: The prompt sent to the model
-            prompt_tokens: Optional pre-counted prompt tokens
-            completion_tokens: Optional pre-counted completion tokens
-            start_time: Optional start time of the request
-        """
-        session = self.Session()
-        try:
-            # Create and save message
-            new_message = Message(
-                chat_id=chat_id,
-                sender='ai',
-                content=content,
-                timestamp=datetime.utcnow()
-            )
-            session.add(new_message)
-            session.commit()
-            
-            # Track model usage
-            end_time = time.time()
-            start_time = start_time or end_time - 1  # Default to 1 second if not provided
-            
-            self.track_model_usage(
-                user_id=user_id,
-                chat_id=chat_id,
-                model_name=model_name,
-                prompt=prompt,
-                response=content,
-                start_time=start_time,
-                prompt_tokens=prompt_tokens,
-                completion_tokens=completion_tokens
-            )
-            
-        except SQLAlchemyError as e:
-            logger.log_message(f"Error saving AI response: {str(e)}", level=logging.ERROR)
-            session.rollback()
-        finally:
-            session.close()
-
-    def track_model_usage(self, user_id: Optional[int], chat_id: int, model_name: str, 
-                           prompt: str, response: str, start_time: float, 
-                           is_streaming: bool = False, 
-                           prompt_tokens: Optional[int] = None, 
-                           completion_tokens: Optional[int] = None) -> Dict[str, Any]:
-        """
-        Track AI model usage for analytics and billing.
-        
-        Args:
-            user_id: Optional user ID making the request
-            chat_id: Chat ID associated with the request
-            model_name: Name of the AI model used
-            prompt: The prompt text sent to the model
-            response: The response text from the model
-            start_time: Start time of the request (time.time() value)
-            is_streaming: Whether the response was streamed
-            prompt_tokens: Optional pre-counted prompt tokens
-            completion_tokens: Optional pre-counted completion tokens
-            
-        Returns:
-            Dictionary with usage information
-        """
-        session = self.Session()
-        try:
-            # Determine model provider
-            provider = "unknown"
-            for prefix, prov in self.model_providers.items():
-                if model_name.startswith(prefix):
-                    provider = prov
-                    break
-                
-            # Calculate tokens if not provided
-            if prompt_tokens is None or completion_tokens is None:
-                try:
-                    encoding = tiktoken.encoding_for_model(model_name) if provider == "openai" else tiktoken.get_encoding("cl100k_base")
-                    prompt_tokens = len(encoding.encode(prompt)) if prompt_tokens is None else prompt_tokens
-                    completion_tokens = len(encoding.encode(response)) if completion_tokens is None else completion_tokens
-                except Exception as e:
-                    logger.log_message(f"Error calculating tokens: {str(e)}", level=logging.ERROR)
-                    # Fallback to character-based estimation
-                    prompt_tokens = len(prompt) // 4
-                    completion_tokens = len(response) // 4
-            
-            total_tokens = prompt_tokens + completion_tokens
-            
-            # Calculate cost
-            cost = 0.0
-            if model_name in self.model_costs:
-                cost = (prompt_tokens * self.model_costs[model_name]["input"] / 1000000) + \
-                       (completion_tokens * self.model_costs[model_name]["output"] / 1000000)
-            
-            # Calculate request time
-            request_time_ms = int((time.time() - start_time) * 1000)
-            
-            # Create usage record
-            usage = ModelUsage(
-                user_id=user_id,
-                chat_id=chat_id,
-                model_name=model_name,
-                provider=provider,
-                prompt_tokens=prompt_tokens,
-                completion_tokens=completion_tokens,
-                total_tokens=total_tokens,
-                query_size=len(prompt),
-                response_size=len(response),
-                cost=cost,
-                timestamp=datetime.utcnow(),
-                is_streaming=is_streaming,
-                request_time_ms=request_time_ms
-            )
-            
-            session.add(usage)
-            session.commit()
-            
-            return {
-                "usage_id": usage.usage_id,
-                "model_name": model_name,
-                "provider": provider,
-                "prompt_tokens": prompt_tokens,
-                "completion_tokens": completion_tokens,
-                "total_tokens": total_tokens,
-                "cost": cost,
-                "request_time_ms": request_time_ms
-            }
-        
-        except SQLAlchemyError as e:
-            session.rollback()
-            logger.log_message(f"Error tracking model usage: {str(e)}", level=logging.ERROR)
-            return {}
-        finally:
-            session.close()
-
-    def get_model_usage_analytics(self, start_date: Optional[datetime] = None, 
-                                  end_date: Optional[datetime] = None,
-                                  user_id: Optional[int] = None,
-                                  model_name: Optional[str] = None,
-                                  provider: Optional[str] = None,
-                                  limit: int = 1000) -> List[Dict[str, Any]]:
-        """
-        Get model usage analytics with optional filtering.
-        
-        Args:
-            start_date: Optional start date for the analytics period
-            end_date: Optional end date for the analytics period
-            user_id: Optional user ID to filter by
-            model_name: Optional model name to filter by
-            provider: Optional provider to filter by
-            limit: Maximum number of records to return
-            
-        Returns:
-            List of dictionaries containing usage records
-        """
-        session = self.Session()
-        try:
-            query = session.query(ModelUsage)
-            
-            # Apply filters
-            if start_date:
-                query = query.filter(ModelUsage.timestamp >= start_date)
-            if end_date:
-                query = query.filter(ModelUsage.timestamp <= end_date)
-            if user_id:
-                query = query.filter(ModelUsage.user_id == user_id)
-            if model_name:
-                query = query.filter(ModelUsage.model_name == model_name)
-            if provider:
-                query = query.filter(ModelUsage.provider == provider)
-            
-            # Order by timestamp descending
-            query = query.order_by(ModelUsage.timestamp.desc()).limit(limit)
-            
-            usages = query.all()
-            
-            return [{
-                "usage_id": usage.usage_id,
-                "user_id": usage.user_id,
-                "chat_id": usage.chat_id,
-                "model_name": usage.model_name,
-                "provider": usage.provider,
-                "prompt_tokens": usage.prompt_tokens,
-                "completion_tokens": usage.completion_tokens,
-                "total_tokens": usage.total_tokens,
-                "query_size": usage.query_size,
-                "response_size": usage.response_size,
-                "cost": usage.cost,
-                "timestamp": usage.timestamp.isoformat(),
-                "is_streaming": usage.is_streaming,
-                "request_time_ms": usage.request_time_ms
-            } for usage in usages]
-        
-        except SQLAlchemyError as e:
-            logger.log_message(f"Error retrieving model usage analytics: {str(e)}", level=logging.ERROR)
-            return []
         finally:
             session.close()
 
@@ -839,104 +524,91 @@ class ChatManager:
         """
         session = self.Session()
         try:
-            query = session.query(
-                func.sum(ModelUsage.cost).label("total_cost"),
-                func.sum(ModelUsage.prompt_tokens).label("total_prompt_tokens"),
-                func.sum(ModelUsage.completion_tokens).label("total_completion_tokens"),
-                func.sum(ModelUsage.total_tokens).label("total_tokens"),
-                func.count(ModelUsage.usage_id).label("request_count"),
-                func.avg(ModelUsage.request_time_ms).label("avg_request_time")
-            )
+            # Build base query - convert None values to default values for compatibility
+            base_query = session.query(ModelUsage)
             
             # Apply date filters
             if start_date:
-                query = query.filter(ModelUsage.timestamp >= start_date)
+                base_query = base_query.filter(ModelUsage.timestamp >= start_date)
             if end_date:
-                query = query.filter(ModelUsage.timestamp <= end_date)
+                base_query = base_query.filter(ModelUsage.timestamp <= end_date)
+                
+            # Get summary data using aggregate functions
+            summary_query = session.query(
+                func.coalesce(func.sum(ModelUsage.cost), 0.0).label("total_cost"),
+                func.coalesce(func.sum(ModelUsage.prompt_tokens), 0).label("total_prompt_tokens"),
+                func.coalesce(func.sum(ModelUsage.completion_tokens), 0).label("total_completion_tokens"),
+                func.coalesce(func.sum(ModelUsage.total_tokens), 0).label("total_tokens"),
+                func.count(ModelUsage.usage_id).label("request_count"),
+                func.coalesce(func.avg(ModelUsage.request_time_ms), 0.0).label("avg_request_time")
+            ).select_from(base_query.subquery())
             
-            result = query.first()
+            result = summary_query.first()
             
-            # Get usage breakdown by model
+            # Get usage breakdown by model - using the same base query for consistency
             model_query = session.query(
                 ModelUsage.model_name,
-                func.sum(ModelUsage.cost).label("model_cost"),
-                func.sum(ModelUsage.total_tokens).label("model_tokens"),
+                func.coalesce(func.sum(ModelUsage.cost), 0.0).label("model_cost"),
+                func.coalesce(func.sum(ModelUsage.total_tokens), 0).label("model_tokens"),
                 func.count(ModelUsage.usage_id).label("model_requests")
-            )
+            ).select_from(base_query.subquery()).group_by(ModelUsage.model_name)
             
-            if start_date:
-                model_query = model_query.filter(ModelUsage.timestamp >= start_date)
-            if end_date:
-                model_query = model_query.filter(ModelUsage.timestamp <= end_date)
-            
-            model_query = model_query.group_by(ModelUsage.model_name)
             model_breakdown = model_query.all()
             
-            # Get usage breakdown by provider
+            # Get usage breakdown by provider using the same base query
             provider_query = session.query(
                 ModelUsage.provider,
-                func.sum(ModelUsage.cost).label("provider_cost"),
-                func.sum(ModelUsage.total_tokens).label("provider_tokens"),
+                func.coalesce(func.sum(ModelUsage.cost), 0.0).label("provider_cost"),
+                func.coalesce(func.sum(ModelUsage.total_tokens), 0).label("provider_tokens"),
                 func.count(ModelUsage.usage_id).label("provider_requests")
-            )
+            ).select_from(base_query.subquery()).group_by(ModelUsage.provider)
             
-            if start_date:
-                provider_query = provider_query.filter(ModelUsage.timestamp >= start_date)
-            if end_date:
-                provider_query = provider_query.filter(ModelUsage.timestamp <= end_date)
-            
-            provider_query = provider_query.group_by(ModelUsage.provider)
             provider_breakdown = provider_query.all()
             
             # Get top users by cost
             user_query = session.query(
                 ModelUsage.user_id,
-                func.sum(ModelUsage.cost).label("user_cost"),
-                func.sum(ModelUsage.total_tokens).label("user_tokens"),
+                func.coalesce(func.sum(ModelUsage.cost), 0.0).label("user_cost"),
+                func.coalesce(func.sum(ModelUsage.total_tokens), 0).label("user_tokens"),
                 func.count(ModelUsage.usage_id).label("user_requests")
-            )
+            ).select_from(base_query.subquery()).group_by(ModelUsage.user_id).order_by(
+                func.sum(ModelUsage.cost).desc()
+            ).limit(10)
             
-            if start_date:
-                user_query = user_query.filter(ModelUsage.timestamp >= start_date)
-            if end_date:
-                user_query = user_query.filter(ModelUsage.timestamp <= end_date)
-            
-            user_query = user_query.group_by(ModelUsage.user_id)
-            user_query = user_query.order_by(func.sum(ModelUsage.cost).desc())
-            user_query = user_query.limit(10)
             user_breakdown = user_query.all()
             
+            # Handle the result data carefully to avoid None/NULL issues
             return {
                 "summary": {
-                    "total_cost": float(result.total_cost) if result.total_cost else 0.0,
-                    "total_prompt_tokens": int(result.total_prompt_tokens) if result.total_prompt_tokens else 0,
-                    "total_completion_tokens": int(result.total_completion_tokens) if result.total_completion_tokens else 0,
-                    "total_tokens": int(result.total_tokens) if result.total_tokens else 0,
-                    "request_count": int(result.request_count) if result.request_count else 0,
-                    "avg_request_time_ms": float(result.avg_request_time) if result.avg_request_time else 0.0
+                    "total_cost": float(result.total_cost) if result and result.total_cost is not None else 0.0,
+                    "total_prompt_tokens": int(result.total_prompt_tokens) if result and result.total_prompt_tokens is not None else 0,
+                    "total_completion_tokens": int(result.total_completion_tokens) if result and result.total_completion_tokens is not None else 0,
+                    "total_tokens": int(result.total_tokens) if result and result.total_tokens is not None else 0,
+                    "request_count": int(result.request_count) if result and result.request_count is not None else 0,
+                    "avg_request_time_ms": float(result.avg_request_time) if result and result.avg_request_time is not None else 0.0
                 },
                 "model_breakdown": [
                     {
                         "model_name": model.model_name,
-                        "cost": float(model.model_cost) if model.model_cost else 0.0,
-                        "tokens": int(model.model_tokens) if model.model_tokens else 0,
-                        "requests": int(model.model_requests) if model.model_requests else 0
+                        "cost": float(model.model_cost) if model.model_cost is not None else 0.0,
+                        "tokens": int(model.model_tokens) if model.model_tokens is not None else 0,
+                        "requests": int(model.model_requests) if model.model_requests is not None else 0
                     } for model in model_breakdown
                 ],
                 "provider_breakdown": [
                     {
                         "provider": provider.provider,
-                        "cost": float(provider.provider_cost) if provider.provider_cost else 0.0,
-                        "tokens": int(provider.provider_tokens) if provider.provider_tokens else 0,
-                        "requests": int(provider.provider_requests) if provider.provider_requests else 0
+                        "cost": float(provider.provider_cost) if provider.provider_cost is not None else 0.0,
+                        "tokens": int(provider.provider_tokens) if provider.provider_tokens is not None else 0,
+                        "requests": int(provider.provider_requests) if provider.provider_requests is not None else 0
                     } for provider in provider_breakdown
                 ],
                 "top_users": [
                     {
                         "user_id": user.user_id,
-                        "cost": float(user.user_cost) if user.user_cost else 0.0,
-                        "tokens": int(user.user_tokens) if user.user_tokens else 0,
-                        "requests": int(user.user_requests) if user.user_requests else 0
+                        "cost": float(user.user_cost) if user.user_cost is not None else 0.0,
+                        "tokens": int(user.user_tokens) if user.user_tokens is not None else 0,
+                        "requests": int(user.user_requests) if user.user_requests is not None else 0
                     } for user in user_breakdown
                 ]
             }
@@ -969,12 +641,18 @@ class ChatManager:
         """
         session = self.Session()
         try:
-            messages = session.query(Message).filter(
-                Message.chat_id == chat_id
-            ).order_by(Message.timestamp.desc()).limit(limit * 2).all()  # Fetch more to get message pairs
+            # Ensure safe limit for both databases
+            safe_limit = min(max(1, limit), 50) * 2  # Between 2 and 100 messages
             
-            # Reverse to get chronological order
-            messages.reverse()
+            # Use subquery for more efficient pagination in PostgreSQL
+            subquery = session.query(Message).filter(
+                Message.chat_id == chat_id
+            ).order_by(Message.timestamp.desc()).limit(safe_limit).subquery()
+            
+            # Query from the subquery and sort in chronological order
+            messages = session.query(Message).from_statement(
+                session.query(subquery).order_by(subquery.c.timestamp).statement
+            ).all()
             
             return [
                 {
@@ -982,7 +660,7 @@ class ChatManager:
                     "chat_id": msg.chat_id,
                     "content": msg.content,
                     "sender": msg.sender,
-                    "timestamp": msg.timestamp.isoformat()
+                    "timestamp": msg.timestamp.isoformat() if msg.timestamp else None
                 } for msg in messages
             ]
         except SQLAlchemyError as e:
@@ -1005,25 +683,54 @@ class ChatManager:
         
         summaries = []
         user_messages = []
-        for msg in messages:
-            # Get User Messages
-            if msg.get("sender") == "user":
-                user_messages.append(msg)
-            # Ensure content exists and is from AI before extracting summary
-            if msg.get("sender") == "ai" and "content" in msg:
-                content = msg["content"]
-                matches = re.findall(r"### Summary\n(.*?)(?=\n\n##|\Z)", content, re.DOTALL)                
-                summaries.extend(match.strip() for match in matches)
-
-        # Combine user messages with summaries in a structured format
-        combined_conversations = []
-        for user_msg, summary in zip(user_messages, summaries):
-            combined_conversations.append(f"Query: {user_msg['content']}\nSummary: {summary}")
-
-        # Return the last 3 conversations to maintain context
-        formatted_context = "\n\n".join(combined_conversations[-3:])
         
-        # Add a clear header to indicate this is past interaction history
-        if formatted_context:
-            return f"### Previous Interaction History:\n{formatted_context}"
-        return ""  
+        # Input validation
+        if not messages or not isinstance(messages, list):
+            return ""
+            
+        try:
+            for msg in messages:
+                # Skip invalid messages
+                if not isinstance(msg, dict):
+                    continue
+                    
+                # Get User Messages
+                if msg.get("sender") == "user":
+                    user_messages.append(msg)
+                # Ensure content exists and is from AI before extracting summary
+                if msg.get("sender") == "ai" and "content" in msg and msg["content"]:
+                    content = msg["content"]
+                    # Use a safer regex pattern with timeout protection
+                    try:
+                        matches = re.findall(r"### Summary\n(.*?)(?=\n\n##|\Z)", content, re.DOTALL)                
+                        summaries.extend(match.strip() for match in matches if match)
+                    except Exception as e:
+                        logger.log_message(f"Error extracting summaries: {str(e)}", level=logging.ERROR)
+    
+            # Combine user messages with summaries in a structured format
+            combined_conversations = []
+            for i, user_msg in enumerate(user_messages):
+                if i < len(summaries):
+                    # Ensure content exists and is not too long
+                    user_content = user_msg.get('content', '')
+                    if user_content and isinstance(user_content, str):
+                        # Truncate if needed
+                        if len(user_content) > 500:
+                            user_content = user_content[:497] + "..."
+                        
+                        summary = summaries[i]
+                        if len(summary) > 500:
+                            summary = summary[:497] + "..."
+                            
+                        combined_conversations.append(f"Query: {user_content}\nSummary: {summary}")
+    
+            # Return the last 3 conversations to maintain context
+            formatted_context = "\n\n".join(combined_conversations[-3:])
+            
+            # Add a clear header to indicate this is past interaction history
+            if formatted_context:
+                return f"### Previous Interaction History:\n{formatted_context}"
+            return ""
+        except Exception as e:
+            logger.log_message(f"Error in extract_response_history: {str(e)}", level=logging.ERROR)
+            return ""  
