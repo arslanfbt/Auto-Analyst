@@ -93,19 +93,6 @@ async def delete_chat(chat_id: int, user_id: Optional[int] = None):
         logger.log_message(f"Error deleting chat: {str(e)}", level=logging.ERROR)
         raise HTTPException(status_code=500, detail=f"Failed to delete chat: {str(e)}")
 
-@router.get("/search/", response_model=List[ChatResponse])
-async def search_chats(
-    query: str,
-    user_id: Optional[int] = None,
-    limit: int = Query(10, ge=1, le=100)
-):
-    """Search for chats containing the query string"""
-    try:
-        chats = chat_manager.search_chats(query, user_id, limit)
-        return chats
-    except Exception as e:
-        logger.log_message(f"Error searching chats: {str(e)}", level=logging.ERROR)
-        raise HTTPException(status_code=500, detail=f"Failed to search chats: {str(e)}")
 
 @router.post("/users", response_model=dict)
 async def create_or_get_user(user_info: UserInfo):
