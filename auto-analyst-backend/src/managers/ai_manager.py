@@ -70,7 +70,7 @@ class AI_Manager:
         
         # Get provider for logging
         model_provider = get_provider_for_model(model_name)    
-        logger.log_message(f"[> ] Model Name: {model_name}, Model Provider: {model_provider}")
+        logger.log_message(f"[> ] Model Name: {model_name}, Model Provider: {model_provider}", level=logging.INFO)
         
         # Use the centralized calculate_cost function
         return calculate_cost(model_name, input_tokens, output_tokens)

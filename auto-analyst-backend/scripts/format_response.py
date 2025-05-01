@@ -176,6 +176,7 @@ def execute_code_from_markdown(code_str, dataframe=None):
 def format_response_to_markdown(api_response, agent_name = None, dataframe=None):
     try:
         markdown = []
+        logger.log_message(f"API response for {agent_name} at {time.strftime('%Y-%m-%d %H:%M:%S')}: {api_response}", level=logging.INFO)
 
         if isinstance(api_response, dict):
             for key in api_response:
@@ -200,11 +201,13 @@ def format_response_to_markdown(api_response, agent_name = None, dataframe=None)
             markdown.append(f"\n## {agent.replace('_', ' ').title()}\n")
             
             if agent == "analytical_planner":
-                if 'rationale' in content:
+                if 'plan_desc' in content:
+                    markdown.append(f"### Reasoning\n{content['plan_desc']}\n")
+                else:
                     markdown.append(f"### Reasoning\n{content['rationale']}\n")
-            
-            if "reasoning" in content:
-                markdown.append(f"### Reasoning\n{content['reasoning']}\n")
+            else:  
+                if "rationale" in content:
+                    markdown.append(f"### Reasoning\n{content['rationale']}\n")
 
             if 'code' in content:
                 markdown.append(f"### Code Implementation\n{format_code_backticked_block(content['code'])}\n")
@@ -267,6 +270,7 @@ def format_response_to_markdown(api_response, agent_name = None, dataframe=None)
         logger.log_message(f"Error in format_response_to_markdown: {str(e)}", level=logging.ERROR)
         return f"{str(e)}"
         
+    # logger.log_message(f"Generated markdown content for agent '{agent_name}' at {time.strftime('%Y-%m-%d %H:%M:%S')}: {markdown}, length: {len(markdown)}", level=logging.INFO)
     
     if not markdown or len(markdown) <= 1:
         logger.log_message(f"Generated markdown (ERROR) content for agent '{agent_name}' at {time.strftime('%Y-%m-%d %H:%M:%S')}: {markdown}, length: {len(markdown)}", level=logging.INFO)
