@@ -239,7 +239,7 @@ def format_response_to_markdown(api_response, agent_name = None, dataframe=None)
                         clean_code = format_code_block(content['refined_complete_code']) 
                         markdown_code = format_code_backticked_block(content['refined_complete_code'])
                         output, json_outputs = execute_code_from_markdown(clean_code, dataframe)
-                    elif "summary" in content and "```python" in content['summary']:
+                    elif "```python" in content['summary']:
                         clean_code = format_code_block(content['summary'])
                         markdown_code = format_code_backticked_block(content['summary'])
                         output, json_outputs = execute_code_from_markdown(clean_code, dataframe)
@@ -266,8 +266,7 @@ def format_response_to_markdown(api_response, agent_name = None, dataframe=None)
     except Exception as e:
         logger.log_message(f"Error in format_response_to_markdown: {str(e)}", level=logging.ERROR)
         return f"{str(e)}"
-    
-    # logger.log_message(f"Generated markdown content for agent '{agent_name}' at {time.strftime('%Y-%m-%d %H:%M:%S')}: {markdown}, length: {len(markdown)}", level=logging.INFO)
+        
     
     if not markdown or len(markdown) <= 1:
         logger.log_message(f"Generated markdown (ERROR) content for agent '{agent_name}' at {time.strftime('%Y-%m-%d %H:%M:%S')}: {markdown}, length: {len(markdown)}", level=logging.INFO)
@@ -301,4 +300,3 @@ fig2.show()
     }
 
     formatted_md = format_response_to_markdown(sample_response)
-
