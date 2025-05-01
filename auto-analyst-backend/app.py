@@ -227,13 +227,20 @@ AVAILABLE_AGENTS = {
     "preprocessing_agent": preprocessing_agent,
 }
 
+PLANNER_AGENTS = {
+    "planner_data_viz_agent": planner_data_viz_agent,
+    "planner_sk_learn_agent": planner_sk_learn_agent,
+    "planner_statistical_analytics_agent": planner_statistical_analytics_agent,
+    "planner_preprocessing_agent": planner_preprocessing_agent,
+}
+
 # Add session header
 X_SESSION_ID = APIKeyHeader(name="X-Session-ID", auto_error=False)
 
 # Update AppState class to use SessionManager
 class AppState:
     def __init__(self):
-        self._session_manager = SessionManager(styling_instructions, AVAILABLE_AGENTS)
+        self._session_manager = SessionManager(styling_instructions, PLANNER_AGENTS)
         self.model_config = DEFAULT_MODEL_CONFIG.copy()
         # Update the SessionManager with the current model_config
         self._session_manager._app_model_config = self.model_config
@@ -515,18 +522,18 @@ async def chat_with_all(
             if chat_context:
                 enhanced_query = f"### Current Query:\n{request.query}\n\n{chat_context}"
             
-            logger.log_message(f"Processing query: {enhanced_query[:100]}...", level=logging.INFO)
+            # logger.log_message(f"Processing query: {enhanced_query[:100]}...", level=logging.INFO)
             
             try:
                 # Use the session model for this specific request
-                dspy.settings.configure(lm=session_lm)
+                dspy.settings.configure(lm=session_lm, async_max_workers=1000)
                 
                 # Get responses from the auto_analyst
                 all_responses = await session_state["ai_system"](enhanced_query)
                 
                 # The response should now be a dictionary, not a generator
                 if not isinstance(all_responses, dict):
-                    logger.log_message(f"Response type: {type(all_responses)}", level=logging.INFO)
+                    # logger.log_message(f"Response type: {type(all_responses)}", level=logging.INFO)
                     # If it's not a dictionary, try to convert it
                     if hasattr(all_responses, 'toDict'):
                         all_responses = all_responses.toDict()
@@ -534,10 +541,10 @@ async def chat_with_all(
                         all_responses = all_responses.to_dict()
                     else:
                         # If we can't convert it, log an error
-                        logger.log_message(f"Unexpected response type, cannot convert: {type(all_responses)}", level=logging.ERROR)
+                        # logger.log_message(f"Unexpected response type, cannot convert: {type(all_responses)}", level=logging.ERROR)
                         raise ValueError(f"Unexpected response type: {type(all_responses)}")
                 
-                logger.log_message(f"All Responses keys: {list(all_responses.keys()) if isinstance(all_responses, dict) else 'not a dict'}", level=logging.INFO)
+                # logger.log_message(f"All Responses keys: {list(all_responses.keys()) if isinstance(all_responses, dict) else 'not a dict'}", level=logging.INFO)
                 
                 # First yield planner response
                 if isinstance(all_responses, dict) and 'analytical_planner' in all_responses:
@@ -546,7 +553,7 @@ async def chat_with_all(
                         {"analytical_planner": plan_response}, 
                         dataframe=session_state["current_df"]
                     )
-                    logger.log_message(f"Plan Description: {plan_description}", level=logging.INFO)
+                    # logger.log_message(f"Plan Description: {plan_description}", level=logging.INFO)
                     
                     if plan_description == "Please provide a valid query...":
                         yield json.dumps({
@@ -565,7 +572,7 @@ async def chat_with_all(
                 # Log the actual structure of all_responses for debugging
                 for key, value in all_responses.items():
                     if key != 'analytical_planner':
-                        logger.log_message(f"Response key: {key}, Type: {type(value)}", level=logging.INFO)
+                        # logger.log_message(f"Response key: {key}, Type: {type(value)}", level=logging.INFO)
                         if isinstance(value, dict):
                             logger.log_message(f"Dict keys for {key}: {list(value.keys())}", level=logging.INFO)
                 
@@ -581,44 +588,49 @@ async def chat_with_all(
                     agent_count += 1
                     
                     # For code combiner, store the response for token calculation
-                    if agent_name == 'code_combiner_agent':
-                        logger.log_message(f"Found code_combiner_agent response", level=logging.INFO)
-                        total_response += str(response)
+                    # if agent_name == 'code_combiner_agent':
+                    #     # logger.log_message(f"Found code_combiner_agent response", level=logging.INFO)
+                    #     total_response += str(response)
                         
-                        # Special handling for code_combiner_agent
-                        if isinstance(response, dict) and 'combiner_results' in response:
-                            logger.log_message(f"Extracting combiner_results for formatting", level=logging.INFO)
+                    #     # Special handling for code_combiner_agent
+                    #     if isinstance(response, dict) and 'combiner_results' in response:
+                    #         # logger.log_message(f"Extracting combiner_results for formatting", level=logging.INFO)
                             
-                            # Extract the actual results from the nested structure
-                            combiner_results = response['combiner_results']
-                            if isinstance(combiner_results, dict):
-                                # Log the structure of the combiner_results
-                                logger.log_message(f"Combiner results keys: {list(combiner_results.keys())}", level=logging.INFO)
+                    #         # Extract the actual results from the nested structure
+                    #         combiner_results = response['combiner_results']
+                    #         if isinstance(combiner_results, dict):
+                    #             # Log the structure of the combiner_results
+                    #             # logger.log_message(f"Combiner results keys: {list(combiner_results.keys())}", level=logging.INFO)
                                 
-                                # Use the extracted combiner_results for formatting
-                                formatted_response = format_response_to_markdown(
-                                    {"code_combiner_agent": combiner_results}, 
-                                    dataframe=session_state["current_df"]
-                                ) or "No response generated"
-                            else:
-                                formatted_response = f"Error formatting code combiner: unexpected result type {type(combiner_results)}"
-                        else:
-                            formatted_response = "Error: Invalid code combiner response format"
-                    else:
+                    #             # Use the extracted combiner_results for formatting
+                    #             formatted_response = format_response_to_markdown(
+                    #                 {"code_combiner_agent": combiner_results}, 
+                    #                 dataframe=session_state["current_df"]
+                    #             ) or "No response generated"
+                    #         else:
+                    #             formatted_response = f"Error formatting code combiner: unexpected result type {type(combiner_results)}"
+                    #     else:
+                    #         formatted_response = "Error: Invalid code combiner response format"
+                    # else:
                         # Normal handling for other agents
-                        formatted_response = format_response_to_markdown(
+                        # formatted_response = format_response_to_markdown(
+                        #     {agent_name: response}, 
+                        #     dataframe=session_state["current_df"]
+                        # ) or "No response generated"
+                    
+                    formatted_response = format_response_to_markdown(
                             {agent_name: response}, 
                             dataframe=session_state["current_df"]
                         ) or "No response generated"
                     
-                    logger.log_message(f"Formatted response for {agent_name}: {formatted_response[:100]}...", level=logging.INFO)
+                    # logger.log_message(f"Formatted response for {agent_name}: {formatted_response[:100]}...", level=logging.INFO)
 
                     if formatted_response == "Please provide a valid query...":
-                        yield json.dumps({
-                            "agent": agent_name,
-                            "content": formatted_response,
-                            "status": "error"
-                        }) + "\n"
+                        # yield json.dumps({
+                        #     "agent": agent_name,
+                        #     "content": formatted_response,
+                        #     "status": "error"
+                        # }) + "\n"
                         continue
                     
                     yield json.dumps({
@@ -627,96 +639,96 @@ async def chat_with_all(
                         "status": "success" if response else "error"
                     }) + "\n"
                     
-                    logger.log_message(f"Successfully yielded response for {agent_name}", level=logging.INFO)
+                    # logger.log_message(f"Successfully yielded response for {agent_name}", level=logging.INFO)
                 
-                logger.log_message(f"Processed {agent_count} agent responses (excluding planner)", level=logging.INFO)
+                # logger.log_message(f"Processed {agent_count} agent responses (excluding planner)", level=logging.INFO)
                 
-                # Record usage statistics if user is logged in
-                if session_state.get("user_id"):
-                    overall_processing_time_ms = int((time.time() - overall_start_time) * 1000)
-                    prompt_size = len(enhanced_query)
-                    response_size = len(total_response)
+                # # Record usage statistics if user is logged in
+                # if session_state.get("user_id"):
+                #     overall_processing_time_ms = int((time.time() - overall_start_time) * 1000)
+                #     prompt_size = len(enhanced_query)
+                #     response_size = len(total_response)
                     
-                    # Get model info from session state
-                    model_config = session_state.get("model_config", DEFAULT_MODEL_CONFIG)
-                    model_name = model_config.get("model", DEFAULT_MODEL_CONFIG["model"])
-                    provider = app.state.ai_manager.get_provider_for_model(model_name)
+                #     # Get model info from session state
+                #     model_config = session_state.get("model_config", DEFAULT_MODEL_CONFIG)
+                #     model_name = model_config.get("model", DEFAULT_MODEL_CONFIG["model"])
+                #     provider = app.state.ai_manager.get_provider_for_model(model_name)
                     
-                    # Estimate tokens
-                    try:
-                        prompt_tokens = len(app.state.ai_manager.tokenizer.encode(enhanced_query))
-                        completion_tokens = len(app.state.ai_manager.tokenizer.encode(total_response))
-                        total_tokens = prompt_tokens + completion_tokens
-                    except:
-                        # Fallback estimation
-                        words = len(enhanced_query.split()) + len(total_response.split())
-                        total_tokens = int(words * 1.5)
-                        prompt_tokens = int(len(enhanced_query.split()) * 1.5)
-                        completion_tokens = total_tokens - prompt_tokens
+                #     # Estimate tokens
+                #     try:
+                #         prompt_tokens = len(app.state.ai_manager.tokenizer.encode(enhanced_query))
+                #         completion_tokens = len(app.state.ai_manager.tokenizer.encode(total_response))
+                #         total_tokens = prompt_tokens + completion_tokens
+                #     except:
+                #         # Fallback estimation
+                #         words = len(enhanced_query.split()) + len(total_response.split())
+                #         total_tokens = int(words * 1.5)
+                #         prompt_tokens = int(len(enhanced_query.split()) * 1.5)
+                #         completion_tokens = total_tokens - prompt_tokens
                     
-                    # Calculate cost
-                    cost = app.state.ai_manager.calculate_cost(model_name, prompt_tokens, completion_tokens)
+                #     # Calculate cost
+                #     cost = app.state.ai_manager.calculate_cost(model_name, prompt_tokens, completion_tokens)
                     
-                    # Save usage to DB
-                    app.state.ai_manager.save_usage_to_db(
-                        user_id=session_state.get("user_id"),
-                        chat_id=session_state.get("chat_id"),
-                        model_name=model_name,
-                        provider=provider,
-                        prompt_tokens=int(prompt_tokens),
-                        completion_tokens=int(completion_tokens),
-                        total_tokens=int(total_tokens),
-                        query_size=prompt_size,
-                        response_size=response_size,
-                        cost=round(cost, 7),
-                        request_time_ms=overall_processing_time_ms,
-                        is_streaming=True
-                    )
+                #     # Save usage to DB
+                #     app.state.ai_manager.save_usage_to_db(
+                #         user_id=session_state.get("user_id"),
+                #         chat_id=session_state.get("chat_id"),
+                #         model_name=model_name,
+                #         provider=provider,
+                #         prompt_tokens=int(prompt_tokens),
+                #         completion_tokens=int(completion_tokens),
+                #         total_tokens=int(total_tokens),
+                #         query_size=prompt_size,
+                #         response_size=response_size,
+                #         cost=round(cost, 7),
+                #         request_time_ms=overall_processing_time_ms,
+                #         is_streaming=True
+                #     )
                     
-                    # If code_combiner_agent is in the responses and has agent_name specified
-                    if 'code_combiner_agent' in all_responses and isinstance(all_responses['code_combiner_agent'], dict):
-                        code_combiner = all_responses['code_combiner_agent']
-                        if 'code_combiner_agent_name' in code_combiner:
-                            model_name = code_combiner['code_combiner_agent_name']
-                            if model_name == "o3-mini" or model_name == "openai":
-                                model_name = "o3-mini" 
-                            elif model_name == "claude-3-7-sonnet-latest" or model_name == "anthropic":
-                                model_name = "claude-3-7-sonnet-latest"
-                            else:
-                                model_name = "gemini-2.5-pro-preview-03-25"
+                #     # If code_combiner_agent is in the responses and has agent_name specified
+                #     if 'code_combiner_agent' in all_responses and isinstance(all_responses['code_combiner_agent'], dict):
+                #         code_combiner = all_responses['code_combiner_agent']
+                #         if 'code_combiner_agent_name' in code_combiner:
+                #             model_name = code_combiner['code_combiner_agent_name']
+                #             if model_name == "o3-mini" or model_name == "openai":
+                #                 model_name = "o3-mini" 
+                #             elif model_name == "claude-3-7-sonnet-latest" or model_name == "anthropic":
+                #                 model_name = "claude-3-7-sonnet-latest"
+                #             else:
+                #                 model_name = "gemini-2.5-pro-preview-03-25"
                                 
-                            provider = app.state.ai_manager.get_provider_for_model(model_name)
-                            code_list = code_combiner.get('code_list', '')
-                            combiner_results = code_combiner.get('combiner_results', {})
+                #             provider = app.state.ai_manager.get_provider_for_model(model_name)
+                #             code_list = code_combiner.get('code_list', '')
+                #             combiner_results = code_combiner.get('combiner_results', {})
                             
-                            # Estimate tokens for code combiner
-                            try:
-                                input_tokens = len(app.state.ai_manager.tokenizer.encode(code_list))
-                                output_tokens = len(app.state.ai_manager.tokenizer.encode(str(combiner_results)))
-                                combiner_tokens = input_tokens + output_tokens
-                            except:
-                                # Fallback estimation
-                                combiner_tokens = int(len(str(code_list + str(combiner_results)).split()) * 1.5)
-                                input_tokens = int(len(str(code_list).split()) * 1.5)
-                                output_tokens = combiner_tokens - input_tokens
+                #             # Estimate tokens for code combiner
+                #             try:
+                #                 input_tokens = len(app.state.ai_manager.tokenizer.encode(code_list))
+                #                 output_tokens = len(app.state.ai_manager.tokenizer.encode(str(combiner_results)))
+                #                 combiner_tokens = input_tokens + output_tokens
+                #             except:
+                #                 # Fallback estimation
+                #                 combiner_tokens = int(len(str(code_list + str(combiner_results)).split()) * 1.5)
+                #                 input_tokens = int(len(str(code_list).split()) * 1.5)
+                #                 output_tokens = combiner_tokens - input_tokens
                             
-                            code_combiner_cost = app.state.ai_manager.calculate_cost(model_name, input_tokens, output_tokens)
+                #             code_combiner_cost = app.state.ai_manager.calculate_cost(model_name, input_tokens, output_tokens)
                             
-                            # Save usage for code combiner
-                            app.state.ai_manager.save_usage_to_db(
-                                user_id=session_state.get("user_id"),
-                                chat_id=session_state.get("chat_id"),
-                                model_name=model_name,
-                                provider=provider,
-                                prompt_tokens=int(input_tokens),
-                                completion_tokens=int(output_tokens),
-                                total_tokens=int(combiner_tokens),
-                                query_size=len(code_list),
-                                response_size=len(str(combiner_results)),
-                                cost=round(code_combiner_cost, 7),
-                                request_time_ms=overall_processing_time_ms,
-                                is_streaming=True
-                            )
+                #             # Save usage for code combiner
+                #             app.state.ai_manager.save_usage_to_db(
+                #                 user_id=session_state.get("user_id"),
+                #                 chat_id=session_state.get("chat_id"),
+                #                 model_name=model_name,
+                #                 provider=provider,
+                #                 prompt_tokens=int(input_tokens),
+                #                 completion_tokens=int(output_tokens),
+                #                 total_tokens=int(combiner_tokens),
+                #                 query_size=len(code_list),
+                #                 response_size=len(str(combiner_results)),
+                #                 cost=round(code_combiner_cost, 7),
+                #                 request_time_ms=overall_processing_time_ms,
+                #                 is_streaming=True
+                #             )
             except Exception as e:
                 logger.log_message(f"Error executing AI system: {str(e)}", level=logging.ERROR)
                 yield json.dumps({

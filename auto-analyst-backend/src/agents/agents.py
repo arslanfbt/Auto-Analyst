@@ -14,8 +14,36 @@ AGENTS_WITH_DESCRIPTION = {
     "data_viz_agent": "Generates interactive visualizations with Plotly, selecting the best chart type to reveal trends, comparisons, and insights based on the analysis goal."
 }
 
-def get_agent_description(agent_name):
-    return AGENTS_WITH_DESCRIPTION[agent_name.lower()] if agent_name.lower() in AGENTS_WITH_DESCRIPTION else "No description available for this agent"
+PLANNER_AGENTS_WITH_DESCRIPTION = {
+    "planner_preprocessing_agent": (
+        "Cleans and prepares a DataFrame using Pandas and NumPy—"
+        "handles missing values, detects column types, and converts date strings to datetime. "
+        "Outputs a cleaned DataFrame for the planner_statistical_analytics_agent."
+    ),
+    "planner_statistical_analytics_agent": (
+        "Takes the cleaned DataFrame from preprocessing, performs statistical analysis "
+        "(e.g., regression, seasonal decomposition) using statsmodels with proper handling "
+        "of categorical data and remaining missing values. "
+        "Produces summary statistics and model diagnostics for the planner_sk_learn_agent."
+    ),
+    "planner_sk_learn_agent": (
+        "Receives summary statistics and the cleaned data, trains and evaluates machine "
+        "learning models using scikit-learn (classification, regression, clustering), "
+        "and generates performance metrics and feature importance. "
+        "Passes the trained models and evaluation results to the planner_data_viz_agent."
+    ),
+    "planner_data_viz_agent": (
+        "Consumes trained models and evaluation results to create interactive visualizations "
+        "with Plotly—selects the best chart type, applies styling, and annotates insights. "
+        "Delivers ready-to-share figures that communicate model performance and key findings."
+    ),
+}
+
+def get_agent_description(agent_name, is_planner=False):
+    if is_planner:
+        return PLANNER_AGENTS_WITH_DESCRIPTION[agent_name.lower()] if agent_name.lower() in PLANNER_AGENTS_WITH_DESCRIPTION else "No description available for this agent"
+    else:
+        return AGENTS_WITH_DESCRIPTION[agent_name.lower()] if agent_name.lower() in AGENTS_WITH_DESCRIPTION else "No description available for this agent"
 
 
 # Agent to make a Chat history name from a query
@@ -104,7 +132,7 @@ class planner_data_viz_agent(dspy.Signature):
 
     Your job is to:
     - Use Plotly to generate a visualization that fulfills the user goal and adheres to plan instructions
-    - Use Streamlit's `st.write()` for displaying outputs (not `print`)
+    - Display the chart using Plotly's `fig.show()` method
     - Respect performance thresholds:
         - If `len(df) > 50000`, sample the dataset before visualizing using:
         ```python
@@ -129,11 +157,11 @@ class planner_data_viz_agent(dspy.Signature):
         - 'receive': list of input variables needed (e.g., 'regression_model', 'df_cleaned')
 
     Output Fields:
-    - code: Plotly Python code that implements the intended chart
+    - code: Plotly Python code that implements and displays the chart
     - summary: A plain-language explanation of what the chart shows (without any code)
     """
     goal = dspy.InputField(desc="User-defined chart goal (e.g. trendlines, scatter plots)")
-    dataset = dspy.InputField(desc="Details of the dataframe and its columns (named as df)")
+    dataset = dspy.InputField(desc="Details of the dataframe (`df`) and its columns")
     styling_index = dspy.InputField(desc="Instructions for plot styling and layout formatting")
     plan_instructions = dspy.InputField(desc="Variables to create and receive for visualization purposes")
 
@@ -168,7 +196,7 @@ class planner_preprocessing_agent(dspy.Signature):
         df['datetime_column'] = df['datetime_column'].apply(safe_to_datetime)
         ```
     - If visualizing (e.g., heatmaps), use Plotly (not matplotlib)
-    - Use `st.write()` instead of `print()` because you're in a Streamlit environment
+    - Write output to the console using `print()`, as this is standard Python code
 
     Your output should include:
     - Python code that satisfies the instructions
@@ -213,14 +241,14 @@ class planner_statistical_analytics_agent(dspy.Signature):
         - Convert X and y to float before fitting
         - Handle missing values before modeling
         - Avoid data visualization here (that is handled by other agents)
-        - Use `st.write()` instead of `print()` for output (Streamlit environment)
+        - Write output to the console using `print()`
 
     If the goal is regression:
         - Use statsmodels OLS with proper handling of categorical variables
 
     If the goal is seasonal decomposition:
         - Use `statsmodels.tsa.seasonal_decompose`
-        - Make sure the time series and period are correctly provided
+        - Ensure the time series and period are correctly provided
 
     Use this function structure as a safe template:
     ```python
@@ -282,7 +310,7 @@ class planner_sk_learn_agent(dspy.Signature):
     Your responsibilities:
     - Use the scikit-learn library to implement the appropriate ML pipeline
     - Always split data into training and testing sets where applicable
-    - Use `st.write()` for all outputs instead of `print()` (Streamlit environment)
+    - Use `print()` for all outputs.
     - Ensure your code is:
         - Reproducible (set `random_state=42`)
         - Modular (avoid deeply nested code)
@@ -800,15 +828,15 @@ class auto_analyst(dspy.Module):
             name = a.__pydantic_core_schema__['schema']['model_name']
             self.agents[name] = dspy.ChainOfThought(a)
             self.agent_inputs[name] = {x.strip() for x in str(agents[i].__pydantic_core_schema__['cls']).split('->')[0].split('(')[1].split(',')}
-            self.agent_desc.append({name: get_agent_description(name)})
+            self.agent_desc.append({name: get_agent_description(name, is_planner=True)})
         
         # Initialize coordination agents
         self.planner = dspy.ChainOfThought(analytical_planner)
         self.refine_goal = dspy.ChainOfThought(goal_refiner_agent)
-        self.code_combiner_agent = dspy.ChainOfThought(code_combiner_agent)
+        # self.code_combiner_agent = dspy.ChainOfThought(code_combiner_agent)
         self.story_teller = dspy.ChainOfThought(story_teller_agent)
         self.memory_summarize_agent = dspy.ChainOfThought(m.memory_summarize_agent)
-        self.parallelizer = dspy.Parallel()
+        self.parallelizer = dspy.Parallel(num_threads=10)
                 
         # Initialize retrievers
         self.dataset = retrievers['dataframe_index'].as_retriever(k=1)
@@ -868,41 +896,41 @@ class auto_analyst(dspy.Module):
                 code_list.append(result.code)
                 
         code_combiner_info = {}
-        try:
-            with dspy.context(lm=dspy.LM(model="gemini/gemini-2.5-pro-preview-03-25", api_key = os.environ['GEMINI_API_KEY'], max_tokens=10000)):
-                combiner_result = self.code_combiner_agent(agent_code_list=str(code_list), dataset=dict_['dataset'])
-                code_combiner_info = {
-                    'code_combiner_agent_name': 'gemini-2.5-pro-preview-03-25',
-                    'code_list': str(code_list),
-                    'combiner_results': dict(combiner_result)
-                }
-        except:
-            try: 
-                # Set max_tokens to a fixed value of 10000 for all models
-                with dspy.context(lm=dspy.LM(model="o3-mini", max_tokens=10000, temperature=1.0, api_key=os.getenv("OPENAI_API_KEY"))):
-                    combiner_result = self.code_combiner_agent(agent_code_list=str(code_list), dataset=dict_['dataset'])
-                    code_combiner_info = {
-                        'code_combiner_agent_name': 'o3-mini',
-                        'code_list': str(code_list),
-                        'combiner_results': dict(combiner_result)
-                    }
-            except:
-                try: 
-                    with dspy.context(lm=dspy.LM(model="claude-3-7-sonnet-latest", max_tokens=100000, temperature=1.0, api_key=os.getenv("ANTHROPIC_API_KEY"))):
-                        combiner_result = self.code_combiner_agent(agent_code_list=str(code_list), dataset=dict_['dataset'])
-                        code_combiner_info = {
-                            'code_combiner_agent_name': 'claude-3-7-sonnet-latest',
-                            'code_list': str(code_list),
-                            'combiner_results': dict(combiner_result)
-                        }
-                except Exception as e:
-                    code_combiner_info = {
-                        'code_combiner_agent_name': 'none',
-                        'code_list': str(code_list),
-                        'combiner_results': {"error": f"Error in code combiner: {str(e)}"}
-                    }
+        # try:
+        #     with dspy.context(lm=dspy.LM(model="gemini/gemini-2.5-pro-preview-03-25", api_key = os.environ['GEMINI_API_KEY'], max_tokens=10000)):
+        #         combiner_result = self.code_combiner_agent(agent_code_list=str(code_list), dataset=dict_['dataset'])
+        #         code_combiner_info = {
+        #             'code_combiner_agent_name': 'gemini-2.5-pro-preview-03-25',
+        #             'code_list': str(code_list),
+        #             'combiner_results': dict(combiner_result)
+        #         }
+        # except:
+        #     try: 
+        #         # Set max_tokens to a fixed value of 10000 for all models
+        #         with dspy.context(lm=dspy.LM(model="o3-mini", max_tokens=10000, temperature=1.0, api_key=os.getenv("OPENAI_API_KEY"))):
+        #             combiner_result = self.code_combiner_agent(agent_code_list=str(code_list), dataset=dict_['dataset'])
+        #             code_combiner_info = {
+        #                 'code_combiner_agent_name': 'o3-mini',
+        #                 'code_list': str(code_list),
+        #                 'combiner_results': dict(combiner_result)
+        #             }
+        #     except:
+        #         try: 
+        #             with dspy.context(lm=dspy.LM(model="claude-3-7-sonnet-latest", max_tokens=100000, temperature=1.0, api_key=os.getenv("ANTHROPIC_API_KEY"))):
+        #                 combiner_result = self.code_combiner_agent(agent_code_list=str(code_list), dataset=dict_['dataset'])
+        #                 code_combiner_info = {
+        #                     'code_combiner_agent_name': 'claude-3-7-sonnet-latest',
+        #                     'code_list': str(code_list),
+        #                     'combiner_results': dict(combiner_result)
+        #                 }
+        #         except Exception as e:
+        #             code_combiner_info = {
+        #                 'code_combiner_agent_name': 'none',
+        #                 'code_list': str(code_list),
+        #                 'combiner_results': {"error": f"Error in code combiner: {str(e)}"}
+        #             }
         
-        # Add the code combiner info to the output dictionary
+        # # Add the code combiner info to the output dictionary
         output_dict['code_combiner_agent'] = code_combiner_info
             
         return output_dict
