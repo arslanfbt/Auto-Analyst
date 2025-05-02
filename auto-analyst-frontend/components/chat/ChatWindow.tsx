@@ -71,7 +71,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
     // Toggle canvas without clearing outputs
     setCodeCanvasOpen(!codeCanvasOpen)
   }, [codeCanvasOpen])
-  
+
   // Update local messages when prop messages change
   useEffect(() => {
     setLocalMessages(messages)
@@ -257,6 +257,19 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
     const codeEntry = codeEntries.find(entry => entry.id === entryId);
     if (!codeEntry) return;
     
+    // If this is just a code update without execution (savedCode)
+    if (result.savedCode) {
+      // Update the code in our state without generating output
+      setCodeEntries(prev => 
+        prev.map(entry => 
+          entry.id === entryId 
+            ? { ...entry, code: result.savedCode } 
+            : entry
+        )
+      );
+      return;
+    }
+    
     // Clear previous outputs for this code
     setCodeOutputs(prev => prev.filter(output => output.codeId !== entryId))
     
@@ -323,14 +336,14 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
       : JSON.stringify(message.text);
     
     // Render the entire message
-    return (
-      <motion.div
+            return (
+              <motion.div
         key={index}
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.3 }}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.3 }}
         className={`flex ${message.sender === "user" ? "justify-end" : "justify-start"} mb-8`}
-      >
+              >
         <div
           className={`relative rounded-2xl p-6 transition-shadow duration-200 hover:shadow-lg ${
             message.sender === "user"
@@ -390,8 +403,8 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
       if (plotlyData.data && plotlyData.data.length > 0) {
         return (
           <div key={key} className="w-full my-4 overflow-x-auto">
-            <PlotlyChart data={plotlyData.data} layout={plotlyData.layout} />
-          </div>
+                    <PlotlyChart data={plotlyData.data} layout={plotlyData.layout} />
+                  </div>
         );
       }
     } catch (e) {
@@ -425,20 +438,20 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
               </div>
             );
           } else if (output.type === 'output') {
-            return (
+          return (
               <div key={`output-${messageIndex}-${idx}`} className="bg-gray-50 border border-gray-200 rounded-md p-3 overflow-auto">
                 <div className="text-gray-700 font-medium mb-2">Output</div>
                 <pre className="text-xs text-gray-800 font-mono whitespace-pre-wrap">{output.content}</pre>
               </div>
             );
           } else if (output.type === 'plotly') {
-            return (
+        return (
               <div key={`output-${messageIndex}-${idx}`} className="bg-white border border-gray-200 rounded-md p-3 overflow-auto">
                 <div className="text-gray-700 font-medium mb-2">Visualization</div>
                 <div className="w-full">
                   <PlotlyChart data={output.content.data} layout={output.content.layout} />
                 </div>
-              </div>
+            </div>
             );
           }
           return null;

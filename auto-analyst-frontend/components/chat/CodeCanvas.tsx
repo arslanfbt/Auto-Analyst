@@ -1,17 +1,20 @@
 "use client"
 
-import React, { useState, useEffect } from "react"
+import React, { useState, useEffect, useRef } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter"
 import { vscDarkPlus } from "react-syntax-highlighter/dist/esm/styles/prism"
-import { ChevronRight, Copy, Check, Play, Edit2, Save, X, Maximize2, Minimize2 } from "lucide-react"
+import { ChevronRight, Copy, Check, Play, Edit2, Save, X, Maximize2, Minimize2, Wand2, AlertTriangle, WrenchIcon, Send, Scissors } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
-import MonacoEditor from '@monaco-editor/react'
+import MonacoEditor, { useMonaco } from '@monaco-editor/react'
 import { useToast } from "@/components/ui/use-toast"
 import { useSessionStore } from '@/lib/store/sessionStore'
 import axios from "axios"
 import API_URL from '@/config/api'
+import { Textarea } from "@/components/ui/textarea"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { diff_match_patch } from 'diff-match-patch'
 
 interface CodeEntry {
   id: string;
@@ -31,6 +34,12 @@ interface CodeCanvasProps {
   onCodeExecute?: (entryId: string, result: any) => void;
 }
 
+interface SelectionPosition {
+  top: number;
+  left: number;
+  width: number;
+}
+
 const CodeCanvas: React.FC<CodeCanvasProps> = ({ 
   isOpen, 
   onToggle, 
@@ -44,6 +53,17 @@ const CodeCanvas: React.FC<CodeCanvasProps> = ({
   const [editedCodeMap, setEditedCodeMap] = useState<Record<string, string>>({})
   const [copiedMap, setCopiedMap] = useState<Record<string, boolean>>({})
   const [isMaximized, setIsMaximized] = useState(false)
+  const [showAIEditField, setShowAIEditField] = useState<Record<string, boolean>>({})
+  const [aiEditPrompt, setAIEditPrompt] = useState("")
+  const [isAIEditing, setIsAIEditing] = useState(false)
+  const [isFixingCode, setIsFixingCode] = useState(false)
+  const [execOutputMap, setExecOutputMap] = useState<Record<string, {output: string, hasError: boolean}>>({})
+  const [selectedText, setSelectedText] = useState<{text: string, range: any} | null>(null)
+  const [selectionPosition, setSelectionPosition] = useState<SelectionPosition | null>(null)
+  const monaco = useMonaco()
+  const editorRef = useRef<any>(null)
+  const [isAnimatingEdit, setIsAnimatingEdit] = useState(false)
+  const [isCleaningCode, setIsCleaningCode] = useState(false)
 
   // Set the most recent entry as active when entries change
   useEffect(() => {
@@ -60,7 +80,7 @@ const CodeCanvas: React.FC<CodeCanvasProps> = ({
 
   const saveEdit = (entryId: string) => {
     const updatedCode = editedCodeMap[entryId]
-    // Find the entry and update it in the parent component
+    // Find the entry and update it
     const entryIndex = codeEntries.findIndex(entry => entry.id === entryId)
     if (entryIndex !== -1) {
       const updatedEntries = [...codeEntries]
@@ -68,8 +88,11 @@ const CodeCanvas: React.FC<CodeCanvasProps> = ({
         ...updatedEntries[entryIndex],
         code: updatedCode
       }
-      // Here you would typically update the parent state
-      // onCodeUpdate(updatedEntries)
+      // Update the entries in the parent component
+      if (onCodeExecute) {
+        // Notify parent that code was updated (but not executed)
+        onCodeExecute(entryId, { savedCode: updatedCode });
+      }
     }
     setEditingMap(prev => ({ ...prev, [entryId]: false }))
   }
@@ -109,17 +132,19 @@ const CodeCanvas: React.FC<CodeCanvasProps> = ({
     const entryIndex = codeEntries.findIndex(entry => entry.id === entryId)
     if (entryIndex === -1) return
     
+    // Use the edited code if available, otherwise use the original code
+    const codeToExecute = editedCodeMap[entryId] || code
+    
     const updatedEntries = [...codeEntries]
     updatedEntries[entryIndex] = {
       ...updatedEntries[entryIndex],
-      isExecuting: true
+      isExecuting: true,
+      code: codeToExecute // Update the code in the entry to the latest version
     }
-    // Update parent state to show executing status
-    // onCodeUpdate(updatedEntries)
     
     try {
       const response = await axios.post(`${API_URL}/code/execute`, {
-        code: code,
+        code: codeToExecute, // Use the edited code
         session_id: sessionId,
       }, {
         headers: {
@@ -128,16 +153,45 @@ const CodeCanvas: React.FC<CodeCanvasProps> = ({
       })
       
       // Mark execution as complete
-      const codeEntry = codeEntries[entryIndex];
-      if (codeEntry) {
-        // Only update the executing flag, not the output
-        const updatedEntries = [...codeEntries];
-        updatedEntries[entryIndex] = {
-          ...updatedEntries[entryIndex],
-          isExecuting: false
-        };
-        // Notify parent to update entries
-        // onCodeUpdate(updatedEntries);
+      const updatedEntries = [...codeEntries];
+      updatedEntries[entryIndex] = {
+        ...updatedEntries[entryIndex],
+        isExecuting: false
+      };
+      
+      // Store execution output for showing error messages and fix button
+      if (response.data.error) {
+        setExecOutputMap(prev => ({
+          ...prev,
+          [entryId]: { 
+            output: response.data.error,
+            hasError: true
+          }
+        }));
+      } else if (response.data.output) {
+        // Check if the output contains error indicators
+        const errorPatterns = [
+          "error", "exception", "traceback", "invalid", "failed", "syntax error", 
+          "name error", "type error", "value error", "index error"
+        ];
+        const hasErrorInOutput = errorPatterns.some(pattern => 
+          response.data.output.toLowerCase().includes(pattern.toLowerCase())
+        );
+        
+        setExecOutputMap(prev => ({
+          ...prev,
+          [entryId]: { 
+            output: response.data.output,
+            hasError: hasErrorInOutput
+          }
+        }));
+      } else {
+        // Clear any previous error/output
+        setExecOutputMap(prev => {
+          const newMap = { ...prev };
+          delete newMap[entryId];
+          return newMap;
+        });
       }
       
       // Pass execution result to parent component
@@ -156,11 +210,438 @@ const CodeCanvas: React.FC<CodeCanvasProps> = ({
         isExecuting: false
       }
       
+      // Store error for fix button
+      setExecOutputMap(prev => ({
+        ...prev,
+        [entryId]: { 
+        output: errorMessage,
+        hasError: true
+      }
+      }));
+      
       if (onCodeExecute) {
         onCodeExecute(entryId, { error: errorMessage });
       }
+    } finally {
+      // Cleanup edited code map entry if we've saved the edit
+      if (editingMap[entryId] === false) {
+        setEditedCodeMap(prev => {
+          const newMap = { ...prev };
+          delete newMap[entryId];
+          return newMap;
+        });
+      }
     }
   }
+  
+  // Handle editor mount
+  const handleEditorDidMount = (editor: any) => {
+    editorRef.current = editor;
+    
+    // Listen for selection changes
+    editor.onDidChangeCursorSelection((e: any) => {
+      const selection = editor.getSelection();
+      
+      if (selection && !selection.isEmpty()) {
+        const selectedText = editor.getModel().getValueInRange(selection);
+        if (selectedText.trim()) {
+          setSelectedText({
+            text: selectedText,
+            range: selection
+          });
+          
+          // Calculate position for the popover
+          const lineHeight = editor.getOption(monaco?.editor.EditorOption.lineHeight);
+          const { startLineNumber, startColumn } = selection;
+          const position = editor.getScrolledVisiblePosition({ lineNumber: startLineNumber, column: startColumn });
+          
+          // Get editor container dimensions for positioning
+          const editorContainer = editor.getContainerDomNode();
+          const editorRect = editorContainer.getBoundingClientRect();
+          
+          if (position) {
+            // Calculate position that ensures it stays inside the canvas
+            const top = Math.max(10, Math.min(position.top - 5, editorRect.height - 250));
+            const left = Math.max(10, Math.min(position.left, editorRect.width - 180));
+            
+            setSelectionPosition({
+              top: top,
+              left: left,
+              width: 160
+            });
+          }
+        }
+      } else {
+        setSelectedText(null);
+        setSelectionPosition(null);
+      }
+    });
+  };
+
+  // Helper to animate code changes line by line
+  const animateCodeChanges = async (originalCode: string, newCode: string, entryId: string) => {
+    if (!editorRef.current) return;
+
+    setIsAnimatingEdit(true);
+    
+    // Create diff algorithm instance
+    const dmp = new diff_match_patch();
+    const diffs = dmp.diff_main(originalCode, newCode);
+    dmp.diff_cleanupSemantic(diffs);
+    
+    // Get the editor model
+    const model = editorRef.current.getModel();
+    const originalLines = originalCode.split('\n');
+    let currentCode = originalCode;
+    
+    // Process diffs with animation
+    for (const [operation, text] of diffs) {
+      // Skip if operation is EQUAL (0) - no change needed
+      if (operation === 0) continue;
+      
+      // For insertions (1) or deletions (-1)
+      await new Promise<void>(resolve => {
+        setTimeout(() => {
+          if (!editorRef.current || !model) {
+            resolve();
+            return;
+          }
+          
+          // Find position for edit
+          const position = model.getPositionAt(currentCode.indexOf(operation === -1 ? text : "") || 0);
+          if (!position) {
+            resolve();
+            return;
+          }
+          
+          // Create edit operation
+          const range = operation === 1 
+            ? { startLineNumber: position.lineNumber, startColumn: position.column, endLineNumber: position.lineNumber, endColumn: position.column }
+            : { startLineNumber: position.lineNumber, startColumn: position.column, endLineNumber: position.lineNumber, endColumn: position.column + text.length };
+          
+          // Execute edit
+          editorRef.current.executeEdits('animated-edit', [{
+            range,
+            text: operation === 1 ? text : "",
+            forceMoveMarkers: true
+          }]);
+          
+          // Update current code state
+          currentCode = model.getValue();
+          
+          resolve();
+        }, 50); // Small delay for animation effect
+      });
+    }
+    
+    // Ensure final state matches expected new code
+    const finalValue = editorRef.current.getModel().getValue();
+    if (finalValue !== newCode) {
+      // Apply the full edit if animation resulted in incorrect state
+      editorRef.current.executeEdits('final-edit', [{
+        range: {
+          startLineNumber: 1,
+          startColumn: 1,
+          endLineNumber: editorRef.current.getModel().getLineCount(),
+          endColumn: editorRef.current.getModel().getLineMaxColumn(editorRef.current.getModel().getLineCount())
+        },
+        text: newCode,
+        forceMoveMarkers: true
+      }]);
+    }
+    
+    // Update state with the new code
+    setEditedCodeMap(prev => ({
+      ...prev,
+      [entryId]: newCode
+    }));
+    
+    setIsAnimatingEdit(false);
+    
+    // Notify parent component of the code change
+    if (onCodeExecute) {
+      onCodeExecute(entryId, { savedCode: newCode });
+    }
+  };
+
+  // Modified handleAIEditRequest to use animations
+  const handleAIEditRequest = async (entryId: string) => {
+    if (!aiEditPrompt.trim()) return;
+    
+    const activeEntry = codeEntries.find(entry => entry.id === entryId);
+    if (!activeEntry) return;
+    
+    setIsAIEditing(true);
+    
+    try {
+      let originalCode = "";
+      let fullCode = editedCodeMap[entryId] || activeEntry.code;
+      
+      // If there's selected text, only edit that portion
+      if (selectedText && editorRef.current) {
+        originalCode = selectedText.text;
+      } else {
+        originalCode = fullCode;
+      }
+      
+      toast({
+        title: "Processing edit request",
+        description: "AI is modifying your code...",
+        duration: 3000,
+      });
+      
+      const response = await axios.post(`${API_URL}/code/edit`, {
+        original_code: originalCode,
+        user_prompt: aiEditPrompt,
+        session_id: sessionId,
+      }, {
+        headers: {
+          ...(sessionId && { 'X-Session-ID': sessionId }),
+        },
+      });
+
+      if (response.data && response.data.edited_code) {
+        const editedCode = response.data.edited_code;
+        
+        // If editing needs to happen, make sure we're in edit mode
+        if (!editingMap[entryId]) {
+          startEditing(entryId, fullCode);
+          // Small delay to ensure editor is ready
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
+        
+        // If we're editing a selection, only replace that part
+        if (selectedText && editorRef.current) {
+          const model = editorRef.current.getModel();
+          
+          // Animate just the selected portion
+          await animateCodeChanges(
+            originalCode, 
+            editedCode, 
+            entryId
+          );
+          
+          // Get the updated full code after animation
+          const updatedFullCode = editorRef.current.getModel().getValue();
+          
+          // Update the entry code
+          const entryIndex = codeEntries.findIndex(entry => entry.id === entryId);
+          if (entryIndex !== -1) {
+            const updatedEntries = [...codeEntries];
+            updatedEntries[entryIndex] = {
+              ...updatedEntries[entryIndex],
+              code: updatedFullCode
+            };
+          }
+        } else {
+          // Animate the entire document
+          await animateCodeChanges(
+            fullCode,
+            editedCode,
+            entryId
+          );
+          
+          // Update the code entry
+          const entryIndex = codeEntries.findIndex(entry => entry.id === entryId);
+          if (entryIndex !== -1) {
+            const updatedEntries = [...codeEntries];
+            updatedEntries[entryIndex] = {
+              ...updatedEntries[entryIndex],
+              code: editedCode
+            };
+          }
+        }
+        
+        // Show success message
+        toast({
+          title: "Code updated",
+          description: "AI successfully modified your code.",
+          variant: "default",
+          duration: 3000,
+        });
+      }
+      
+      // Handle error message from backend
+      if (response.data && response.data.error) {
+        toast({
+          title: "Error modifying code",
+          description: response.data.error,
+          variant: "destructive",
+          duration: 5000,
+        });
+      }
+    } catch (error) {
+      console.error("Error editing code with AI:", error);
+      toast({
+        title: "Error",
+        description: "Failed to modify code. Please try again.",
+        variant: "destructive",
+        duration: 5000,
+      });
+    } finally {
+      setIsAIEditing(false);
+      setShowAIEditField(prev => ({ ...prev, [entryId]: false }));
+      setAIEditPrompt("");
+      setSelectedText(null);
+      setSelectionPosition(null);
+    }
+  };
+  
+  // Modified handleFixCode to use animations
+  const handleFixCode = async (entryId: string) => {
+    const errorOutput = execOutputMap[entryId]?.output;
+    const hasError = execOutputMap[entryId]?.hasError;
+    
+    if (!errorOutput || !hasError) return;
+    
+    setIsFixingCode(true);
+    try {
+      const codeToFix = editedCodeMap[entryId] || codeEntries.find(entry => entry.id === entryId)?.code || '';
+      
+      toast({
+        title: "Fixing code",
+        description: "AI is attempting to fix the errors...",
+        duration: 3000,
+      });
+      
+      const response = await axios.post(`${API_URL}/code/fix`, {
+        code: codeToFix,
+        error: errorOutput,
+        session_id: sessionId,
+      }, {
+        headers: {
+          ...(sessionId && { 'X-Session-ID': sessionId }),
+        },
+      });
+
+      if (response.data && response.data.fixed_code) {
+        // If fixing code, ensure we're in edit mode
+        if (!editingMap[entryId]) {
+          startEditing(entryId, codeToFix);
+          // Small delay to ensure editor is ready
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
+        
+        // Animate the code changes
+        await animateCodeChanges(
+          codeToFix,
+          response.data.fixed_code,
+          entryId
+        );
+        
+        // Update the code entry
+        const entryIndex = codeEntries.findIndex(entry => entry.id === entryId);
+        if (entryIndex !== -1) {
+          const updatedEntries = [...codeEntries];
+          updatedEntries[entryIndex] = {
+            ...updatedEntries[entryIndex],
+            code: response.data.fixed_code
+          };
+        }
+        
+        // Clear the error
+        setExecOutputMap(prev => {
+          const newMap = { ...prev };
+          delete newMap[entryId];
+          return newMap;
+        });
+        
+        toast({
+          title: "Code fixed",
+          description: "AI has fixed your code. Run it to see if the fix works.",
+          variant: "default",
+          duration: 3000,
+        });
+      } else if (response.data && response.data.error) {
+        toast({
+          title: "Error fixing code",
+          description: response.data.error,
+          variant: "destructive",
+          duration: 5000,
+        });
+      }
+    } catch (error) {
+      console.error("Error fixing code with AI:", error);
+      toast({
+        title: "Error",
+        description: "Failed to fix code. Please try again.",
+        variant: "destructive",
+        duration: 5000,
+      });
+    } finally {
+      setIsFixingCode(false);
+    }
+  };
+
+  // Add a handler for cleaning code
+  const handleCleanCode = async (entryId: string) => {
+    const activeEntry = codeEntries.find(entry => entry.id === entryId);
+    if (!activeEntry || activeEntry.language !== "python") return;
+    
+    setIsCleaningCode(true);
+    try {
+      // Use the edited code if available, otherwise use the original code
+      const codeToClean = editedCodeMap[entryId] || activeEntry.code;
+      
+      toast({
+        title: "Cleaning code",
+        description: "Organizing imports and formatting...",
+        duration: 2000,
+      });
+      
+      const response = await axios.post(`${API_URL}/code/clean-code`, {
+        code: codeToClean,
+        session_id: sessionId,
+      }, {
+        headers: {
+          ...(sessionId && { 'X-Session-ID': sessionId }),
+        },
+      });
+
+      if (response.data && response.data.cleaned_code) {
+        // If not in edit mode, start editing
+        if (!editingMap[entryId]) {
+          startEditing(entryId, codeToClean);
+          // Small delay to ensure editor is ready
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
+        
+        // Use animation for a nicer UX
+        await animateCodeChanges(
+          codeToClean,
+          response.data.cleaned_code,
+          entryId
+        );
+        
+        // Update the entry
+        const entryIndex = codeEntries.findIndex(entry => entry.id === entryId);
+        if (entryIndex !== -1) {
+          const updatedEntries = [...codeEntries];
+          updatedEntries[entryIndex] = {
+            ...updatedEntries[entryIndex],
+            code: response.data.cleaned_code
+          };
+        }
+        
+        toast({
+          title: "Code cleaned",
+          description: "Successfully organized imports and formatted code.",
+          variant: "default",
+          duration: 2000,
+        });
+      }
+    } catch (error) {
+      console.error("Error cleaning code:", error);
+      toast({
+        title: "Error",
+        description: "Failed to clean code. Please try again.",
+        variant: "destructive",
+        duration: 3000,
+      });
+    } finally {
+      setIsCleaningCode(false);
+    }
+  };
 
   const getActiveEntry = () => {
     return activeEntryId ? codeEntries.find(entry => entry.id === activeEntryId) : null;
@@ -171,6 +652,7 @@ const CodeCanvas: React.FC<CodeCanvasProps> = ({
   }
 
   const activeEntry = getActiveEntry();
+  const hasError = activeEntry ? execOutputMap[activeEntry.id]?.hasError : false;
 
   return (
     <AnimatePresence>
@@ -188,14 +670,14 @@ const CodeCanvas: React.FC<CodeCanvasProps> = ({
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Button 
-                    variant="ghost" 
-                    size="sm"
+            <Button 
+              variant="ghost" 
+              size="sm"
                     onClick={() => setIsMaximized(!isMaximized)}
                     aria-label={isMaximized ? "Minimize" : "Maximize"}
-                  >
+            >
                     {isMaximized ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
-                  </Button>
+            </Button>
                 </TooltipTrigger>
                 <TooltipContent>
                   <p>{isMaximized ? "Minimize" : "Maximize"}</p>
@@ -217,19 +699,19 @@ const CodeCanvas: React.FC<CodeCanvasProps> = ({
           {/* Simplified sidebar */}
           {codeEntries.length > 1 && (
             <div className="w-48 border-r overflow-y-auto">
-              {codeEntries.map((entry) => (
-                <div 
-                  key={entry.id}
+            {codeEntries.map((entry) => (
+              <div 
+                key={entry.id}
                   className={`p-2 border-b cursor-pointer hover:bg-gray-100 transition-colors
-                             ${activeEntryId === entry.id ? 'bg-gray-100' : ''}`}
-                  onClick={() => setActiveEntryId(entry.id)}
-                >
+                           ${activeEntryId === entry.id ? 'bg-gray-100' : ''}`}
+                onClick={() => setActiveEntryId(entry.id)}
+              >
                   <div className="font-medium truncate text-sm">
                     {entry.language}
-                  </div>
                 </div>
-              ))}
-            </div>
+              </div>
+            ))}
+          </div>
           )}
           
           {/* Active code entry */}
@@ -244,6 +726,88 @@ const CodeCanvas: React.FC<CodeCanvasProps> = ({
                   </div>
                   
                   <div className="flex items-center space-x-1">
+                    {activeEntry.language === "python" && !editingMap[activeEntry.id] && !selectedText && (
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button 
+                              variant="ghost" 
+                              size="sm" 
+                              onClick={() => {
+                                setShowAIEditField(prev => ({ 
+                                  ...prev, 
+                                  [activeEntry.id]: !prev[activeEntry.id] 
+                                }))
+                              }} 
+                              className="text-[#FF7F7F] hover:bg-[#FF7F7F]/20"
+                            >
+                              <Wand2 className="h-4 w-4" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent side="bottom">
+                            <p className="text-sm">Edit with AI</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    )}
+                    
+                    {/* Add clean code button for Python */}
+                    {activeEntry.language === "python" && (
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleCleanCode(activeEntry.id)}
+                              disabled={isCleaningCode}
+                              className="text-blue-500 hover:bg-blue-100"
+                            >
+                              {isCleaningCode ? (
+                                <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                </svg>
+                              ) : (
+                                <Scissors className="h-4 w-4" />
+                              )}
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent side="bottom">
+                            <p className="text-sm">Clean code (organize imports)</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    )}
+                    
+                    {hasError && activeEntry.language === "python" && !editingMap[activeEntry.id] && (
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleFixCode(activeEntry.id)}
+                              disabled={isFixingCode}
+                              className="text-[#FF7F7F] hover:bg-[#FF7F7F]/20"
+                            >
+                              {isFixingCode ? (
+                                <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                </svg>
+                              ) : (
+                                <WrenchIcon className="h-4 w-4" />
+                              )}
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent side="bottom">
+                            <p className="text-sm">Fix code error</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    )}
+                    
                     <TooltipProvider>
                       <Tooltip>
                         <TooltipTrigger asChild>
@@ -266,7 +830,7 @@ const CodeCanvas: React.FC<CodeCanvasProps> = ({
                       </Tooltip>
                     </TooltipProvider>
                     
-                    {activeEntry.language === "python" && (
+                    {activeEntry.language === "python" && !editingMap[activeEntry.id] && (
                       <TooltipProvider>
                         <Tooltip>
                           <TooltipTrigger asChild>
@@ -347,8 +911,127 @@ const CodeCanvas: React.FC<CodeCanvasProps> = ({
                   </div>
                 </div>
                 
-                <div className="flex-1 overflow-hidden">
+                {/* AI Edit Field for entire code */}
+                {showAIEditField[activeEntry.id] && (
+                  <div className="flex flex-col px-4 py-2 bg-[#f8f8f8] border-b">
+                    <Textarea
+                      placeholder="Describe how to modify the code (e.g., Add error handling, optimize the loop, etc.)"
+                      value={aiEditPrompt}
+                      onChange={(e) => setAIEditPrompt(e.target.value)}
+                      className="bg-white border-gray-300 text-gray-800 h-20 mb-2 resize-none"
+                      disabled={isAIEditing}
+                    />
+                    <div className="flex justify-end space-x-2">
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        onClick={() => setShowAIEditField(prev => ({ ...prev, [activeEntry.id]: false }))}
+                        className="border-gray-300 text-gray-600 hover:bg-gray-100 h-8"
+                      >
+                        <X className="h-4 w-4 mr-1" />
+                        Cancel
+                      </Button>
+                      <Button
+                        size="sm"
+                        onClick={() => handleAIEditRequest(activeEntry.id)}
+                        disabled={isAIEditing || !aiEditPrompt.trim()}
+                        className="bg-[#FF7F7F] text-white hover:bg-[#FF7F7F]/80 shadow-md h-8"
+                      >
+                        {isAIEditing ? (
+                          <span className="flex items-center">
+                            <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                            Processing...
+                          </span>
+                        ) : (
+                          <>
+                            <Send className="h-4 w-4 mr-1"/>
+                            Apply
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                )}
+                
+                <div className="flex-1 overflow-hidden relative">
                   {editingMap[activeEntry.id] ? (
+                    <>
+                      {/* Add visual indicator when code is being animated */}
+                      {isAnimatingEdit && (
+                        <div className="absolute right-3 top-3 z-20 flex items-center bg-black/75 text-white text-xs px-2 py-1 rounded-md">
+                          <svg className="animate-spin mr-1.5 h-3 w-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                          </svg>
+                          Applying changes...
+                        </div>
+                      )}
+                      
+                      {/* Selection-based AI edit popup */}
+                      {selectedText && selectionPosition && (
+                        <div 
+                          className="absolute z-10"
+                          style={{
+                            top: `${selectionPosition.top}px`,
+                            left: `${selectionPosition.left}px`,
+                          }}
+                        >
+                          <Popover>
+                            <PopoverTrigger asChild>
+                              <Button 
+                                variant="ghost" 
+                                size="sm" 
+                                className="p-1 h-6 w-6 rounded-full bg-[#FF7F7F] text-white hover:bg-[#FF7F7F]/80 shadow-md"
+                              >
+                                <Wand2 className="h-5 w-5" />
+                              </Button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-96 p-3" sideOffset={5} align="start">
+                              <div className="space-y-2">
+                                <h4 className="font-medium text-xs mb-1">Edit Selection</h4>
+                                <Textarea
+                                  placeholder="Describe the change..."
+                                  value={aiEditPrompt}
+                                  onChange={(e) => setAIEditPrompt(e.target.value)}
+                                  className="bg-white border-gray-300 text-gray-800 h-16 w-full text-xs resize-none min-h-[64px]"
+                                  disabled={isAIEditing}
+                                />
+                                <div className="flex justify-end space-x-1 pt-1">
+                                  <Button 
+                                    variant="outline" 
+                                    size="sm" 
+                                    onClick={() => {
+                                      setSelectedText(null);
+                                      setSelectionPosition(null);
+                                      setAIEditPrompt("");
+                                    }}
+                                    className="h-6 text-xs px-2"
+                                  >
+                                    Cancel
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    onClick={() => handleAIEditRequest(activeEntry.id)}
+                                    disabled={isAIEditing || !aiEditPrompt.trim()}
+                                    className="bg-[#FF7F7F] text-white hover:bg-[#FF7F7F]/80 h-6 text-xs px-2"
+                                  >
+                                    {isAIEditing ? 
+                                      <svg className="animate-spin h-3 w-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                      </svg> 
+                                      : "Apply"
+                                    }
+                                  </Button>
+                                </div>
+                              </div>
+                            </PopoverContent>
+                          </Popover>
+                        </div>
+                      )}
                     <MonacoEditor
                       height="100%"
                       language={activeEntry.language}
@@ -358,12 +1041,14 @@ const CodeCanvas: React.FC<CodeCanvasProps> = ({
                           setEditedCodeMap(prev => ({ ...prev, [activeEntry.id]: value }))
                         }
                       }}
+                        onMount={handleEditorDidMount}
                       options={{ 
                         minimap: { enabled: false },
                         scrollBeyondLastLine: false,
                         fontSize: 14
                       }}
                     />
+                    </>
                   ) : (
                     <SyntaxHighlighter
                       language={activeEntry.language}
@@ -380,6 +1065,14 @@ const CodeCanvas: React.FC<CodeCanvasProps> = ({
                     </SyntaxHighlighter>
                   )}
                 </div>
+                
+                {/* Show error indicator but not the full output */}
+                {hasError && (
+                  <div className="border-t px-4 py-2 bg-red-50 flex items-center text-red-600 text-sm">
+                    <AlertTriangle className="h-4 w-4 mr-2" />
+                    <span>Code execution resulted in an error. Click the <WrenchIcon className="h-3 w-3 inline mx-1" /> button to attempt to fix it.</span>
+                  </div>
+                )}
               </>
             ) : (
               <div className="flex items-center justify-center h-full text-gray-500">

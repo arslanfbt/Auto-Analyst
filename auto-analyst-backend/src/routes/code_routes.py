@@ -31,6 +31,9 @@ class CodeEditRequest(BaseModel):
 class CodeFixRequest(BaseModel):
     code: str
     error: str
+    
+class CodeCleanRequest(BaseModel):
+    code: str
 
 def get_dataset_context(df):
     """
@@ -104,6 +107,37 @@ def fix_code_with_dspy(code: str, error: str, dataset_context: str = ""):
             error=error,
         )
         return result.fixed_code
+    
+import re
+
+def move_imports_to_top(code: str) -> str:
+    """
+    Moves all import statements to the top of the Python code.
+
+    Args:
+        code (str): The raw Python code as a string.
+
+    Returns:
+        str: The cleaned code with import statements at the top.
+    """
+    # Extract import statements
+    import_statements = re.findall(
+        r'^\s*(import\s+[^\n]+|from\s+[^\n]+import\s+[^\n]+)', code, flags=re.MULTILINE
+    )
+    
+    # Remove import statements from original code
+    code_without_imports = re.sub(
+        r'^\s*(import\s+[^\n]+|from\s+[^\n]+import\s+[^\n]+)\n?', '', code, flags=re.MULTILINE
+    )
+    
+    # Deduplicate and sort imports
+    sorted_imports = sorted(set(import_statements))
+    
+    # Combine cleaned imports and remaining code
+    cleaned_code = '\n'.join(sorted_imports) + '\n\n' + code_without_imports.strip()
+    
+    return cleaned_code
+
 
 @router.post("/execute")
 async def execute_code(
@@ -259,3 +293,37 @@ async def fix_code(
     except Exception as e:
         logger.log_message(f"Error fixing code: {str(e)}", level=logging.ERROR)
         raise HTTPException(status_code=500, detail=str(e))
+    
+    
+@router.post("/clean-code")
+async def clean_code(
+    request_data: CodeCleanRequest,
+    request: Request,
+    session_id: str = Depends(get_session_id_dependency)
+):
+    """
+    Clean code provided in the request
+    
+    Args:
+        request_data: Body containing code to clean
+        request: FastAPI Request object
+        session_id: Session identifier
+        
+    Returns:
+        Dictionary containing the cleaned code
+    """
+    try:
+        # Check if code is provided
+        if not request_data.code:
+            raise HTTPException(status_code=400, detail="Code is required")
+
+        # Clean the code
+        cleaned_code = move_imports_to_top(request_data.code)
+        
+        return {
+            "cleaned_code": cleaned_code,
+        }
+    except Exception as e:
+        logger.log_message(f"Error cleaning code: {str(e)}", level=logging.ERROR)
+        raise HTTPException(status_code=500, detail=str(e))
+
