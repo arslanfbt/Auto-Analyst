@@ -14,7 +14,6 @@ import axios from "axios"
 import API_URL from '@/config/api'
 import { Textarea } from "@/components/ui/textarea"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { diff_match_patch } from 'diff-match-patch'
 
 interface CodeEntry {
   id: string;
@@ -62,7 +61,6 @@ const CodeCanvas: React.FC<CodeCanvasProps> = ({
   const [selectionPosition, setSelectionPosition] = useState<SelectionPosition | null>(null)
   const monaco = useMonaco()
   const editorRef = useRef<any>(null)
-  const [isAnimatingEdit, setIsAnimatingEdit] = useState(false)
   const [isCleaningCode, setIsCleaningCode] = useState(false)
 
   // Set the most recent entry as active when entries change
@@ -278,93 +276,11 @@ const CodeCanvas: React.FC<CodeCanvasProps> = ({
     });
   };
 
-  // Helper to animate code changes line by line
-  const animateCodeChanges = async (originalCode: string, newCode: string, entryId: string) => {
-    if (!editorRef.current) return;
+  const getActiveEntry = () => {
+    return activeEntryId ? codeEntries.find(entry => entry.id === activeEntryId) : null;
+  }
 
-    setIsAnimatingEdit(true);
-    
-    // Create diff algorithm instance
-    const dmp = new diff_match_patch();
-    const diffs = dmp.diff_main(originalCode, newCode);
-    dmp.diff_cleanupSemantic(diffs);
-    
-    // Get the editor model
-    const model = editorRef.current.getModel();
-    const originalLines = originalCode.split('\n');
-    let currentCode = originalCode;
-    
-    // Process diffs with animation
-    for (const [operation, text] of diffs) {
-      // Skip if operation is EQUAL (0) - no change needed
-      if (operation === 0) continue;
-      
-      // For insertions (1) or deletions (-1)
-      await new Promise<void>(resolve => {
-        setTimeout(() => {
-          if (!editorRef.current || !model) {
-            resolve();
-            return;
-          }
-          
-          // Find position for edit
-          const position = model.getPositionAt(currentCode.indexOf(operation === -1 ? text : "") || 0);
-          if (!position) {
-            resolve();
-            return;
-          }
-          
-          // Create edit operation
-          const range = operation === 1 
-            ? { startLineNumber: position.lineNumber, startColumn: position.column, endLineNumber: position.lineNumber, endColumn: position.column }
-            : { startLineNumber: position.lineNumber, startColumn: position.column, endLineNumber: position.lineNumber, endColumn: position.column + text.length };
-          
-          // Execute edit
-          editorRef.current.executeEdits('animated-edit', [{
-            range,
-            text: operation === 1 ? text : "",
-            forceMoveMarkers: true
-          }]);
-          
-          // Update current code state
-          currentCode = model.getValue();
-          
-          resolve();
-        }, 50); // Small delay for animation effect
-      });
-    }
-    
-    // Ensure final state matches expected new code
-    const finalValue = editorRef.current.getModel().getValue();
-    if (finalValue !== newCode) {
-      // Apply the full edit if animation resulted in incorrect state
-      editorRef.current.executeEdits('final-edit', [{
-        range: {
-          startLineNumber: 1,
-          startColumn: 1,
-          endLineNumber: editorRef.current.getModel().getLineCount(),
-          endColumn: editorRef.current.getModel().getLineMaxColumn(editorRef.current.getModel().getLineCount())
-        },
-        text: newCode,
-        forceMoveMarkers: true
-      }]);
-    }
-    
-    // Update state with the new code
-    setEditedCodeMap(prev => ({
-      ...prev,
-      [entryId]: newCode
-    }));
-    
-    setIsAnimatingEdit(false);
-    
-    // Notify parent component of the code change
-    if (onCodeExecute) {
-      onCodeExecute(entryId, { savedCode: newCode });
-    }
-  };
-
-  // Modified handleAIEditRequest to use animations
+  // Direct code edit without animations
   const handleAIEditRequest = async (entryId: string) => {
     if (!aiEditPrompt.trim()) return;
     
@@ -412,17 +328,21 @@ const CodeCanvas: React.FC<CodeCanvasProps> = ({
         
         // If we're editing a selection, only replace that part
         if (selectedText && editorRef.current) {
-          const model = editorRef.current.getModel();
+          // Apply the edit directly to the editor
+          editorRef.current.executeEdits('apply-edit', [{
+            range: selectedText.range,
+            text: editedCode,
+            forceMoveMarkers: true
+          }]);
           
-          // Animate just the selected portion
-          await animateCodeChanges(
-            originalCode, 
-            editedCode, 
-            entryId
-          );
-          
-          // Get the updated full code after animation
+          // Get the updated full code
           const updatedFullCode = editorRef.current.getModel().getValue();
+          
+          // Update the code in state
+          setEditedCodeMap(prev => ({
+            ...prev,
+            [entryId]: updatedFullCode
+          }));
           
           // Update the entry code
           const entryIndex = codeEntries.findIndex(entry => entry.id === entryId);
@@ -433,13 +353,31 @@ const CodeCanvas: React.FC<CodeCanvasProps> = ({
               code: updatedFullCode
             };
           }
+          
+          // Notify parent component of the code change
+          if (onCodeExecute) {
+            onCodeExecute(entryId, { savedCode: updatedFullCode });
+          }
         } else {
-          // Animate the entire document
-          await animateCodeChanges(
-            fullCode,
-            editedCode,
-            entryId
-          );
+          // Apply edit to the entire document
+          if (editorRef.current) {
+            editorRef.current.executeEdits('apply-edit', [{
+              range: {
+                startLineNumber: 1,
+                startColumn: 1,
+                endLineNumber: editorRef.current.getModel().getLineCount(),
+                endColumn: editorRef.current.getModel().getLineMaxColumn(editorRef.current.getModel().getLineCount())
+              },
+              text: editedCode,
+              forceMoveMarkers: true
+            }]);
+          }
+          
+          // Update the code state
+          setEditedCodeMap(prev => ({
+            ...prev,
+            [entryId]: editedCode
+          }));
           
           // Update the code entry
           const entryIndex = codeEntries.findIndex(entry => entry.id === entryId);
@@ -449,6 +387,11 @@ const CodeCanvas: React.FC<CodeCanvasProps> = ({
               ...updatedEntries[entryIndex],
               code: editedCode
             };
+          }
+          
+          // Notify parent component of the code change
+          if (onCodeExecute) {
+            onCodeExecute(entryId, { savedCode: editedCode });
           }
         }
         
@@ -487,7 +430,7 @@ const CodeCanvas: React.FC<CodeCanvasProps> = ({
     }
   };
   
-  // Modified handleFixCode to use animations
+  // Direct code fix without animations
   const handleFixCode = async (entryId: string) => {
     const errorOutput = execOutputMap[entryId]?.output;
     const hasError = execOutputMap[entryId]?.hasError;
@@ -515,6 +458,8 @@ const CodeCanvas: React.FC<CodeCanvasProps> = ({
       });
 
       if (response.data && response.data.fixed_code) {
+        const fixedCode = response.data.fixed_code;
+        
         // If fixing code, ensure we're in edit mode
         if (!editingMap[entryId]) {
           startEditing(entryId, codeToFix);
@@ -522,12 +467,25 @@ const CodeCanvas: React.FC<CodeCanvasProps> = ({
           await new Promise(resolve => setTimeout(resolve, 100));
         }
         
-        // Animate the code changes
-        await animateCodeChanges(
-          codeToFix,
-          response.data.fixed_code,
-          entryId
-        );
+        // Apply the fix directly
+        if (editorRef.current) {
+          editorRef.current.executeEdits('apply-fix', [{
+            range: {
+              startLineNumber: 1,
+              startColumn: 1,
+              endLineNumber: editorRef.current.getModel().getLineCount(),
+              endColumn: editorRef.current.getModel().getLineMaxColumn(editorRef.current.getModel().getLineCount())
+            },
+            text: fixedCode,
+            forceMoveMarkers: true
+          }]);
+        }
+        
+        // Update the code state
+        setEditedCodeMap(prev => ({
+          ...prev,
+          [entryId]: fixedCode
+        }));
         
         // Update the code entry
         const entryIndex = codeEntries.findIndex(entry => entry.id === entryId);
@@ -535,8 +493,13 @@ const CodeCanvas: React.FC<CodeCanvasProps> = ({
           const updatedEntries = [...codeEntries];
           updatedEntries[entryIndex] = {
             ...updatedEntries[entryIndex],
-            code: response.data.fixed_code
+            code: fixedCode
           };
+        }
+        
+        // Notify parent component of the code change
+        if (onCodeExecute) {
+          onCodeExecute(entryId, { savedCode: fixedCode });
         }
         
         // Clear the error
@@ -573,7 +536,7 @@ const CodeCanvas: React.FC<CodeCanvasProps> = ({
     }
   };
 
-  // Add a handler for cleaning code
+  // Direct code cleaning without animations
   const handleCleanCode = async (entryId: string) => {
     const activeEntry = codeEntries.find(entry => entry.id === entryId);
     if (!activeEntry || activeEntry.language !== "python") return;
@@ -599,6 +562,8 @@ const CodeCanvas: React.FC<CodeCanvasProps> = ({
       });
 
       if (response.data && response.data.cleaned_code) {
+        const cleanedCode = response.data.cleaned_code;
+        
         // If not in edit mode, start editing
         if (!editingMap[entryId]) {
           startEditing(entryId, codeToClean);
@@ -606,12 +571,25 @@ const CodeCanvas: React.FC<CodeCanvasProps> = ({
           await new Promise(resolve => setTimeout(resolve, 100));
         }
         
-        // Use animation for a nicer UX
-        await animateCodeChanges(
-          codeToClean,
-          response.data.cleaned_code,
-          entryId
-        );
+        // Apply the cleaned code directly
+        if (editorRef.current) {
+          editorRef.current.executeEdits('apply-clean', [{
+            range: {
+              startLineNumber: 1,
+              startColumn: 1,
+              endLineNumber: editorRef.current.getModel().getLineCount(),
+              endColumn: editorRef.current.getModel().getLineMaxColumn(editorRef.current.getModel().getLineCount())
+            },
+            text: cleanedCode,
+            forceMoveMarkers: true
+          }]);
+        }
+        
+        // Update the code state
+        setEditedCodeMap(prev => ({
+          ...prev,
+          [entryId]: cleanedCode
+        }));
         
         // Update the entry
         const entryIndex = codeEntries.findIndex(entry => entry.id === entryId);
@@ -619,8 +597,13 @@ const CodeCanvas: React.FC<CodeCanvasProps> = ({
           const updatedEntries = [...codeEntries];
           updatedEntries[entryIndex] = {
             ...updatedEntries[entryIndex],
-            code: response.data.cleaned_code
+            code: cleanedCode
           };
+        }
+        
+        // Notify parent component of the code change
+        if (onCodeExecute) {
+          onCodeExecute(entryId, { savedCode: cleanedCode });
         }
         
         toast({
@@ -642,10 +625,6 @@ const CodeCanvas: React.FC<CodeCanvasProps> = ({
       setIsCleaningCode(false);
     }
   };
-
-  const getActiveEntry = () => {
-    return activeEntryId ? codeEntries.find(entry => entry.id === activeEntryId) : null;
-  }
 
   if (!isOpen) {
     return null;
@@ -959,17 +938,6 @@ const CodeCanvas: React.FC<CodeCanvasProps> = ({
                 <div className="flex-1 overflow-hidden relative">
                   {editingMap[activeEntry.id] ? (
                     <>
-                      {/* Add visual indicator when code is being animated */}
-                      {isAnimatingEdit && (
-                        <div className="absolute right-3 top-3 z-20 flex items-center bg-black/75 text-white text-xs px-2 py-1 rounded-md">
-                          <svg className="animate-spin mr-1.5 h-3 w-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                          </svg>
-                          Applying changes...
-                        </div>
-                      )}
-                      
                       {/* Selection-based AI edit popup */}
                       {selectedText && selectionPosition && (
                         <div 
@@ -1041,7 +1009,7 @@ const CodeCanvas: React.FC<CodeCanvasProps> = ({
                           setEditedCodeMap(prev => ({ ...prev, [activeEntry.id]: value }))
                         }
                       }}
-                        onMount={handleEditorDidMount}
+                      onMount={handleEditorDidMount}
                       options={{ 
                         minimap: { enabled: false },
                         scrollBeyondLastLine: false,

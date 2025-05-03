@@ -79,6 +79,7 @@
     "@tailwindcss/typography": "^0.5.16",
     "@types/date-fns": "^2.5.3",
     "@types/debounce": "^1.2.4",
+    "@types/diff-match-patch": "^1.0.36",
     "@types/node": "^20",
     "@types/plotly.js": "^2.35.2",
     "@types/react": "^18",
