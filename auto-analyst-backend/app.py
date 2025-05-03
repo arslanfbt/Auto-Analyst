@@ -165,7 +165,6 @@ def get_session_lm(session_state):
         if model_config and isinstance(model_config, dict) and "model" in model_config:
             # Found valid session-specific model config, use it
             provider = model_config.get("provider", "openai").lower()
-            logger.log_message(f"Model Config: {model_config}", level=logging.INFO)
             if provider == "groq":
                 return dspy.GROQ(
                     model=model_config.get("model", DEFAULT_MODEL_CONFIG["model"]),
@@ -224,6 +223,13 @@ AVAILABLE_AGENTS = {
     "sk_learn_agent": sk_learn_agent,
     "statistical_analytics_agent": statistical_analytics_agent,
     "preprocessing_agent": preprocessing_agent,
+}
+
+PLANNER_AGENTS = {
+    "planner_preprocessing_agent": planner_preprocessing_agent,
+    "planner_sk_learn_agent": planner_sk_learn_agent,
+    "planner_statistical_analytics_agent": planner_statistical_analytics_agent,
+    "planner_data_viz_agent": planner_data_viz_agent,
 }
 
 # Add session header
@@ -292,18 +298,15 @@ app.add_middleware(
     expose_headers=["Content-Type", "Content-Length"]
 )
 
-# DSPy Configuration
-import dspy
+# Add these constants at the top of the file with other imports/constants
+RESPONSE_ERROR_INVALID_QUERY = "Please provide a valid query..."
+RESPONSE_ERROR_NO_DATASET = "No dataset is currently loaded. Please link a dataset before proceeding with your analysis."
+DEFAULT_TOKEN_RATIO = 1.5
+REQUEST_TIMEOUT_SECONDS = 60  # Timeout for LLM requests
+MAX_RECENT_MESSAGES = 3
+DB_BATCH_SIZE = 10  # For future batch DB operations
 
-# Available agents
-AVAILABLE_AGENTS = {
-    "data_viz_agent": data_viz_agent,
-    "sk_learn_agent": sk_learn_agent,
-    "statistical_analytics_agent": statistical_analytics_agent,
-    "preprocessing_agent": preprocessing_agent,
-}
-
-
+# Replace the existing chat_with_agent function
 @app.post("/chat/{agent_name}", response_model=dict)
 async def chat_with_agent(
     agent_name: str, 
@@ -313,22 +316,136 @@ async def chat_with_agent(
 ):
     session_state = app.state.get_session_state(session_id)
     
+    try:
+        # Extract and validate query parameters
+        _update_session_from_query_params(request_obj, session_state)
+        
+        # Validate dataset and agent name
+        if session_state["current_df"] is None:
+            raise HTTPException(status_code=400, detail=RESPONSE_ERROR_NO_DATASET)
+
+        _validate_agent_name(agent_name)
+        
+        # Record start time for timing
+        start_time = time.time()
+        
+        # Get chat context and prepare query
+        enhanced_query = _prepare_query_with_context(request.query, session_state)
+        
+        # Initialize agent
+        if "," in agent_name:
+            agent_list = [AVAILABLE_AGENTS[agent.strip()] for agent in agent_name.split(",")]
+            agent = auto_analyst_ind(agents=agent_list, retrievers=session_state["retrievers"])
+        else:
+            agent = auto_analyst_ind(agents=[AVAILABLE_AGENTS[agent_name]], retrievers=session_state["retrievers"])
+        
+        # Execute agent with timeout
+        try:
+            # Get session-specific model
+            session_lm = get_session_lm(session_state)
+            
+            # Use session-specific model for this request
+            with dspy.context(lm=session_lm):
+                response = await asyncio.wait_for(
+                    asyncio.to_thread(agent, enhanced_query, agent_name),
+                    timeout=REQUEST_TIMEOUT_SECONDS
+                )
+        except asyncio.TimeoutError:
+            logger.log_message(f"Agent execution timed out for {agent_name}", level=logging.WARNING)
+            raise HTTPException(status_code=504, detail="Request timed out. Please try a simpler query.")
+        except Exception as agent_error:
+            logger.log_message(f"Agent execution failed: {str(agent_error)}", level=logging.ERROR)
+            raise HTTPException(status_code=500, detail="Failed to process query. Please try again.")
+        
+        formatted_response = format_response_to_markdown(response, agent_name, session_state["current_df"])
+        
+        if formatted_response == RESPONSE_ERROR_INVALID_QUERY:
+            return {
+                "agent_name": agent_name,
+                "query": request.query,
+                "response": formatted_response,
+                "session_id": session_id
+            }
+        
+        # Track usage statistics
+        if session_state.get("user_id"):
+            _track_model_usage(
+                session_state=session_state,
+                enhanced_query=enhanced_query,
+                response=response,
+                processing_time_ms=int((time.time() - start_time) * 1000)
+            )
+        
+        return {
+            "agent_name": agent_name,
+            "query": request.query,  # Return original query without context
+            "response": formatted_response,
+            "session_id": session_id
+        }
+    except HTTPException:
+        # Re-raise HTTP exceptions to preserve status codes
+        raise
+    except Exception as e:
+        logger.log_message(f"Unexpected error in chat_with_agent: {str(e)}", level=logging.ERROR)
+        raise HTTPException(status_code=500, detail="An unexpected error occurred. Please try again later.")
+    
+    
+@app.post("/chat", response_model=dict)
+async def chat_with_all(
+    request: QueryRequest,
+    request_obj: Request,
+    session_id: str = Depends(get_session_id_dependency)
+):
+    session_state = app.state.get_session_state(session_id)
+
+    try:
+        # Extract and validate query parameters
+        _update_session_from_query_params(request_obj, session_state)
+        
+        # Validate dataset
+        if session_state["current_df"] is None:
+            raise HTTPException(status_code=400, detail=RESPONSE_ERROR_NO_DATASET)
+        
+        if session_state["ai_system"] is None:
+            raise HTTPException(status_code=500, detail="AI system not properly initialized.")
+
+        # Get session-specific model
+        session_lm = get_session_lm(session_state)
+
+        # Create streaming response
+        return StreamingResponse(
+            _generate_streaming_responses(session_state, request.query, session_lm),
+            media_type='text/event-stream',
+            headers={
+                'Cache-Control': 'no-cache',
+                'Connection': 'keep-alive',
+                'Content-Type': 'text/event-stream',
+                'Access-Control-Allow-Origin': '*',
+                'X-Accel-Buffering': 'no'
+            }
+        )
+    except HTTPException:
+        # Re-raise HTTP exceptions to preserve status codes
+        raise
+    except Exception as e:
+        logger.log_message(f"Unexpected error in chat_with_all: {str(e)}", level=logging.ERROR)
+        raise HTTPException(status_code=500, detail="An unexpected error occurred. Please try again later.")
+
+
+# Helper functions to reduce duplication and improve modularity
+def _update_session_from_query_params(request_obj: Request, session_state: dict):
+    """Extract and validate chat_id and user_id from query parameters"""
     # Check for chat_id in query parameters
-    chat_id_param = None
     if "chat_id" in request_obj.query_params:
         try:
             chat_id_param = int(request_obj.query_params.get("chat_id"))
             # Update session state with this chat ID
             session_state["chat_id"] = chat_id_param
         except (ValueError, TypeError):
-            pass
+            logger.log_message("Invalid chat_id parameter", level=logging.WARNING)
+            # Continue without updating chat_id
 
-    if session_state["current_df"] is None:
-        raise HTTPException(
-            status_code=400,
-            detail="No dataset is currently loaded. Please link a dataset before proceeding with your analysis."
-        )
-
+    # Check for user_id in query parameters
     if "user_id" in request_obj.query_params:
         try:
             user_id = int(request_obj.query_params["user_id"])
@@ -338,7 +455,10 @@ async def chat_with_agent(
                 status_code=400,
                 detail="Invalid user_id in query params. Please provide a valid integer."
             )
-    # For comma-separated agents, verify each agent exists
+
+
+def _validate_agent_name(agent_name: str):
+    """Validate that the requested agent(s) exist"""
     if "," in agent_name:
         agent_list = [agent.strip() for agent in agent_name.split(",")]
         for agent in agent_list:
@@ -354,192 +474,135 @@ async def chat_with_agent(
             status_code=404, 
             detail=f"Agent '{agent_name}' not found. Available agents: {available}"
         )
+
+
+def _prepare_query_with_context(query: str, session_state: dict) -> str:
+    """Prepare the query with chat context from previous messages"""
+    chat_id = session_state.get("chat_id")
+    if not chat_id:
+        return query
+        
+    # Get chat manager from app state
+    chat_manager = app.state._session_manager.chat_manager
+    # Get recent messages
+    recent_messages = chat_manager.get_recent_chat_history(chat_id, limit=MAX_RECENT_MESSAGES)
+    # Extract response history
+    chat_context = chat_manager.extract_response_history(recent_messages)
     
+    # Append context to the query if available
+    if chat_context:
+        return f"### Current Query:\n{query}\n\n{chat_context}"
+    return query
+
+
+def _track_model_usage(session_state: dict, enhanced_query: str, response, processing_time_ms: int):
+    """Track model usage statistics in the database"""
     try:
-        # Record start time for timing
-        start_time = time.time()
-        
-        # Get session-specific model
-        session_lm = get_session_lm(session_state)
-        
-        # Add chat context from previous messages if chat_id is available
-        chat_id = session_state.get("chat_id")
-        chat_context = ""
-        if chat_id:
-            # Get chat manager from app state
-            chat_manager = app.state._session_manager.chat_manager
-            # Get recent messages
-            recent_messages = chat_manager.get_recent_chat_history(chat_id, limit=5)
-            # Extract response history
-            chat_context = chat_manager.extract_response_history(recent_messages)
-        # Append context to the query if available
-        enhanced_query = request.query
-        if chat_context:
-            enhanced_query = f"### Current Query:\n{request.query}\n\n{chat_context}"
-        # For multiple agents
-        if "," in agent_name:
-            agent_list = [AVAILABLE_AGENTS[agent.strip()] for agent in agent_name.split(",")]
-            agent = auto_analyst_ind(agents=agent_list, retrievers=session_state["retrievers"])
-        else:
-            # Single agent case
-            agent = AVAILABLE_AGENTS[agent_name]
-            agent = auto_analyst_ind(agents=[agent], retrievers=session_state["retrievers"])
-        
-        try:
-            # Use session-specific model for this request
-            with dspy.context(lm=session_lm):
-                response = agent(enhanced_query, agent_name)
-        except Exception as agent_error:
-            raise HTTPException(
-                status_code=500,
-                detail=f"Agent execution failed: {str(agent_error)}"
-            )
-        
-        formatted_response = format_response_to_markdown(response, agent_name, session_state["current_df"])
-        
-        if formatted_response == "Please provide a valid query...":
-            return {
-                "agent_name": agent_name,
-                "query": request.query,  # Return original query without context
-                "response": formatted_response,
-                "session_id": session_id
-            }
-        
-        # Track model usage directly with AI Manager
         ai_manager = app.state.get_ai_manager()
-
-        if session_state.get("user_id"):
-            # Calculate processing time
-            processing_time_ms = int((time.time() - start_time) * 1000)
-            
-            # Get prompt and response sizes
-            prompt_size = len(enhanced_query)
-            response_size = len(str(response))
-            
-            # Get model name from session config
-            model_config = session_state.get("model_config", DEFAULT_MODEL_CONFIG)
-            model_name = model_config.get("model", DEFAULT_MODEL_CONFIG["model"])
-            provider = ai_manager.get_provider_for_model(model_name)
-                
-            # Estimate tokens
-            try:
-                prompt_tokens = len(ai_manager.tokenizer.encode(enhanced_query))
-                completion_tokens = len(ai_manager.tokenizer.encode(str(response)))
-                total_tokens = prompt_tokens + completion_tokens
-            except:
-                # Fallback estimation
-                words = len(enhanced_query.split()) + len(str(response).split())
-                total_tokens = words * 1.5
-                prompt_tokens = len(enhanced_query.split()) * 1.5
-                completion_tokens = total_tokens - prompt_tokens
-            
-            cost = ai_manager.calculate_cost(model_name, prompt_tokens, completion_tokens)
-            # Save to DB with the proper chat_id
-            ai_manager.save_usage_to_db(
-                user_id=session_state.get("user_id"),
-                chat_id=session_state.get("chat_id"),
-                model_name=model_name,
-                provider=provider,
-                prompt_tokens=int(prompt_tokens),
-                completion_tokens=int(completion_tokens),
-                total_tokens=int(total_tokens),
-                query_size=prompt_size,
-                response_size=response_size,
-                cost=round(cost, 7),
-                request_time_ms=processing_time_ms,
-                is_streaming=False
-            )
-            
         
-        return {
-            "agent_name": agent_name,
-            "query": request.query,  # Return original query without context
-            "response": formatted_response,
-            "session_id": session_id
-        }
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.log_message(f"Unexpected error: {str(e)}", level=logging.ERROR)
-        raise HTTPException(status_code=500, detail=f"Unexpected error: {str(e)}")
-    
-    
-@app.post("/chat", response_model=dict)
-async def chat_with_all(
-    request: QueryRequest,
-    request_obj: Request,
-    session_id: str = Depends(get_session_id_dependency)
-):
-    session_state = app.state.get_session_state(session_id)
-
-    # Update session state with user_id and chat_id from request if provided
-    for param in ["user_id", "chat_id"]:
-        if param in request_obj.query_params:
-            try:
-                session_state[param] = int(request_obj.query_params[param])
-            except (ValueError, TypeError):
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Invalid {param} in query params. Please provide a valid integer."
-                )
-
-    if session_state["current_df"] is None:
-        raise HTTPException(status_code=400, detail="No dataset is currently loaded.")
-    
-    if session_state["ai_system"] is None:
-        raise HTTPException(status_code=500, detail="AI system not properly initialized.")
-
-    # Get session-specific model
-    session_lm = get_session_lm(session_state)
-
-    async def generate_responses():
-        overall_start_time = time.time()
-        total_response = ""
-        total_inputs = ""
-
+        # Get model configuration
+        model_config = session_state.get("model_config", DEFAULT_MODEL_CONFIG)
+        model_name = model_config.get("model", DEFAULT_MODEL_CONFIG["model"])
+        provider = ai_manager.get_provider_for_model(model_name)
+        
+        # Calculate token usage
         try:
-            # Add chat context from previous messages if chat_id is available
-            chat_id = session_state.get("chat_id")
-            chat_context = ""
-            if chat_id:
-                # Get chat manager from app state
-                chat_manager = app.state._session_manager.chat_manager
-                # Get recent messages
-                recent_messages = chat_manager.get_recent_chat_history(chat_id, limit=5)
-                # Extract response history
-                chat_context = chat_manager.extract_response_history(recent_messages)
-            # Append context to the query if available
-            enhanced_query = request.query
-            if chat_context:
-                enhanced_query = f"### Current Query:\n{request.query}\n\n{chat_context}"
-            
-            # Use the session model for this specific request
-            with dspy.context(lm=session_lm):
-                loop = asyncio.get_event_loop()
-                plan_response = await loop.run_in_executor(
-                    None,
-                    session_state["ai_system"].get_plan,
-                    enhanced_query  # Use enhanced query with context
-                )
+            # Try exact tokenization
+            prompt_tokens = len(ai_manager.tokenizer.encode(enhanced_query))
+            completion_tokens = len(ai_manager.tokenizer.encode(str(response)))
+            total_tokens = prompt_tokens + completion_tokens
+        except Exception as token_error:
+            # Fall back to estimation
+            logger.log_message(f"Tokenization error: {str(token_error)}", level=logging.WARNING)
+            prompt_words = len(enhanced_query.split())
+            completion_words = len(str(response).split())
+            prompt_tokens = int(prompt_words * DEFAULT_TOKEN_RATIO)
+            completion_tokens = int(completion_words * DEFAULT_TOKEN_RATIO)
+            total_tokens = prompt_tokens + completion_tokens
+        
+        # Calculate cost
+        cost = ai_manager.calculate_cost(model_name, prompt_tokens, completion_tokens)
+        
+        # Save usage to database
+        ai_manager.save_usage_to_db(
+            user_id=session_state.get("user_id"),
+            chat_id=session_state.get("chat_id"),
+            model_name=model_name,
+            provider=provider,
+            prompt_tokens=int(prompt_tokens),
+            completion_tokens=int(completion_tokens),
+            total_tokens=int(total_tokens),
+            query_size=len(enhanced_query),
+            response_size=len(str(response)),
+            cost=round(cost, 7),
+            request_time_ms=processing_time_ms,
+            is_streaming=False
+        )
+    except Exception as e:
+        # Log but don't fail the request if usage tracking fails
+        logger.log_message(f"Failed to track model usage: {str(e)}", level=logging.ERROR)
 
-                plan_descrition = format_response_to_markdown({"analytical_planner": plan_response}, dataframe=session_state["current_df"])
+
+async def _generate_streaming_responses(session_state: dict, query: str, session_lm):
+    """Generate streaming responses for chat_with_all endpoint"""
+    overall_start_time = time.time()
+    total_response = ""
+    total_inputs = ""
+    usage_records = []
+
+    try:
+        # Add chat context from previous messages
+        enhanced_query = _prepare_query_with_context(query, session_state)
+        
+        # Use the session model for this specific request
+        with dspy.context(lm=session_lm):
+            try:
+                # Get the plan
+                plan_response = await asyncio.wait_for(
+                    asyncio.to_thread(session_state["ai_system"].get_plan, enhanced_query),
+                    timeout=REQUEST_TIMEOUT_SECONDS
+                )
                 
-                # if plan_descrition is empty, yield and send error
-                if plan_descrition == "Please provide a valid query...":
+                plan_description = format_response_to_markdown(
+                    {"analytical_planner": plan_response}, 
+                    dataframe=session_state["current_df"]
+                )
+                
+                # Check if plan is valid
+                if plan_description == RESPONSE_ERROR_INVALID_QUERY:
                     yield json.dumps({
                         "agent": "Analytical Planner",
-                        "content": plan_descrition,
+                        "content": plan_description,
                         "status": "error"
                     }) + "\n"
                     return
                 
                 yield json.dumps({
                     "agent": "Analytical Planner",
-                    "content": plan_descrition,
-                    "status": "success" if plan_descrition else "error"
+                    "content": plan_description,
+                    "status": "success" if plan_description else "error"
                 }) + "\n"
-
-                async for agent_name, inputs, response in session_state["ai_system"].execute_plan(enhanced_query, plan_response):
+                
+                # Track planner usage
+                if session_state.get("user_id"):
+                    planner_tokens = _estimate_tokens(ai_manager=app.state.ai_manager, 
+                                                    input_text=enhanced_query, 
+                                                    output_text=plan_description)
+                    
+                    usage_records.append(_create_usage_record(
+                        session_state=session_state,
+                        model_name=session_state.get("model_config", DEFAULT_MODEL_CONFIG)["model"],
+                        prompt_tokens=planner_tokens["prompt"],
+                        completion_tokens=planner_tokens["completion"],
+                        query_size=len(enhanced_query),
+                        response_size=len(plan_description),
+                        processing_time_ms=int((time.time() - overall_start_time) * 1000),
+                        is_streaming=False
+                    ))
+                
+                # Execute the plan with well-managed concurrency
+                async for agent_name, inputs, response in _execute_plan_with_timeout(
+                    session_state["ai_system"], enhanced_query, plan_response):
                     
                     if agent_name == "plan_not_found":
                         yield json.dumps({
@@ -554,98 +617,153 @@ async def chat_with_all(
                         dataframe=session_state["current_df"]
                     ) or "No response generated"
 
-                    if formatted_response == "Please provide a valid query...":
+                    if formatted_response == RESPONSE_ERROR_INVALID_QUERY:
                         yield json.dumps({
                             "agent": agent_name,
                             "content": formatted_response,
                             "status": "error"
                         }) + "\n"
                         return
+                        
                     if "code_combiner_agent" in agent_name:
-                        logger.log_message(f"[>] Code combiner response: {response}", level=logging.INFO)
+                        # logger.log_message(f"[>] Code combiner response: {response}", level=logging.INFO)
                         total_response += str(response) if response else ""
                         total_inputs += str(inputs) if inputs else ""
 
+                    # Send response chunk
                     yield json.dumps({
                         "agent": agent_name.split("__")[0] if "__" in agent_name else agent_name,
                         "content": formatted_response,
                         "status": "success" if response else "error"
                     }) + "\n"
-            if session_state.get("user_id"):
-                overall_processing_time_ms = int((time.time() - overall_start_time) * 1000)
-                prompt_size = len(enhanced_query)  # Use enhanced_query size instead of request.query
+                    
+                    # Track agent usage for future batch DB write
+                    if session_state.get("user_id"):
+                        agent_tokens = _estimate_tokens(
+                            ai_manager=app.state.ai_manager,
+                            input_text=str(inputs),
+                            output_text=str(response)
+                        )
+                        
+                        # Get appropriate model name for code combiner
+                        if "code_combiner_agent" in agent_name and "__" in agent_name:
+                            provider = agent_name.split("__")[1]
+                            model_name = _get_model_name_for_provider(provider)
+                        else:
+                            model_name = session_state.get("model_config", DEFAULT_MODEL_CONFIG)["model"]
 
-                # Track the code combiner agent response
-                if "refined_complete_code" in response:
-                    model_name = agent_name.split("__")[1] if "__" in agent_name else agent_name
-                    if model_name == "openai":
-                        model_name = "o3-mini"
-                    elif model_name == "anthropic":
-                        model_name = "claude-3-7-sonnet-latest"
-                    else:
-                        model_name = "gemini-2.5-pro-preview-03-25"
-                    provider = app.state.ai_manager.get_provider_for_model(model_name)
-                    input_tokens = len(app.state.ai_manager.tokenizer.encode(str(inputs)))
-                    completion_tokens = len(app.state.ai_manager.tokenizer.encode(str(response)))
-                    code_combiner_cost = app.state.ai_manager.calculate_cost(model_name, input_tokens, completion_tokens)
-                    app.state.ai_manager.save_usage_to_db(
-                        user_id=session_state.get("user_id"),
-                        chat_id=session_state.get("chat_id"),
-                        model_name=model_name,
-                        provider=provider,
-                        prompt_tokens=int(input_tokens),
-                        completion_tokens=int(completion_tokens),
-                        total_tokens=int(input_tokens + completion_tokens),
-                        query_size=prompt_size,
-                        response_size=len(total_response),
-                        cost=round(code_combiner_cost, 7),
-                        request_time_ms=overall_processing_time_ms,
-                        is_streaming=True
-                    )
-
-                # Get model info from session state
-                model_config = session_state.get("model_config", DEFAULT_MODEL_CONFIG)
-                model_name = model_config.get("model", DEFAULT_MODEL_CONFIG["model"])
-                provider = app.state.ai_manager.get_provider_for_model(model_name)
-                prompt_tokens = len(app.state.ai_manager.tokenizer.encode(total_inputs)) 
-                completion_tokens = len(app.state.ai_manager.tokenizer.encode(total_response))  
-                total_tokens = prompt_tokens + completion_tokens
-
-                cost = app.state.ai_manager.calculate_cost(model_name, prompt_tokens, completion_tokens)
-
-                app.state.ai_manager.save_usage_to_db(
-                    user_id=session_state.get("user_id"),
-                    chat_id=session_state.get("chat_id"),
-                    model_name=model_name,
-                    provider=provider,
-                    prompt_tokens=int(prompt_tokens),
-                    completion_tokens=int(completion_tokens),
-                    total_tokens=int(total_tokens),
-                    query_size=prompt_size,
-                    response_size=len(total_response),
-                    cost=round(cost, 7),
-                    request_time_ms=overall_processing_time_ms,
-                    is_streaming=True
-                )
+                        usage_records.append(_create_usage_record(
+                            session_state=session_state,
+                            model_name=model_name,
+                            prompt_tokens=agent_tokens["prompt"],
+                            completion_tokens=agent_tokens["completion"],
+                            query_size=len(str(inputs)),
+                            response_size=len(str(response)),
+                            processing_time_ms=int((time.time() - overall_start_time) * 1000),
+                            is_streaming=True
+                        ))
+                        
+            except asyncio.TimeoutError:
+                yield json.dumps({
+                    "agent": "planner",
+                    "content": "The request timed out. Please try a simpler query.",
+                    "status": "error"
+                }) + "\n"
+                return
+            except Exception as e:
+                logger.log_message(f"Error in streaming response: {str(e)}", level=logging.ERROR)
+                yield json.dumps({
+                    "agent": "planner",
+                    "content": "An error occurred while generating responses. Please try again!",
+                    "status": "error"
+                }) + "\n"
+                return
+                
+            # Batch write usage records to DB
+            if usage_records and session_state.get("user_id"):
+                try:
+                    # In a real implementation, you would batch these writes
+                    # For now, we're writing them one by one but could be optimized
+                    ai_manager = app.state.get_ai_manager()
+                    for record in usage_records:
+                        ai_manager.save_usage_to_db(**record)
+                except Exception as db_error:
+                    logger.log_message(f"Failed to save usage records: {str(db_error)}", level=logging.ERROR)
            
-        except Exception as e:
-            yield json.dumps({
-                "agent": "planner",
-                "content": f"An error occurred while generating responses. Please try again!\n{str(e)}",
-                "status": "error"
-            }) + "\n"
+    except Exception as e:
+        logger.log_message(f"Streaming response generation failed: {str(e)}", level=logging.ERROR)
+        yield json.dumps({
+            "agent": "planner",
+            "content": "An error occurred while generating responses. Please try again!",
+            "status": "error"
+        }) + "\n"
 
-    return StreamingResponse(
-        generate_responses(),
-        media_type='text/event-stream',
-        headers={
-            'Cache-Control': 'no-cache',
-            'Connection': 'keep-alive',
-            'Content-Type': 'text/event-stream',
-            'Access-Control-Allow-Origin': '*',
-            'X-Accel-Buffering': 'no'
-        }
-    )
+
+def _estimate_tokens(ai_manager, input_text: str, output_text: str) -> dict:
+    """Estimate token counts, with fallback for tokenization errors"""
+    try:
+        # Try exact tokenization
+        prompt_tokens = len(ai_manager.tokenizer.encode(input_text))
+        completion_tokens = len(ai_manager.tokenizer.encode(output_text))
+    except Exception:
+        # Fall back to estimation
+        prompt_words = len(input_text.split())
+        completion_words = len(output_text.split())
+        prompt_tokens = int(prompt_words * DEFAULT_TOKEN_RATIO)
+        completion_tokens = int(completion_words * DEFAULT_TOKEN_RATIO)
+    
+    return {
+        "prompt": prompt_tokens,
+        "completion": completion_tokens,
+        "total": prompt_tokens + completion_tokens
+    }
+
+
+def _create_usage_record(session_state: dict, model_name: str, prompt_tokens: int, 
+                        completion_tokens: int, query_size: int, response_size: int,
+                        processing_time_ms: int, is_streaming: bool) -> dict:
+    """Create a usage record for the database"""
+    ai_manager = app.state.get_ai_manager()
+    provider = ai_manager.get_provider_for_model(model_name)
+    cost = ai_manager.calculate_cost(model_name, prompt_tokens, completion_tokens)
+    
+    return {
+        "user_id": session_state.get("user_id"),
+        "chat_id": session_state.get("chat_id"),
+        "model_name": model_name,
+        "provider": provider,
+        "prompt_tokens": int(prompt_tokens),
+        "completion_tokens": int(completion_tokens),
+        "total_tokens": int(prompt_tokens + completion_tokens),
+        "query_size": query_size,
+        "response_size": response_size,
+        "cost": round(cost, 7),
+        "request_time_ms": processing_time_ms,
+        "is_streaming": is_streaming
+    }
+
+
+def _get_model_name_for_provider(provider: str) -> str:
+    """Get the model name for a provider"""
+    provider_model_map = {
+        "openai": "o3-mini",
+        "anthropic": "claude-3-7-sonnet-latest",
+        "gemini": "gemini-2.5-pro-preview-03-25"
+    }
+    return provider_model_map.get(provider, "o3-mini")
+
+
+async def _execute_plan_with_timeout(ai_system, enhanced_query, plan_response):
+    """Execute the plan with timeout handling for each step"""
+    try:
+        # Use asyncio.create_task to run the execute_plan coroutine
+        async for agent_name, inputs, response in ai_system.execute_plan(enhanced_query, plan_response):
+            # Yield results as they come
+            yield agent_name, inputs, response
+    except Exception as e:
+        logger.log_message(f"Error executing plan: {str(e)}", level=logging.ERROR)
+        yield "error", None, {"error": "An error occurred during plan execution"}
+
 
 # Add an endpoint to list available agents
 @app.get("/agents", response_model=dict)

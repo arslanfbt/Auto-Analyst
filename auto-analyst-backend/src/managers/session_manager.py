@@ -90,8 +90,8 @@ This dataset appears clean with consistent formatting and no missing values, mak
         """Initialize the default dataset and store it"""
         try:
             self._default_df = pd.read_csv("Housing.csv")
-            data_dict = make_data(self._default_df, self._dataset_description)
-            self._default_retrievers = self.initialize_retrievers(self.styling_instructions, [str(data_dict)])
+            self._make_data = make_data(self._default_df, self._dataset_description)
+            self._default_retrievers = self.initialize_retrievers(self.styling_instructions, [str(self._make_data)])
             self._default_ai_system = auto_analyst(agents=list(self.available_agents.values()), 
                                                   retrievers=self._default_retrievers)
         except Exception as e:
@@ -204,8 +204,8 @@ This dataset appears clean with consistent formatting and no missing values, mak
             desc: Description of the dataset
         """
         try:
-            data_dict = make_data(df, desc)
-            retrievers = self.initialize_retrievers(self.styling_instructions, [str(data_dict)])
+            self._make_data = make_data(df, desc)
+            retrievers = self.initialize_retrievers(self.styling_instructions, [str(self._make_data)])
             ai_system = auto_analyst(agents=list(self.available_agents.values()), retrievers=retrievers)
             
             # Get default model config for new sessions
@@ -223,7 +223,7 @@ This dataset appears clean with consistent formatting and no missing values, mak
                 "current_df": df,
                 "retrievers": retrievers,
                 "ai_system": ai_system,
-                "make_data": data_dict,
+                "make_data": self._make_data,
                 "description": desc,
                 "name": name,
                 "model_config": default_model_config,  # Initialize with default

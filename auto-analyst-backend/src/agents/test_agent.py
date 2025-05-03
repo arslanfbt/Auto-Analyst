@@ -814,7 +814,6 @@ class auto_analyst_ind(dspy.Module):
         except Exception as e:
             return {"response": f"Error executing multiple agents: {str(e)}"}
 
-
 # This is the auto_analyst with planner
 class auto_analyst(dspy.Module):
     """Main analyst module that coordinates multiple agents using a planner"""
@@ -829,102 +828,109 @@ class auto_analyst(dspy.Module):
             name = a.__pydantic_core_schema__['schema']['model_name']
             self.agents[name] = dspy.ChainOfThought(a)
             self.agent_inputs[name] = {x.strip() for x in str(agents[i].__pydantic_core_schema__['cls']).split('->')[0].split('(')[1].split(',')}
-            self.agent_desc.append({name: get_agent_description(name)})
+            self.agent_desc.append({name: get_agent_description(name, is_planner=True)})
         
         # Initialize coordination agents
         self.planner = dspy.ChainOfThought(analytical_planner)
         self.refine_goal = dspy.ChainOfThought(goal_refiner_agent)
-        self.code_combiner_agent = dspy.ChainOfThought(code_combiner_agent)
+        # self.code_combiner_agent = dspy.ChainOfThought(code_combiner_agent)
         self.story_teller = dspy.ChainOfThought(story_teller_agent)
         self.memory_summarize_agent = dspy.ChainOfThought(m.memory_summarize_agent)
+        self.parallelizer = dspy.Parallel(num_threads=10)
                 
         # Initialize retrievers
         self.dataset = retrievers['dataframe_index'].as_retriever(k=1)
         self.styling_index = retrievers['style_index'].as_retriever(similarity_top_k=1)
-        
-        # Initialize thread pool for parallel execution
-        self.executor = ThreadPoolExecutor(max_workers=min(len(agents) + 2, os.cpu_count() * 2))
 
-    def execute_agent(self, agent_name, inputs):
-        """Execute a single agent with given inputs"""
-        try:
-            result = self.agents[agent_name.strip()](**inputs)
-            return agent_name.strip(), dict(result)
-        except Exception as e:
-            return agent_name.strip(), {"error": str(e)}
-
-    def get_plan(self, query):
-        """Get the analysis plan"""
-        dict_ = {}
-        dict_['dataset'] = self.dataset.retrieve(query)[0].text
-        dict_['styling_index'] = self.styling_index.retrieve(query)[0].text
-        dict_['goal'] = query
-        dict_['Agent_desc'] = str(self.agent_desc)
-        
-        plan = self.planner(goal=dict_['goal'], dataset=dict_['dataset'], Agent_desc=dict_['Agent_desc'])
-        return dict(plan)
-
-    async def execute_plan(self, query, plan):
-        """Execute the plan and yield results as they complete"""
+    def forward(self, query):
+        # Create shared dictionary for inputs
         dict_ = {}
         dict_['dataset'] = self.dataset.retrieve(query)[0].text
         dict_['styling_index'] = self.styling_index.retrieve(query)[0].text
         dict_['hint'] = []
         dict_['goal'] = query
-        
-        plan_text = plan['plan'].replace('Plan','').replace(':','').strip()
-        plan_list = [agent.strip() for agent in plan_text.split('->') if agent.strip()]
+        dict_['Agent_desc'] = str(self.agent_desc)
 
+        # Get plan from planner agent
+        plan = self.planner(goal=dict_['goal'], dataset=dict_['dataset'], Agent_desc=dict_['Agent_desc'])
+        
+        # Parse the plan
+        output_dict = {'analytical_planner': plan}
+        plan_text = plan.plan.replace('Plan', '').replace(':', '').strip()
+        
+        # If no plan is created, refine the goal and try again
+        if not plan_text or not plan_text.split('->'):
+            refined_goal = self.refine_goal(dataset=dict_['dataset'], goal=dict_['goal'], Agent_desc=dict_['Agent_desc'])
+            return self.forward(query=refined_goal.refined_goal)
+        
+        plan_list = [p.strip() for p in plan_text.split('->') if p.strip()]
+        
         # Get plan instructions if available, or create default empty ones
         try:
             plan_instructions = eval(plan.plan_instructions)
         except:
             plan_instructions = {p.strip(): {'create': [], 'receive': []} for p in plan_list}
-
-        if len(plan_list) == 0:
-            yield "plan_not_found",  dict(plan), {"error": "No plan found"}
-            return
-        # Execute agents in parallel
-        futures = []
-        for agent_name in plan_list:
-            inputs = {x:dict_[x] for x in self.agent_inputs[agent_name.strip()] if x != 'plan_instructions'}
-            if 'plan_instructions' in self.agent_inputs[agent_name.strip()]:
-                if agent_name.strip() in plan_instructions:
-                    inputs['plan_instructions'] = str(plan_instructions[agent_name.strip()])
-                else:
-                    inputs['plan_instructions'] = str({'create': [], 'receive': []})
-            future = self.executor.submit(self.execute_agent, agent_name, inputs)
-            futures.append((agent_name, inputs, future))
         
-        # Yield results as they complete 
-        completed_results = []
-        for agent_name, inputs, future in futures:
-            try:
-                name, result = await asyncio.get_event_loop().run_in_executor(None, future.result)
-                completed_results.append((name, result))
-                yield name, inputs, result
-            except Exception as e:
-                yield agent_name, inputs, {"error": str(e)}
-        # Execute code combiner after all agents complete
-        code_list = [result['code'] for _, result in completed_results if 'code' in result]
-        # max tokens is number of characters - number of words / 2
-        char_count = sum(len(code) for code in code_list)
-        word_count = sum(len(code.split()) for code in code_list)
-        max_tokens = int((char_count - word_count) / 2)
-        print(f"Max tokens: {max_tokens}")
-        try:
-            with dspy.context(lm=dspy.LM(model="gemini/gemini-2.5-pro-preview-03-25", api_key = os.environ['GEMINI_API_KEY'], max_tokens=10000)):
-                combiner_result = self.code_combiner_agent(agent_code_list=str(code_list), dataset=dict_['dataset'])
-                yield 'code_combiner_agent__gemini', str(code_list), dict(combiner_result)
-        except:
-            try: 
-                with dspy.context(lm=dspy.LM(model="o3-mini", max_tokens=max_tokens, temperature=1.0, api_key=os.getenv("OPENAI_API_KEY"))):
-                    combiner_result = self.code_combiner_agent(agent_code_list=str(code_list), dataset=dict_['dataset'])
-                    yield 'code_combiner_agent__openai', str(code_list), dict(combiner_result)
-            except:
-                try: 
-                    with dspy.context(lm=dspy.LM(model="claude-3-7-sonnet-latest", max_tokens=max_tokens, temperature=1.0, api_key=os.getenv("ANTHROPIC_API_KEY"))):
-                        combiner_result = self.code_combiner_agent(agent_code_list=str(code_list), dataset=dict_['dataset'])
-                        yield 'code_combiner_agent__anthropic', str(code_list), dict(combiner_result)
-                except Exception as e:
-                    yield 'code_combiner_agent__none', str(code_list), {"error": "Error in code combiner: "+str(e)}
+        # Prepare parallel execution list
+        parallel_list = []
+        for p in plan_list:
+            inputs = {x: dict_[x] for x in self.agent_inputs[p.strip()] if x != 'plan_instructions'}
+            if 'plan_instructions' in self.agent_inputs[p.strip()]:
+                if p.strip() in plan_instructions:
+                    inputs['plan_instructions'] = plan_instructions[p.strip()]
+                else:
+                    inputs['plan_instructions'] = {'create': [], 'receive': []}
+            parallel_list.append((self.agents[p.strip()], inputs))
+        
+        # Execute agents in parallel
+        results = self.parallelizer(parallel_list)
+        
+        # Process results
+        output_dict = {'analytical_planner': dict(plan)}
+        code_list = []
+        
+        for i, result in enumerate(results):
+            agent_name = plan_list[i].strip()
+            output_dict[agent_name] = dict(result)
+            if hasattr(result, 'code'):
+                code_list.append(result.code)
+                
+        code_combiner_info = {}
+        # try:
+        #     with dspy.context(lm=dspy.LM(model="gemini/gemini-2.5-pro-preview-03-25", api_key = os.environ['GEMINI_API_KEY'], max_tokens=10000)):
+        #         combiner_result = self.code_combiner_agent(agent_code_list=str(code_list), dataset=dict_['dataset'])
+        #         code_combiner_info = {
+        #             'code_combiner_agent_name': 'gemini-2.5-pro-preview-03-25',
+        #             'code_list': str(code_list),
+        #             'combiner_results': dict(combiner_result)
+        #         }
+        # except:
+        #     try: 
+        #         # Set max_tokens to a fixed value of 10000 for all models
+        #         with dspy.context(lm=dspy.LM(model="o3-mini", max_tokens=10000, temperature=1.0, api_key=os.getenv("OPENAI_API_KEY"))):
+        #             combiner_result = self.code_combiner_agent(agent_code_list=str(code_list), dataset=dict_['dataset'])
+        #             code_combiner_info = {
+        #                 'code_combiner_agent_name': 'o3-mini',
+        #                 'code_list': str(code_list),
+        #                 'combiner_results': dict(combiner_result)
+        #             }
+        #     except:
+        #         try: 
+        #             with dspy.context(lm=dspy.LM(model="claude-3-7-sonnet-latest", max_tokens=100000, temperature=1.0, api_key=os.getenv("ANTHROPIC_API_KEY"))):
+        #                 combiner_result = self.code_combiner_agent(agent_code_list=str(code_list), dataset=dict_['dataset'])
+        #                 code_combiner_info = {
+        #                     'code_combiner_agent_name': 'claude-3-7-sonnet-latest',
+        #                     'code_list': str(code_list),
+        #                     'combiner_results': dict(combiner_result)
+        #                 }
+        #         except Exception as e:
+        #             code_combiner_info = {
+        #                 'code_combiner_agent_name': 'none',
+        #                 'code_list': str(code_list),
+        #                 'combiner_results': {"error": f"Error in code combiner: {str(e)}"}
+        #             }
+        
+        # # Add the code combiner info to the output dictionary
+        output_dict['code_combiner_agent'] = code_combiner_info
+            
+        return output_dict
