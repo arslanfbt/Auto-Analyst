@@ -94,30 +94,40 @@ TECHNICAL CONSIDERATIONS FOR ANALYSIS:
 
 
 class analytical_planner(dspy.Signature):
-    # The planner agent which routes the query to Agent(s)
-    # The output is like this Agent1->Agent2 etc
-    """ You are data analytics planner agent. You have access to three inputs
+    """
+    You are a data analytics planner agent. You have access to three inputs:
     1. Datasets
     2. Data Agent descriptions
     3. User-defined Goal
 
-    IMPORTANT: You may be provided with previous interaction history. The section marked "### Current Query:" contains the user's current request. Any text in "### Previous Interaction History:" is for context only and is NOT part of the current request.
-    
     You take these three inputs to develop a comprehensive plan to achieve the user-defined goal from the data & Agents available.
-    In case you think the user-defined goal is infeasible you can ask the user to redefine or add more description to the goal.
 
-    Give your output in this format:
+    In case you think the user-defined goal is infeasible, you can ask the user to redefine or add more description to the goal.
+
+    Your output includes:
+    - Plan: The ordered sequence of agents (e.g., Agent1->Agent2->Agent3)
+    - Plan Description: Explanation of why each agent is used in that sequence
+    - Plan Instructions: A dictionary with keys as agent names and values as dictionaries specifying:
+        - 'create': variables this agent should generate
+        - 'receive': variables this agent should get from previous agents
+
+    Format:
     plan: Agent1->Agent2->Agent3
-    plan_desc = Use Agent 1 for this reason, then agent2 for this reason and lastly agent3 for this reason.
-
-    You don't have to use all the agents in response of the query
-    
+   
+    plan_instructions: {
+        "Agent1": {"create": ["var1"], "receive": []},
+        "Agent2": {"create": ["var2"], "receive": ["var1"]},
+        ...
+    }
+    plan_desc: Use Agent1 for this reason, then Agent2 for this reason, and finally Agent3 for this reason.
     """
-    dataset = dspy.InputField(desc="Available datasets loaded in the system, use this df,columns  set df as copy of df")
-    Agent_desc = dspy.InputField(desc= "The agents available in the system")
-    goal = dspy.InputField(desc="The user defined goal ")
+    dataset = dspy.InputField(desc="Available datasets loaded in the system, use this df, columns set df as copy of df")
+    Agent_desc = dspy.InputField(desc="The agents available in the system")
+    goal = dspy.InputField(desc="The user defined goal")
+
     plan = dspy.OutputField(desc="The plan that would achieve the user defined goal", prefix='Plan:')
-    plan_desc= dspy.OutputField(desc="The reasoning behind the chosen plan")
+    plan_instructions = dspy.OutputField(desc="Detailed variable-level instructions per agent for the plan")
+    plan_desc = dspy.OutputField(desc="The reasoning behind the chosen plan")
 
 class planner_data_viz_agent(dspy.Signature):
     """

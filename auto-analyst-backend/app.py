@@ -238,7 +238,7 @@ X_SESSION_ID = APIKeyHeader(name="X-Session-ID", auto_error=False)
 # Update AppState class to use SessionManager
 class AppState:
     def __init__(self):
-        self._session_manager = SessionManager(styling_instructions, AVAILABLE_AGENTS)
+        self._session_manager = SessionManager(styling_instructions, PLANNER_AGENTS)
         self.model_config = DEFAULT_MODEL_CONFIG.copy()
         # Update the SessionManager with the current model_config
         self._session_manager._app_model_config = self.model_config

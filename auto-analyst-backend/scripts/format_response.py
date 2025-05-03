@@ -176,7 +176,7 @@ def execute_code_from_markdown(code_str, dataframe=None):
 def format_response_to_markdown(api_response, agent_name = None, dataframe=None):
     try:
         markdown = []
-        logger.log_message(f"API response for {agent_name} at {time.strftime('%Y-%m-%d %H:%M:%S')}: {api_response}", level=logging.INFO)
+        # logger.log_message(f"API response for {agent_name} at {time.strftime('%Y-%m-%d %H:%M:%S')}: {api_response}", level=logging.INFO)
 
         if isinstance(api_response, dict):
             for key in api_response:
@@ -201,6 +201,7 @@ def format_response_to_markdown(api_response, agent_name = None, dataframe=None)
             markdown.append(f"\n## {agent.replace('_', ' ').title()}\n")
             
             if agent == "analytical_planner":
+                # logger.log_message(f"Analytical planner content: {content}", level=logging.INFO)
                 if 'plan_desc' in content:
                     markdown.append(f"### Reasoning\n{content['plan_desc']}\n")
                 else:

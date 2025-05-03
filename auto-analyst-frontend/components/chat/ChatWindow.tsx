@@ -48,9 +48,10 @@ interface ChatWindowProps {
   isLoading: boolean
   onSendMessage: (message: string) => void
   showWelcome: boolean
+  chatNameGenerated?: boolean
 }
 
-const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMessage, showWelcome }) => {
+const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMessage, showWelcome, chatNameGenerated = false }) => {
   const chatWindowRef = useRef<HTMLDivElement>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const [localMessages, setLocalMessages] = useState<ChatMessage[]>(messages)
@@ -58,6 +59,21 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
   const [codeEntries, setCodeEntries] = useState<CodeEntry[]>([])
   const [currentMessageIndex, setCurrentMessageIndex] = useState<number | null>(null)
   const [codeOutputs, setCodeOutputs] = useState<CodeOutput[]>([])
+  const [chatCompleted, setChatCompleted] = useState(false)
+  
+  // Set chatCompleted when chat name is generated
+  useEffect(() => {
+    if (chatNameGenerated && messages.length > 0) {
+      setChatCompleted(true);
+      
+      // Reset chatCompleted after a delay to prepare for the next response
+      const timer = setTimeout(() => {
+        setChatCompleted(false);
+      }, 5000);
+      
+      return () => clearTimeout(timer);
+    }
+  }, [chatNameGenerated, messages.length]);
   
   // Clear code entries for new chats or messages
   const clearCodeEntries = useCallback(() => {
@@ -336,60 +352,62 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
       : JSON.stringify(message.text);
     
     // Render the entire message
-            return (
-              <motion.div
+    return (
+      <motion.div
         key={index}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.3 }}
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3 }}
         className={`flex ${message.sender === "user" ? "justify-end" : "justify-start"} mb-8`}
-              >
+      >
         <div
           className={`relative rounded-2xl p-6 transition-shadow duration-200 hover:shadow-lg ${
             message.sender === "user"
               ? "bg-[#FF7F7F] text-white shadow-pink-200/50 max-w-[95%]"
-              : "bg-white text-gray-900 shadow-md shadow-gray-200/50 max-w-[95%]"
+              : "bg-white text-gray-900 shadow-md shadow-gray-200/50 max-w-full md:max-w-[95%] overflow-hidden"
           }`}
         >
-          {Array.isArray(messageContent) ? (
-            // Render message with code indicators
-            messageContent.map((part, partIndex) => {
-              if (typeof part === 'string') {
-                // Handle plotly blocks embedded in the string
-                if (part.includes('```plotly')) {
-                  const plotlyParts = part.split(/(```plotly[\s\S]*?```)/);
-                  return plotlyParts.map((plotlyPart, plotlyIndex) => {
-                    if (plotlyPart.startsWith('```plotly') && plotlyPart.endsWith('```')) {
-                      return renderPlotlyBlock(plotlyPart, `${index}-${partIndex}-${plotlyIndex}`);
-                    } else if (plotlyPart.trim()) {
-                      return <MessageContent key={`${index}-${partIndex}-${plotlyIndex}`} message={plotlyPart} onCodeExecute={handleCodeExecute} />;
-                    }
-                    return null;
-                  });
+          <div className={message.sender === "ai" ? "overflow-x-auto" : ""}>
+            {Array.isArray(messageContent) ? (
+              // Render message with code indicators
+              messageContent.map((part, partIndex) => {
+                if (typeof part === 'string') {
+                  // Handle plotly blocks embedded in the string
+                  if (part.includes('```plotly')) {
+                    const plotlyParts = part.split(/(```plotly[\s\S]*?```)/);
+                    return plotlyParts.map((plotlyPart, plotlyIndex) => {
+                      if (plotlyPart.startsWith('```plotly') && plotlyPart.endsWith('```')) {
+                        return renderPlotlyBlock(plotlyPart, `${index}-${partIndex}-${plotlyIndex}`);
+                      } else if (plotlyPart.trim()) {
+                        return <MessageContent key={`${index}-${partIndex}-${plotlyIndex}`} message={plotlyPart} onCodeExecute={handleCodeExecute} />;
+                      }
+                      return null;
+                    });
+                  }
+                  // Regular text part
+                  return <MessageContent key={`${index}-${partIndex}`} message={part} onCodeExecute={handleCodeExecute} />;
+                } else if (part.type === 'code') {
+                  // Code indicator
+                  return (
+                    <CodeIndicator
+                      key={`${index}-${partIndex}-code`}
+                      language={part.language}
+                      onClick={() => {
+                        setCurrentMessageIndex(index);
+                        clearCodeEntries();
+                        extractCodeFromMessages([message], index);
+                        setCodeCanvasOpen(true);
+                      }}
+                    />
+                  );
                 }
-                // Regular text part
-                return <MessageContent key={`${index}-${partIndex}`} message={part} onCodeExecute={handleCodeExecute} />;
-              } else if (part.type === 'code') {
-                // Code indicator
-                return (
-                  <CodeIndicator
-                    key={`${index}-${partIndex}-code`}
-                    language={part.language}
-                    onClick={() => {
-                      setCurrentMessageIndex(index);
-                      clearCodeEntries();
-                      extractCodeFromMessages([message], index);
-                      setCodeCanvasOpen(true);
-                    }}
-                  />
-                );
-              }
-              return null;
-            })
-          ) : (
-            // Fallback for non-array content
-            <MessageContent message={typeof messageContent === 'string' ? messageContent : JSON.stringify(messageContent)} onCodeExecute={handleCodeExecute} />
-          )}
+                return null;
+              })
+            ) : (
+              // Fallback for non-array content
+              <MessageContent message={typeof messageContent === 'string' ? messageContent : JSON.stringify(messageContent)} onCodeExecute={handleCodeExecute} />
+            )}
+          </div>
         </div>
       </motion.div>
     );
@@ -403,8 +421,8 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
       if (plotlyData.data && plotlyData.data.length > 0) {
         return (
           <div key={key} className="w-full my-4 overflow-x-auto">
-                    <PlotlyChart data={plotlyData.data} layout={plotlyData.layout} />
-                  </div>
+            <PlotlyChart data={plotlyData.data} layout={plotlyData.layout} />
+          </div>
         );
       }
     } catch (e) {
@@ -438,20 +456,32 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
               </div>
             );
           } else if (output.type === 'output') {
-          return (
-              <div key={`output-${messageIndex}-${idx}`} className="bg-gray-50 border border-gray-200 rounded-md p-3 overflow-auto">
+            // Check if the output looks like a DataFrame or tabular data
+            const isTabularData = output.content.includes('|') && 
+                                 (output.content.includes('DataFrame') || 
+                                  output.content.includes('Column Types') ||
+                                  (output.content.match(/\|\s*\w+\s*\|/g)?.length > 1));
+            
+            return (
+              <div key={`output-${messageIndex}-${idx}`} className="bg-gray-50 border border-gray-200 rounded-md p-3">
                 <div className="text-gray-700 font-medium mb-2">Output</div>
-                <pre className="text-xs text-gray-800 font-mono whitespace-pre-wrap">{output.content}</pre>
+                {isTabularData ? (
+                  <div className="overflow-x-auto max-w-full">
+                    <pre className="text-xs text-gray-800 font-mono whitespace-pre min-w-max">{output.content}</pre>
+                  </div>
+                ) : (
+                  <pre className="text-xs text-gray-800 font-mono whitespace-pre-wrap overflow-auto max-h-[400px]">{output.content}</pre>
+                )}
               </div>
             );
           } else if (output.type === 'plotly') {
-        return (
+            return (
               <div key={`output-${messageIndex}-${idx}`} className="bg-white border border-gray-200 rounded-md p-3 overflow-auto">
                 <div className="text-gray-700 font-medium mb-2">Visualization</div>
                 <div className="w-full">
                   <PlotlyChart data={output.content.data} layout={output.content.layout} />
                 </div>
-            </div>
+              </div>
             );
           }
           return null;
@@ -523,6 +553,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
           onToggle={handleCanvasToggle}
           codeEntries={codeEntries}
           onCodeExecute={handleCodeCanvasExecute}
+          chatCompleted={chatCompleted}
         />
       )}
     </div>
