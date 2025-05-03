@@ -33,10 +33,11 @@ const MessageContent: React.FC<MessageContentProps> = ({ message, onCodeExecute,
                   const codeContent = String(children).replace(/\n$/, "")
                   
                   // Check if this is likely tabular data
+                  const matches = codeContent.match(/\|\s*\w+\s*\|/g);
                   const isTabularData = !isInline && codeContent.includes('|') && 
                                        (codeContent.includes('DataFrame') || 
                                         codeContent.includes('Column Types') ||
-                                        (codeContent.match(/\|\s*\w+\s*\|/g)?.length > 1));
+                                        (matches !== null && matches.length > 1));
 
                   if (!isInline && match) {
                     // Special handling for tabular data
