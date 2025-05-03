@@ -653,6 +653,7 @@ Your task is to:
 5. Ensure the final output is **runnable**, **error-free**, and **logically consistent**.
 
 Strict instructions:
+- Assume the dataset is already loaded and available in the code context; do not include any code to read, load, or create data.
 - Do **not** modify any working parts of the code unnecessarily.
 - Do **not** change variable names, structure, or logic unless it directly contributes to resolving the issue.
 - Do **not** output anything besides the corrected, full version of the code (i.e., no explanations, comments, or logs).
@@ -676,15 +677,8 @@ Your job is to:
 3. Leave all unrelated parts of the code unchanged, unless the user explicitly requests a full rewrite or broader changes.
 4. Ensure that your changes maintain or improve the functionality and correctness of the code.
 
-Your edits may include:
-- Bug fixes or logic corrections (if requested)
-- Plot and visualization styling changes
-- Optimization or simplification
-- Code reformatting or restructuring (if asked for)
-- Adjusting data processing or analysis steps
-- Any other edits specifically described in the user prompt
-
 Strict requirements:
+- Assume the dataset is already loaded and available in the code context; do not include any code to read, load, or create data.
 - Do not change variable names, function structures, or logic outside the scope of the user's request.
 - Do not refactor, optimize, or rewrite unless explicitly instructed.
 - Ensure the edited code remains complete and executable.

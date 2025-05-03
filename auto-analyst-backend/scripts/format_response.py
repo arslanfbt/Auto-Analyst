@@ -116,10 +116,6 @@ def execute_code_from_markdown(code_str, dataframe=None):
         'json_outputs': []  # List to store multiple Plotly JSON outputs
     }
 
-    # If a dataframe is provided, add it to the context
-    if dataframe is not None:
-        context['df'] = dataframe
-    
     # Modify code to store multiple JSON outputs
     modified_code = re.sub(
         r'(\w*_?)fig(\w*)\.show\(\)',
@@ -146,6 +142,12 @@ def execute_code_from_markdown(code_str, dataframe=None):
     )
 
 
+    # If a dataframe is provided, add it to the context
+    if dataframe is not None:
+        context['df'] = dataframe
+
+    # remove pd.read_csv() if it's already in the context
+    modified_code = re.sub(r"pd\.read_csv\(\s*[\"\'].*?[\"\']\s*\)", '', modified_code)
 
     # # Remove sample dataframe lines with multiple array values
     modified_code = re.sub(r"^# Sample DataFrames?.*?(\n|$)", '', modified_code, flags=re.MULTILINE | re.IGNORECASE)
@@ -171,8 +173,41 @@ def execute_code_from_markdown(code_str, dataframe=None):
         return output, json_outputs
     except Exception as e:
         return "Error executing code: " + str(e), []
+    
 
+def format_plan_instructions(plan_instructions):
+    """
+    Format any plan instructions (JSON string or dict) into markdown sections per agent.
+    """
+    # Parse input into a dict
+    if isinstance(plan_instructions, str):
+        try:
+            instructions = json.loads(plan_instructions)
+        except json.JSONDecodeError:
+            return f"Invalid plan instructions: {plan_instructions}"
+    elif isinstance(plan_instructions, dict):
+        instructions = plan_instructions
+    else:
+        return f"Unsupported plan instructions type: {type(plan_instructions)}"
 
+    markdown_lines = []
+    for agent, content in instructions.items():
+        agent_title = agent.replace('_', ' ').title()
+        markdown_lines.append(f"#### {agent_title}")
+        if isinstance(content, dict):
+            for key, values in content.items():
+                key_title = key.replace('_', ' ').capitalize()
+                if isinstance(values, list) and values:
+                    markdown_lines.append(f"- **{key_title}**:")
+                    for v in values:
+                        markdown_lines.append(f"  - {v}")
+                else:
+                    markdown_lines.append(f"- **{key_title}**: None")
+        else:
+            markdown_lines.append(f"- {content}")
+        markdown_lines.append("")  # blank line between agents
+    return "\n".join(markdown_lines).strip()
+    
 def format_response_to_markdown(api_response, agent_name = None, dataframe=None):
     try:
         markdown = []
@@ -204,6 +239,8 @@ def format_response_to_markdown(api_response, agent_name = None, dataframe=None)
                 # logger.log_message(f"Analytical planner content: {content}", level=logging.INFO)
                 if 'plan_desc' in content:
                     markdown.append(f"### Reasoning\n{content['plan_desc']}\n")
+                if 'plan_instructions' in content:
+                    markdown.append(f"### Plan Instructions\n{format_plan_instructions(content['plan_instructions'])}\n")
                 else:
                     markdown.append(f"### Reasoning\n{content['rationale']}\n")
             else:  
