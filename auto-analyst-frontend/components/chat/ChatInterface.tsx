@@ -103,6 +103,7 @@ const ChatInterface: React.FC = () => {
   const datasetPopupShownRef = useRef(false);
   const popupShownForChatIdsRef = useRef<Set<number>>(new Set());
   const [isNewLoginSession, setIsNewLoginSession] = useState(false);
+  const [chatNameGenerated, setChatNameGenerated] = useState(false);
 
   useEffect(() => {
     setMounted(true)
@@ -959,7 +960,14 @@ const ChatInterface: React.FC = () => {
                   : chat
               )
             );
-            // We removed the fetchChatHistories() call here
+            
+            // Set chatNameGenerated to true to trigger auto-run in CodeCanvas
+            setChatNameGenerated(true);
+            
+            // Reset the flag after a delay 
+            setTimeout(() => {
+              setChatNameGenerated(false);
+            }, 5000);
           }
         } catch (error) {
           console.error('Failed to update chat title:', error);
@@ -1401,6 +1409,7 @@ const ChatInterface: React.FC = () => {
             isLoading={isLoading} 
             onSendMessage={handleSendMessage}
             showWelcome={showWelcome}
+            chatNameGenerated={chatNameGenerated}
           />
         </div>
         <ChatInput 

@@ -28,13 +28,36 @@ const MessageContent: React.FC<MessageContentProps> = ({ message, onCodeExecute,
                 code({ node, className, children, ...props }) {
                   const match = /language-(\w+)/.exec(className || "")
                   const isInline = (props as { inline?: boolean })?.inline ?? false
+                  
+                  // Convert children to string to check content
+                  const codeContent = String(children).replace(/\n$/, "")
+                  
+                  // Check if this is likely tabular data
+                  const matches = codeContent.match(/\|\s*\w+\s*\|/g);
+                  const isTabularData = !isInline && codeContent.includes('|') && 
+                                       (codeContent.includes('DataFrame') || 
+                                        codeContent.includes('Column Types') ||
+                                        (matches !== null && matches.length > 1));
 
                   if (!isInline && match) {
-                    // For code blocks, return as inline code instead of using CodeBlocker
+                    // Special handling for tabular data
+                    if (isTabularData) {
+                      return (
+                        <div className="overflow-x-auto max-w-full my-2">
+                          <pre className="text-sm p-2 bg-gray-100 rounded font-mono whitespace-pre min-w-max">
+                            {codeContent}
+                          </pre>
+                        </div>
+                      )
+                    }
+                    
+                    // For regular code blocks
                     return (
-                      <code className={`text-sm p-1 bg-gray-100 rounded font-mono ${className}`} {...props}>
-                        {children}
-                      </code>
+                      <div className="overflow-x-auto my-2">
+                        <code className={`text-sm p-1 bg-gray-100 rounded font-mono block ${className}`} {...props}>
+                          {children}
+                        </code>
+                      </div>
                     )
                   }
 
@@ -42,6 +65,13 @@ const MessageContent: React.FC<MessageContentProps> = ({ message, onCodeExecute,
                     <code className={className} {...props}>
                       {children}
                     </code>
+                  )
+                },
+                pre({ children }) {
+                  return (
+                    <div className="overflow-x-auto max-w-full">
+                      {children}
+                    </div>
                   )
                 },
                 h1: ({ node, ...props }) => <h1 className="text-2xl font-bold mt-6 mb-4" {...props} />,
@@ -59,6 +89,11 @@ const MessageContent: React.FC<MessageContentProps> = ({ message, onCodeExecute,
                 ),
                 blockquote: ({ node, ...props }) => (
                   <blockquote className="border-l-4 border-gray-300 pl-4 italic my-4" {...props} />
+                ),
+                table: ({ node, ...props }) => (
+                  <div className="overflow-x-auto max-w-full my-4">
+                    <table className="min-w-max border-collapse" {...props} />
+                  </div>
                 ),
               }}
             >

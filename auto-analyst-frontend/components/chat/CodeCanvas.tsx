@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useEffect, useRef } from "react"
+import React, { useState, useEffect, useRef, useCallback } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter"
 import { vscDarkPlus } from "react-syntax-highlighter/dist/esm/styles/prism"
@@ -14,6 +14,11 @@ import axios from "axios"
 import API_URL from '@/config/api'
 import { Textarea } from "@/components/ui/textarea"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Switch } from "@/components/ui/switch"
+import { Label } from "@/components/ui/label"
+import { useSession } from "next-auth/react"
+import { useCredits } from '@/lib/contexts/credit-context'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
 
 interface CodeEntry {
   id: string;
@@ -31,6 +36,7 @@ interface CodeCanvasProps {
   onToggle: () => void;
   codeEntries: CodeEntry[];
   onCodeExecute?: (entryId: string, result: any) => void;
+  chatCompleted?: boolean;
 }
 
 interface SelectionPosition {
@@ -43,7 +49,8 @@ const CodeCanvas: React.FC<CodeCanvasProps> = ({
   isOpen, 
   onToggle, 
   codeEntries,
-  onCodeExecute
+  onCodeExecute,
+  chatCompleted = false
 }) => {
   const { toast } = useToast()
   const { sessionId } = useSessionStore()
@@ -62,67 +69,16 @@ const CodeCanvas: React.FC<CodeCanvasProps> = ({
   const monaco = useMonaco()
   const editorRef = useRef<any>(null)
   const [isCleaningCode, setIsCleaningCode] = useState(false)
+  const [autoRunEnabled, setAutoRunEnabled] = useState(true)
+  const previousChatCompletedRef = useRef(false)
+  const { data: session } = useSession()
+  const { remainingCredits, checkCredits, hasEnoughCredits } = useCredits()
+  const [insufficientCreditsOpen, setInsufficientCreditsOpen] = useState(false)
+  const [creditAction, setCreditAction] = useState<'edit' | 'fix' | null>(null)
+  const [pendingEntryId, setPendingEntryId] = useState<string | null>(null)
 
-  // Set the most recent entry as active when entries change
-  useEffect(() => {
-    if (codeEntries.length > 0 && (!activeEntryId || !codeEntries.find(entry => entry.id === activeEntryId))) {
-      setActiveEntryId(codeEntries[codeEntries.length - 1].id)
-    }
-  }, [codeEntries, activeEntryId])
-
-  // Initialize edited code when switching to edit mode
-  const startEditing = (entryId: string, code: string) => {
-    setEditingMap(prev => ({ ...prev, [entryId]: true }))
-    setEditedCodeMap(prev => ({ ...prev, [entryId]: code }))
-  }
-
-  const saveEdit = (entryId: string) => {
-    const updatedCode = editedCodeMap[entryId]
-    // Find the entry and update it
-    const entryIndex = codeEntries.findIndex(entry => entry.id === entryId)
-    if (entryIndex !== -1) {
-      const updatedEntries = [...codeEntries]
-      updatedEntries[entryIndex] = {
-        ...updatedEntries[entryIndex],
-        code: updatedCode
-      }
-      // Update the entries in the parent component
-      if (onCodeExecute) {
-        // Notify parent that code was updated (but not executed)
-        onCodeExecute(entryId, { savedCode: updatedCode });
-      }
-    }
-    setEditingMap(prev => ({ ...prev, [entryId]: false }))
-  }
-
-  const cancelEdit = (entryId: string) => {
-    setEditingMap(prev => ({ ...prev, [entryId]: false }))
-  }
-
-  const copyToClipboard = async (code: string, entryId: string) => {
-    try {
-      await navigator.clipboard.writeText(code)
-      toast({
-        title: "Copied to clipboard",
-        variant: "default",
-        duration: 2000, // 2 seconds
-      })
-      setCopiedMap(prev => ({ ...prev, [entryId]: true }))
-      setTimeout(() => {
-        setCopiedMap(prev => ({ ...prev, [entryId]: false }))
-      }, 2000)
-    } catch (err) {
-      console.error("Failed to copy text: ", err)
-      toast({
-        title: "Copy failed",
-        description: "Could not copy to clipboard",
-        variant: "destructive",
-        duration: 3000, // 3 seconds
-      })
-    }
-  }
-
-  const executeCode = async (entryId: string, code: string, language: string) => {
+  // Define executeCode with useCallback at the top
+  const executeCode = useCallback(async (entryId: string, code: string, language: string) => {
     // Only execute Python code for now
     if (language !== "python") return
     
@@ -230,8 +186,91 @@ const CodeCanvas: React.FC<CodeCanvasProps> = ({
         });
       }
     }
+  }, [codeEntries, editedCodeMap, editingMap, onCodeExecute, sessionId]);
+
+  // Set the most recent entry as active when entries change
+  useEffect(() => {
+    if (codeEntries.length > 0 && (!activeEntryId || !codeEntries.find(entry => entry.id === activeEntryId))) {
+      setActiveEntryId(codeEntries[codeEntries.length - 1].id)
+    }
+  }, [codeEntries, activeEntryId])
+
+  // Auto-run code when chat is completed
+  useEffect(() => {
+    // Only run code if chatCompleted changes from false to true
+    if (chatCompleted && !previousChatCompletedRef.current && autoRunEnabled && codeEntries.length > 0 && activeEntryId) {
+      const activeEntry = codeEntries.find(entry => entry.id === activeEntryId);
+      
+      // Only execute Python code automatically
+      if (activeEntry && activeEntry.language === "python" && !editingMap[activeEntryId]) {
+        // Add a small delay to ensure UI is ready
+        setTimeout(() => {
+          executeCode(activeEntryId, activeEntry.code, activeEntry.language);
+          toast({
+            title: "Auto-running code",
+            description: "Code is automatically running after AI response completed",
+            duration: 3000,
+          });
+        }, 500);
+      }
+    }
+    
+    // Update the ref for the next check
+    previousChatCompletedRef.current = chatCompleted;
+  }, [chatCompleted, autoRunEnabled, codeEntries, activeEntryId, editingMap, executeCode, toast]);
+
+  // Initialize edited code when switching to edit mode
+  const startEditing = (entryId: string, code: string) => {
+    setEditingMap(prev => ({ ...prev, [entryId]: true }))
+    setEditedCodeMap(prev => ({ ...prev, [entryId]: code }))
   }
-  
+
+  const saveEdit = (entryId: string) => {
+    const updatedCode = editedCodeMap[entryId]
+    // Find the entry and update it
+    const entryIndex = codeEntries.findIndex(entry => entry.id === entryId)
+    if (entryIndex !== -1) {
+      const updatedEntries = [...codeEntries]
+      updatedEntries[entryIndex] = {
+        ...updatedEntries[entryIndex],
+        code: updatedCode
+      }
+      // Update the entries in the parent component
+      if (onCodeExecute) {
+        // Notify parent that code was updated (but not executed)
+        onCodeExecute(entryId, { savedCode: updatedCode });
+      }
+    }
+    setEditingMap(prev => ({ ...prev, [entryId]: false }))
+  }
+
+  const cancelEdit = (entryId: string) => {
+    setEditingMap(prev => ({ ...prev, [entryId]: false }))
+  }
+
+  const copyToClipboard = async (code: string, entryId: string) => {
+    try {
+      await navigator.clipboard.writeText(code)
+      toast({
+        title: "Copied to clipboard",
+        variant: "default",
+        duration: 2000, // 2 seconds
+      })
+      setCopiedMap(prev => ({ ...prev, [entryId]: true }))
+      setTimeout(() => {
+        setCopiedMap(prev => ({ ...prev, [entryId]: false }))
+      }, 2000)
+    } catch (err) {
+      console.error("Failed to copy text: ", err)
+      toast({
+        title: "Copy failed",
+        description: "Could not copy to clipboard",
+        variant: "destructive",
+        duration: 3000, // 3 seconds
+      })
+    }
+  }
+
   // Handle editor mount
   const handleEditorDidMount = (editor: any) => {
     editorRef.current = editor;
@@ -286,6 +325,25 @@ const CodeCanvas: React.FC<CodeCanvasProps> = ({
     
     const activeEntry = codeEntries.find(entry => entry.id === entryId);
     if (!activeEntry) return;
+    
+    // Check if user has credits for AI edit (only for logged in users)
+    if (session) {
+      try {
+        // Credit cost for AI code edit is 1
+        const creditCost = 1;
+        const hasEnough = await hasEnoughCredits(creditCost);
+        
+        if (!hasEnough) {
+          // Show insufficient credits dialog
+          setCreditAction('edit');
+          setPendingEntryId(entryId);
+          setInsufficientCreditsOpen(true);
+          return;
+        }
+      } catch (error) {
+        console.error("Error checking credits:", error);
+      }
+    }
     
     setIsAIEditing(true);
     
@@ -390,8 +448,40 @@ const CodeCanvas: React.FC<CodeCanvasProps> = ({
           }
           
           // Notify parent component of the code change
-          if (onCodeExecute) {
+      if (onCodeExecute) {
             onCodeExecute(entryId, { savedCode: editedCode });
+          }
+        }
+        
+        // Deduct credits for successful edit (only for logged in users)
+        if (session?.user) {
+          try {
+            // Determine user ID for credit deduction
+            let userIdForCredits = '';
+            
+            if ((session.user as any).sub) {
+              userIdForCredits = (session.user as any).sub;
+            } else if ((session.user as any).id) {
+              userIdForCredits = (session.user as any).id;
+            } else if (session.user.email) {
+              userIdForCredits = session.user.email;
+            }
+            
+            if (userIdForCredits) {
+              // Deduct 1 credit for AI code edit
+              await axios.post('/api/user/deduct-credits', {
+                userId: userIdForCredits,
+                credits: 1,
+                description: 'Used AI to edit code'
+              });
+              
+              // Refresh credits display
+              if (checkCredits) {
+                await checkCredits();
+              }
+            }
+          } catch (creditError) {
+            console.error("Failed to deduct credits for code edit:", creditError);
           }
         }
         
@@ -436,6 +526,25 @@ const CodeCanvas: React.FC<CodeCanvasProps> = ({
     const hasError = execOutputMap[entryId]?.hasError;
     
     if (!errorOutput || !hasError) return;
+    
+    // Check if user has credits for AI fix (only for logged in users)
+    if (session) {
+      try {
+        // Credit cost for AI code fix is 1
+        const creditCost = 1;
+        const hasEnough = await hasEnoughCredits(creditCost);
+        
+        if (!hasEnough) {
+          // Show insufficient credits dialog
+          setCreditAction('fix');
+          setPendingEntryId(entryId);
+          setInsufficientCreditsOpen(true);
+          return;
+        }
+      } catch (error) {
+        console.error("Error checking credits:", error);
+      }
+    }
     
     setIsFixingCode(true);
     try {
@@ -491,14 +600,14 @@ const CodeCanvas: React.FC<CodeCanvasProps> = ({
         const entryIndex = codeEntries.findIndex(entry => entry.id === entryId);
         if (entryIndex !== -1) {
           const updatedEntries = [...codeEntries];
-          updatedEntries[entryIndex] = {
-            ...updatedEntries[entryIndex],
+      updatedEntries[entryIndex] = {
+        ...updatedEntries[entryIndex],
             code: fixedCode
           };
-        }
-        
+      }
+      
         // Notify parent component of the code change
-        if (onCodeExecute) {
+      if (onCodeExecute) {
           onCodeExecute(entryId, { savedCode: fixedCode });
         }
         
@@ -508,6 +617,38 @@ const CodeCanvas: React.FC<CodeCanvasProps> = ({
           delete newMap[entryId];
           return newMap;
         });
+        
+        // Deduct credits for successful fix (only for logged in users)
+        if (session?.user) {
+          try {
+            // Determine user ID for credit deduction
+            let userIdForCredits = '';
+            
+            if ((session.user as any).sub) {
+              userIdForCredits = (session.user as any).sub;
+            } else if ((session.user as any).id) {
+              userIdForCredits = (session.user as any).id;
+            } else if (session.user.email) {
+              userIdForCredits = session.user.email;
+            }
+            
+            if (userIdForCredits) {
+              // Deduct 1 credit for AI code fix
+              await axios.post('/api/user/deduct-credits', {
+                userId: userIdForCredits,
+                credits: 1,
+                description: 'Used AI to fix code errors'
+              });
+              
+              // Refresh credits display
+              if (checkCredits) {
+                await checkCredits();
+              }
+            }
+          } catch (creditError) {
+            console.error("Failed to deduct credits for code fix:", creditError);
+          }
+        }
         
         toast({
           title: "Code fixed",
@@ -626,6 +767,14 @@ const CodeCanvas: React.FC<CodeCanvasProps> = ({
     }
   };
 
+  // Add this before the return statement
+  const handleCreditDialogContinue = () => {
+    setInsufficientCreditsOpen(false);
+    
+    // Upgrade plan: redirect to pricing page
+    window.location.href = '/pricing';
+  };
+
   if (!isOpen) {
     return null;
   }
@@ -646,6 +795,16 @@ const CodeCanvas: React.FC<CodeCanvasProps> = ({
         <div className="flex items-center justify-between border-b p-3 bg-gray-50">
           <h2 className="text-base font-semibold">Code Canvas</h2>
           <div className="flex items-center space-x-1">
+            <div className="flex items-center mr-4 space-x-2">
+              <Switch 
+                id="auto-run" 
+                checked={autoRunEnabled}
+                onCheckedChange={setAutoRunEnabled}
+                size="sm"
+              />
+              <Label htmlFor="auto-run" className="text-xs font-medium">Auto-run</Label>
+            </div>
+            
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -1049,6 +1208,27 @@ const CodeCanvas: React.FC<CodeCanvasProps> = ({
             )}
           </div>
         </div>
+        
+        {/* Insufficient credits dialog */}
+        <Dialog open={insufficientCreditsOpen} onOpenChange={setInsufficientCreditsOpen}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>Insufficient Credits</DialogTitle>
+              <DialogDescription>
+                You need at least 1 credit to {creditAction === 'edit' ? 'edit code with AI' : 'fix code errors with AI'}.
+                Please upgrade your plan or wait for your credits to reset.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="flex justify-end space-x-2 pt-4">
+              <Button variant="outline" onClick={() => setInsufficientCreditsOpen(false)}>
+                Cancel
+              </Button>
+              <Button onClick={handleCreditDialogContinue}>
+                Upgrade Plan
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
       </motion.div>
     </AnimatePresence>
   )

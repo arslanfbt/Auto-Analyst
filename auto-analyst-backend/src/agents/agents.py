@@ -94,30 +94,40 @@ TECHNICAL CONSIDERATIONS FOR ANALYSIS:
 
 
 class analytical_planner(dspy.Signature):
-    # The planner agent which routes the query to Agent(s)
-    # The output is like this Agent1->Agent2 etc
-    """ You are data analytics planner agent. You have access to three inputs
+    """
+    You are a data analytics planner agent. You have access to three inputs:
     1. Datasets
     2. Data Agent descriptions
     3. User-defined Goal
 
-    IMPORTANT: You may be provided with previous interaction history. The section marked "### Current Query:" contains the user's current request. Any text in "### Previous Interaction History:" is for context only and is NOT part of the current request.
-    
     You take these three inputs to develop a comprehensive plan to achieve the user-defined goal from the data & Agents available.
-    In case you think the user-defined goal is infeasible you can ask the user to redefine or add more description to the goal.
 
-    Give your output in this format:
+    In case you think the user-defined goal is infeasible, you can ask the user to redefine or add more description to the goal.
+
+    Your output includes:
+    - Plan: The ordered sequence of agents (e.g., Agent1->Agent2->Agent3)
+    - Plan Description: Explanation of why each agent is used in that sequence
+    - Plan Instructions: A dictionary with keys as agent names and values as dictionaries specifying:
+        - 'create': variables this agent should generate
+        - 'receive': variables this agent should get from previous agents
+
+    Format:
     plan: Agent1->Agent2->Agent3
-    plan_desc = Use Agent 1 for this reason, then agent2 for this reason and lastly agent3 for this reason.
-
-    You don't have to use all the agents in response of the query
-    
+   
+    plan_instructions: {
+        "Agent1": {"create": ["var1"], "receive": []},
+        "Agent2": {"create": ["var2"], "receive": ["var1"]},
+        ...
+    }
+    plan_desc: Use Agent1 for this reason, then Agent2 for this reason, and finally Agent3 for this reason.
     """
-    dataset = dspy.InputField(desc="Available datasets loaded in the system, use this df,columns  set df as copy of df")
-    Agent_desc = dspy.InputField(desc= "The agents available in the system")
-    goal = dspy.InputField(desc="The user defined goal ")
+    dataset = dspy.InputField(desc="Available datasets loaded in the system, use this df, columns set df as copy of df")
+    Agent_desc = dspy.InputField(desc="The agents available in the system")
+    goal = dspy.InputField(desc="The user defined goal")
+
     plan = dspy.OutputField(desc="The plan that would achieve the user defined goal", prefix='Plan:')
-    plan_desc= dspy.OutputField(desc="The reasoning behind the chosen plan")
+    plan_instructions = dspy.OutputField(desc="Detailed variable-level instructions per agent for the plan")
+    plan_desc = dspy.OutputField(desc="The reasoning behind the chosen plan")
 
 class planner_data_viz_agent(dspy.Signature):
     """
@@ -643,6 +653,7 @@ Your task is to:
 5. Ensure the final output is **runnable**, **error-free**, and **logically consistent**.
 
 Strict instructions:
+- Assume the dataset is already loaded and available in the code context; do not include any code to read, load, or create data.
 - Do **not** modify any working parts of the code unnecessarily.
 - Do **not** change variable names, structure, or logic unless it directly contributes to resolving the issue.
 - Do **not** output anything besides the corrected, full version of the code (i.e., no explanations, comments, or logs).
@@ -666,15 +677,8 @@ Your job is to:
 3. Leave all unrelated parts of the code unchanged, unless the user explicitly requests a full rewrite or broader changes.
 4. Ensure that your changes maintain or improve the functionality and correctness of the code.
 
-Your edits may include:
-- Bug fixes or logic corrections (if requested)
-- Plot and visualization styling changes
-- Optimization or simplification
-- Code reformatting or restructuring (if asked for)
-- Adjusting data processing or analysis steps
-- Any other edits specifically described in the user prompt
-
 Strict requirements:
+- Assume the dataset is already loaded and available in the code context; do not include any code to read, load, or create data.
 - Do not change variable names, function structures, or logic outside the scope of the user's request.
 - Do not refactor, optimize, or rewrite unless explicitly instructed.
 - Ensure the edited code remains complete and executable.
