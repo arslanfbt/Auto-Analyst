@@ -906,25 +906,25 @@ class auto_analyst(dspy.Module):
             except Exception as e:
                 yield agent_name, inputs, {"error": str(e)}
         # Execute code combiner after all agents complete
-        code_list = [result['code'] for _, result in completed_results if 'code' in result]
-        # max tokens is number of characters - number of words / 2
-        char_count = sum(len(code) for code in code_list)
-        word_count = sum(len(code.split()) for code in code_list)
-        max_tokens = int((char_count - word_count) / 2)
-        print(f"Max tokens: {max_tokens}")
-        try:
-            with dspy.context(lm=dspy.LM(model="gemini/gemini-2.5-pro-preview-03-25", api_key = os.environ['GEMINI_API_KEY'], max_tokens=10000)):
-                combiner_result = self.code_combiner_agent(agent_code_list=str(code_list), dataset=dict_['dataset'])
-                yield 'code_combiner_agent__gemini', str(code_list), dict(combiner_result)
-        except:
-            try: 
-                with dspy.context(lm=dspy.LM(model="o3-mini", max_tokens=max_tokens, temperature=1.0, api_key=os.getenv("OPENAI_API_KEY"))):
-                    combiner_result = self.code_combiner_agent(agent_code_list=str(code_list), dataset=dict_['dataset'])
-                    yield 'code_combiner_agent__openai', str(code_list), dict(combiner_result)
-            except:
-                try: 
-                    with dspy.context(lm=dspy.LM(model="claude-3-7-sonnet-latest", max_tokens=max_tokens, temperature=1.0, api_key=os.getenv("ANTHROPIC_API_KEY"))):
-                        combiner_result = self.code_combiner_agent(agent_code_list=str(code_list), dataset=dict_['dataset'])
-                        yield 'code_combiner_agent__anthropic', str(code_list), dict(combiner_result)
-                except Exception as e:
-                    yield 'code_combiner_agent__none', str(code_list), {"error": "Error in code combiner: "+str(e)}
+        # code_list = [result['code'] for _, result in completed_results if 'code' in result]
+        # # max tokens is number of characters - number of words / 2
+        # char_count = sum(len(code) for code in code_list)
+        # word_count = sum(len(code.split()) for code in code_list)
+        # max_tokens = int((char_count - word_count) / 2)
+        # print(f"Max tokens: {max_tokens}")
+        # try:
+        #     with dspy.context(lm=dspy.LM(model="gemini/gemini-2.5-pro-preview-03-25", api_key = os.environ['GEMINI_API_KEY'], max_tokens=10000)):
+        #         combiner_result = self.code_combiner_agent(agent_code_list=str(code_list), dataset=dict_['dataset'])
+        #         yield 'code_combiner_agent__gemini', str(code_list), dict(combiner_result)
+        # except:
+        #     try: 
+        #         with dspy.context(lm=dspy.LM(model="o3-mini", max_tokens=max_tokens, temperature=1.0, api_key=os.getenv("OPENAI_API_KEY"))):
+        #             combiner_result = self.code_combiner_agent(agent_code_list=str(code_list), dataset=dict_['dataset'])
+        #             yield 'code_combiner_agent__openai', str(code_list), dict(combiner_result)
+        #     except:
+        #         try: 
+        #             with dspy.context(lm=dspy.LM(model="claude-3-7-sonnet-latest", max_tokens=max_tokens, temperature=1.0, api_key=os.getenv("ANTHROPIC_API_KEY"))):
+        #                 combiner_result = self.code_combiner_agent(agent_code_list=str(code_list), dataset=dict_['dataset'])
+        #                 yield 'code_combiner_agent__anthropic', str(code_list), dict(combiner_result)
+        #         except Exception as e:
+        #             yield 'code_combiner_agent__none', str(code_list), {"error": "Error in code combiner: "+str(e)}

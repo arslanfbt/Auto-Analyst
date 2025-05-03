@@ -2,7 +2,6 @@ import React, { useCallback } from "react"
 import ReactMarkdown from "react-markdown"
 import rehypeRaw from "rehype-raw"
 import remarkGfm from "remark-gfm"
-import CodeBlock from "./CodeBlocker"
 
 interface MessageContentProps {
   message: string
@@ -13,6 +12,7 @@ interface MessageContentProps {
 const MessageContent: React.FC<MessageContentProps> = ({ message, onCodeExecute, agentName }) => {
   const renderContent = useCallback(
     (content: string) => {
+      // Remove plotly blocks as they'll be handled separately
       const parts = content.split(/(```plotly[\s\S]*?```)/)
 
       return parts.map((part, index) => {
@@ -30,13 +30,11 @@ const MessageContent: React.FC<MessageContentProps> = ({ message, onCodeExecute,
                   const isInline = (props as { inline?: boolean })?.inline ?? false
 
                   if (!isInline && match) {
+                    // For code blocks, return as inline code instead of using CodeBlocker
                     return (
-                      <CodeBlock
-                        language={match[1]}
-                        value={String(children).replace(/\n$/, "")}
-                        onExecute={onCodeExecute || (() => {})}
-                        agentName={agentName}
-                      />
+                      <code className={`text-sm p-1 bg-gray-100 rounded font-mono ${className}`} {...props}>
+                        {children}
+                      </code>
                     )
                   }
 

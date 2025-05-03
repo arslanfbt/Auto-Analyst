@@ -625,10 +625,10 @@ async def _generate_streaming_responses(session_state: dict, query: str, session
                         }) + "\n"
                         return
                         
-                    if "code_combiner_agent" in agent_name:
-                        # logger.log_message(f"[>] Code combiner response: {response}", level=logging.INFO)
-                        total_response += str(response) if response else ""
-                        total_inputs += str(inputs) if inputs else ""
+                    # if "code_combiner_agent" in agent_name:
+                    #     # logger.log_message(f"[>] Code combiner response: {response}", level=logging.INFO)
+                    #     total_response += str(response) if response else ""
+                    #     total_inputs += str(inputs) if inputs else ""
 
                     # Send response chunk
                     yield json.dumps({
