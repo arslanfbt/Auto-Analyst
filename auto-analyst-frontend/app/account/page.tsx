@@ -551,7 +551,8 @@ export default function AccountPage() {
                       <CreditCard size={16} className="mr-2" />
                       Subscription
                     </Button>
-                    <Button 
+                    {/* TODO: Add settings page after launch */}
+                    {/* <Button 
                       variant="outline"
                       className={`w-full justify-start text-left ${
                         activeTab === 'settings' ? "bg-[#FF7F7F] text-white hover:bg-[#FF6666]" : "bg-white text-gray-700 hover:bg-[#FFE5E5] hover:text-gray-900"
@@ -560,7 +561,7 @@ export default function AccountPage() {
                     >
                       <Settings size={16} className="mr-2" />
                       Settings
-                    </Button>
+                    </Button> */}
                     <Button
                       variant="ghost"
                       className="mt-4 w-full justify-start text-left text-[#FF5252] hover:text-white hover:bg-[#FF5252]"
@@ -828,12 +829,12 @@ export default function AccountPage() {
                           >
                             Change Plan
                           </Button>
-                          <Button
+                          {/* <Button
                             variant="ghost"
                             className="text-white bg-[#FF7F7F] hover:bg-[#FF6666]"
                           >
                             Update Payment Method
-                          </Button>
+                          </Button> */}
                           {canDowngrade() && (
                             <Button
                               variant="default"
