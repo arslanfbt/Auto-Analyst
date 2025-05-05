@@ -192,7 +192,6 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
     
     if (newEntries.length > 0) {
       setCodeEntries(newEntries);
-      setCodeCanvasOpen(true);
     }
   }, []);
 
@@ -352,14 +351,14 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
       : JSON.stringify(message.text);
     
     // Render the entire message
-    return (
-      <motion.div
+            return (
+              <motion.div
         key={index}
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.3 }}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.3 }}
         className={`flex ${message.sender === "user" ? "justify-end" : "justify-start"} mb-8`}
-      >
+              >
         <div
           className={`relative rounded-2xl p-6 transition-shadow duration-200 hover:shadow-lg ${
             message.sender === "user"
@@ -407,9 +406,9 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
               // Fallback for non-array content
               <MessageContent message={typeof messageContent === 'string' ? messageContent : JSON.stringify(messageContent)} onCodeExecute={handleCodeExecute} />
             )}
-          </div>
-        </div>
-      </motion.div>
+                  </div>
+                </div>
+              </motion.div>
     );
   };
 
@@ -424,8 +423,8 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
             <PlotlyChart data={plotlyData.data} layout={plotlyData.layout} />
           </div>
         );
-      }
-    } catch (e) {
+          }
+        } catch (e) {
       console.error("Error parsing Plotly data:", e);
       return (
         <div key={key} className="text-red-500 my-2">
@@ -462,7 +461,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
                                   output.content.includes('Column Types') ||
                                   (output.content.match(/\|\s*\w+\s*\|/g)?.length > 1));
             
-            return (
+          return (
               <div key={`output-${messageIndex}-${idx}`} className="bg-gray-50 border border-gray-200 rounded-md p-3">
                 <div className="text-gray-700 font-medium mb-2">Output</div>
                 {isTabularData ? (
@@ -475,13 +474,13 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
               </div>
             );
           } else if (output.type === 'plotly') {
-            return (
+        return (
               <div key={`output-${messageIndex}-${idx}`} className="bg-white border border-gray-200 rounded-md p-3 overflow-auto">
                 <div className="text-gray-700 font-medium mb-2">Visualization</div>
                 <div className="w-full">
                   <PlotlyChart data={output.content.data} layout={output.content.layout} />
                 </div>
-              </div>
+            </div>
             );
           }
           return null;
