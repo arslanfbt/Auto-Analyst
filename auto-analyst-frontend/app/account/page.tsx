@@ -162,13 +162,15 @@ export default function AccountPage() {
       toast({
         title: 'Data refreshed',
         description: 'Your account information has been updated',
+        duration: 3000
       })
     } catch (error) {
       console.error('Error refreshing user data:', error)
       toast({
         title: 'Could not refresh data',
         description: 'Please try again later',
-        variant: 'destructive'
+        variant: 'destructive',
+        duration: 3000
       })
     } finally {
       setIsRefreshing(false)
@@ -299,9 +301,16 @@ export default function AccountPage() {
                 toast({
                   title: 'Redis data logged',
                   description: 'Check the console for details',
+                  duration: 3000
                 });
               } catch (err) {
                 console.error('Error fetching debug data:', err);
+                toast({
+                  title: 'Error',
+                  description: 'Failed to check Redis data',
+                  variant: 'destructive',
+                  duration: 3000
+                });
               }
             }}
           >
@@ -325,13 +334,15 @@ export default function AccountPage() {
                 toast({
                   title: data.success ? 'Status fixed' : 'No change needed',
                   description: data.message,
+                  duration: 3000
                 });
               } catch (err) {
                 console.error('Error fixing plan status:', err);
                 toast({
                   title: 'Error',
                   description: 'Failed to fix plan status',
-                  variant: 'destructive'
+                  variant: 'destructive',
+                  duration: 3000
                 });
               }
             }}
@@ -375,6 +386,7 @@ export default function AccountPage() {
       toast({
         title: 'Plan downgraded successfully',
         description: `Your subscription has been changed to ${result.subscription.plan}`,
+        duration: 3000
       })
     } catch (error) {
       console.error('Error downgrading plan:', error)
@@ -382,6 +394,7 @@ export default function AccountPage() {
         title: 'Failed to downgrade plan',
         description: 'Please try again later or contact support',
         variant: 'destructive',
+        duration: 3000
       })
     } finally {
       setIsRefreshing(false)
@@ -434,6 +447,7 @@ export default function AccountPage() {
       toast({
         title: 'Subscription canceled',
         description: 'Your subscription will remain active until the end of your current billing period',
+        duration: 5000
       })
     } catch (error) {
       console.error('Error canceling subscription:', error)
@@ -441,6 +455,7 @@ export default function AccountPage() {
         title: 'Failed to cancel subscription',
         description: 'Please try again later or contact support',
         variant: 'destructive',
+        duration: 3000
       })
     } finally {
       setIsRefreshing(false)

@@ -4,8 +4,12 @@ import asyncio
 from concurrent.futures import ThreadPoolExecutor
 import os
 from dotenv import load_dotenv
-
+# import logging
+# from src.utils.logger import Logger
 load_dotenv()
+
+# logger = Logger("agents", see_time=True, console_log=False)
+
 
 AGENTS_WITH_DESCRIPTION = {
     "preprocessing_agent": "Cleans and prepares a DataFrame using Pandas and NumPy—handles missing values, detects column types, and converts date strings to datetime.",
@@ -92,34 +96,29 @@ TECHNICAL CONSIDERATIONS FOR ANALYSIS:
     description = dspy.OutputField(desc="A comprehensive dataset description with business context and technical guidance for analysis agents.")
 
 
-
 class analytical_planner(dspy.Signature):
     """
     You are a data analytics planner agent. You have access to three inputs:
     1. Datasets
     2. Data Agent descriptions
     3. User-defined Goal
-
     You take these three inputs to develop a comprehensive plan to achieve the user-defined goal from the data & Agents available.
-
     In case you think the user-defined goal is infeasible, you can ask the user to redefine or add more description to the goal.
-
     Your output includes:
     - Plan: The ordered sequence of agents (e.g., Agent1->Agent2->Agent3)
-    - Plan Description: Explanation of why each agent is used in that sequence
     - Plan Instructions: A dictionary with keys as agent names and values as dictionaries specifying:
         - 'create': variables this agent should generate
         - 'receive': variables this agent should get from previous agents
-
+        - 'instruction': a one-liner on why to follow this 
     Format:
     plan: Agent1->Agent2->Agent3
    
     plan_instructions: {
-        "Agent1": {"create": ["var1"], "receive": []},
-        "Agent2": {"create": ["var2"], "receive": ["var1"]},
+        "Agent1": {"create": ["var1"], "use": [] , "instruction":"You need to make var1 so Agent2 can use var1 for xyz"},
+        "Agent2": {"create": ["var2"], "use": ["var1"]  , "instruction":"You need to make var2 so Agent3 can use var1 for analysis"}},
         ...
     }
-    plan_desc: Use Agent1 for this reason, then Agent2 for this reason, and finally Agent3 for this reason.
+
     """
     dataset = dspy.InputField(desc="Available datasets loaded in the system, use this df, columns set df as copy of df")
     Agent_desc = dspy.InputField(desc="The agents available in the system")
@@ -127,8 +126,6 @@ class analytical_planner(dspy.Signature):
 
     plan = dspy.OutputField(desc="The plan that would achieve the user defined goal", prefix='Plan:')
     plan_instructions = dspy.OutputField(desc="Detailed variable-level instructions per agent for the plan")
-    plan_desc = dspy.OutputField(desc="The reasoning behind the chosen plan")
-
 class planner_data_viz_agent(dspy.Signature):
     """
     You are the data visualization agent in a multi-agent analytics system.
@@ -876,30 +873,46 @@ class auto_analyst(dspy.Module):
         dict_['hint'] = []
         dict_['goal'] = query
         
-        plan_text = plan['plan'].replace('Plan','').replace(':','').strip()
-        plan_list = [agent.strip() for agent in plan_text.split('->') if agent.strip()]
+        import json
 
-        # Get plan instructions if available, or create default empty ones
-        try:
-            plan_instructions = eval(plan.plan_instructions)
-        except:
-            plan_instructions = {p.strip(): {'create': [], 'receive': []} for p in plan_list}
+        # Clean and split the plan string into agent names
+        plan_text = plan.get("plan", "").replace("Plan", "").replace(":", "").strip()
+        plan_list = [agent.strip() for agent in plan_text.split("->") if agent.strip()]
 
-        if len(plan_list) == 0:
-            yield "plan_not_found",  dict(plan), {"error": "No plan found"}
+        # Parse the attached plan_instructions into a dict
+        raw_instr = plan.get("plan_instructions", {})
+        if isinstance(raw_instr, str):
+            try:
+                plan_instructions = json.loads(raw_instr)
+            except Exception:
+                plan_instructions = {}
+        elif isinstance(raw_instr, dict):
+            plan_instructions = raw_instr
+        else:
+            plan_instructions = {}
+
+        # If no plan was produced, short-circuit
+        if not plan_list:
+            yield "plan_not_found", dict(plan), {"error": "No plan found"}
             return
-        # Execute agents in parallel
+
+        # Launch each agent in parallel, attaching its own instructions
         futures = []
         for agent_name in plan_list:
-            inputs = {x:dict_[x] for x in self.agent_inputs[agent_name.strip()] if x != 'plan_instructions'}
-            if 'plan_instructions' in self.agent_inputs[agent_name.strip()]:
-                if agent_name.strip() in plan_instructions:
-                    inputs['plan_instructions'] = str(plan_instructions[agent_name.strip()])
-                else:
-                    inputs['plan_instructions'] = str({'create': [], 'receive': []})
+            key = agent_name.strip()
+            # gather input fields except plan_instructions
+            inputs = {
+                param: dict_[param]
+                for param in self.agent_inputs[key]
+                if param != "plan_instructions"
+            }
+            # attach the specific instructions for this agent (or defaults)
+            if "plan_instructions" in self.agent_inputs[key]:
+                inputs["plan_instructions"] = str(plan_instructions.get(
+                    key, {"create": [], "receive": []}
+                ))
             future = self.executor.submit(self.execute_agent, agent_name, inputs)
             futures.append((agent_name, inputs, future))
-        
         # Yield results as they complete 
         completed_results = []
         for agent_name, inputs, future in futures:
@@ -909,26 +922,3 @@ class auto_analyst(dspy.Module):
                 yield name, inputs, result
             except Exception as e:
                 yield agent_name, inputs, {"error": str(e)}
-        # Execute code combiner after all agents complete
-        # code_list = [result['code'] for _, result in completed_results if 'code' in result]
-        # # max tokens is number of characters - number of words / 2
-        # char_count = sum(len(code) for code in code_list)
-        # word_count = sum(len(code.split()) for code in code_list)
-        # max_tokens = int((char_count - word_count) / 2)
-        # print(f"Max tokens: {max_tokens}")
-        # try:
-        #     with dspy.context(lm=dspy.LM(model="gemini/gemini-2.5-pro-preview-03-25", api_key = os.environ['GEMINI_API_KEY'], max_tokens=10000)):
-        #         combiner_result = self.code_combiner_agent(agent_code_list=str(code_list), dataset=dict_['dataset'])
-        #         yield 'code_combiner_agent__gemini', str(code_list), dict(combiner_result)
-        # except:
-        #     try: 
-        #         with dspy.context(lm=dspy.LM(model="o3-mini", max_tokens=max_tokens, temperature=1.0, api_key=os.getenv("OPENAI_API_KEY"))):
-        #             combiner_result = self.code_combiner_agent(agent_code_list=str(code_list), dataset=dict_['dataset'])
-        #             yield 'code_combiner_agent__openai', str(code_list), dict(combiner_result)
-        #     except:
-        #         try: 
-        #             with dspy.context(lm=dspy.LM(model="claude-3-7-sonnet-latest", max_tokens=max_tokens, temperature=1.0, api_key=os.getenv("ANTHROPIC_API_KEY"))):
-        #                 combiner_result = self.code_combiner_agent(agent_code_list=str(code_list), dataset=dict_['dataset'])
-        #                 yield 'code_combiner_agent__anthropic', str(code_list), dict(combiner_result)
-        #         except Exception as e:
-        #             yield 'code_combiner_agent__none', str(code_list), {"error": "Error in code combiner: "+str(e)}

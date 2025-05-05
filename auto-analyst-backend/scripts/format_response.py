@@ -180,32 +180,51 @@ def format_plan_instructions(plan_instructions):
     Format any plan instructions (JSON string or dict) into markdown sections per agent.
     """
     # Parse input into a dict
-    if isinstance(plan_instructions, str):
-        try:
+    try:
+        if isinstance(plan_instructions, str):
             instructions = json.loads(plan_instructions)
-        except json.JSONDecodeError:
-            return f"Invalid plan instructions: {plan_instructions}"
-    elif isinstance(plan_instructions, dict):
-        instructions = plan_instructions
-    else:
-        return f"Unsupported plan instructions type: {type(plan_instructions)}"
+        elif isinstance(plan_instructions, dict):
+            instructions = plan_instructions
+        else:
+            return f"Unsupported plan instructions type: {type(plan_instructions)}"
+    except json.JSONDecodeError:
+        return f"Invalid plan instructions: {plan_instructions}"
+    # logger.log_message(f"Plan instructions: {instructions}", level=logging.INFO)
 
     markdown_lines = []
     for agent, content in instructions.items():
         agent_title = agent.replace('_', ' ').title()
         markdown_lines.append(f"#### {agent_title}")
         if isinstance(content, dict):
-            for key, values in content.items():
-                key_title = key.replace('_', ' ').capitalize()
-                if isinstance(values, list) and values:
-                    markdown_lines.append(f"- **{key_title}**:")
-                    for v in values:
-                        markdown_lines.append(f"  - {v}")
-                else:
-                    markdown_lines.append(f"- **{key_title}**: None")
+            # Handle 'create' key
+            create_vals = content.get('create', [])
+            if create_vals:
+                markdown_lines.append(f"- **Create**:")
+                for item in create_vals:
+                    markdown_lines.append(f"  - {item}")
+            else:
+                markdown_lines.append(f"- **Create**: None")
+
+            # Handle 'use' key
+            use_vals = content.get('use', [])
+            if use_vals:
+                markdown_lines.append(f"- **Use**:")
+                for item in use_vals:
+                    markdown_lines.append(f"  - {item}")
+            else:
+                markdown_lines.append(f"- **Use**: None")
+
+            # Handle 'instruction' key
+            instr = content.get('instruction')
+            if isinstance(instr, str) and instr:
+                markdown_lines.append(f"- **Instruction**: {instr}")
+            else:
+                markdown_lines.append(f"- **Instruction**: None")
         else:
+            # Fallback for non-dict content
             markdown_lines.append(f"- {content}")
         markdown_lines.append("")  # blank line between agents
+
     return "\n".join(markdown_lines).strip()
     
 def format_response_to_markdown(api_response, agent_name = None, dataframe=None):
@@ -215,7 +234,7 @@ def format_response_to_markdown(api_response, agent_name = None, dataframe=None)
 
         if isinstance(api_response, dict):
             for key in api_response:
-                if "error" in api_response[key]:
+                if "error" in api_response[key] and "litellm.RateLimitError" in api_response[key]['error'].lower():
                     return f"**Error**: Rate limit exceeded. Please try switching models from the settings."
                 # You can add more checks here if needed for other keys
                        
@@ -272,7 +291,11 @@ def format_response_to_markdown(api_response, agent_name = None, dataframe=None)
                 markdown.append("### Summary\n")
                 for line in summary_lines:
                     if line != "":
-                        markdown.append(f"• {line.strip().replace('•', '').replace('-', '').replace('*', '') if line.strip().startswith('•') or line.strip().startswith('-') or line.strip().startswith('*') else line.strip()}\n")
+                        if line.strip().startswith('•') or line.strip().startswith('-') or line.strip().startswith('*'):
+                            line = line.strip().replace('•', '').replace('-', '').replace('*', '')
+                            markdown.append(f"* {line.strip()}\n")
+                        else:
+                            markdown.append(f"{line.strip()}\n")
 
             if 'refined_complete_code' in content and 'summary' in content:
                 try:

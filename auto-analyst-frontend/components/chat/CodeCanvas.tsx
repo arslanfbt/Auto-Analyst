@@ -618,37 +618,37 @@ const CodeCanvas: React.FC<CodeCanvasProps> = ({
           return newMap;
         });
         
-        // Deduct credits for successful fix (only for logged in users)
-        if (session?.user) {
-          try {
-            // Determine user ID for credit deduction
-            let userIdForCredits = '';
+        // // Deduct credits for successful fix (only for logged in users)
+        // if (session?.user) {
+        //   try {
+        //     // Determine user ID for credit deduction
+        //     let userIdForCredits = '';
             
-            if ((session.user as any).sub) {
-              userIdForCredits = (session.user as any).sub;
-            } else if ((session.user as any).id) {
-              userIdForCredits = (session.user as any).id;
-            } else if (session.user.email) {
-              userIdForCredits = session.user.email;
-            }
+        //     if ((session.user as any).sub) {
+        //       userIdForCredits = (session.user as any).sub;
+        //     } else if ((session.user as any).id) {
+        //       userIdForCredits = (session.user as any).id;
+        //     } else if (session.user.email) {
+        //       userIdForCredits = session.user.email;
+        //     }
             
-            if (userIdForCredits) {
-              // Deduct 1 credit for AI code fix
-              await axios.post('/api/user/deduct-credits', {
-                userId: userIdForCredits,
-                credits: 1,
-                description: 'Used AI to fix code errors'
-              });
+        //     if (userIdForCredits) {
+        //       // Deduct 1 credit for AI code fix
+        //       await axios.post('/api/user/deduct-credits', {
+        //         userId: userIdForCredits,
+        //         credits: 1,
+        //         description: 'Used AI to fix code errors'
+        //       });
               
-              // Refresh credits display
-              if (checkCredits) {
-                await checkCredits();
-              }
-            }
-          } catch (creditError) {
-            console.error("Failed to deduct credits for code fix:", creditError);
-          }
-        }
+        //       // Refresh credits display
+        //       if (checkCredits) {
+        //         await checkCredits();
+        //       }
+        //     }
+        //   } catch (creditError) {
+        //     console.error("Failed to deduct credits for code fix:", creditError);
+        //   }
+        // }
         
         toast({
           title: "Code fixed",
