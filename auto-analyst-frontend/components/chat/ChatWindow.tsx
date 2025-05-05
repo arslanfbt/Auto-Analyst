@@ -205,11 +205,11 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
       // Only open the canvas visually if the user explicitly clicks on the code indicator
       setHiddenCanvas(true);
       
-      // Trigger code execution
-      setChatCompleted(true);
-      setTimeout(() => {
-        setChatCompleted(false);
-      }, 10000);
+      // Remove auto-run trigger when manually processing a message
+      // setChatCompleted(true);
+      // setTimeout(() => {
+      //   setChatCompleted(false);
+      // }, 10000);
     }
   }, [messages, clearCodeEntriesKeepOutput, extractCodeFromMessages]);
 
@@ -470,13 +470,11 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
                         setCodeCanvasOpen(true);
                         setHiddenCanvas(false); // Make the canvas visible when clicked
                         
-                        // Set chatCompleted to true when opening canvas manually to trigger auto-run
-                        setChatCompleted(true);
-                        
-                        // Reset chatCompleted after a delay
-                        setTimeout(() => {
-                          setChatCompleted(false);
-                        }, 10000); // Increase to 10 seconds
+                        // Remove auto-run trigger when manually opening canvas
+                        // setChatCompleted(true);
+                        // setTimeout(() => {
+                        //   setChatCompleted(false);
+                        // }, 10000);
                       }}
                     />
                   );

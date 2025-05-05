@@ -193,7 +193,7 @@ const CodeCanvas: React.FC<CodeCanvasProps> = ({
   // Set the most recent entry as active when entries change
   useEffect(() => {
     if (codeEntries.length > 0 && (!activeEntryId || !codeEntries.find(entry => entry.id === activeEntryId))) {
-      setActiveEntryId(codeEntries[codeEntries.length - 1].id)
+      setActiveEntryId(codeEntries[codeEntries.length - 1].id);
       
       // If autoRun is enabled and this is a new entry, execute it automatically
       if (autoRunEnabled && chatCompleted) {
@@ -205,8 +205,8 @@ const CodeCanvas: React.FC<CodeCanvasProps> = ({
           setTimeout(() => {
             executeCode(newestEntry.id, newestEntry.code, newestEntry.language);
             
-            // Only show toast if canvas is open
-            if (isOpen) {
+            // Only show toast if canvas is open and not hidden
+            if (isOpen && !hiddenCanvas) {
               toast({
                 title: "Auto-running code",
                 description: "Code is automatically running after AI response completed",
@@ -217,7 +217,7 @@ const CodeCanvas: React.FC<CodeCanvasProps> = ({
         }
       }
     }
-  }, [codeEntries, activeEntryId, autoRunEnabled, chatCompleted, executeCode, isOpen, toast]);
+  }, [codeEntries, activeEntryId, autoRunEnabled, chatCompleted, executeCode, isOpen, hiddenCanvas, toast]);
 
   // Auto-run code when chat is completed
   useEffect(() => {
@@ -232,8 +232,8 @@ const CodeCanvas: React.FC<CodeCanvasProps> = ({
           // Execute immediately - no need to check if canvas is open
           executeCode(activeEntryId, activeEntry.code, activeEntry.language);
           
-          // Only show toast notification if canvas is open
-          if (isOpen) {
+          // Only show toast notification if canvas is open and not hidden
+          if (isOpen && !hiddenCanvas) {
             toast({
               title: "Auto-running code",
               description: "Code is automatically running after AI response completed",
@@ -246,7 +246,7 @@ const CodeCanvas: React.FC<CodeCanvasProps> = ({
     
     // Update the ref for the next check
     previousChatCompletedRef.current = chatCompleted;
-  }, [chatCompleted, autoRunEnabled, codeEntries, activeEntryId, editingMap, executeCode, isOpen, toast]);
+  }, [chatCompleted, autoRunEnabled, codeEntries, activeEntryId, editingMap, executeCode, isOpen, hiddenCanvas, toast]);
 
   // Initialize edited code when switching to edit mode
   const startEditing = (entryId: string, code: string) => {
