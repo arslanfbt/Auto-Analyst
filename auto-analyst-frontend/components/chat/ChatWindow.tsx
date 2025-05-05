@@ -12,6 +12,7 @@ import CodeIndicator from "./CodeIndicator"
 import { v4 as uuidv4 } from 'uuid'
 import { Code, AlertTriangle } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import axios from "axios"
 
 interface PlotlyMessage {
   type: "plotly"
@@ -49,9 +50,10 @@ interface ChatWindowProps {
   onSendMessage: (message: string) => void
   showWelcome: boolean
   chatNameGenerated?: boolean
+  sessionId?: string
 }
 
-const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMessage, showWelcome, chatNameGenerated = false }) => {
+const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMessage, showWelcome, chatNameGenerated = false, sessionId }) => {
   const chatWindowRef = useRef<HTMLDivElement>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const [localMessages, setLocalMessages] = useState<ChatMessage[]>(messages)
@@ -60,6 +62,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
   const [currentMessageIndex, setCurrentMessageIndex] = useState<number | null>(null)
   const [codeOutputs, setCodeOutputs] = useState<CodeOutput[]>([])
   const [chatCompleted, setChatCompleted] = useState(false)
+  const [autoRunEnabled, setAutoRunEnabled] = useState(true)
   
   // Set chatCompleted when chat name is generated
   useEffect(() => {
@@ -69,16 +72,29 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
       // Reset chatCompleted after a delay to prepare for the next response
       const timer = setTimeout(() => {
         setChatCompleted(false);
-      }, 5000);
+      }, 10000); // Increase to 10 seconds
       
       return () => clearTimeout(timer);
     }
   }, [chatNameGenerated, messages.length]);
   
+  // Explicitly set chatCompleted to false when loading starts
+  useEffect(() => {
+    if (isLoading) {
+      setChatCompleted(false);
+    }
+  }, [isLoading]);
+  
   // Clear code entries for new chats or messages
   const clearCodeEntries = useCallback(() => {
     setCodeEntries([])
     setCodeOutputs([])
+    setCodeCanvasOpen(false)
+  }, [])
+  
+  // Clear only code entries but keep outputs (for new AI messages)
+  const clearCodeEntriesKeepOutput = useCallback(() => {
+    setCodeEntries([])
     setCodeCanvasOpen(false)
   }, [])
   
@@ -100,13 +116,23 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
         
         // Only if it's an AI message
         if (messages[newMessageIndex].sender === "ai") {
-          // Clear previous code entries and set the current message index
-          clearCodeEntries()
+          // Clear previous code entries but preserve outputs, and set the current message index
+          clearCodeEntriesKeepOutput()
           setCurrentMessageIndex(newMessageIndex)
           
           // Extract code blocks from the new message
           if (typeof messages[newMessageIndex].text === "string") {
             extractCodeFromMessages([messages[newMessageIndex]], newMessageIndex)
+            
+            // Set chatCompleted to true for each new AI message to trigger auto-run
+            setChatCompleted(true);
+            
+            // Reset chatCompleted after a delay
+            const timer = setTimeout(() => {
+              setChatCompleted(false);
+            }, 10000); // Increase to 10 seconds
+            
+            return () => clearTimeout(timer);
           }
         }
       } else if (messages.length < localMessages.length || messages.length === 0) {
@@ -115,7 +141,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
         setCurrentMessageIndex(null)
       }
     }
-  }, [messages, localMessages.length, clearCodeEntries])
+  }, [messages, localMessages.length, clearCodeEntries, clearCodeEntriesKeepOutput])
 
   // Force immediate update when transitioning from welcome to chat view
   useEffect(() => {
@@ -126,11 +152,11 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
       const lastAiMessageIndex = messages.findIndex(m => m.sender === "ai")
       if (lastAiMessageIndex !== -1) {
         setCurrentMessageIndex(lastAiMessageIndex)
-        clearCodeEntries()
+        clearCodeEntriesKeepOutput()
         extractCodeFromMessages([messages[lastAiMessageIndex]], lastAiMessageIndex)
       }
     }
-  }, [showWelcome, messages, clearCodeEntries])
+  }, [showWelcome, messages, clearCodeEntriesKeepOutput])
 
   useEffect(() => {
     scrollToBottom()
@@ -192,7 +218,6 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
     
     if (newEntries.length > 0) {
       setCodeEntries(newEntries);
-      setCodeCanvasOpen(true);
     }
   }, []);
 
@@ -286,10 +311,11 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
       return;
     }
     
-    // Clear previous outputs for this code
-    setCodeOutputs(prev => prev.filter(output => output.codeId !== entryId))
+    // Remove previous output for this message (not just this code entry)
+    // This ensures each message has only one output box
+    setCodeOutputs(prev => prev.filter(output => output.messageIndex !== codeEntry.messageIndex));
     
-    // Add outputs to the chat
+    // Add/update outputs for this message
     if (result.error) {
       // Add error output
       setCodeOutputs(prev => [
@@ -352,14 +378,14 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
       : JSON.stringify(message.text);
     
     // Render the entire message
-    return (
-      <motion.div
+            return (
+              <motion.div
         key={index}
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.3 }}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.3 }}
         className={`flex ${message.sender === "user" ? "justify-end" : "justify-start"} mb-8`}
-      >
+              >
         <div
           className={`relative rounded-2xl p-6 transition-shadow duration-200 hover:shadow-lg ${
             message.sender === "user"
@@ -394,9 +420,16 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
                       language={part.language}
                       onClick={() => {
                         setCurrentMessageIndex(index);
-                        clearCodeEntries();
+                        clearCodeEntriesKeepOutput();
                         extractCodeFromMessages([message], index);
                         setCodeCanvasOpen(true);
+                        // Set chatCompleted to true when opening canvas manually to trigger auto-run
+                        setChatCompleted(true);
+                        
+                        // Reset chatCompleted after a delay
+                        setTimeout(() => {
+                          setChatCompleted(false);
+                        }, 10000); // Increase to 10 seconds
                       }}
                     />
                   );
@@ -407,9 +440,9 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
               // Fallback for non-array content
               <MessageContent message={typeof messageContent === 'string' ? messageContent : JSON.stringify(messageContent)} onCodeExecute={handleCodeExecute} />
             )}
-          </div>
-        </div>
-      </motion.div>
+                  </div>
+                </div>
+              </motion.div>
     );
   };
 
@@ -424,13 +457,13 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
             <PlotlyChart data={plotlyData.data} layout={plotlyData.layout} />
           </div>
         );
-      }
-    } catch (e) {
+          }
+        } catch (e) {
       console.error("Error parsing Plotly data:", e);
-      return (
+          return (
         <div key={key} className="text-red-500 my-2">
           Error rendering Plotly chart
-        </div>
+              </div>
       );
     }
     return null;
@@ -442,50 +475,58 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
     
     if (relevantOutputs.length === 0) return null;
     
-    return (
+    // Group outputs by type for organized display
+    const errorOutputs = relevantOutputs.filter(output => output.type === 'error');
+    const textOutputs = relevantOutputs.filter(output => output.type === 'output');
+    const plotlyOutputs = relevantOutputs.filter(output => output.type === 'plotly');
+    
+        return (
       <div className="mt-2 space-y-4">
-        {relevantOutputs.map((output, idx) => {
-          if (output.type === 'error') {
-            return (
-              <div key={`output-${messageIndex}-${idx}`} className="bg-red-50 border border-red-200 rounded-md p-3 overflow-auto">
-                <div className="flex items-center text-red-600 font-medium mb-2">
-                  <AlertTriangle size={16} className="mr-2" />
-                  Error Output
+        {/* Show error outputs first */}
+        {errorOutputs.length > 0 && (
+          <div className="bg-red-50 border border-red-200 rounded-md p-3 overflow-auto">
+            <div className="flex items-center text-red-600 font-medium mb-2">
+              <AlertTriangle size={16} className="mr-2" />
+              Error Output
+            </div>
+            <pre className="text-xs text-red-700 font-mono whitespace-pre-wrap">
+              {errorOutputs[0].content}
+            </pre>
+          </div>
+        )}
+        
+        {/* Show text outputs */}
+        {textOutputs.length > 0 && (
+          <div className="bg-gray-50 border border-gray-200 rounded-md p-3">
+            <div className="text-gray-700 font-medium mb-2">Output</div>
+            {(() => {
+              const content = textOutputs[0].content;
+              // Check if the output looks like a DataFrame or tabular data
+              const isTabularData = content.includes('|') && 
+                                 (content.includes('DataFrame') || 
+                                  content.includes('Column Types') ||
+                                  (content.match(/\|\s*\w+\s*\|/g)?.length > 1));
+              
+              return isTabularData ? (
+                <div className="overflow-x-auto max-w-full">
+                  <pre className="text-xs text-gray-800 font-mono whitespace-pre min-w-max">{content}</pre>
                 </div>
-                <pre className="text-xs text-red-700 font-mono whitespace-pre-wrap">{output.content}</pre>
-              </div>
-            );
-          } else if (output.type === 'output') {
-            // Check if the output looks like a DataFrame or tabular data
-            const isTabularData = output.content.includes('|') && 
-                                 (output.content.includes('DataFrame') || 
-                                  output.content.includes('Column Types') ||
-                                  (output.content.match(/\|\s*\w+\s*\|/g)?.length > 1));
-            
-            return (
-              <div key={`output-${messageIndex}-${idx}`} className="bg-gray-50 border border-gray-200 rounded-md p-3">
-                <div className="text-gray-700 font-medium mb-2">Output</div>
-                {isTabularData ? (
-                  <div className="overflow-x-auto max-w-full">
-                    <pre className="text-xs text-gray-800 font-mono whitespace-pre min-w-max">{output.content}</pre>
-                  </div>
-                ) : (
-                  <pre className="text-xs text-gray-800 font-mono whitespace-pre-wrap overflow-auto max-h-[400px]">{output.content}</pre>
-                )}
-              </div>
-            );
-          } else if (output.type === 'plotly') {
-            return (
-              <div key={`output-${messageIndex}-${idx}`} className="bg-white border border-gray-200 rounded-md p-3 overflow-auto">
-                <div className="text-gray-700 font-medium mb-2">Visualization</div>
-                <div className="w-full">
-                  <PlotlyChart data={output.content.data} layout={output.content.layout} />
-                </div>
-              </div>
-            );
-          }
-          return null;
-        })}
+              ) : (
+                <pre className="text-xs text-gray-800 font-mono whitespace-pre-wrap overflow-auto max-h-[400px]">{content}</pre>
+              );
+            })()}
+          </div>
+        )}
+        
+        {/* Show plotly visualizations */}
+        {plotlyOutputs.map((output, idx) => (
+          <div key={`plotly-${messageIndex}-${idx}`} className="bg-white border border-gray-200 rounded-md p-3 overflow-auto">
+            <div className="text-gray-700 font-medium mb-2">Visualization</div>
+            <div className="w-full">
+              <PlotlyChart data={output.content.data} layout={output.content.layout} />
+            </div>
+          </div>
+        ))}
       </div>
     );
   };
@@ -516,7 +557,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
       >
         {showWelcome ? (
           <WelcomeSection onSampleQueryClick={(query) => {
-            clearCodeEntries(); // Clear code canvas when starting a new query
+            clearCodeEntries(); // Clear ALL code canvas data for new chat
             onSendMessage(query);
           }} />
         ) : (

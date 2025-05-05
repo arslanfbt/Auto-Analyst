@@ -192,32 +192,59 @@ const CodeCanvas: React.FC<CodeCanvasProps> = ({
   useEffect(() => {
     if (codeEntries.length > 0 && (!activeEntryId || !codeEntries.find(entry => entry.id === activeEntryId))) {
       setActiveEntryId(codeEntries[codeEntries.length - 1].id)
+      
+      // If autoRun is enabled and this is a new entry, execute it automatically
+      if (autoRunEnabled && chatCompleted) {
+        const newestEntry = codeEntries[codeEntries.length - 1];
+        
+        // Only auto-run Python code
+        if (newestEntry.language === "python") {
+          // Add a small delay to ensure state is updated
+          setTimeout(() => {
+            executeCode(newestEntry.id, newestEntry.code, newestEntry.language);
+            
+            // Only show toast if canvas is open
+            if (isOpen) {
+              toast({
+                title: "Auto-running code",
+                description: "Code is automatically running after AI response completed",
+                duration: 3000,
+              });
+            }
+          }, 500);
+        }
+      }
     }
-  }, [codeEntries, activeEntryId])
+  }, [codeEntries, activeEntryId, autoRunEnabled, chatCompleted, executeCode, isOpen, toast]);
 
   // Auto-run code when chat is completed
   useEffect(() => {
-    // Only run code if chatCompleted changes from false to true
-    if (chatCompleted && !previousChatCompletedRef.current && autoRunEnabled && codeEntries.length > 0 && activeEntryId) {
-      const activeEntry = codeEntries.find(entry => entry.id === activeEntryId);
-      
-      // Only execute Python code automatically
-      if (activeEntry && activeEntry.language === "python" && !editingMap[activeEntryId]) {
-        // Add a small delay to ensure UI is ready
-        setTimeout(() => {
+    // Auto-run ONLY when chatCompleted changes from false to true
+    if (chatCompleted && !previousChatCompletedRef.current) {
+      if (autoRunEnabled && codeEntries.length > 0 && activeEntryId) {
+        const activeEntry = codeEntries.find(entry => entry.id === activeEntryId);
+        
+        // Only execute Python code automatically
+        if (activeEntry && activeEntry.language === "python" && !editingMap[activeEntryId]) {
+          console.log("Auto-running code for entry:", activeEntry.id);
+          // Execute immediately - no need to check if canvas is open
           executeCode(activeEntryId, activeEntry.code, activeEntry.language);
-          toast({
-            title: "Auto-running code",
-            description: "Code is automatically running after AI response completed",
-            duration: 3000,
-          });
-        }, 500);
+          
+          // Only show toast notification if canvas is open
+          if (isOpen) {
+            toast({
+              title: "Auto-running code",
+              description: "Code is automatically running after AI response completed",
+              duration: 3000,
+            });
+          }
+        }
       }
     }
     
     // Update the ref for the next check
     previousChatCompletedRef.current = chatCompleted;
-  }, [chatCompleted, autoRunEnabled, codeEntries, activeEntryId, editingMap, executeCode, toast]);
+  }, [chatCompleted, autoRunEnabled, codeEntries, activeEntryId, editingMap, executeCode, isOpen, toast]);
 
   // Initialize edited code when switching to edit mode
   const startEditing = (entryId: string, code: string) => {
@@ -775,12 +802,15 @@ const CodeCanvas: React.FC<CodeCanvasProps> = ({
     window.location.href = '/pricing';
   };
 
-  if (!isOpen) {
-    return null;
-  }
-
+  // Instead of returning null when not open, we'll render a hidden div to keep the component mounted
+  // This ensures auto-run still works even when canvas is closed
   const activeEntry = getActiveEntry();
   const hasError = activeEntry ? execOutputMap[activeEntry.id]?.hasError : false;
+
+  if (!isOpen) {
+    // Return an empty div instead of null to keep the component mounted
+    return <div className="hidden" />;
+  }
 
   return (
     <AnimatePresence>
