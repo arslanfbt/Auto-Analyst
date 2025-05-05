@@ -64,6 +64,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
   const [chatCompleted, setChatCompleted] = useState(false)
   const [autoRunEnabled, setAutoRunEnabled] = useState(true)
   const [hiddenCanvas, setHiddenCanvas] = useState<boolean>(true)
+  const [pendingCodeExecution, setPendingCodeExecution] = useState(false)
   
   // Set chatCompleted when chat name is generated
   useEffect(() => {
@@ -78,13 +79,6 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
       return () => clearTimeout(timer);
     }
   }, [chatNameGenerated, messages.length]);
-  
-  // Explicitly set chatCompleted to false when loading starts
-  useEffect(() => {
-    if (isLoading) {
-      setChatCompleted(false);
-    }
-  }, [isLoading]);
   
   // Scrolling helper
   const scrollToBottom = useCallback(() => {
@@ -186,32 +180,44 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
     // Extract code from the latest AI message
     extractCodeFromMessages([messages[lastAiMessageIndex]], lastAiMessageIndex);
     
-    // Trigger auto-run for the code
-    setChatCompleted(true);
-    setTimeout(() => {
-      setChatCompleted(false);
-    }, 10000);
+    // Trigger auto-run for the code will happen via the chatCompleted state
     
   }, [messages, clearCodeEntriesKeepOutput, extractCodeFromMessages]);
   
-  // Add a handler for clicking on message's code blocks
-  const handleMessageClick = useCallback((messageIndex: number) => {
-    if (messageIndex >= 0 && messageIndex < messages.length && messages[messageIndex].sender === "ai") {
-      // Process the selected message
-      setCurrentMessageIndex(messageIndex);
-      clearCodeEntriesKeepOutput();
-      extractCodeFromMessages([messages[messageIndex]], messageIndex);
+  // Detect when loading completes and trigger code execution
+  useEffect(() => {
+    if (pendingCodeExecution && !isLoading) {
+      // The entire response is now complete (loading finished)
+      console.log("Loading complete - triggering code execution for all messages");
       
-      // Only open the canvas visually if the user explicitly clicks on the code indicator
-      setHiddenCanvas(true);
+      // Process all AI messages to find and execute code
+      // This ensures we wait for the ENTIRE conversation/response to complete
+      // before auto-running any code, rather than running code for each
+      // individual message as it arrives
+      processAllAiMessages();
       
-      // Remove auto-run trigger when manually processing a message
-      // setChatCompleted(true);
-      // setTimeout(() => {
-      //   setChatCompleted(false);
-      // }, 10000);
+      // Set chatCompleted to true to trigger auto-run
+      setChatCompleted(true);
+      
+      // Reset flags
+      setPendingCodeExecution(false);
+      
+      // Reset chatCompleted after a delay
+      const timer = setTimeout(() => {
+        setChatCompleted(false);
+      }, 10000);
+      
+      return () => clearTimeout(timer);
     }
-  }, [messages, clearCodeEntriesKeepOutput, extractCodeFromMessages]);
+  }, [isLoading, pendingCodeExecution, processAllAiMessages]);
+  
+  // When loading starts, mark that we need to process code when loading ends
+  useEffect(() => {
+    if (isLoading) {
+      setChatCompleted(false);
+      setPendingCodeExecution(true);
+    }
+  }, [isLoading]);
 
   // Update local messages when prop messages change
   useEffect(() => {
@@ -229,19 +235,12 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
           clearCodeEntriesKeepOutput()
           setCurrentMessageIndex(newMessageIndex)
           
-          // Extract code blocks from the new message
+          // Extract code blocks from the new message but DON'T auto-run yet
           if (typeof messages[newMessageIndex].text === "string") {
             extractCodeFromMessages([messages[newMessageIndex]], newMessageIndex)
             
-            // Set chatCompleted to true for each new AI message to trigger auto-run
-            setChatCompleted(true);
-            
-            // Reset chatCompleted after a delay
-            const timer = setTimeout(() => {
-              setChatCompleted(false);
-            }, 10000); // Increase to 10 seconds
-            
-            return () => clearTimeout(timer);
+            // We'll wait for loading to complete before auto-running
+            // so we've removed the setChatCompleted(true) calls here
           }
         }
       } else if (messages.length < localMessages.length || messages.length === 0) {
