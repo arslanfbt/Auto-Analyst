@@ -63,6 +63,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
   const [codeOutputs, setCodeOutputs] = useState<CodeOutput[]>([])
   const [chatCompleted, setChatCompleted] = useState(false)
   const [autoRunEnabled, setAutoRunEnabled] = useState(true)
+  const [hiddenCanvas, setHiddenCanvas] = useState<boolean>(true)
   
   // Set chatCompleted when chat name is generated
   useEffect(() => {
@@ -85,83 +86,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
     }
   }, [isLoading]);
   
-  // Clear code entries for new chats or messages
-  const clearCodeEntries = useCallback(() => {
-    setCodeEntries([])
-    setCodeOutputs([])
-    setCodeCanvasOpen(false)
-  }, [])
-  
-  // Clear only code entries but keep outputs (for new AI messages)
-  const clearCodeEntriesKeepOutput = useCallback(() => {
-    setCodeEntries([])
-    setCodeCanvasOpen(false)
-  }, [])
-  
-  // Handle canvas toggle
-  const handleCanvasToggle = useCallback(() => {
-    // Toggle canvas without clearing outputs
-    setCodeCanvasOpen(!codeCanvasOpen)
-  }, [codeCanvasOpen])
-
-  // Update local messages when prop messages change
-  useEffect(() => {
-    setLocalMessages(messages)
-    
-    // Check if this is a new message set (chat reset or new response)
-    if (messages.length !== localMessages.length) {
-      // If a new AI message was added
-      if (messages.length > localMessages.length && messages.length > 0) {
-        const newMessageIndex = messages.length - 1
-        
-        // Only if it's an AI message
-        if (messages[newMessageIndex].sender === "ai") {
-          // Clear previous code entries but preserve outputs, and set the current message index
-          clearCodeEntriesKeepOutput()
-          setCurrentMessageIndex(newMessageIndex)
-          
-          // Extract code blocks from the new message
-          if (typeof messages[newMessageIndex].text === "string") {
-            extractCodeFromMessages([messages[newMessageIndex]], newMessageIndex)
-            
-            // Set chatCompleted to true for each new AI message to trigger auto-run
-            setChatCompleted(true);
-            
-            // Reset chatCompleted after a delay
-            const timer = setTimeout(() => {
-              setChatCompleted(false);
-            }, 10000); // Increase to 10 seconds
-            
-            return () => clearTimeout(timer);
-          }
-        }
-      } else if (messages.length < localMessages.length || messages.length === 0) {
-        // Chat was reset or cleared
-        clearCodeEntries()
-        setCurrentMessageIndex(null)
-      }
-    }
-  }, [messages, localMessages.length, clearCodeEntries, clearCodeEntriesKeepOutput])
-
-  // Force immediate update when transitioning from welcome to chat view
-  useEffect(() => {
-    if (!showWelcome && messages.length > 0) {
-      setLocalMessages(messages)
-      
-      // Set current message index to the latest AI message
-      const lastAiMessageIndex = messages.findIndex(m => m.sender === "ai")
-      if (lastAiMessageIndex !== -1) {
-        setCurrentMessageIndex(lastAiMessageIndex)
-        clearCodeEntriesKeepOutput()
-        extractCodeFromMessages([messages[lastAiMessageIndex]], lastAiMessageIndex)
-      }
-    }
-  }, [showWelcome, messages, clearCodeEntriesKeepOutput])
-
-  useEffect(() => {
-    scrollToBottom()
-  }, [localMessages, isLoading])
-
+  // Scrolling helper
   const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
   }, [])
@@ -220,6 +145,125 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
       setCodeEntries(newEntries);
     }
   }, []);
+  
+  // Clear code entries for new chats or messages
+  const clearCodeEntries = useCallback(() => {
+    setCodeEntries([])
+    setCodeOutputs([])
+    // Don't close the canvas anymore, just hide it
+    setHiddenCanvas(true)
+  }, [])
+  
+  // Clear only code entries but keep outputs (for new AI messages)
+  const clearCodeEntriesKeepOutput = useCallback(() => {
+    setCodeEntries([])
+    // Don't close the canvas, just make it hidden
+    setHiddenCanvas(true)
+  }, [])
+  
+  // Handle canvas toggle
+  const handleCanvasToggle = useCallback(() => {
+    // Toggle canvas visibility instead of existence
+    setCodeCanvasOpen(!codeCanvasOpen)
+    setHiddenCanvas(false) // Make sure it's not hidden when manually toggled
+  }, [codeCanvasOpen])
+  
+  // Add a function to process all AI messages in the chat
+  const processAllAiMessages = useCallback(() => {
+    if (messages.length === 0) return;
+    
+    // Get all AI messages
+    const aiMessages = messages.filter(m => m.sender === "ai");
+    if (aiMessages.length === 0) return;
+    
+    // Set the latest AI message as active
+    const lastAiMessageIndex = messages.lastIndexOf(aiMessages[aiMessages.length - 1]);
+    setCurrentMessageIndex(lastAiMessageIndex);
+    
+    // Clear previous code entries but preserve outputs
+    clearCodeEntriesKeepOutput();
+    
+    // Extract code from the latest AI message
+    extractCodeFromMessages([messages[lastAiMessageIndex]], lastAiMessageIndex);
+    
+    // Trigger auto-run for the code
+    setChatCompleted(true);
+    setTimeout(() => {
+      setChatCompleted(false);
+    }, 10000);
+    
+  }, [messages, clearCodeEntriesKeepOutput, extractCodeFromMessages]);
+  
+  // Add a handler for clicking on message's code blocks
+  const handleMessageClick = useCallback((messageIndex: number) => {
+    if (messageIndex >= 0 && messageIndex < messages.length && messages[messageIndex].sender === "ai") {
+      // Process the selected message
+      setCurrentMessageIndex(messageIndex);
+      clearCodeEntriesKeepOutput();
+      extractCodeFromMessages([messages[messageIndex]], messageIndex);
+      
+      // Only open the canvas visually if the user explicitly clicks on the code indicator
+      setHiddenCanvas(true);
+      
+      // Trigger code execution
+      setChatCompleted(true);
+      setTimeout(() => {
+        setChatCompleted(false);
+      }, 10000);
+    }
+  }, [messages, clearCodeEntriesKeepOutput, extractCodeFromMessages]);
+
+  // Update local messages when prop messages change
+  useEffect(() => {
+    setLocalMessages(messages)
+    
+    // Check if this is a new message set (chat reset or new response)
+    if (messages.length !== localMessages.length) {
+      // If a new AI message was added
+      if (messages.length > localMessages.length && messages.length > 0) {
+        const newMessageIndex = messages.length - 1
+        
+        // Only if it's an AI message
+        if (messages[newMessageIndex].sender === "ai") {
+          // Clear previous code entries but preserve outputs, and set the current message index
+          clearCodeEntriesKeepOutput()
+          setCurrentMessageIndex(newMessageIndex)
+          
+          // Extract code blocks from the new message
+          if (typeof messages[newMessageIndex].text === "string") {
+            extractCodeFromMessages([messages[newMessageIndex]], newMessageIndex)
+            
+            // Set chatCompleted to true for each new AI message to trigger auto-run
+            setChatCompleted(true);
+            
+            // Reset chatCompleted after a delay
+            const timer = setTimeout(() => {
+              setChatCompleted(false);
+            }, 10000); // Increase to 10 seconds
+            
+            return () => clearTimeout(timer);
+          }
+        }
+      } else if (messages.length < localMessages.length || messages.length === 0) {
+        // Chat was reset or cleared
+        clearCodeEntries()
+        setCurrentMessageIndex(null)
+      }
+    }
+  }, [messages, localMessages.length, clearCodeEntries, clearCodeEntriesKeepOutput, extractCodeFromMessages])
+
+  // Modify the useEffect for loading chat to process all messages
+  useEffect(() => {
+    if (!showWelcome && messages.length > 0) {
+      setLocalMessages(messages);
+      processAllAiMessages();
+    }
+  }, [showWelcome, messages, processAllAiMessages, setLocalMessages]);
+
+  // Auto-scroll to bottom when messages change
+  useEffect(() => {
+    scrollToBottom()
+  }, [localMessages, isLoading, scrollToBottom])
 
   // Process a message to replace code blocks with indicators
   const processMessageWithCodeIndicators = useCallback((message: ChatMessage, index: number) => {
@@ -419,10 +463,13 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
                       key={`${index}-${partIndex}-code`}
                       language={part.language}
                       onClick={() => {
+                        // When clicking on a code indicator, process the message and make the canvas visible
                         setCurrentMessageIndex(index);
                         clearCodeEntriesKeepOutput();
                         extractCodeFromMessages([message], index);
                         setCodeCanvasOpen(true);
+                        setHiddenCanvas(false); // Make the canvas visible when clicked
+                        
                         // Set chatCompleted to true when opening canvas manually to trigger auto-run
                         setChatCompleted(true);
                         
@@ -553,7 +600,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
     <div className="h-full overflow-hidden flex flex-col relative">
       <div 
         ref={chatWindowRef}
-        className={`flex-1 overflow-y-auto transition-all duration-300 ${codeCanvasOpen ? 'pr-[50%]' : ''}`}
+        className={`flex-1 overflow-y-auto transition-all duration-300 ${codeCanvasOpen && !hiddenCanvas ? 'pr-[50%]' : ''}`}
       >
         {showWelcome ? (
           <WelcomeSection onSampleQueryClick={(query) => {
@@ -587,7 +634,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
         <div ref={messagesEndRef} />
       </div>
       
-      {/* Code Canvas */}
+      {/* Code Canvas - always render it if we have code, but control visibility */}
       {currentMessageIndex !== null && codeEntries.length > 0 && (
         <CodeCanvas 
           isOpen={codeCanvasOpen}
@@ -595,6 +642,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
           codeEntries={codeEntries}
           onCodeExecute={handleCodeCanvasExecute}
           chatCompleted={chatCompleted}
+          hiddenCanvas={hiddenCanvas}
         />
       )}
     </div>

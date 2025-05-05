@@ -37,6 +37,7 @@ interface CodeCanvasProps {
   codeEntries: CodeEntry[];
   onCodeExecute?: (entryId: string, result: any) => void;
   chatCompleted?: boolean;
+  hiddenCanvas?: boolean;
 }
 
 interface SelectionPosition {
@@ -50,7 +51,8 @@ const CodeCanvas: React.FC<CodeCanvasProps> = ({
   onToggle, 
   codeEntries,
   onCodeExecute,
-  chatCompleted = false
+  chatCompleted = false,
+  hiddenCanvas = false
 }) => {
   const { toast } = useToast()
   const { sessionId } = useSessionStore()
@@ -809,6 +811,11 @@ const CodeCanvas: React.FC<CodeCanvasProps> = ({
 
   if (!isOpen) {
     // Return an empty div instead of null to keep the component mounted
+    return <div className="hidden" />;
+  }
+
+  // If hiddenCanvas is true, keep the component mounted but visually hidden
+  if (hiddenCanvas) {
     return <div className="hidden" />;
   }
 
