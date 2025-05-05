@@ -1028,6 +1028,11 @@ const ChatInput = forwardRef<
     // Use the actual reset date from Redis if available
     if (creditResetDate) {
       try {
+        // If it's the "Check accounts page" string, format it better for the sentence
+        if (creditResetDate === "Check accounts page") {
+          return "the next billing cycle (check accounts page for details)";
+        }
+        
         const resetDate = new Date(creditResetDate);
         if (!isNaN(resetDate.getTime())) {
           console.log(`[ChatInput] Using actual reset date from Redis: ${resetDate.toISOString()}`);
@@ -1042,15 +1047,9 @@ const ChatInput = forwardRef<
       }
     }
     
-    // Fall back to first day of next month if no date from Redis or invalid date
-    console.log('[ChatInput] No valid reset date from Redis, using first day of next month');
-    const now = new Date();
-    const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-    return nextMonth.toLocaleDateString('en-US', { 
-      year: 'numeric', 
-      month: 'long', 
-      day: 'numeric' 
-    });
+    // Fall back to a clearer message if no date from Redis or invalid date
+    console.log('[ChatInput] No valid reset date from Redis, using fallback message');
+    return "the next billing cycle (check accounts page for details)";
   }
 
   // Add a function to generate dataset description automatically

@@ -88,26 +88,22 @@ export function CreditProvider({ children }: { children: ReactNode }) {
             
             if (creditsHash && creditsHash.resetDate) {
               resetDate = creditsHash.resetDate;
-              console.log('[Credits] Reset date from Redis hash:', resetDate);
             } else {
-              resetDate = creditUtils.getNextMonthFirstDay();
-              console.log('[Credits] Using calculated next month date:', resetDate);
+              resetDate = "Check accounts page";
             }
           } catch (resetError) {
-            console.error('[Credits] Error fetching reset date:', resetError);
-            resetDate = creditUtils.getNextMonthFirstDay();
+            resetDate = "Check accounts page";
           }
         }
-        console.log(`[Credits] Current credits for ${userId}: ${currentCredits}`);
       } catch (error) {
-        console.error('[Credits] Error fetching credits:', error);
-        // Use cached credits as fallback if available
-        if (typeof window !== 'undefined') {
-          const cachedCredits = localStorage.getItem(`user_credits_${userId}`);
-          if (cachedCredits) {
-            currentCredits = parseInt(cachedCredits);
-          }
-        }
+        // // Use cached credits as fallback if available
+        // if (typeof window !== 'undefined') {
+        //   const cachedCredits = localStorage.getItem(`user_credits_${userId}`);
+        //   if (cachedCredits) {
+        //     currentCredits = parseInt(cachedCredits);
+        //   }
+        // }
+        currentCredits = 10;
       }
       
       // Store credits in state
@@ -121,12 +117,10 @@ export function CreditProvider({ children }: { children: ReactNode }) {
           remaining: currentCredits,
           lastUpdate: new Date().toISOString()
         }));
-        console.log(`[Credits] Updated credits state with reset date: ${resetDate}`);
       }
       
       // Determine if chat should be blocked based on available credits
       const shouldBeBlocked = currentCredits <= 0;
-      console.log(`[Credits] Should chat be blocked? ${shouldBeBlocked} (credits: ${currentCredits})`);
       
       // Update isChatBlocked state
       setIsChatBlocked(shouldBeBlocked);
@@ -153,7 +147,6 @@ export function CreditProvider({ children }: { children: ReactNode }) {
     // If not enough credits, block chat input immediately
     if (!hasEnough) {
       setIsChatBlocked(true);
-      console.log('[Credits] Chat blocked due to insufficient credits');
     }
     
     return hasEnough;
@@ -162,12 +155,10 @@ export function CreditProvider({ children }: { children: ReactNode }) {
   // Deduct credits for an operation
   const deductCredits = async (amount: number): Promise<boolean> => {
     try {
-      console.log(`[CREDIT-CONTEXT] Attempting to deduct ${amount} credits`);
       const userId = getUserId();
       
       // First check if we have enough credits locally
       if (remainingCredits < amount) {
-        console.log(`[CREDIT-CONTEXT] Insufficient credits locally: ${remainingCredits} < ${amount}`);
         setIsChatBlocked(true);
         return false;
       }
@@ -177,9 +168,7 @@ export function CreditProvider({ children }: { children: ReactNode }) {
       try {
         // Try to deduct from Redis
         success = await creditUtils.deductCredits(userId, amount);
-        console.log(`[CREDIT-CONTEXT] Redis deduction result: ${success}`);
       } catch (redisError) {
-        console.error('[CREDIT-CONTEXT] Redis deduction error:', redisError);
         // Fall back to local state if Redis fails
         success = true;
       }
@@ -187,7 +176,6 @@ export function CreditProvider({ children }: { children: ReactNode }) {
       if (success) {
         // Always update local state regardless of Redis result
         const newBalance = remainingCredits - amount;
-        console.log(`[CREDIT-CONTEXT] Updating local credits: ${remainingCredits} -> ${newBalance}`);
         
         setRemainingCredits(newBalance);
         
