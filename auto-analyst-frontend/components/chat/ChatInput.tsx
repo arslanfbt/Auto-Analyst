@@ -986,14 +986,26 @@ const ChatInput = forwardRef<
       setShowPreview(false);
       setUploadSuccess(true);
       if (actualFile) {
+        // Create a new File object with the updated name but preserve other properties
+        // Add .csv extension if not present in the new name
+        const updatedFileName = datasetDescription.name.endsWith('.csv') 
+          ? datasetDescription.name 
+          : `${datasetDescription.name}.csv`;
+          
+        const updatedFile = new File(
+          [actualFile], 
+          updatedFileName,
+          { type: actualFile.type, lastModified: actualFile.lastModified }
+        );
+        
         setFileUpload({
-          file: actualFile,
+          file: updatedFile,
           status: 'success'
         });
       
         // Save to localStorage after successful upload to persist across refreshes
         localStorage.setItem('lastUploadedFile', JSON.stringify({
-          name: actualFile.name,
+          name: updatedFileName,
           type: actualFile.type,
           lastModified: actualFile.lastModified
         }));

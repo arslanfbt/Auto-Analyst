@@ -334,7 +334,7 @@ def format_response_to_markdown(api_response, agent_name = None, dataframe=None)
     # logger.log_message(f"Generated markdown content for agent '{agent_name}' at {time.strftime('%Y-%m-%d %H:%M:%S')}: {markdown}, length: {len(markdown)}", level=logging.INFO)
     
     if not markdown or len(markdown) <= 1:
-        logger.log_message(f"Generated markdown (ERROR) content for agent '{agent_name}' at {time.strftime('%Y-%m-%d %H:%M:%S')}: {markdown}, length: {len(markdown)}", level=logging.INFO)
+        logger.log_message(f"Generated markdown (ERROR) content for agent '{agent_name}' at {time.strftime('%Y-%m-%d %H:%M:%S')}: {markdown}, length: {len(markdown)}, api_response: {api_response}", level=logging.INFO)
         return "Please provide a valid query..."
         
     return '\n'.join(markdown)
