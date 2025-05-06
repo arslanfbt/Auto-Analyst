@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef, useCallback } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter"
 import { vscDarkPlus } from "react-syntax-highlighter/dist/esm/styles/prism"
-import { ChevronRight, Copy, Check, Play, Edit2, Save, X, Maximize2, Minimize2, Wand2, AlertTriangle, WrenchIcon, Send, Scissors } from "lucide-react"
+import { ChevronRight, Copy, Check, Play, Edit2, Save, X, Maximize2, Minimize2, Wand2, AlertTriangle, WrenchIcon, Send, Scissors, CreditCard } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import MonacoEditor, { useMonaco } from '@monaco-editor/react'
@@ -78,6 +78,9 @@ const CodeCanvas: React.FC<CodeCanvasProps> = ({
   const [insufficientCreditsOpen, setInsufficientCreditsOpen] = useState(false)
   const [creditAction, setCreditAction] = useState<'edit' | 'fix' | null>(null)
   const [pendingEntryId, setPendingEntryId] = useState<string | null>(null)
+  const [showFeedbackPopup, setShowFeedbackPopup] = useState(false)
+  const [codeFixes, setCodeFixes] = useState<Record<string, number>>({})
+  const [showFixLimitNotification, setShowFixLimitNotification] = useState(false)
 
   // Define executeCode with useCallback at the top
   const executeCode = useCallback(async (entryId: string, code: string, language: string) => {
@@ -242,6 +245,10 @@ const CodeCanvas: React.FC<CodeCanvasProps> = ({
           }
         }
       }
+      
+      // Reset code fix counters when a new message is complete
+      setCodeFixes({});
+      console.log("Code fix counters reset for new message");
     }
     
     // Update the ref for the next check
@@ -556,8 +563,27 @@ const CodeCanvas: React.FC<CodeCanvasProps> = ({
     
     if (!errorOutput || !hasError) return;
     
-    // Check if user has credits for AI fix (only for logged in users)
-    if (session) {
+    // Track number of fixes for this entry
+    const fixCount = codeFixes[entryId] || 0;
+    const newFixCount = fixCount + 1;
+    setCodeFixes(prev => ({ ...prev, [entryId]: newFixCount }));
+    
+    // Check if user has reached free limit (3 fixes)
+    const needsCredits = newFixCount > 3;
+    
+    // Show notification after 3rd fix
+    if (newFixCount == 4) {
+      toast({
+        title: "Free fix limit reached",
+        description: "You've used your 3 free code fixes. Additional fixes will use 1 credit each.",
+        duration: 5000,
+      });
+      setShowFixLimitNotification(true);
+      setTimeout(() => setShowFixLimitNotification(false), 5000);
+    }
+    
+    // Check if user has credits for AI fix (only if beyond free limit)
+    if (needsCredits && session) {
       try {
         // Credit cost for AI code fix is 1
         const creditCost = 1;
@@ -647,37 +673,37 @@ const CodeCanvas: React.FC<CodeCanvasProps> = ({
           return newMap;
         });
         
-        // // Deduct credits for successful fix (only for logged in users)
-        // if (session?.user) {
-        //   try {
-        //     // Determine user ID for credit deduction
-        //     let userIdForCredits = '';
+        // Deduct credits for successful fix (only for logged in users beyond free limit)
+        if (needsCredits && session?.user) {
+          try {
+            // Determine user ID for credit deduction
+            let userIdForCredits = '';
             
-        //     if ((session.user as any).sub) {
-        //       userIdForCredits = (session.user as any).sub;
-        //     } else if ((session.user as any).id) {
-        //       userIdForCredits = (session.user as any).id;
-        //     } else if (session.user.email) {
-        //       userIdForCredits = session.user.email;
-        //     }
+            if ((session.user as any).sub) {
+              userIdForCredits = (session.user as any).sub;
+            } else if ((session.user as any).id) {
+              userIdForCredits = (session.user as any).id;
+            } else if (session.user.email) {
+              userIdForCredits = session.user.email;
+            }
             
-        //     if (userIdForCredits) {
-        //       // Deduct 1 credit for AI code fix
-        //       await axios.post('/api/user/deduct-credits', {
-        //         userId: userIdForCredits,
-        //         credits: 1,
-        //         description: 'Used AI to fix code errors'
-        //       });
+            if (userIdForCredits) {
+              // Deduct 1 credit for AI code fix
+              await axios.post('/api/user/deduct-credits', {
+                userId: userIdForCredits,
+                credits: 1,
+                description: 'Used AI to fix code errors'
+              });
               
-        //       // Refresh credits display
-        //       if (checkCredits) {
-        //         await checkCredits();
-        //       }
-        //     }
-        //   } catch (creditError) {
-        //     console.error("Failed to deduct credits for code fix:", creditError);
-        //   }
-        // }
+              // Refresh credits display
+              if (checkCredits) {
+                await checkCredits();
+              }
+            }
+          } catch (creditError) {
+            console.error("Failed to deduct credits for code fix:", creditError);
+          }
+        }
         
         toast({
           title: "Code fixed",
@@ -959,25 +985,57 @@ const CodeCanvas: React.FC<CodeCanvasProps> = ({
                       <TooltipProvider>
                         <Tooltip>
                           <TooltipTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleFixCode(activeEntry.id)}
-                              disabled={isFixingCode}
-                              className="text-[#FF7F7F] hover:bg-[#FF7F7F]/20"
-                            >
-                              {isFixingCode ? (
-                                <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                                </svg>
-                              ) : (
-                                <WrenchIcon className="h-4 w-4" />
-                              )}
-                            </Button>
+                            <div className="flex items-center">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleFixCode(activeEntry.id)}
+                                disabled={isFixingCode}
+                                className="text-[#FF7F7F] hover:bg-[#FF7F7F]/20 relative"
+                              >
+                                {isFixingCode ? (
+                                  <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                  </svg>
+                                ) : (
+                                  <>
+                                    <WrenchIcon className="h-4 w-4" />
+                                    {(codeFixes[activeEntry.id] || 0) < 3 && (
+                                      <div className="absolute -top-1 -right-1 flex items-center justify-center">
+                                        <div className="bg-gradient-to-r from-blue-500 to-cyan-400 text-white text-[9px] px-1.5 py-0.5 rounded-full font-semibold shadow-sm">
+                                          {3 - (codeFixes[activeEntry.id] || 0)}
+                                        </div>
+                                      </div>
+                                    )}
+                                    {(codeFixes[activeEntry.id] || 0) >= 3 && (
+                                      <div className="absolute -top-1 -right-1 flex items-center justify-center">
+                                        <div className="bg-amber-500 text-white text-[9px] px-1.5 py-0.5 rounded-full font-semibold shadow-sm flex items-center">
+                                          <CreditCard className="h-2 w-2 mr-0.5" />1
+                                        </div>
+                                      </div>
+                                    )}
+                                  </>
+                                )}
+                              </Button>
+                            </div>
                           </TooltipTrigger>
-                          <TooltipContent side="bottom">
-                            <p className="text-sm">Fix code error</p>
+                          <TooltipContent side="bottom" className="px-3 py-1.5">
+                            {(codeFixes[activeEntry.id] || 0) < 3 ? (
+                              <div className="space-y-1">
+                                <p className="text-sm font-medium">Fix code error</p>
+                                <p className="text-xs text-gray-500">
+                                  {3 - (codeFixes[activeEntry.id] || 0)} free {3 - (codeFixes[activeEntry.id] || 0) === 1 ? 'fix' : 'fixes'} remaining
+                                </p>
+                              </div>
+                            ) : (
+                              <div className="space-y-1">
+                                <p className="text-sm font-medium">Fix code error</p>
+                                <p className="text-xs text-amber-500 flex items-center">
+                                  <CreditCard className="h-3 w-3 mr-1" /> Uses 1 credit per fix
+                                </p>
+                              </div>
+                            )}
                           </TooltipContent>
                         </Tooltip>
                       </TooltipProvider>
@@ -1250,22 +1308,64 @@ const CodeCanvas: React.FC<CodeCanvasProps> = ({
         <Dialog open={insufficientCreditsOpen} onOpenChange={setInsufficientCreditsOpen}>
           <DialogContent className="sm:max-w-md">
             <DialogHeader>
-              <DialogTitle>Insufficient Credits</DialogTitle>
-              <DialogDescription>
+              <DialogTitle className="text-xl font-semibold">Insufficient Credits</DialogTitle>
+              <DialogDescription className="text-sm text-gray-500 mt-2">
                 You need at least 1 credit to {creditAction === 'edit' ? 'edit code with AI' : 'fix code errors with AI'}.
-                Please upgrade your plan or wait for your credits to reset.
               </DialogDescription>
             </DialogHeader>
+            
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 my-4">
+              <div className="flex items-start gap-3">
+                <div className="bg-amber-100 rounded-full p-2 flex-shrink-0">
+                  <CreditCard className="h-5 w-5 text-amber-600" />
+                </div>
+                <div>
+                  <h4 className="text-sm font-medium text-amber-800">Free Limit Exceeded</h4>
+                  <p className="text-xs text-amber-700 mt-1">
+                    You've used your free code fixes for this message. Upgrade your plan for unlimited fixes.
+                  </p>
+                </div>
+              </div>
+            </div>
+            
             <div className="flex justify-end space-x-2 pt-4">
-              <Button variant="outline" onClick={() => setInsufficientCreditsOpen(false)}>
+              <Button variant="outline" onClick={() => setInsufficientCreditsOpen(false)} className="text-gray-700">
                 Cancel
               </Button>
-              <Button onClick={handleCreditDialogContinue}>
+              <Button 
+                onClick={handleCreditDialogContinue}
+                className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white"
+              >
+                <CreditCard className="h-4 w-4 mr-2" />
                 Upgrade Plan
               </Button>
             </div>
           </DialogContent>
         </Dialog>
+        {/* TODO: HAS ALIGNMENT ISSUE; WILL FIX LATER */}
+        {/* {showFixLimitNotification && (
+          <div className="fixed bottom-20 left-1/2 transform -translate-x-1/2 z-50 max-w-sm w-full">
+            <motion.div 
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 10 }}
+              className="bg-white rounded-lg shadow-lg border border-amber-200 overflow-hidden"
+            >
+              <div className="bg-gradient-to-r from-amber-500 to-amber-400 h-1"></div>
+              <div className="p-4 flex gap-3">
+                <div className="bg-amber-100 rounded-full p-2 h-fit">
+                  <CreditCard className="h-5 w-5 text-amber-600" />
+                </div>
+                <div className="flex-1">
+                  <h4 className="text-sm font-medium text-gray-800">Free fix limit reached</h4>
+                  <p className="text-xs text-gray-600 mt-1">
+                    You've used all 3 free code fixes for this message. Additional fixes will use 1 credit each.
+                  </p>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )} */}
       </motion.div>
     </AnimatePresence>
   )
