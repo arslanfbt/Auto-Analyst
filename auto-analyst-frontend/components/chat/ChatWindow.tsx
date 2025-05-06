@@ -87,14 +87,25 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
   
   // Extract code blocks from messages
   const extractCodeFromMessages = useCallback((messagesToExtract: ChatMessage[], messageIndex: number) => {
+    console.log("messagesToExtract", messagesToExtract)
     // Use a map to group code blocks by language
-    const codeByLanguage: Record<string, { code: string, blocks: string[] }> = {};
+    const codeByLanguage: Record<string, { code: string, blocks: string[], agents: string[] }> = {};
     
     messagesToExtract.forEach((message) => {
       if (message.sender === "ai" && typeof message.text === "string") {
         const codeBlockRegex = /```([a-zA-Z0-9_]+)?\n([\s\S]*?)```/g;
-        let match;
         
+        // Look for agent markers in the text
+        const agentMarkersMap: Record<number, string> = {};
+        const agentMarkerRegex = /<!-- AGENT: ([^>]+) -->\s*```([a-zA-Z0-9_]+)?/g;
+        let markerMatch;
+        while ((markerMatch = agentMarkerRegex.exec(message.text)) !== null) {
+          const markerPos = markerMatch.index;
+          const agentName = markerMatch[1];
+          agentMarkersMap[markerPos] = agentName;
+        }
+        
+        let match;
         while ((match = codeBlockRegex.exec(message.text)) !== null) {
           const language = match[1] || 'text';
           const code = match[2].trim();
@@ -106,12 +117,28 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
           if (!codeByLanguage[language]) {
             codeByLanguage[language] = {
               code: '',
-              blocks: []
+              blocks: [],
+              agents: []
             };
           }
           
           // Add this code block to the appropriate language group
           codeByLanguage[language].blocks.push(code);
+          
+          // Find the closest agent marker before this code block
+          let blockAgentName = message.agent || "AI";
+          const blockPos = match.index;
+          
+          // Find the closest agent marker before this position
+          let closestMarkerPos = -1;
+          for (const markerPos in agentMarkersMap) {
+            if (parseInt(markerPos) < blockPos && parseInt(markerPos) > closestMarkerPos) {
+              closestMarkerPos = parseInt(markerPos);
+              blockAgentName = agentMarkersMap[markerPos];
+            }
+          }
+          
+          codeByLanguage[language].agents.push(blockAgentName);
         }
       }
     });
@@ -119,10 +146,20 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
     // Combine code blocks for each language and create entries
     const newEntries: CodeEntry[] = [];
     
-    for (const [language, { blocks }] of Object.entries(codeByLanguage)) {
+    for (const [language, { blocks, agents }] of Object.entries(codeByLanguage)) {
       if (blocks.length > 0) {
-        // Combine all code blocks with the same language
-        const combinedCode = blocks.join('\n\n# Next code block\n\n');
+        // Create combined code with agent names
+        let combinedCode = "";
+        for (let i = 0; i < blocks.length; i++) {
+          // Add agent name header for all blocks, including the first one
+          combinedCode += `# ${agents[i]} code block\n\n`;
+          combinedCode += blocks[i];
+          
+          // Add separator between blocks if not the last block
+          if (i < blocks.length - 1) {
+            combinedCode += `\n\n`;
+          }
+        }
         
         newEntries.push({
           id: uuidv4(),
