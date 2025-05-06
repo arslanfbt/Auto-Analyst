@@ -102,6 +102,10 @@ def execute_code_from_markdown(code_str, dataframe=None):
     import matplotlib.pyplot as plt
     import seaborn as sns
     import numpy as np
+    import re
+    import traceback
+    import sys
+    from io import StringIO
 
     context = {
         'pd': pd,
@@ -141,7 +145,6 @@ def execute_code_from_markdown(code_str, dataframe=None):
         flags=re.MULTILINE
     )
 
-
     # If a dataframe is provided, add it to the context
     if dataframe is not None:
         context['df'] = dataframe
@@ -149,13 +152,12 @@ def execute_code_from_markdown(code_str, dataframe=None):
     # remove pd.read_csv() if it's already in the context
     modified_code = re.sub(r"pd\.read_csv\(\s*[\"\'].*?[\"\']\s*\)", '', modified_code)
 
-    # # Remove sample dataframe lines with multiple array values
+    # Remove sample dataframe lines with multiple array values
     modified_code = re.sub(r"^# Sample DataFrames?.*?(\n|$)", '', modified_code, flags=re.MULTILINE | re.IGNORECASE)
         
-    # # Remove plt.show() statements
+    # Remove plt.show() statements
     modified_code = re.sub(r"plt\.show\(\).*?(\n|$)", '', modified_code)
     
-
     # Only add df = pd.read_csv() if no dataframe was provided and the code contains pd.read_csv
     if dataframe is None and 'pd.read_csv' not in modified_code:
         modified_code = re.sub(
@@ -164,17 +166,58 @@ def execute_code_from_markdown(code_str, dataframe=None):
             modified_code
         )
 
-    try:
-        with stdoutIO() as s:
-            exec(modified_code, context)  # Execute the modified code
-        output = s.getvalue()
-        json_outputs = context.get('json_outputs', [])
-
-        return output, json_outputs
-    except Exception as e:
-        return "Error executing code: " + str(e), []
+    # Identify code blocks by comments
+    code_blocks = []
+    current_block = []
+    current_block_name = "unknown"
     
-
+    for line in modified_code.splitlines():
+        # Check if line contains a block identifier comment
+        block_match = re.match(r'^# ([a-zA-Z_]+)_agent code start', line)
+        if block_match:
+            # If we had a previous block, save it
+            if current_block:
+                code_blocks.append((current_block_name, '\n'.join(current_block)))
+            # Start a new block
+            current_block_name = block_match.group(1)
+            current_block = []
+        else:
+            current_block.append(line)
+    
+    # Add the last block if it exists
+    if current_block:
+        code_blocks.append((current_block_name, '\n'.join(current_block)))
+    
+    # Execute each code block separately
+    all_outputs = []
+    for block_name, block_code in code_blocks:
+        try:
+            with stdoutIO() as s:
+                exec(block_code, context)  # Execute the block
+            output = s.getvalue()
+            all_outputs.append((block_name, output, None))  # None means no error
+        except Exception as e:
+            error_traceback = traceback.format_exc()
+            all_outputs.append((block_name, None, f"Error in {block_name}_agent: {str(e)}\n{error_traceback}"))
+    
+    # Compile all outputs and errors
+    output_text = ""
+    json_outputs = context.get('json_outputs', [])
+    error_found = False
+    
+    for block_name, output, error in all_outputs:
+        if error:
+            output_text += f"\n\n=== ERROR IN {block_name.upper()}_AGENT ===\n{error}\n"
+            error_found = True
+        elif output:
+            output_text += f"\n\n=== OUTPUT FROM {block_name.upper()}_AGENT ===\n{output}\n"
+    
+    if error_found:
+        return output_text, []
+    else:
+        return output_text, json_outputs
+    
+    
 def format_plan_instructions(plan_instructions):
     """
     Format any plan instructions (JSON string or dict) into markdown sections per agent.
@@ -268,20 +311,20 @@ def format_response_to_markdown(api_response, agent_name = None, dataframe=None)
 
             if 'code' in content:
                 markdown.append(f"### Code Implementation\n{format_code_backticked_block(content['code'])}\n")
-                if agent_name is not None:
-                    # execute the code
-                    clean_code = format_code_block(content['code'])
-                    output, json_outputs = execute_code_from_markdown(clean_code, dataframe)
-                    if output:
-                        markdown.append("### Execution Output\n")
-                        markdown.append(f"```output\n{output}\n```\n")
+                # if agent_name is not None:
+                #     # execute the code
+                #     clean_code = format_code_block(content['code'])
+                #     output, json_outputs = execute_code_from_markdown(clean_code, dataframe)
+                #     if output:
+                #         markdown.append("### Execution Output\n")
+                #         markdown.append(f"```output\n{output}\n```\n")
 
-                    if json_outputs:
-                        markdown.append("### Plotly JSON Outputs\n")
-                        for idx, json_output in enumerate(json_outputs):
-                            if len(json_output) > 1000000:  # If JSON is larger than 1MB
-                                logger.log_message(f"Large JSON output detected: {len(json_output)} bytes", level=logging.WARNING)
-                            markdown.append(f"```plotly\n{json_output}\n```\n")
+                #     if json_outputs:
+                #         markdown.append("### Plotly JSON Outputs\n")
+                #         for idx, json_output in enumerate(json_outputs):
+                #             if len(json_output) > 1000000:  # If JSON is larger than 1MB
+                #                 logger.log_message(f"Large JSON output detected: {len(json_output)} bytes", level=logging.WARNING)
+                #             markdown.append(f"```plotly\n{json_output}\n```\n")
 
             if 'summary' in content:
                 # make the summary a bullet-point list

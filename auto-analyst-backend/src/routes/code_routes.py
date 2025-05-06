@@ -1,7 +1,8 @@
 import io
 import logging
+import re
 from fastapi import APIRouter, Depends, HTTPException, Request
-from typing import Dict, Optional
+from typing import Dict, Optional, List, Tuple
 from pydantic import BaseModel
 
 from scripts.format_response import execute_code_from_markdown, format_code_block
@@ -19,7 +20,7 @@ router = APIRouter(
 
 # Initialize logger
 logger = Logger("code_routes", see_time=True, console_log=False)
-
+try_logger = Logger("try_code_routes", see_time=True, console_log=False)
 # Request body model
 class CodeExecuteRequest(BaseModel):
     code: str
@@ -34,6 +35,187 @@ class CodeFixRequest(BaseModel):
     
 class CodeCleanRequest(BaseModel):
     code: str
+    
+def format_code(code: str) -> str:
+    """
+    Clean the code by organizing imports and ensuring code blocks are properly formatted.
+    
+    Args:
+        code (str): The raw Python code as a string.
+        
+    Returns:
+        str: The cleaned code.
+    """
+    # Move imports to top
+    code = move_imports_to_top(code)
+    
+    # Split code into blocks if they exist (based on comments like '# agent_name code start')
+    code_blocks = []
+    current_block = []
+    current_agent = None
+    
+    for line in code.splitlines():
+        if re.search(r'#\s+\w+\s+code\s+start', line.lower()):
+            if current_agent and current_block:
+                code_blocks.append((current_agent, '\n'.join(current_block)))
+                current_block = []
+            current_agent = re.search(r'#\s+(\w+)\s+code\s+start', line.lower()).group(1)
+            current_block.append(line)
+        elif re.search(r'#\s+\w+\s+code\s+end', line.lower()):
+            if current_block:
+                current_block.append(line)
+                code_blocks.append((current_agent, '\n'.join(current_block)))
+                current_agent = None
+                current_block = []
+        else:
+            current_block.append(line)
+    
+    # If there's remaining code not in a block
+    if current_block:
+        if current_agent:
+            code_blocks.append((current_agent, '\n'.join(current_block)))
+        else:
+            code_blocks.append(('main', '\n'.join(current_block)))
+    
+    # If no blocks were identified, return the original cleaned code
+    if not code_blocks:
+        return code
+    # Reconstruct the code with the identified blocks
+    return '\n\n'.join([block[1] for block in code_blocks])
+
+def extract_code_blocks(code: str) -> Dict[str, str]:
+    """
+    Extract code blocks from the code based on agent name comments.
+    
+    Args:
+        code (str): The code containing multiple blocks
+        
+    Returns:
+        Dict[str, str]: Dictionary mapping agent names to their code blocks
+    """
+    # Find code blocks with start and end markers
+    block_pattern = r'(#\s+(\w+)\s+code\s+start[\s\S]*?#\s+\w+\s+code\s+end)'
+    blocks_with_markers = re.findall(block_pattern, code, re.DOTALL)
+    
+    if not blocks_with_markers:
+        # If no blocks found, treat the entire code as one block
+        return {'main': code}
+    
+    result = {}
+    for full_block, agent_name in blocks_with_markers:
+        result[agent_name.lower()] = full_block.strip()
+    
+    return result
+
+def identify_error_blocks(code: str, error_output: str) -> List[Tuple[str, str, str]]:
+    """
+    Identify code blocks that have errors during execution.
+    
+    Args:
+        code (str): The full code containing multiple agent blocks
+        error_output (str): The error output from execution
+        
+    Returns:
+        List[Tuple[str, str, str]]: List of tuples containing (agent_name, block_code, error_message)
+    """
+    # Parse the error output to find which agents had errors
+    faulty_blocks = []
+    
+    # Find error patterns like "=== ERROR IN AGENT_NAME ==="
+    error_matches = re.findall(r'===\s+ERROR\s+IN\s+([A-Za-z0-9_]+)\s+===\s*([\s\S]*?)(?:(?===\s+)|$)', error_output)
+    
+    if not error_matches:
+        return []
+    
+    # Find all code blocks in the given code
+    blocks = {}
+    for agent_match in re.finditer(r'#\s+(\w+)\s+code\s+start([\s\S]*?)#\s+\w+\s+code\s+end', code, re.DOTALL):
+        agent_name = agent_match.group(1).lower()
+        full_block = agent_match.group(0)
+        blocks[agent_name] = full_block
+    
+    # Match errors with their corresponding code blocks
+    for agent_name, error_message in error_matches:
+        normalized_name = agent_name.lower()
+        
+        # Find the block for this agent
+        for block_name, block_code in blocks.items():
+            if normalized_name in block_name:
+                # Limit error message to last 10 lines if too large
+                error_lines = error_message.strip().split('\n')
+                if len(error_lines) > 10:
+                    error_message = '\n'.join(error_lines[-10:])
+                
+                faulty_blocks.append((block_name, block_code, error_message.strip()))
+                break
+    
+    return faulty_blocks
+
+def fix_code_with_dspy(code: str, error: str, dataset_context: str = ""):
+    """
+    Fix code with errors by identifying faulty blocks and fixing them individually
+    
+    Args:
+        code (str): The code containing errors
+        error (str): Error message from execution
+        dataset_context (str): Context about the dataset
+        
+    Returns:
+        str: The fixed code
+    """
+    gemini = dspy.LM("gemini/gemini-2.5-pro-preview-03-25", api_key = os.environ['GEMINI_API_KEY'], max_tokens=5000)
+    
+    # Find the blocks with errors
+    faulty_blocks = identify_error_blocks(code, error)
+    
+    if not faulty_blocks:
+        # If no specific errors found, fix the entire code
+        with dspy.context(lm=gemini):
+            code_fixer = dspy.ChainOfThought(code_fix)
+            result = code_fixer(
+                dataset_context=str(dataset_context),
+                faulty_code=str(code),
+                error=str(error),
+            )
+            return result.fixed_code
+    
+    # Start with the original code
+    result_code = code
+    
+    # Fix each faulty block separately
+    with dspy.context(lm=gemini):
+        code_fixer = dspy.ChainOfThought(code_fix)
+        
+        for agent_name, block_code, specific_error in faulty_blocks:
+            # Extract inner code between the markers
+            inner_code_match = re.search(r'#\s+\w+\s+code\s+start\s*\n([\s\S]*?)#\s+\w+\s+code\s+end', block_code)
+            if not inner_code_match:
+                continue
+                
+            inner_code = inner_code_match.group(1).strip()
+            
+            # Find markers
+            start_marker = re.search(r'(#\s+\w+\s+code\s+start)', block_code).group(1)
+            end_marker = re.search(r'(#\s+\w+\s+code\s+end)', block_code).group(1)
+            try:
+                # Fix only the inner code
+                result = code_fixer(
+                    dataset_context=str(dataset_context),
+                    faulty_code=str(inner_code),
+                    error=str(specific_error),
+                )   
+                
+                # Reconstruct the block with fixed code
+                fixed_block = f"{start_marker}\n{result.fixed_code.strip()}\n{end_marker}"
+                
+                # Replace the original block with the fixed block
+                result_code = result_code.replace(block_code, fixed_block)
+                
+            except Exception:
+                # Skip if fixing fails
+                continue
+    
+    return result_code
 
 def get_dataset_context(df):
     """
@@ -61,7 +243,7 @@ def get_dataset_context(df):
         for col, dtype in col_types.items():
             null_count = null_counts.get(col, 0)
             null_percent = (null_count / len(df)) * 100 if len(df) > 0 else 0
-            context += f"  * {col} ({dtype}): {null_count} null values"
+            context += f"  * {col} ({dtype}): {null_count} null values\n"
         
         # Add sample values for each column (first 2 non-null values)
         context += "- Sample values:\n"
@@ -82,33 +264,12 @@ def edit_code_with_dspy(original_code: str, user_prompt: str, dataset_context: s
     with dspy.context(lm=gemini):
         code_editor = dspy.ChainOfThought(code_edit)
         
-        logger.log_message(f"Dataset context: {dataset_context}", level=logging.INFO)
-        logger.log_message(f"Original code: {original_code}", level=logging.INFO)
-        logger.log_message(f"User prompt: {user_prompt}", level=logging.INFO)
-        
         result = code_editor(
             dataset_context=dataset_context,
             original_code=original_code,
             user_prompt=user_prompt,
         )
         return result.edited_code
-
-def fix_code_with_dspy(code: str, error: str, dataset_context: str = ""):
-    gemini = dspy.LM("gemini/gemini-2.5-pro-preview-03-25", api_key = os.environ['GEMINI_API_KEY'], max_tokens=2000)
-    with dspy.context(lm=gemini):
-        code_fixer = dspy.ChainOfThought(code_fix)
-        logger.log_message(f"FIX Dataset context: {dataset_context}", level=logging.INFO)
-        logger.log_message(f"FIX Original code: {code}", level=logging.INFO)
-        logger.log_message(f"FIX Error: {error}", level=logging.INFO)
-        # Add dataset context information to help the agent understand the data
-        result = code_fixer(
-            dataset_context=dataset_context,
-            faulty_code=code,
-            error=error,
-        )
-        return result.fixed_code
-    
-import re
 
 def move_imports_to_top(code: str) -> str:
     """
@@ -223,7 +384,6 @@ async def edit_code(
                 dataset_context
             )
             edited_code = format_code_block(edited_code)
-                
             return {
                 "edited_code": edited_code,
             }
@@ -247,7 +407,7 @@ async def fix_code(
     session_id: str = Depends(get_session_id_dependency)
 ):
     """
-    Fix code with errors using the code_fix agent
+    Fix code with errors using block-by-block approach
     
     Args:
         request_data: Body containing code and error message
@@ -255,7 +415,7 @@ async def fix_code(
         session_id: Session identifier
         
     Returns:
-        Dictionary containing the fixed code
+        Dictionary containing the fixed code and information about fixed blocks
     """
     try:
         # Check if code and error are provided
@@ -276,6 +436,7 @@ async def fix_code(
                 request_data.error,
                 dataset_context
             )
+            
             fixed_code = format_code_block(fixed_code)
                 
             return {
@@ -317,13 +478,12 @@ async def clean_code(
         if not request_data.code:
             raise HTTPException(status_code=400, detail="Code is required")
 
-        # Clean the code
-        cleaned_code = move_imports_to_top(request_data.code)
+        # Clean the code using the format_code function
+        cleaned = format_code(request_data.code)
         
         return {
-            "cleaned_code": cleaned_code,
+            "cleaned_code": cleaned,
         }
     except Exception as e:
         logger.log_message(f"Error cleaning code: {str(e)}", level=logging.ERROR)
         raise HTTPException(status_code=500, detail=str(e))
-

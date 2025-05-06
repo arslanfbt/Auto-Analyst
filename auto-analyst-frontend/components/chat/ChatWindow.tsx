@@ -152,8 +152,9 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
         let combinedCode = "";
         for (let i = 0; i < blocks.length; i++) {
           // Add agent name header for all blocks, including the first one
-          combinedCode += `# ${agents[i]} code block\n\n`;
+          combinedCode += `# ${agents[i]} code start\n\n`;
           combinedCode += blocks[i];
+          combinedCode += `\n\n# ${agents[i]} code end\n\n`;
           
           // Add separator between blocks if not the last block
           if (i < blocks.length - 1) {
