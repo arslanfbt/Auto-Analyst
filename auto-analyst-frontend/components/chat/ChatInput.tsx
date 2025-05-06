@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef, forwardRef, useImperativeHandle } from "react"
 import { motion, AnimatePresence } from "framer-motion"
-import { Send, Paperclip, X, Square, Loader2, CheckCircle2, XCircle, Eye, CreditCard, Edit, FileText, MessageSquare } from 'lucide-react'
+import { Send, Paperclip, X, Square, Loader2, CheckCircle2, XCircle, Eye, CreditCard, Edit, FileText, MessageSquare, AlertTriangle } from 'lucide-react'
 import AgentHint from './AgentHint'
 import { Button } from "../ui/button"
 import { Textarea } from "../ui/textarea"
@@ -91,6 +91,10 @@ const ChatInput = forwardRef<
   const popupShownForChatIdsRef = useRef<Set<number>>(new Set());
   const [descriptionTab, setDescriptionTab] = useState<"edit" | "preview">("edit")
   const [showFeedbackPopup, setShowFeedbackPopup] = useState(false)
+  // Add state for error notification
+  const [errorNotification, setErrorNotification] = useState<{ message: string, details?: string } | null>(null);
+  // Add timeout ref to manage error notification cleanup
+  const errorTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Expose handlePreviewDefaultDataset to parent
   useImperativeHandle(ref, () => ({
@@ -376,6 +380,12 @@ const ChatInput = forwardRef<
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (file) {
+      // Clear any existing error notifications
+      setErrorNotification(null);
+      if (errorTimeoutRef.current) {
+        clearTimeout(errorTimeoutRef.current);
+      }
+      
       // Log file details for debugging
       console.log('Selected file:', {
         name: file.name,
@@ -395,10 +405,17 @@ const ChatInput = forwardRef<
           errorMessage: 'Please upload a CSV file only' 
         });
         
-        setTimeout(() => {
+        // Show error notification instead of just file error
+        setErrorNotification({
+          message: 'Invalid file format',
+          details: 'Please upload a CSV file only. Other file formats are not supported.'
+        });
+        
+        errorTimeoutRef.current = setTimeout(() => {
           setFileUpload(null);
           localStorage.removeItem('lastUploadedFile');
-        }, 3000);
+          setErrorNotification(null);
+        }, 5000);
         return;
       }
       
@@ -422,15 +439,28 @@ const ChatInput = forwardRef<
         const errorMessage = getErrorMessage(error)
         setFileUpload(prev => prev ? { ...prev, status: 'error', errorMessage } : null)
         
-        setTimeout(() => {
+        // Show detailed error notification
+        setErrorNotification({
+          message: 'File upload failed',
+          details: errorMessage
+        });
+        
+        errorTimeoutRef.current = setTimeout(() => {
           setFileUpload(null);
           localStorage.removeItem('lastUploadedFile');
-        }, 3000)
+          setErrorNotification(null);
+        }, 5000);
       }
     }
   }
 
   const handleFilePreview = async (file: File, isNewDataset = false) => {
+    // Clear any existing error notifications
+    setErrorNotification(null);
+    if (errorTimeoutRef.current) {
+      clearTimeout(errorTimeoutRef.current);
+    }
+    
     if (file.type === 'text/csv' || file.name.toLowerCase().endsWith('.csv')) {
       try {
         // Save the current description in case we need to restore it
@@ -543,26 +573,91 @@ const ChatInput = forwardRef<
             response: error.response?.data,
             status: error.response?.status
           });
+          
+          // Set error notification with detailed information
+          setErrorNotification({
+            message: 'File preview failed',
+            details: getErrorMessage(error)
+          });
+          
+          // Set file upload to error state
+          setFileUpload(prev => prev ? { 
+            ...prev, 
+            status: 'error', 
+            errorMessage: getErrorMessage(error)
+          } : null);
+          
+          errorTimeoutRef.current = setTimeout(() => {
+            setErrorNotification(null);
+          }, 5000);
+          
           throw error;
         }
       } catch (error) {
         console.error('Failed to preview file:', error);
-        alert(`Error uploading file: ${getErrorMessage(error)}`);
+        // Set error notification with detailed information
+        setErrorNotification({
+          message: 'File preview failed',
+          details: getErrorMessage(error)
+        });
+        
+        // Set file upload to error state
+        setFileUpload(prev => prev ? { 
+          ...prev, 
+          status: 'error', 
+          errorMessage: getErrorMessage(error) 
+        } : null);
+        
+        errorTimeoutRef.current = setTimeout(() => {
+          setErrorNotification(null);
+        }, 5000);
       }
     } else {
       console.log('Not a CSV file');
-      alert('Please upload a CSV file');
+      // Set error notification with detailed information
+      setErrorNotification({
+        message: 'Invalid file format',
+        details: 'Please upload a CSV file. Other file formats are not supported.'
+      });
+      
+      // Set file upload to error state
+      setFileUpload(prev => prev ? { 
+        ...prev, 
+        status: 'error', 
+        errorMessage: 'Please upload a CSV file only' 
+      } : null);
+      
+      errorTimeoutRef.current = setTimeout(() => {
+        setErrorNotification(null);
+      }, 5000);
     }
   }
 
   const getErrorMessage = (error: any): string => {
     if (axios.isAxiosError(error)) {
-      if (error.response?.status === 413) return "File too large"
-      if (error.response?.status === 415) return "Invalid file type"
-      if (error.response?.data?.message) return error.response.data.message
+      // Detailed Axios error handling
+      if (error.response?.status === 413) return "File too large. Please upload a smaller file."
+      if (error.response?.status === 415) return "Invalid file type. Please upload a CSV file."
+      if (error.response?.status === 400 && error.response?.data?.detail) {
+        // Extract and format detailed validation errors
+        const detail = error.response.data.detail;
+        if (typeof detail === 'string') return detail;
+        if (Array.isArray(detail)) {
+          return detail.map(err => err.msg || err.message || String(err)).join('. ');
+        }
+        if (typeof detail === 'object') {
+          return Object.entries(detail)
+            .map(([key, value]) => `${key}: ${value}`)
+            .join('. ');
+        }
+        return JSON.stringify(detail);
+      }
+      if (error.response?.data?.message) return error.response.data.message;
+      if (error.response?.data?.error) return error.response.data.error;
+      if (error.message) return error.message;
     }
-    if (error instanceof Error) return error.message
-    return "Upload failed"
+    if (error instanceof Error) return error.message;
+    return "Upload failed. Please try again.";
   }
 
   const clearFile = () => {
@@ -838,11 +933,25 @@ const ChatInput = forwardRef<
 
   const handleUploadWithDescription = async () => {
     if (!datasetDescription.name || !datasetDescription.description) {
-      alert('Please provide both a name and description for the dataset');
+      // Use error notification instead of alert
+      setErrorNotification({
+        message: 'Missing information',
+        details: 'Please provide both a name and description for the dataset'
+      });
+      
+      errorTimeoutRef.current = setTimeout(() => {
+        setErrorNotification(null);
+      }, 5000);
       return;
     }
 
     try {
+      // Clear any existing error notifications
+      setErrorNotification(null);
+      if (errorTimeoutRef.current) {
+        clearTimeout(errorTimeoutRef.current);
+      }
+      
       // Log the description we're about to use
       console.log('Using dataset description for upload:', datasetDescription.description);
       
@@ -986,14 +1095,26 @@ const ChatInput = forwardRef<
       setShowPreview(false);
       setUploadSuccess(true);
       if (actualFile) {
+        // Create a new File object with the updated name but preserve other properties
+        // Add .csv extension if not present in the new name
+        const updatedFileName = datasetDescription.name.endsWith('.csv') 
+          ? datasetDescription.name 
+          : `${datasetDescription.name}.csv`;
+          
+        const updatedFile = new File(
+          [actualFile], 
+          updatedFileName,
+          { type: actualFile.type, lastModified: actualFile.lastModified }
+        );
+        
         setFileUpload({
-          file: actualFile,
+          file: updatedFile,
           status: 'success'
         });
       
         // Save to localStorage after successful upload to persist across refreshes
         localStorage.setItem('lastUploadedFile', JSON.stringify({
-          name: actualFile.name,
+          name: updatedFileName,
           type: actualFile.type,
           lastModified: actualFile.lastModified
         }));
@@ -1202,6 +1323,34 @@ const ChatInput = forwardRef<
             </div>
           ) : (
             <>
+              {/* Error Notification */}
+              <AnimatePresence>
+                {errorNotification && (
+                  <motion.div 
+                    initial={{ opacity: 0, y: -10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -10 }}
+                    className="max-w-3xl mx-auto mb-2"
+                  >
+                    <div className="bg-red-50 border border-red-200 rounded-md p-3 flex items-start gap-3">
+                      <AlertTriangle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
+                      <div className="flex-1">
+                        <h4 className="text-sm font-medium text-red-800">{errorNotification.message}</h4>
+                        {errorNotification.details && (
+                          <p className="text-xs text-red-700 mt-1">{errorNotification.details}</p>
+                        )}
+                      </div>
+                      <button 
+                        onClick={() => setErrorNotification(null)}
+                        className="text-red-400 hover:text-red-600 transition-colors"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
               {uploadSuccess && (
                 <div className="max-w-3xl mx-auto mb-2">
                   <div className="bg-green-50 border border-green-200 rounded-md p-3 flex items-center gap-2">

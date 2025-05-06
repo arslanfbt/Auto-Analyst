@@ -505,6 +505,7 @@ const ChatInterface: React.FC = () => {
     let accumulatedResponse = ""
     const baseUrl = API_URL
     const endpoint = `${baseUrl}/chat`
+    let lastAgentName = "AI" // Track the last agent name
 
     const headers = {
       'Content-Type': 'application/json',
@@ -561,13 +562,31 @@ const ChatInterface: React.FC = () => {
           if (error) {
             accumulatedResponse += `\nError: ${error}`
           } else {
-            accumulatedResponse += `\n${content}`
+            // Add agent info to content with code blocks
+            const codeBlockRegex = /```([a-zA-Z0-9_]+)?\n([\s\S]*?)```/g;
+            if (content.match(codeBlockRegex)) {
+              // Content contains code blocks, add agent information as a comment before each block
+              let modifiedContent = content.replace(codeBlockRegex, (match: string, language: string, code: string) => {
+                // Add agent information as a markdown comment above each code block
+                return `\n<!-- AGENT: ${agent || 'AI'} -->\n${match}`;
+              });
+              accumulatedResponse += `\n${modifiedContent}`
+            } else {
+              // Regular content without code block
+              accumulatedResponse += `\n${content}`
+            }
           }
           
-          // Update the existing message with accumulated content
+          // Store the most recent agent name
+          if (agent) {
+            lastAgentName = agent
+          }
+          
+          // Update the existing message with accumulated content and agent name
           updateMessage(messageId, {
             text: accumulatedResponse.trim(),
-            sender: "ai"
+            sender: "ai",
+            agent: agent // Include the agent name from the response
           })
         } catch (e) {
           console.error('Error parsing chunk:', e)
@@ -585,7 +604,8 @@ const ChatInterface: React.FC = () => {
           try {
             const response = await axios.post(`${API_URL}/chats/${currentId}/messages`, {
               content: accumulatedResponse.trim(),
-              sender: 'ai'
+              sender: 'ai',
+              agent: lastAgentName // Use the tracked agent name
             }, {
               params: { user_id: userId, is_admin: isAdmin },
               headers: { 'X-Session-ID': sessionId }
@@ -671,7 +691,8 @@ const ChatInterface: React.FC = () => {
         console.log("Saving agent response for chat ID:", currentId);
         await axios.post(`${API_URL}/chats/${currentId}/messages`, {
           content: accumulatedResponse.trim(),
-          sender: 'ai'
+          sender: 'ai',
+          agent: agentName
         }, {
           params: { user_id: userId, is_admin: isAdmin },
           headers: { 'X-Session-ID': sessionId }

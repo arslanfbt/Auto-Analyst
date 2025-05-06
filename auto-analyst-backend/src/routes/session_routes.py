@@ -1,5 +1,6 @@
 import io
 import logging
+import json
 import os
 from io import StringIO
 from typing import Optional
@@ -14,6 +15,7 @@ from src.schemas.model_settings import ModelSettings
 from src.utils.logger import Logger
 from src.agents.agents import dataset_description_agent
 import dspy
+
 
 logger = Logger("session_routes", see_time=False, console_log=False)
 
@@ -270,7 +272,7 @@ async def preview_csv(app_state = Depends(get_app_state), session_id: str = Depe
         # Get rows and convert to dict
         preview_data = {
             "headers": df.columns.tolist(),
-            "rows": df.head(5).values.tolist(),  # Limit to first 5 rows for performance
+            "rows": json.loads(df.head(5).to_json(orient="values")),
             "name": name,
             "description": description
         }
