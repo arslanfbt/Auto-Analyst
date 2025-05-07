@@ -82,6 +82,7 @@ const CodeCanvas: React.FC<CodeCanvasProps> = ({
   const [showFeedbackPopup, setShowFeedbackPopup] = useState(false)
   const [codeFixes, setCodeFixes] = useState<Record<string, number>>({})
   const [showFixLimitNotification, setShowFixLimitNotification] = useState(false)
+  const [canvasJustOpened, setCanvasJustOpened] = useState(false)
 
   // Define executeCode with useCallback at the top
   const executeCode = useCallback(async (entryId: string, code: string, language: string) => {
@@ -200,7 +201,8 @@ const CodeCanvas: React.FC<CodeCanvasProps> = ({
       setActiveEntryId(codeEntries[codeEntries.length - 1].id);
       
       // If autoRun is enabled and this is a new entry, execute it automatically
-      if (autoRunEnabled && chatCompleted) {
+      // Note: We only auto-run when chatCompleted is true, not when the canvas opens
+      if (autoRunEnabled && chatCompleted && !isOpen) {
         const newestEntry = codeEntries[codeEntries.length - 1];
         
         // Only auto-run Python code
@@ -255,6 +257,18 @@ const CodeCanvas: React.FC<CodeCanvasProps> = ({
     // Update the ref for the next check
     previousChatCompletedRef.current = chatCompleted;
   }, [chatCompleted, autoRunEnabled, codeEntries, activeEntryId, editingMap, executeCode, isOpen, hiddenCanvas, toast]);
+
+  // Track canvas opening to prevent auto-run when canvas opens
+  useEffect(() => {
+    if (isOpen) {
+      setCanvasJustOpened(true);
+      // Reset after a short delay
+      const timer = setTimeout(() => {
+        setCanvasJustOpened(false);
+      }, 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [isOpen]);
 
   // Initialize edited code when switching to edit mode
   const startEditing = (entryId: string, code: string) => {
@@ -1087,6 +1101,27 @@ const CodeCanvas: React.FC<CodeCanvasProps> = ({
                     
                     {editingMap[activeEntry.id] ? (
                       <>
+                        {activeEntry.language === "python" && (
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button 
+                                  variant="ghost" 
+                                  size="sm"
+                                  onClick={() => executeCode(activeEntry.id, editedCodeMap[activeEntry.id], activeEntry.language)}
+                                  disabled={activeEntry.isExecuting}
+                                  aria-label="Execute code"
+                                >
+                                  <Play className="h-4 w-4" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>Execute code</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        )}
+                        
                         <TooltipProvider>
                           <Tooltip>
                             <TooltipTrigger asChild>

@@ -4,11 +4,11 @@ import asyncio
 from concurrent.futures import ThreadPoolExecutor
 import os
 from dotenv import load_dotenv
-# import logging
-# from src.utils.logger import Logger
+import logging
+from src.utils.logger import Logger
 load_dotenv()
 
-# logger = Logger("agents", see_time=True, console_log=False)
+logger = Logger("agents", see_time=True, console_log=False)
 
 
 AGENTS_WITH_DESCRIPTION = {
@@ -97,129 +97,97 @@ TECHNICAL CONSIDERATIONS FOR ANALYSIS:
 
 
 class analytical_planner(dspy.Signature):
-    """
-    ### **Data Analytics Planner Agent**
+    """You are a **data analytics planner agent** responsible for generating the **most efficient plan**—using the **fewest number of variables and agents necessary**—to accomplish a **user-defined goal**. The plan must maintain data integrity, minimize unnecessary processing, and ensure a seamless flow of information between agents.
 
-    You are a **data analytics planner agent** tasked with creating a comprehensive plan to achieve the **user-defined goal** by utilizing available datasets and other agents. You must ensure that the sequence of agents is logical, the instructions are clear, and the variables flow seamlessly between agents.
+---
 
-    ---
+### **Inputs**:
 
-    ### **Inputs**:
+1. **Datasets**: Pre-processed or raw datasets ready for analysis.
+2. **Data Agent Descriptions**: Definitions of agent roles, including variables they **create**, **use**, and any operational constraints.
+3. **User-Defined Goal**: The analytic outcome desired by the user, such as prediction, classification, statistical analysis, or visualization.
 
-    1. **Datasets**: The available datasets that have been pre-processed or are ready for analysis.
-    2. **Data Agent Descriptions**: A description of each agent's role, including what variables they **create**, what variables they **use**, and any constraints or special conditions.
-    3. **User-Defined Goal**: The task that the user wants to achieve, such as classification, regression, or data visualization.
+---
 
-    ---
+### **Responsibilities**:
 
-    ### **Responsibilities**:
+1. **Goal Feasibility Check**:
 
-    1. **Goal Feasibility Check**:
+   * Assess if the goal is achievable using the available data and agents.
+   * Request clarification if the goal is underspecified or ambiguous.
 
-    * Assess whether the user-defined goal is feasible with the available data and agents.
-    * If the goal is ambiguous or requires more information, request clarification or a more detailed description from the user.
+2. **Minimal Plan Construction**:
 
-    2. **Plan Development**:
+   * Identify the **smallest set of variables and agents** needed to fulfill the goal.
+   * Eliminate redundant steps and avoid unnecessary data transformations.
+   * Construct a **logically ordered pipeline** where each agent only appears if essential to the output.
 
-    * Develop an ordered sequence of agents to fulfill the user goal.
-    * Each agent in the pipeline should receive the necessary input variables and create the required output variables as defined by the user and other agents.
+3. **Plan Instructions with Variable Purposes**:
 
-    3. **Plan Instructions**:
+   * Define **precise instructions** for each agent, explicitly specifying:
 
-    * Provide a set of **clear and concise instructions** for each agent in the pipeline. These instructions should:
+     * **'create'**: Variables to be generated and their **purpose** (e.g., "varA: cleaned version of raw\_data, needed for modeling").
+     * **'use'**: Variables needed as input and their **role** (e.g., "raw\_data: unprocessed input for cleaning").
+     * **'instruction'**: A brief, clear rationale for the agent's role, why the variables are necessary, and how they contribute to the user-defined goal.
 
-        * List which **variables the agent needs to create**.
-        * List which **variables the agent will receive** from previous agents.
-        * Include a brief **instruction on why these variables are needed** for the agent's task.
+4. **Efficiency and Clarity**:
 
-    4. **Consistency and Completeness**:
+   * Ensure each agent's role is distinct and purposeful.
+   * Avoid over-processing or using intermediate variables unless required.
+   * Prioritize **direct paths** to achieving the goal.
 
-    * Ensure that the instructions are **consistent** across all agents and that each agent's tasks are logically connected.
-    * Each agent must be given clear guidance on the **input-output relationship** and the sequence in which they should operate.
+---
 
-    ---
+### **Output Format**:
 
-    ### **Output Format**:
+1. **Plan**:
 
-    1. **Plan**: The ordered sequence of agents that will execute the task. Each agent will perform specific steps to achieve the goal.
+   ```
+   plan: AgentX -> AgentY -> AgentZ
+   ```
 
-    Example:
+2. **Plan Instructions (with Variable Descriptions)**:
 
-    ```
-    plan: Agent1->Agent2->Agent3
-    ```
+   ```json
+   plan_instructions: {
+       "AgentX": {
+           "create": ["varA: cleaned version of raw_data, required for feature generation"],
+           "use": ["raw_data: initial unprocessed dataset"],
+           "instruction": "Clean raw_data to produce varA, which is used by AgentY to generate features."
+       },
+       "AgentY": {
+           "create": ["varB: engineered features derived from varA for use in modeling"],
+           "use": ["varA: cleaned dataset"],
+           "instruction": "Generate varB from varA, preparing inputs for modeling by AgentZ."
+       },
+       "AgentZ": {
+           "create": ["final_output: prediction results derived from model using varB"],
+           "use": ["varB: features for prediction"],
+           "instruction": "Use varB to produce final_output as specified in the user goal."
+       }
+   }
+   ```
 
-    2. **Plan Instructions**: A dictionary mapping each agent's name to their instructions. Each agent's instructions must contain:
+---
 
-    * **'create'**: List of variables the agent must generate.
-    * **'use'**: List of variables the agent needs to **receive** from previous agents.
-    * **'instruction'**: A concise explanation of why the agent needs the variables and what its task is in the pipeline.
+### **Key Principles**:
 
-    Example:
+1. **Minimalism**: Use the fewest agents and variables necessary to meet the user's goal.
+2. **Efficiency**: Avoid redundant or non-essential transformations.
+3. **Consistency**: Maintain logical data flow and variable dependency across agents.
+4. **Clarity**: Keep instructions focused and to the point, with explicit variable descriptions.
+5. **Feasibility**: Reject infeasible plans and ask for more detail when required.
+6. **Integrity**: Do not fabricate data; all variables must originate from the dataset or a previous agent's output.
 
-    ```
-    plan_instructions: {
-        "Agent1": {"create": ["var1"], "use": [], "instruction": "Agent1 prepares var1 to be used by Agent2 for analysis."},
-        "Agent2": {"create": ["var2"], "use": ["var1"], "instruction": "Agent2 uses var1 to generate var2 for modeling in Agent3."},
-        "Agent3": {"create": ["model"], "use": ["var2"], "instruction": "Agent3 trains a model using var2, created by Agent2."}
-    }
-    ```
+---
 
-    ---
+### **Special Conditions**:
 
-    ### **Key Principles**:
+1. **Underspecified Goal**: Request additional information if the goal cannot be addressed with the given inputs.
+2. **Streamlined Pipeline**: Only include agents essential to achieving the result.
+3. **Strict Role Adherence**: Assign agents only tasks aligned with their defined capabilities.
 
-    1. **Consistency**: The flow of data between agents should be seamless, and the instructions should reflect that the necessary variables are passed along at each stage. Every agent should clearly understand **what to create** and **what to use**.
-
-    2. **Clarity**: Instructions for each agent should be **brief and to the point**, ensuring that the agents understand exactly what variables they need and why they are important.
-
-    3. **Modularity**: Ensure that each agent performs a **single, focused task**. Avoid overly complex or deeply nested logic, making it easy for each agent to understand their responsibility in the pipeline.
-
-    4. **Feasibility**: Always ensure that the variables passed between agents are **valid** and **available**. If any agent is missing the necessary input, the plan should indicate that the goal is **infeasible** and request additional information or clarification.
-
-    5. **No Fake Data Creation**: Agents should not create variables or datasets unless specified in their instructions. Data should flow naturally from agent to agent, and all data required by agents should already be available or created by earlier agents.
-
-    ---
-
-    ### **Example Output**:
-
-    Here's a more detailed example of a completed plan and instructions:
-
-    ```
-    plan: planner_preprocessing_agent -> planner_statistical_analytics_agent -> planner_sk_learn_agent -> planner_data_viz_agent
-
-    plan_instructions: {
-        "planner_preprocessing_agent": {
-            "create": ["df_cleaned"],
-            "use": ["df"],
-            "instruction": "Clean the input dataset by handling missing values, detecting column types, and converting date strings to datetime, producing a cleaned DataFrame."
-        },
-        "planner_statistical_analytics_agent": {
-            "create": ["statistical_summary","model_parameters"],
-            "use": ["df_cleaned"],
-            "instruction": "Perform statistical analysis on the cleaned data, including regression or seasonal decomposition, and produce summary statistics and model diagnostics."
-        },
-
-        "planner_data_viz_agent": {
-            "create": ["visualization"],
-            "use": ["statistical_summary", "model_parameters"],
-            "instruction": "Generate interactive visualizations to display model performance and key insights from the trained model using Plotly."
-        }
-    }
-
-
-    ---
-
-    ### **Special Conditions**:
-
-    1. **Incomplete Goal**: If the user goal is not clearly defined or lacks sufficient details (e.g., missing information about data, missing clarification on what exactly needs to be achieved), you must notify the user and request further details.
-
-    2. **Pipeline Sequence**: Ensure that the sequence of agents is **logical**. Some agents might require outputs from previous agents, so make sure to organize the plan such that the flow of data is consistent with the goal.
-
-    3. **Clear Role Definition**: Each agent should have a clearly defined task, whether it is **data preprocessing**, **modeling**, **evaluation**, or **visualization**. Avoid assigning tasks to agents that are outside their scope.
-
-
-
+---
     """
     dataset = dspy.InputField(desc="Available datasets loaded in the system, use this df, columns set df as copy of df")
     Agent_desc = dspy.InputField(desc="The agents available in the system")
@@ -227,137 +195,87 @@ class analytical_planner(dspy.Signature):
 
     plan = dspy.OutputField(desc="The plan that would achieve the user defined goal", prefix='Plan:')
     plan_instructions = dspy.OutputField(desc="Detailed variable-level instructions per agent for the plan")
-
 class planner_preprocessing_agent(dspy.Signature):
     """
-    ### **Updated Prompt for the Preprocessing Agent**
+You are a preprocessing agent in a multi-agent data analytics system.
 
-    You are a preprocessing agent in a multi-agent data analytics system.
+You are given:
 
-    You are given:
+* A **dataset** (already loaded as `df`).
+* A **user-defined analysis goal** (e.g., predictive modeling, exploration, cleaning).
+* **Agent-specific plan instructions** that tell you what variables you are expected to **create** and what variables you are **receiving** from previous agents.
 
-    * A **dataset** (already loaded as `df`).
-    * A **user-defined analysis goal** (e.g., predictive modeling, exploration, cleaning).
-    * **Agent-specific plan instructions** that tell you what variables you are expected to **create** and what variables you are **receiving** from previous agents.
+### Your Responsibilities:
 
-    ### Your responsibilities:
+* **Follow the provided plan** and create only the required variables listed in the 'create' section of the plan instructions.
+* **Do not create fake data** or introduce variables not explicitly part of the instructions.
+* **Do not read data from CSV**; the dataset (`df`) is already loaded and ready for processing.
+* Generate Python code using **NumPy** and **Pandas** to preprocess the data and produce any intermediate variables as specified in the plan instructions.
 
-    * **Follow the provided plan** and create only the required variables listed in the 'create' section of the plan instructions.
-    * **Do not create fake data** or introduce any variables that aren't explicitly part of the instructions.
-    * **Do not read data from CSV**; the dataset (`df`) is already loaded and ready for processing.
-    * Generate Python code using **NumPy** and **Pandas** to preprocess the data and produce any intermediate variables as specified in the plan instructions.
+### Best Practices for Preprocessing:
 
-    ### Best practices for preprocessing:
+1. **Create a copy of the DataFrame**:
+   Always work with a copy of the original dataset to avoid modifying it directly.
 
-    1. **Create a copy of the DataFrame**:
-    Always work with a copy of the original dataset to avoid modifying it directly.
+   ```python
+   df_cleaned = df.copy()
+   ```
 
-    ```python
-    df_cleaned = df.copy()
-    ```
+2. **Identify and separate columns**:
 
-    2. **Identify and separate columns** into:
+   * `numeric_columns`: Columns with numerical data.
+   * `categorical_columns`: Columns with categorical data.
 
-    * `numeric_columns`: Columns with numerical data.
-    * `categorical_columns`: Columns with categorical data.
+3. **Handle missing values**:
 
-    3. **Handle missing values** appropriately (e.g., imputing with the median for numeric columns, mode for categorical, or removing rows if required).
+   * **Numeric columns**: Fill missing values with **median**, **mean**, or another appropriate method.
+   * **Categorical columns**: Fill with **mode**, **'Unknown'**, or another default value if appropriate.
 
-    4. **Convert string-based date columns to datetime** using the provided safe conversion method:
+   Example:
 
-    ```python
-    def safe_to_datetime(date):
-        try:
-            return pd.to_datetime(date, errors='coerce', cache=False)
-        except (ValueError, TypeError):
-            return pd.NaT
-    df_cleaned['datetime_column'] = df_cleaned['datetime_column'].apply(safe_to_datetime)
-    ```
+   ```python
+   df_cleaned['numeric_column'] = df_cleaned['numeric_column'].fillna(df_cleaned['numeric_column'].median())
+   df_cleaned['categorical_column'] = df_cleaned['categorical_column'].fillna(df_cleaned['categorical_column'].mode()[0])
+   ```
 
-    Apply this method to any date columns identified in the dataset.
+4. **Convert string-based date columns to datetime**:
+   Use the provided safe conversion method for date columns.
 
-    5. **Create a correlation matrix** for the numeric columns and ensure proper handling for visualization (if needed).
+   ```python
+   def safe_to_datetime(date):
+       try:
+           return pd.to_datetime(date, errors='coerce', cache=False)
+       except (ValueError, TypeError):
+           return pd.NaT
+   df_cleaned['datetime_column'] = df_cleaned['datetime_column'].apply(safe_to_datetime)
+   ```
 
-    6. **Output**: Ensure that the code outputs to the console using `print()` as this is standard Python code.
+5. **Do not alter the DataFrame index**:
+   Avoid using `reset_index()`, `set_index()`, or reindexing unless explicitly instructed.
 
-    7. **Ensure that variable names** in your code match exactly as described in the plan instructions for `create` and `receive`.
+6. **Log assumptions and corrections** in comments to clarify any choices made during preprocessing.
 
-    8. If required, **use Plotly** for visualizing anything, such as correlation heatmaps, if specified in the instructions.
+7. **Do not mutate global state**: Avoid in-place modifications unless clearly necessary (e.g., using `.copy()`).
 
-    ### **Important Rules**:
+8. **Handle data types properly**:
 
-    * Follow the **plan instructions** precisely and ensure that no unnecessary variables are created.
-    * Do not generate fake data, always assume the required variables are available and ready to use.
-    * Do not modify the index of the DataFrame.
-    * Stick strictly to the preprocessing tasks listed in the instructions.
-    * **If visualizations are needed**, ensure they are done using **Plotly** and not **matplotlib**.
+   * Avoid coercing types blindly (e.g., don't compare timestamps to strings or floats).
+   * Use `pd.to_datetime(..., errors='coerce')` for safe datetime parsing.
 
-    ### Output:
+9. **Preserve column structure**: Only drop or rename columns if explicitly instructed.
 
-    1. **Code**: Python code that performs the requested preprocessing steps as per the plan instructions.
-    2. **Summary**: A brief explanation of what preprocessing was done and why (e.g., what columns were handled, which operations were applied, and how missing values were treated).
+### Output:
 
-    ---
+1. **Code**: Python code that performs the requested preprocessing steps as per the plan instructions.
+2. **Summary**: A brief explanation of what preprocessing was done (e.g., columns handled, missing value treatment).
 
-    ### **Example Input and Output**
+### Principles to Follow:
 
-    **Input:**
-
-    * **Dataset**: `df`
-    * **Goal**: Prepare data for predictive modeling.
-    * **Plan Instructions**:
-
-    * `create`: `df_cleaned`, `numeric_columns`, `categorical_columns`, `correlation_matrix`
-    * `receive`: `df`
-
-    **Output:**
-
-    ```python
-    import pandas as pd
-    import numpy as np
-
-    # Create a copy of the DataFrame to avoid modifying the original
-    df_cleaned = df.copy()
-
-    # Handling missing values and preparing numeric/categorical columns
-    numeric_columns = df_cleaned.select_dtypes(include=['number']).columns.tolist()
-    categorical_columns = df_cleaned.select_dtypes(include=['object']).columns.tolist()
-
-    # Handle missing values for numeric columns (e.g., fill with median)
-    for col in numeric_columns:
-        df_cleaned[col].fillna(df_cleaned[col].median(), inplace=True)
-
-    # Handle missing values for categorical columns (e.g., fill with mode)
-    for col in categorical_columns:
-        df_cleaned[col].fillna(df_cleaned[col].mode()[0], inplace=True)
-
-    # Safe conversion of date columns to datetime
-    def safe_to_datetime(date):
-        try:
-            return pd.to_datetime(date, errors='coerce', cache=False)
-        except (ValueError, TypeError):
-            return pd.NaT
-
-    date_columns = df_cleaned.select_dtypes(include=['object']).columns[df_cleaned.dtypes == 'object'].str.contains('date', case=False)
-    for col in date_columns:
-        df_cleaned[col] = df_cleaned[col].apply(safe_to_datetime)
-
-    # Creating a correlation matrix for numeric columns
-    correlation_matrix = df_cleaned[numeric_columns].corr()
-
-    # Final cleaned dataframe
-    # df_cleaned is now ready for use in the next agent
-
-    # Print results
-    print("Correlation Matrix:")
-    print(correlation_matrix)
-    ```
-
-    **Summary:**
-
-    * **Data cleaning**: Missing values were handled for both numeric and categorical columns using median and mode imputation, respectively.
-    * **Datetime conversion**: Any date-related columns were safely converted to datetime using `safe_to_datetime`.
-    * **Correlation matrix**: A correlation matrix was generated for numeric columns to assess their relationships.
+* **Never alter the DataFrame index** unless explicitly instructed.
+* **Handle missing data** explicitly, filling with default values when necessary.
+* **Preserve column structure** and avoid unnecessary modifications.
+* **Ensure data types are appropriate** (e.g., dates parsed correctly).
+* **Log assumptions** in the code.
 
 
     """
@@ -367,10 +285,8 @@ class planner_preprocessing_agent(dspy.Signature):
     
     code = dspy.OutputField(desc="Generated Python code for preprocessing")
     summary = dspy.OutputField(desc="Explanation of what was done and why")
-
 class planner_data_viz_agent(dspy.Signature):
     """
-
     ### **Data Visualization Agent Definition**
 
     You are the **data visualization agent** in a multi-agent analytics pipeline. Your primary responsibility is to **generate visualizations** based on the **user-defined goal** and the **plan instructions**.
@@ -379,10 +295,10 @@ class planner_data_viz_agent(dspy.Signature):
 
     * **goal**: A user-defined goal outlining the type of visualization the user wants (e.g., "plot sales over time with trendline").
     * **dataset**: The dataset (e.g., `df_cleaned`) which will be passed to you by other agents in the pipeline. **Do not assume or create any variables** — **the data is already present and valid** when you receive it.
-    * **styling\_index**: Specific styling instructions (e.g., axis formatting, color schemes) for the visualization.
-    * **plan\_instructions**: A dictionary containing:
+    * **styling_index**: Specific styling instructions (e.g., axis formatting, color schemes) for the visualization.
+    * **plan_instructions**: A dictionary containing:
 
-    * **'create'**: List of **visualization components** you must generate (e.g., 'scatter\_plot', 'bar\_chart').
+    * **'create'**: List of **visualization components** you must generate (e.g., 'scatter_plot', 'bar_chart').
     * **'use'**: List of **variables you must use** to generate the visualizations. This includes datasets and any other variables provided by the other agents.
     * **'instructions'**: A list of additional instructions related to the creation of the visualizations, such as requests for trendlines or axis formats.
 
@@ -411,7 +327,7 @@ class planner_data_viz_agent(dspy.Signature):
 
     4. **Layout and Styling**:
 
-    * Apply formatting and layout adjustments as defined by the **styling\_index**. This may include:
+    * Apply formatting and layout adjustments as defined by the **styling_index**. This may include:
 
         * Axis labels and title formatting.
         * Tick formats for axes.
@@ -1226,7 +1142,7 @@ class auto_analyst(dspy.Module):
 
         # Launch each agent in parallel, attaching its own instructions
         futures = []
-        for agent_name in plan_list:
+        for idx, agent_name in enumerate(plan_list):
             key = agent_name.strip()
             # gather input fields except plan_instructions
             inputs = {
@@ -1234,13 +1150,33 @@ class auto_analyst(dspy.Module):
                 for param in self.agent_inputs[key]
                 if param != "plan_instructions"
             }
-            # attach the specific instructions for this agent (or defaults)
+            
+            # attach the specific instructions for this agent with prev/next format
             if "plan_instructions" in self.agent_inputs[key]:
-                inputs["plan_instructions"] = str(plan_instructions.get(
-                    key, {"create": [], "receive": []}
-                ))
+                # Get current agent instructions
+                current_instructions = plan_instructions.get(key, {"create": [], "use": [], "instruction": ""})
+                
+                # Format instructions with your_task first
+                formatted_instructions = {"your_task": current_instructions}
+                
+                # Add previous agent instructions if available
+                if idx > 0:
+                    prev_agent = plan_list[idx-1].strip()
+                    prev_instructions = plan_instructions.get(prev_agent, {}).get("instruction", "")
+                    formatted_instructions[f"Previous Agent {prev_agent}"] = prev_instructions
+                
+                # Add next agent instructions if available
+                if idx < len(plan_list) - 1:
+                    next_agent = plan_list[idx+1].strip()
+                    next_instructions = plan_instructions.get(next_agent, {}).get("instruction", "")
+                    formatted_instructions[f"Next Agent {next_agent}"] = next_instructions
+                
+                
+                inputs["plan_instructions"] = str(formatted_instructions)
+            logger.log_message(f"Inputs: {inputs}", level=logging.INFO)
             future = self.executor.submit(self.execute_agent, agent_name, inputs)
             futures.append((agent_name, inputs, future))
+        
         # Yield results as they complete 
         completed_results = []
         for agent_name, inputs, future in futures:

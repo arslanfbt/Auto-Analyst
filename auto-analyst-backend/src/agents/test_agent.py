@@ -4,8 +4,12 @@ import asyncio
 from concurrent.futures import ThreadPoolExecutor
 import os
 from dotenv import load_dotenv
-
+# import logging
+from src.utils.logger import Logger
 load_dotenv()
+
+logger = Logger("agents", see_time=True, console_log=False)
+
 
 AGENTS_WITH_DESCRIPTION = {
     "preprocessing_agent": "Cleans and prepares a DataFrame using Pandas and NumPy—handles missing values, detects column types, and converts date strings to datetime.",
@@ -92,34 +96,100 @@ TECHNICAL CONSIDERATIONS FOR ANALYSIS:
     description = dspy.OutputField(desc="A comprehensive dataset description with business context and technical guidance for analysis agents.")
 
 
-
 class analytical_planner(dspy.Signature):
-    """
-    You are a data analytics planner agent. You have access to three inputs:
-    1. Datasets
-    2. Data Agent descriptions
-    3. User-defined Goal
+    """You are a **data analytics planner agent** responsible for generating the **most efficient plan**—using the **fewest number of variables and agents necessary**—to accomplish a **user-defined goal**. The plan must maintain data integrity, minimize unnecessary processing, and ensure a seamless flow of information between agents.
 
-    You take these three inputs to develop a comprehensive plan to achieve the user-defined goal from the data & Agents available.
+---
 
-    In case you think the user-defined goal is infeasible, you can ask the user to redefine or add more description to the goal.
+### **Inputs**:
 
-    Your output includes:
-    - Plan: The ordered sequence of agents (e.g., Agent1->Agent2->Agent3)
-    - Plan Description: Explanation of why each agent is used in that sequence
-    - Plan Instructions: A dictionary with keys as agent names and values as dictionaries specifying:
-        - 'create': variables this agent should generate
-        - 'receive': variables this agent should get from previous agents
+1. **Datasets**: Pre-processed or raw datasets ready for analysis.
+2. **Data Agent Descriptions**: Definitions of agent roles, including variables they **create**, **use**, and any operational constraints.
+3. **User-Defined Goal**: The analytic outcome desired by the user, such as prediction, classification, statistical analysis, or visualization.
 
-    Format:
-    plan: Agent1->Agent2->Agent3
-   
-    plan_instructions: {
-        "Agent1": {"create": ["var1"], "receive": []},
-        "Agent2": {"create": ["var2"], "receive": ["var1"]},
-        ...
-    }
-    plan_desc: Use Agent1 for this reason, then Agent2 for this reason, and finally Agent3 for this reason.
+---
+
+### **Responsibilities**:
+
+1. **Goal Feasibility Check**:
+
+   * Assess if the goal is achievable using the available data and agents.
+   * Request clarification if the goal is underspecified or ambiguous.
+
+2. **Minimal Plan Construction**:
+
+   * Identify the **smallest set of variables and agents** needed to fulfill the goal.
+   * Eliminate redundant steps and avoid unnecessary data transformations.
+   * Construct a **logically ordered pipeline** where each agent only appears if essential to the output.
+
+3. **Plan Instructions with Variable Purposes**:
+
+   * Define **precise instructions** for each agent, explicitly specifying:
+
+     * **'create'**: Variables to be generated and their **purpose** (e.g., "varA: cleaned version of raw\_data, needed for modeling").
+     * **'use'**: Variables needed as input and their **role** (e.g., "raw\_data: unprocessed input for cleaning").
+     * **'instruction'**: A brief, clear rationale for the agent's role, why the variables are necessary, and how they contribute to the user-defined goal.
+
+4. **Efficiency and Clarity**:
+
+   * Ensure each agent's role is distinct and purposeful.
+   * Avoid over-processing or using intermediate variables unless required.
+   * Prioritize **direct paths** to achieving the goal.
+
+---
+
+### **Output Format**:
+
+1. **Plan**:
+
+   ```
+   plan: AgentX -> AgentY -> AgentZ
+   ```
+
+2. **Plan Instructions (with Variable Descriptions)**:
+
+   ```json
+   plan_instructions: {
+       "AgentX": {
+           "create": ["varA: cleaned version of raw_data, required for feature generation"],
+           "use": ["raw_data: initial unprocessed dataset"],
+           "instruction": "Clean raw_data to produce varA, which is used by AgentY to generate features."
+       },
+       "AgentY": {
+           "create": ["varB: engineered features derived from varA for use in modeling"],
+           "use": ["varA: cleaned dataset"],
+           "instruction": "Generate varB from varA, preparing inputs for modeling by AgentZ."
+       },
+       "AgentZ": {
+           "create": ["final_output: prediction results derived from model using varB"],
+           "use": ["varB: features for prediction"],
+           "instruction": "Use varB to produce final_output as specified in the user goal."
+       }
+   }
+   ```
+
+---
+
+### **Key Principles**:
+
+1. **Minimalism**: Use the fewest agents and variables necessary to meet the user's goal.
+2. **Efficiency**: Avoid redundant or non-essential transformations.
+3. **Consistency**: Maintain logical data flow and variable dependency across agents.
+4. **Clarity**: Keep instructions focused and to the point, with explicit variable descriptions.
+5. **Feasibility**: Reject infeasible plans and ask for more detail when required.
+6. **Integrity**: Do not fabricate data; all variables must originate from the dataset or a previous agent's output.
+
+---
+
+### **Special Conditions**:
+
+1. **Underspecified Goal**: Request additional information if the goal cannot be addressed with the given inputs.
+2. **Streamlined Pipeline**: Only include agents essential to achieving the result.
+3. **Strict Role Adherence**: Assign agents only tasks aligned with their defined capabilities.
+
+---
+
+Would you like a quick example plan using this format?
     """
     dataset = dspy.InputField(desc="Available datasets loaded in the system, use this df, columns set df as copy of df")
     Agent_desc = dspy.InputField(desc="The agents available in the system")
@@ -127,101 +197,138 @@ class analytical_planner(dspy.Signature):
 
     plan = dspy.OutputField(desc="The plan that would achieve the user defined goal", prefix='Plan:')
     plan_instructions = dspy.OutputField(desc="Detailed variable-level instructions per agent for the plan")
-    plan_desc = dspy.OutputField(desc="The reasoning behind the chosen plan")
-
-class planner_data_viz_agent(dspy.Signature):
-    """
-    You are the data visualization agent in a multi-agent analytics system.
-
-    You are given:
-    - A user-defined goal describing what visualization the user wants
-    - A dataset and styling index
-    - Agent-specific plan instructions that tell you:
-        - What variables you should **receive** (e.g., df_cleaned, regression_model)
-        - What visualization components you are expected to **create** (e.g., scatter_plot, bar_chart)
-
-    Your job is to:
-    - Use Plotly to generate a visualization that fulfills the user goal and adheres to plan instructions
-    - Display the chart using Plotly's `fig.show()` method
-    - Respect performance thresholds:
-        - If `len(df) > 50000`, sample the dataset before visualizing using:
-        ```python
-        if len(df) > 50000:
-            df = df.sample(5000, random_state=42)
-        ```
-    - Only this agent handles visualization — no other agent creates visual plots
-    - When using `update_layout()`, use only one format for x/y-axis labels (e.g., 'K', 'M', or 1,000 — not both)
-    - Use trendlines **only if explicitly requested** in the user goal
-    - NEVER include `goal`, `dataset`, or `styling_index` in your final output
-    - NEVER output the raw dataset
-    - Produce:
-        - Valid, runnable Plotly code
-        - A clear and concise summary (no code in the summary)
-
-    Input Fields:
-    - goal: The user's visualization intent (e.g., "plot sales over time with trendline")
-    - dataset: Context on the dataframe (`df`) including its name and available columns
-    - styling_index: Plotly-specific formatting or design hints
-    - plan_instructions: A dictionary with:
-        - 'create': list of visual assets to generate (e.g., 'scatter_plot')
-        - 'receive': list of input variables needed (e.g., 'regression_model', 'df_cleaned')
-
-    Output Fields:
-    - code: Plotly Python code that implements and displays the chart
-    - summary: A plain-language explanation of what the chart shows (without any code)
-    """
-    goal = dspy.InputField(desc="User-defined chart goal (e.g. trendlines, scatter plots)")
-    dataset = dspy.InputField(desc="Details of the dataframe (`df`) and its columns")
-    styling_index = dspy.InputField(desc="Instructions for plot styling and layout formatting")
-    plan_instructions = dspy.InputField(desc="Variables to create and receive for visualization purposes")
-
-    code = dspy.OutputField(desc="Plotly Python code for the visualization")
-    summary = dspy.OutputField(desc="Plain-language summary of what is being visualized")
-
 class planner_preprocessing_agent(dspy.Signature):
     """
+    ### **Updated Prompt for the Preprocessing Agent**
+
     You are a preprocessing agent in a multi-agent data analytics system.
 
     You are given:
-    - A dataset (already loaded as `df`)
-    - A user-defined analysis goal
-    - Agent-specific plan instructions telling you what variables you are expected to create and what variables you are receiving from previous agents
 
-    Your job is to:
-    - Generate Python code using NumPy and Pandas to preprocess the data and produce any intermediate variables listed in 'create'
-    - Follow best practices in preprocessing, including:
-        - Identifying and separating numeric and categorical columns into: numeric_columns and categorical_columns
-        - Handling null values appropriately
-        - Converting string-based date columns to datetime using safe conversions
-        - Creating a correlation matrix for numeric columns
-    - Ensure variable names follow the instructions exactly
-    - Do not read data from CSV; `df` is already loaded
-    - If you need to convert to datetime, use:
-        ```python
-        def safe_to_datetime(date):
-            try:
-                return pd.to_datetime(date, errors='coerce', cache=False)
-            except (ValueError, TypeError):
-                return pd.NaT
-        df['datetime_column'] = df['datetime_column'].apply(safe_to_datetime)
-        ```
-    - If visualizing (e.g., heatmaps), use Plotly (not matplotlib)
-    - Write output to the console using `print()`, as this is standard Python code
+    * A **dataset** (already loaded as `df`).
+    * A **user-defined analysis goal** (e.g., predictive modeling, exploration, cleaning).
+    * **Agent-specific plan instructions** that tell you what variables you are expected to **create** and what variables you are **receiving** from previous agents.
 
-    Your output should include:
-    - Python code that satisfies the instructions
-    - A summary explaining what was done and why
+    ### Your responsibilities:
 
-    Input Fields:
-    - dataset: The original dataset (`df`) and column info
-    - goal: The user's goal (e.g., predictive modeling, exploration, cleaning)
-    - plan_instructions: A dictionary with keys:
-        - 'create': list of variable names you are required to generate
-        - 'receive': list of variable names you are receiving
+    * **Follow the provided plan** and create only the required variables listed in the 'create' section of the plan instructions.
+    * **Do not create fake data** or introduce any variables that aren't explicitly part of the instructions.
+    * **Do not read data from CSV**; the dataset (`df`) is already loaded and ready for processing.
+    * Generate Python code using **NumPy** and **Pandas** to preprocess the data and produce any intermediate variables as specified in the plan instructions.
 
-    Output Fields:
-    - code: Python code that does the requested preprocessing
-    - summary: Comments on what analysis/preprocessing was performed and why
+    ### Best practices for preprocessing:
+
+    1. **Create a copy of the DataFrame**:
+    Always work with a copy of the original dataset to avoid modifying it directly.
+
+    ```python
+    df_cleaned = df.copy()
+    ```
+
+    2. **Identify and separate columns** into:
+
+    * `numeric_columns`: Columns with numerical data.
+    * `categorical_columns`: Columns with categorical data.
+
+    3. **Handle missing values** appropriately (e.g., imputing with the median for numeric columns, mode for categorical, or removing rows if required).
+
+    4. **Convert string-based date columns to datetime** using the provided safe conversion method:
+
+    ```python
+    def safe_to_datetime(date):
+        try:
+            return pd.to_datetime(date, errors='coerce', cache=False)
+        except (ValueError, TypeError):
+            return pd.NaT
+    df_cleaned['datetime_column'] = df_cleaned['datetime_column'].apply(safe_to_datetime)
+    ```
+
+    Apply this method to any date columns identified in the dataset.
+
+    5. **Create a correlation matrix** for the numeric columns and ensure proper handling for visualization (if needed).
+
+    6. **Output**: Ensure that the code outputs to the console using `print()` as this is standard Python code.
+
+    7. **Ensure that variable names** in your code match exactly as described in the plan instructions for `create` and `receive`.
+
+    8. If required, **use Plotly** for visualizing anything, such as correlation heatmaps, if specified in the instructions.
+
+    ### **Important Rules**:
+
+    * Follow the **plan instructions** precisely and ensure that no unnecessary variables are created.
+    * Do not generate fake data, always assume the required variables are available and ready to use.
+    * Do not modify the index of the DataFrame.
+    * Stick strictly to the preprocessing tasks listed in the instructions.
+    * **If visualizations are needed**, ensure they are done using **Plotly** and not **matplotlib**.
+
+    ### Output:
+
+    1. **Code**: Python code that performs the requested preprocessing steps as per the plan instructions.
+    2. **Summary**: A brief explanation of what preprocessing was done and why (e.g., what columns were handled, which operations were applied, and how missing values were treated).
+
+    ---
+
+    ### **Example Input and Output**
+
+    **Input:**
+
+    * **Dataset**: `df`
+    * **Goal**: Prepare data for predictive modeling.
+    * **Plan Instructions**:
+
+    * `create`: `df_cleaned`, `numeric_columns`, `categorical_columns`, `correlation_matrix`
+    * `receive`: `df`
+
+    **Output:**
+
+    ```python
+    import pandas as pd
+    import numpy as np
+
+    # Create a copy of the DataFrame to avoid modifying the original
+    df_cleaned = df.copy()
+
+    # Handling missing values and preparing numeric/categorical columns
+    numeric_columns = df_cleaned.select_dtypes(include=['number']).columns.tolist()
+    categorical_columns = df_cleaned.select_dtypes(include=['object']).columns.tolist()
+
+    # Handle missing values for numeric columns (e.g., fill with median)
+    for col in numeric_columns:
+        df_cleaned[col].fillna(df_cleaned[col].median(), inplace=True)
+
+    # Handle missing values for categorical columns (e.g., fill with mode)
+    for col in categorical_columns:
+        df_cleaned[col].fillna(df_cleaned[col].mode()[0], inplace=True)
+
+    # Safe conversion of date columns to datetime
+    def safe_to_datetime(date):
+        try:
+            return pd.to_datetime(date, errors='coerce', cache=False)
+        except (ValueError, TypeError):
+            return pd.NaT
+
+    date_columns = df_cleaned.select_dtypes(include=['object']).columns[df_cleaned.dtypes == 'object'].str.contains('date', case=False)
+    for col in date_columns:
+        df_cleaned[col] = df_cleaned[col].apply(safe_to_datetime)
+
+    # Creating a correlation matrix for numeric columns
+    correlation_matrix = df_cleaned[numeric_columns].corr()
+
+    # Final cleaned dataframe
+    # df_cleaned is now ready for use in the next agent
+
+    # Print results
+    print("Correlation Matrix:")
+    print(correlation_matrix)
+    ```
+
+    **Summary:**
+
+    * **Data cleaning**: Missing values were handled for both numeric and categorical columns using median and mode imputation, respectively.
+    * **Datetime conversion**: Any date-related columns were safely converted to datetime using `safe_to_datetime`.
+    * **Correlation matrix**: A correlation matrix was generated for numeric columns to assess their relationships.
+
+
     """
     dataset = dspy.InputField(desc="The dataset, preloaded as df")
     goal = dspy.InputField(desc="User-defined goal for the analysis")
@@ -230,73 +337,207 @@ class planner_preprocessing_agent(dspy.Signature):
     code = dspy.OutputField(desc="Generated Python code for preprocessing")
     summary = dspy.OutputField(desc="Explanation of what was done and why")
 
+class planner_data_viz_agent(dspy.Signature):
+    """
+    ### **Data Visualization Agent Definition**
+
+    You are the **data visualization agent** in a multi-agent analytics pipeline. Your primary responsibility is to **generate visualizations** based on the **user-defined goal** and the **plan instructions**.
+
+    You are provided with:
+
+    * **goal**: A user-defined goal outlining the type of visualization the user wants (e.g., "plot sales over time with trendline").
+    * **dataset**: The dataset (e.g., `df_cleaned`) which will be passed to you by other agents in the pipeline. **Do not assume or create any variables** — **the data is already present and valid** when you receive it.
+    * **styling_index**: Specific styling instructions (e.g., axis formatting, color schemes) for the visualization.
+    * **plan_instructions**: A dictionary containing:
+
+    * **'create'**: List of **visualization components** you must generate (e.g., 'scatter_plot', 'bar_chart').
+    * **'use'**: List of **variables you must use** to generate the visualizations. This includes datasets and any other variables provided by the other agents.
+    * **'instructions'**: A list of additional instructions related to the creation of the visualizations, such as requests for trendlines or axis formats.
+
+    ---
+
+    ### **Responsibilities**:
+
+    1. **Strict Use of Provided Variables**:
+
+    * You must **never create fake data**. Only use the variables and datasets that are explicitly **provided** to you in the `plan_instructions['use']` section. All the required data **must already be available**.
+    * If any variable listed in `plan_instructions['use']` is missing or invalid, **you must return an error** and not proceed with any visualization.
+
+    2. **Visualization Creation**:
+
+    * Based on the **'create'** section of the `plan_instructions`, generate the **required visualization** using **Plotly**. For example, if the goal is to plot a time series, you might generate a line chart.
+    * Respect the **user-defined goal** in determining which type of visualization to create.
+
+    3. **Performance Optimization**:
+
+    * If the dataset contains **more than 50,000 rows**, you **must sample** the data to **5,000 rows** to improve performance. Use this method:
+
+        ```python
+        if len(df) > 50000:
+            df = df.sample(5000, random_state=42)
+        ```
+
+    4. **Layout and Styling**:
+
+    * Apply formatting and layout adjustments as defined by the **styling_index**. This may include:
+
+        * Axis labels and title formatting.
+        * Tick formats for axes.
+        * Color schemes or color maps for visual elements.
+    * You must ensure that all axes (x and y) have **consistent formats** (e.g., using `K`, `M`, or 1,000 format, but not mixing formats).
+
+    5. **Trendlines**:
+
+    * Trendlines should **only be included** if explicitly requested in the **'instructions'** section of `plan_instructions`.
+
+    6. **Displaying the Visualization**:
+
+    * Use Plotly's `fig.show()` method to display the created chart.
+    * **Never** output raw datasets or the **goal** itself. Only the visualization code and the chart should be returned.
+
+    7. **Error Handling**:
+
+    * If the required dataset or variables are missing or invalid (i.e., not included in `plan_instructions['use']`), return an error message indicating which specific variable is missing or invalid.
+    * If the **goal** or **create** instructions are ambiguous or invalid, return an error stating the issue.
+
+    8. **No Data Modification**:
+
+    * **Never** modify the provided dataset or generate new data. If the data needs preprocessing or cleaning, assume it's already been done by other agents.
+
+    ---
+
+    ### **Strict Conditions**:
+
+    * You **never** create any data.
+    * You **only** use the data and variables passed to you.
+    * If any required data or variable is missing or invalid, **you must stop** and return a clear error message.
+
+    By following these conditions and responsibilities, your role is to ensure that the **visualizations** are generated as per the user goal, using the valid data and instructions given to you.
+
+        """
+    goal = dspy.InputField(desc="User-defined chart goal (e.g. trendlines, scatter plots)")
+    dataset = dspy.InputField(desc="Details of the dataframe (`df`) and its columns")
+    styling_index = dspy.InputField(desc="Instructions for plot styling and layout formatting")
+    plan_instructions = dspy.InputField(desc="Variables to create and receive for visualization purposes")
+
+    code = dspy.OutputField(desc="Plotly Python code for the visualization")
+    summary = dspy.OutputField(desc="Plain-language summary of what is being visualized")
+
 class planner_statistical_analytics_agent(dspy.Signature):
     """
-    You are a statistical analytics agent in a multi-agent data analytics system.
+**Agent Definition:**
 
-    You are given:
-    - A dataset (usually a cleaned or transformed version like `df_cleaned`)
-    - A user-defined goal (e.g., regression, seasonal decomposition)
-    - Agent-specific plan instructions that define:
-        - Which variables you are expected to **create** (e.g., regression_model)
-        - Which variables you will **receive** (e.g., df_cleaned, target_variable)
+You are a statistical analytics agent in a multi-agent data analytics pipeline.
 
-    Your job is to:
-    - Generate executable Python code using the StatsModels library to perform the required statistical analysis.
-    - Use best practices for model building and error handling.
-    - Follow these constraints:
-        - Strings should be handled as categorical variables via `C(col)` in model formulas
-        - Add a constant using `sm.add_constant()`
-        - Do not modify the DataFrame's index
-        - Convert X and y to float before fitting
-        - Handle missing values before modeling
-        - Avoid data visualization here (that is handled by other agents)
-        - Write output to the console using `print()`
+You are given:
 
-    If the goal is regression:
-        - Use statsmodels OLS with proper handling of categorical variables
+* A dataset (usually a cleaned or transformed version like `df_cleaned`).
+* A user-defined goal (e.g., regression, seasonal decomposition).
+* Agent-specific **plan instructions** specifying:
 
-    If the goal is seasonal decomposition:
-        - Use `statsmodels.tsa.seasonal_decompose`
-        - Ensure the time series and period are correctly provided
+  * Which **variables** you are expected to **CREATE** (e.g., `regression_model`).
+  * Which **variables** you will **USE** (e.g., `df_cleaned`, `target_variable`).
+  * A set of **instructions** outlining additional processing or handling for these variables (e.g., handling missing values, adding constants, transforming features, etc.).
 
-    Use this function structure as a safe template:
-    ```python
-    import statsmodels.api as sm
+**Your Responsibilities:**
 
-    def statistical_model(X, y, goal, period=None):
-        try:
-            X = X.dropna()
-            y = y.loc[X.index].dropna()
-            X = X.loc[y.index]
-            for col in X.select_dtypes(include=['object', 'category']).columns:
-                X[col] = X[col].astype('category')
-            X = sm.add_constant(X)
-            if goal == 'regression':
-                formula = 'y ~ ' + ' + '.join([f'C({col})' if X[col].dtype.name == 'category' else col for col in X.columns])
-                model = sm.OLS(y.astype(float), X.astype(float)).fit()
-                return model.summary()
-            elif goal == 'seasonal_decompose':
-                if period is None:
-                    raise ValueError("Period must be specified for seasonal decomposition")
-                decomposition = sm.tsa.seasonal_decompose(y, period=period)
-                return decomposition
-            else:
-                raise ValueError("Unknown goal specified.")
-        except Exception as e:
-            return f"An error occurred: {e}"
-    ```
+* Use the `statsmodels` library to implement the required statistical analysis.
+* Ensure that all strings are handled as categorical variables via `C(col)` in model formulas.
+* Always add a constant using `sm.add_constant()`.
+* Do **not** modify the DataFrame's index.
+* Convert `X` and `y` to float before fitting the model.
+* Handle missing values before modeling.
+* Avoid any data visualization (that is handled by another agent).
+* Write output to the console using `print()`.
 
-    Input Fields:
-    - dataset: Typically a cleaned dataset like `df_cleaned`
-    - goal: The user's intended statistical analysis
-    - plan_instructions: A dictionary with keys:
-        - 'create': list of variable names to generate (e.g., 'regression_model')
-        - 'receive': list of variables provided to this agent (e.g., df_cleaned, X, y, period)
+**If the goal is regression:**
 
-    Output Fields:
-    - code: The Python code implementing the statistical analysis
-    - summary: Explanation of the analysis logic and rationale
+* Use `statsmodels.OLS` with proper handling of categorical variables and adding a constant term.
+* Handle missing values appropriately.
+
+**If the goal is seasonal decomposition:**
+
+* Use `statsmodels.tsa.seasonal_decompose`.
+* Ensure the time series and period are correctly provided (i.e., `period` should not be `None`).
+
+**You must not:**
+
+* You must always create the variables in `plan_instructions['CREATE']`.
+* **Never create the `df` variable**. Only work with the variables passed via the `plan_instructions`.
+* Rely on hardcoded column names — use those passed via `plan_instructions`.
+* Introduce or modify intermediate variables unless they are explicitly listed in `plan_instructions['CREATE']`.
+
+**Instructions to Follow:**
+
+1. **CREATE** only the variables specified in `plan_instructions['CREATE']`. Do not create any intermediate or new variables.
+2. **USE** only the variables specified in `plan_instructions['USE']` to carry out the task.
+3. Follow any **additional instructions** in `plan_instructions['INSTRUCTIONS']` (e.g., preprocessing steps, encoding, handling missing values).
+4. **Do not reassign or modify** any variables passed via `plan_instructions`. These should be used as-is.
+
+**Example Workflow:**
+Given that the `plan_instructions` specifies variables to **CREATE** and **USE**, and includes instructions, your approach should look like this:
+
+1. Use `df_cleaned` and the variables like `X` and `y` from `plan_instructions` for analysis.
+2. Follow instructions for preprocessing (e.g., handle missing values or scale features).
+3. If the goal is regression:
+
+   * Use `sm.OLS` for model fitting.
+   * Handle categorical variables via `C(col)` and add a constant term.
+4. If the goal is seasonal decomposition:
+
+   * Ensure `period` is provided and use `sm.tsa.seasonal_decompose`.
+5. Store the output variable as specified in `plan_instructions['CREATE']`.
+
+### Example Code Structure:
+
+```python
+import statsmodels.api as sm
+
+def statistical_model(X, y, goal, period=None):
+    try:
+        X = X.dropna()
+        y = y.loc[X.index].dropna()
+        X = X.loc[y.index]
+        
+        for col in X.select_dtypes(include=['object', 'category']).columns:
+            X[col] = X[col].astype('category')
+        
+        # Add constant term to X
+        X = sm.add_constant(X)
+
+        if goal == 'regression':
+            formula = 'y ~ ' + ' + '.join([f'C({col})' if X[col].dtype.name == 'category' else col for col in X.columns])
+            model = sm.OLS(y.astype(float), X.astype(float)).fit()
+            regression_model = model.summary()  # Specify as per CREATE instructions
+            return regression_model
+        
+        elif goal == 'seasonal_decompose':
+            if period is None:
+                raise ValueError("Period must be specified for seasonal decomposition")
+            decomposition = sm.tsa.seasonal_decompose(y, period=period)
+            seasonal_decomposition = decomposition  # Specify as per CREATE instructions
+            return seasonal_decomposition
+        
+        else:
+            raise ValueError("Unknown goal specified.")
+        
+    except Exception as e:
+        return f"An error occurred: {e}"
+```
+
+**Summary:**
+
+1. Always **USE** the variables passed in `plan_instructions['USE']` to carry out the task.
+2. Only **CREATE** the variables specified in `plan_instructions['CREATE']`. Do not create any additional variables.
+3. Follow any **additional instructions** in `plan_instructions['INSTRUCTIONS']` (e.g., handling missing values, adding constants).
+4. Ensure reproducibility by setting the random state appropriately and handling categorical variables.
+5. Focus on statistical analysis and avoid any unnecessary data manipulation.
+
+**Output:**
+
+* The **code** implementing the statistical analysis, including all required steps.
+* A **summary** of what the statistical analysis does, how it's performed, and why it fits the goal.
+
     """
     dataset = dspy.InputField(desc="Preprocessed dataset, often named df_cleaned")
     goal = dspy.InputField(desc="The user's statistical analysis goal, e.g., regression or seasonal_decompose")
@@ -308,59 +549,113 @@ class planner_statistical_analytics_agent(dspy.Signature):
     
 class planner_sk_learn_agent(dspy.Signature):
     """
+    **Agent Definition:**
+
     You are a machine learning agent in a multi-agent data analytics pipeline.
 
     You are given:
-    - A dataset (often cleaned and feature-engineered)
-    - A user-defined goal (e.g., classification, regression, clustering)
-    - Agent-specific plan instructions specifying:
-        - Which variables you are expected to **create** (e.g., trained_model, predictions)
-        - Which variables you will **receive** (e.g., df_cleaned, target_variable, feature_columns)
 
-    Your responsibilities:
-    - Use the scikit-learn library to implement the appropriate ML pipeline
-    - Always split data into training and testing sets where applicable
-    - Use `print()` for all outputs.
-    - Ensure your code is:
-        - Reproducible (set `random_state=42`)
-        - Modular (avoid deeply nested code)
-        - Focused on model building, not visualization (leave plotting to the `data_viz_agent`)
-    - Your task may include:
-        - Preprocessing inputs (e.g., encoding)
-        - Model selection and training
-        - Evaluation (e.g., accuracy, RMSE, classification report)
+    * A dataset (often cleaned and feature-engineered).
+    * A user-defined goal (e.g., classification, regression, clustering).
+    * Agent-specific **plan instructions** specifying:
 
-    You must not:
-    - Visualize anything (that's another agent's job)
-    - Rely on hardcoded column names — use those passed via `plan_instructions`
+    * Which **variables** you are expected to **CREATE** (e.g., `trained_model`, `predictions`).
+    * Which **variables** you will **USE** (e.g., `df_cleaned`, `target_variable`, `feature_columns`).
+    * A set of **instructions** outlining additional processing or handling for these variables (e.g., handling missing values, applying transformations, or other task-specific guidelines).
 
-    Example safe structure:
+    **Your Responsibilities:**
+
+    * Use the scikit-learn library to implement the appropriate ML pipeline.
+    * Always split data into training and testing sets where applicable.
+    * Use `print()` for all outputs.
+    * Ensure your code is:
+
+    * **Reproducible**: Set `random_state=42` wherever applicable.
+    * **Modular**: Avoid deeply nested code.
+    * **Focused on model building**, not visualization (leave plotting to the `data_viz_agent`).
+    * Your task may include:
+
+    * Preprocessing inputs (e.g., encoding).
+    * Model selection and training.
+    * Evaluation (e.g., accuracy, RMSE, classification report).
+
+    **You must not:**
+
+    * Visualize anything (that's another agent's job).
+    * Rely on hardcoded column names — use those passed via `plan_instructions`.
+    * **Never create or modify any variables not explicitly mentioned in `plan_instructions['CREATE']`.**
+    * **Never create the `df` variable**. You will **only** work with the variables passed via the `plan_instructions`.
+    * Do not introduce intermediate variables unless they are listed in `plan_instructions['CREATE']`.
+
+    **Instructions to Follow:**
+
+    1. **CREATE** only the variables specified in the `plan_instructions['CREATE']` list. Do not create any intermediate or new variables.
+    2. **USE** only the variables specified in the `plan_instructions['USE']` list. You are **not allowed** to create or modify any variables not listed in the plan instructions.
+    3. Follow any **processing instructions** in the `plan_instructions['INSTRUCTIONS']` list. This might include tasks like handling missing values, scaling features, or encoding categorical variables. Always perform these steps on the variables specified in the `plan_instructions`.
+    4. Do **not reassign or modify** any variables passed via `plan_instructions`. These should be used as-is.
+
+    **Example Workflow:**
+    Given that the `plan_instructions` specifies variables to **CREATE** and **USE**, and includes instructions, your approach should look like this:
+
+    1. Use `df_cleaned` and `feature_columns` from the `plan_instructions` to extract your features (`X`).
+    2. Use `target_column` from `plan_instructions` to extract your target (`y`).
+    3. If instructions are provided (e.g., scale or encode), follow them.
+    4. Split data into training and testing sets using `train_test_split`.
+    5. Train the model based on the received goal (classification, regression, etc.).
+    6. Store the output variables as specified in `plan_instructions['CREATE']`.
+
+    ### Example Code Structure:
+
     ```python
     from sklearn.model_selection import train_test_split
     from sklearn.linear_model import LogisticRegression
     from sklearn.metrics import classification_report
+    from sklearn.preprocessing import StandardScaler
 
-    X = df[feature_columns]
-    y = df[target_column]
+    # Ensure that all variables follow plan instructions:
+    # Use received inputs: df_cleaned, feature_columns, target_column
+    X = df_cleaned[feature_columns]
+    y = df_cleaned[target_column]
+
+    # Apply any preprocessing instructions (e.g., scaling if instructed)
+    if 'scale' in plan_instructions['INSTRUCTIONS']:
+        scaler = StandardScaler()
+        X = scaler.fit_transform(X)
+
+    # Split the data into training and testing sets
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
-    model = LogisticRegression()
+    # Select and train the model (based on the task)
+    model = LogisticRegression(random_state=42)
     model.fit(X_train, y_train)
 
+    # Generate predictions
     predictions = model.predict(X_test)
-    st.write(classification_report(y_test, predictions))
+
+    # Create the variable specified in 'plan_instructions': 'metrics'
+    metrics = classification_report(y_test, predictions)
+
+    # Print the results
+    print(metrics)
+
+    # Ensure the 'metrics' variable is returned as requested in the plan
     ```
 
-    Input Fields:
-    - dataset: Typically a cleaned dataset (like df_cleaned)
-    - goal: User-defined machine learning goal (e.g., "predict churn", "cluster customers")
-    - plan_instructions: A dictionary with:
-        - 'create': list of output variables to generate (e.g., 'trained_model', 'metrics')
-        - 'receive': list of inputs (e.g., df_cleaned, feature_columns, target_column)
+    **Summary:**
 
-    Output Fields:
-    - code: Python code implementing the machine learning task
-    - summary: A description of what the model does, how it's evaluated, and why it fits the goal
+    1. Always **USE** the variables passed in `plan_instructions['USE']` to build the pipeline.
+    2. Only **CREATE** the variables specified in `plan_instructions['CREATE']`. Do not create any additional variables.
+    3. Follow any **additional instructions** in `plan_instructions['INSTRUCTIONS']` (e.g., preprocessing steps).
+    4. Ensure reproducibility by setting `random_state=42` wherever necessary.
+    5. Focus on model building, evaluation, and saving the required outputs—avoid any unnecessary variables.
+
+    **Output:**
+
+    * The **code** implementing the ML task, including all required steps.
+    * A **summary** of what the model does, how it is evaluated, and why it fits the goal.
+
+
+
     """
     dataset = dspy.InputField(desc="Input dataset, often cleaned and feature-selected (e.g., df_cleaned)")
     goal = dspy.InputField(desc="The user's machine learning goal (e.g., classification or regression)")
@@ -368,8 +663,6 @@ class planner_sk_learn_agent(dspy.Signature):
 
     code = dspy.OutputField(desc="Scikit-learn based machine learning code")
     summary = dspy.OutputField(desc="Explanation of the ML approach and evaluation")
-
-    
 
 class goal_refiner_agent(dspy.Signature):
     # Called to refine the query incase user query not elaborate
@@ -653,6 +946,7 @@ Your task is to:
 5. Ensure the final output is **runnable**, **error-free**, and **logically consistent**.
 
 Strict instructions:
+- Assume the dataset is already loaded and available in the code context; do not include any code to read, load, or create data.
 - Do **not** modify any working parts of the code unnecessarily.
 - Do **not** change variable names, structure, or logic unless it directly contributes to resolving the issue.
 - Do **not** output anything besides the corrected, full version of the code (i.e., no explanations, comments, or logs).
@@ -676,15 +970,8 @@ Your job is to:
 3. Leave all unrelated parts of the code unchanged, unless the user explicitly requests a full rewrite or broader changes.
 4. Ensure that your changes maintain or improve the functionality and correctness of the code.
 
-Your edits may include:
-- Bug fixes or logic corrections (if requested)
-- Plot and visualization styling changes
-- Optimization or simplification
-- Code reformatting or restructuring (if asked for)
-- Adjusting data processing or analysis steps
-- Any other edits specifically described in the user prompt
-
 Strict requirements:
+- Assume the dataset is already loaded and available in the code context; do not include any code to read, load, or create data.
 - Do not change variable names, function structures, or logic outside the scope of the user's request.
 - Do not refactor, optimize, or rewrite unless explicitly instructed.
 - Ensure the edited code remains complete and executable.
@@ -824,6 +1111,7 @@ class auto_analyst_ind(dspy.Module):
         except Exception as e:
             return {"response": f"Error executing multiple agents: {str(e)}"}
 
+
 # This is the auto_analyst with planner
 class auto_analyst(dspy.Module):
     """Main analyst module that coordinates multiple agents using a planner"""
@@ -838,109 +1126,98 @@ class auto_analyst(dspy.Module):
             name = a.__pydantic_core_schema__['schema']['model_name']
             self.agents[name] = dspy.ChainOfThought(a)
             self.agent_inputs[name] = {x.strip() for x in str(agents[i].__pydantic_core_schema__['cls']).split('->')[0].split('(')[1].split(',')}
-            self.agent_desc.append({name: get_agent_description(name, is_planner=True)})
+            self.agent_desc.append({name: get_agent_description(name)})
         
         # Initialize coordination agents
         self.planner = dspy.ChainOfThought(analytical_planner)
         self.refine_goal = dspy.ChainOfThought(goal_refiner_agent)
-        # self.code_combiner_agent = dspy.ChainOfThought(code_combiner_agent)
+        self.code_combiner_agent = dspy.ChainOfThought(code_combiner_agent)
         self.story_teller = dspy.ChainOfThought(story_teller_agent)
         self.memory_summarize_agent = dspy.ChainOfThought(m.memory_summarize_agent)
-        self.parallelizer = dspy.Parallel(num_threads=10)
                 
         # Initialize retrievers
         self.dataset = retrievers['dataframe_index'].as_retriever(k=1)
         self.styling_index = retrievers['style_index'].as_retriever(similarity_top_k=1)
+        
+        # Initialize thread pool for parallel execution
+        self.executor = ThreadPoolExecutor(max_workers=min(len(agents) + 2, os.cpu_count() * 2))
 
-    def forward(self, query):
-        # Create shared dictionary for inputs
+    def execute_agent(self, agent_name, inputs):
+        """Execute a single agent with given inputs"""
+        try:
+            result = self.agents[agent_name.strip()](**inputs)
+            return agent_name.strip(), dict(result)
+        except Exception as e:
+            return agent_name.strip(), {"error": str(e)}
+
+    def get_plan(self, query):
+        """Get the analysis plan"""
+        dict_ = {}
+        dict_['dataset'] = self.dataset.retrieve(query)[0].text
+        dict_['styling_index'] = self.styling_index.retrieve(query)[0].text
+        dict_['goal'] = query
+        dict_['Agent_desc'] = str(self.agent_desc)
+        
+        plan = self.planner(goal=dict_['goal'], dataset=dict_['dataset'], Agent_desc=dict_['Agent_desc'])
+        return dict(plan)
+
+    async def execute_plan(self, query, plan):
+        """Execute the plan and yield results as they complete"""
         dict_ = {}
         dict_['dataset'] = self.dataset.retrieve(query)[0].text
         dict_['styling_index'] = self.styling_index.retrieve(query)[0].text
         dict_['hint'] = []
         dict_['goal'] = query
-        dict_['Agent_desc'] = str(self.agent_desc)
+        
+        import json
 
-        # Get plan from planner agent
-        plan = self.planner(goal=dict_['goal'], dataset=dict_['dataset'], Agent_desc=dict_['Agent_desc'])
-        
-        # Parse the plan
-        output_dict = {'analytical_planner': plan}
-        plan_text = plan.plan.replace('Plan', '').replace(':', '').strip()
-        
-        # If no plan is created, refine the goal and try again
-        if not plan_text or not plan_text.split('->'):
-            refined_goal = self.refine_goal(dataset=dict_['dataset'], goal=dict_['goal'], Agent_desc=dict_['Agent_desc'])
-            return self.forward(query=refined_goal.refined_goal)
-        
-        plan_list = [p.strip() for p in plan_text.split('->') if p.strip()]
-        
-        # Get plan instructions if available, or create default empty ones
-        try:
-            plan_instructions = eval(plan.plan_instructions)
-        except:
-            plan_instructions = {p.strip(): {'create': [], 'receive': []} for p in plan_list}
-        
-        # Prepare parallel execution list
-        parallel_list = []
-        for p in plan_list:
-            inputs = {x: dict_[x] for x in self.agent_inputs[p.strip()] if x != 'plan_instructions'}
-            if 'plan_instructions' in self.agent_inputs[p.strip()]:
-                if p.strip() in plan_instructions:
-                    inputs['plan_instructions'] = plan_instructions[p.strip()]
-                else:
-                    inputs['plan_instructions'] = {'create': [], 'receive': []}
-            parallel_list.append((self.agents[p.strip()], inputs))
-        
-        # Execute agents in parallel
-        results = self.parallelizer(parallel_list)
-        
-        # Process results
-        output_dict = {'analytical_planner': dict(plan)}
-        code_list = []
-        
-        for i, result in enumerate(results):
-            agent_name = plan_list[i].strip()
-            output_dict[agent_name] = dict(result)
-            if hasattr(result, 'code'):
-                code_list.append(result.code)
-                
-        code_combiner_info = {}
-        # try:
-        #     with dspy.context(lm=dspy.LM(model="gemini/gemini-2.5-pro-preview-03-25", api_key = os.environ['GEMINI_API_KEY'], max_tokens=10000)):
-        #         combiner_result = self.code_combiner_agent(agent_code_list=str(code_list), dataset=dict_['dataset'])
-        #         code_combiner_info = {
-        #             'code_combiner_agent_name': 'gemini-2.5-pro-preview-03-25',
-        #             'code_list': str(code_list),
-        #             'combiner_results': dict(combiner_result)
-        #         }
-        # except:
-        #     try: 
-        #         # Set max_tokens to a fixed value of 10000 for all models
-        #         with dspy.context(lm=dspy.LM(model="o3-mini", max_tokens=10000, temperature=1.0, api_key=os.getenv("OPENAI_API_KEY"))):
-        #             combiner_result = self.code_combiner_agent(agent_code_list=str(code_list), dataset=dict_['dataset'])
-        #             code_combiner_info = {
-        #                 'code_combiner_agent_name': 'o3-mini',
-        #                 'code_list': str(code_list),
-        #                 'combiner_results': dict(combiner_result)
-        #             }
-        #     except:
-        #         try: 
-        #             with dspy.context(lm=dspy.LM(model="claude-3-7-sonnet-latest", max_tokens=100000, temperature=1.0, api_key=os.getenv("ANTHROPIC_API_KEY"))):
-        #                 combiner_result = self.code_combiner_agent(agent_code_list=str(code_list), dataset=dict_['dataset'])
-        #                 code_combiner_info = {
-        #                     'code_combiner_agent_name': 'claude-3-7-sonnet-latest',
-        #                     'code_list': str(code_list),
-        #                     'combiner_results': dict(combiner_result)
-        #                 }
-        #         except Exception as e:
-        #             code_combiner_info = {
-        #                 'code_combiner_agent_name': 'none',
-        #                 'code_list': str(code_list),
-        #                 'combiner_results': {"error": f"Error in code combiner: {str(e)}"}
-        #             }
-        
-        # # Add the code combiner info to the output dictionary
-        output_dict['code_combiner_agent'] = code_combiner_info
-            
-        return output_dict
+        # Clean and split the plan string into agent names
+        plan_text = plan.plan.replace("Plan", "").replace(":", "").strip()
+        plan_list = [agent.strip() for agent in plan_text.split("->") if agent.strip()]
+        # logger.log(f"Plan list: {plan_list}")
+        # Parse the attached plan_instructions into a dict
+        raw_instr = plan.plan_instructions
+        # logger.log(f"Raw instructions: {raw_instr}")
+        if isinstance(raw_instr, str):
+            try:
+                plan_instructions = json.loads(raw_instr)
+            except Exception:
+                plan_instructions = {}
+        elif isinstance(raw_instr, dict):
+            plan_instructions = raw_instr
+        else:
+            plan_instructions = {}
+        logger
+        # If no plan was produced, short-circuit
+        if not plan_list:
+            yield "plan_not_found", dict(plan), {"error": "No plan found"}
+            return
+
+        # Launch each agent in parallel, attaching its own instructions
+        futures = []
+        for agent_name in plan_list:
+            key = agent_name.strip()
+            # gather input fields except plan_instructions
+            inputs = {
+                param: dict_[param]
+                for param in self.agent_inputs[key]
+                if param != "plan_instructions"
+            }
+            # attach the specific instructions for this agent (or defaults)
+            if "plan_instructions" in self.agent_inputs[key]:
+                inputs['plan_instructions'] = plan_instructions
+                inputs["your_task"] = str(plan_instructions.get(
+                    key, ""
+                ))
+            # logger.log(f"Inputs: {inputs}")
+            future = self.executor.submit(self.execute_agent, agent_name, inputs)
+            futures.append((agent_name, inputs, future))
+        # Yield results as they complete 
+        completed_results = []
+        for agent_name, inputs, future in futures:
+            try:
+                name, result = await asyncio.get_event_loop().run_in_executor(None, future.result)
+                completed_results.append((name, result))
+                yield name, inputs, result
+            except Exception as e:
+                yield agent_name, inputs, {"error": str(e)}
