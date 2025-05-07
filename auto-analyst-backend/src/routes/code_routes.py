@@ -135,21 +135,74 @@ def identify_error_blocks(code: str, error_output: str) -> List[Tuple[str, str, 
         blocks[agent_name] = full_block
     
     # Match errors with their corresponding code blocks
+    matched_blocks = set()
     for agent_name, error_message in error_matches:
+        # Format from error output is AGENT_NAME_AGENT, we need to extract the base name
+        # Remove '_AGENT' suffix if present and convert to lowercase
         normalized_name = agent_name.lower()
+        if normalized_name.endswith('_agent'):
+            normalized_name = normalized_name[:-6]  # Remove '_agent' suffix
         
-        # Find the block for this agent
-        for block_name, block_code in blocks.items():
-            if normalized_name in block_name:
-                # Limit error message to last 10 lines if too large
-                error_lines = error_message.strip().split('\n')
-                if len(error_lines) > 10:
-                    error_message = '\n'.join(error_lines[-10:])
-                
-                faulty_blocks.append((block_name, block_code, error_message.strip()))
-                break
+        # Try direct match first
+        if normalized_name in blocks:
+            # Extract the relevant error information
+            processed_error = extract_relevant_error_section(error_message)
+            faulty_blocks.append((normalized_name, blocks[normalized_name], processed_error))
+            matched_blocks.add(normalized_name)
+        else:
+            # Try fuzzy matching for agent names
+            for block_name, block_code in blocks.items():
+                if block_name not in matched_blocks and (normalized_name in block_name or block_name in normalized_name):
+                    # Extract the relevant error information
+                    processed_error = extract_relevant_error_section(error_message)
+                    faulty_blocks.append((block_name, block_code, processed_error))
+                    matched_blocks.add(block_name)
+                    break
     
+    logger.log_message(f"Faulty blocks found: {len(faulty_blocks)}", level=logging.INFO)
+    logger.log_message(f"Faulty blocks: {faulty_blocks}", level=logging.INFO)
     return faulty_blocks
+
+def extract_relevant_error_section(error_message: str) -> str:
+    """
+    Extract the most relevant parts of the error message to help with fixing.
+    
+    Args:
+        error_message (str): The full error message
+        
+    Returns:
+        str: The processed error message with the most relevant information
+    """
+    error_lines = error_message.strip().split('\n')
+    
+    # If "Problem at this location" is in the error, focus on that section
+    if 'Problem at this location:' in error_message:
+        problem_idx = -1
+        for i, line in enumerate(error_lines):
+            if 'Problem at this location:' in line:
+                problem_idx = i
+                break
+        
+        if problem_idx >= 0:
+            # Include the "Problem at this location" section and a few lines after
+            end_idx = min(problem_idx + 10, len(error_lines))
+            problem_section = error_lines[problem_idx:end_idx]
+            
+            # Also include the error type from the end
+            error_type_lines = []
+            for line in reversed(error_lines):
+                if line.startswith('TypeError:') or line.startswith('ValueError:') or line.startswith('AttributeError:'):
+                    error_type_lines = [line]
+                    break
+            
+            return '\n'.join(problem_section + error_type_lines)
+    
+    # If we couldn't find "Problem at this location", include first few and last few lines
+    if len(error_lines) > 10:
+        return '\n'.join(error_lines[:3] + error_lines[-3:])
+    
+    # If the error is short enough, return as is
+    return error_message
 
 def fix_code_with_dspy(code: str, error: str, dataset_context: str = ""):
     """
@@ -167,7 +220,7 @@ def fix_code_with_dspy(code: str, error: str, dataset_context: str = ""):
     
     # Find the blocks with errors
     faulty_blocks = identify_error_blocks(code, error)
-    
+    logger.log_message(f"Number of faulty blocks found: {len(faulty_blocks)}", level=logging.INFO)
     if not faulty_blocks:
         # If no specific errors found, fix the entire code
         with dspy.context(lm=gemini):
@@ -180,39 +233,76 @@ def fix_code_with_dspy(code: str, error: str, dataset_context: str = ""):
             return result.fixed_code
     
     # Start with the original code
-    result_code = code
+    result_code = code.replace("```python", "").replace("```", "")
     
-    # Fix each faulty block separately
+    # Fix each faulty block separatelyw
     with dspy.context(lm=gemini):
         code_fixer = dspy.ChainOfThought(code_fix)
         
         for agent_name, block_code, specific_error in faulty_blocks:
-            # Extract inner code between the markers
-            inner_code_match = re.search(r'#\s+\w+\s+code\s+start\s*\n([\s\S]*?)#\s+\w+\s+code\s+end', block_code)
-            if not inner_code_match:
-                continue
-                
-            inner_code = inner_code_match.group(1).strip()
+            logger.log_message(f"Fixing {agent_name} block", level=logging.INFO)
             
-            # Find markers
-            start_marker = re.search(r'(#\s+\w+\s+code\s+start)', block_code).group(1)
-            end_marker = re.search(r'(#\s+\w+\s+code\s+end)', block_code).group(1)
             try:
+                # Extract inner code between the markers
+                inner_code_match = re.search(r'#\s+\w+\s+code\s+start\s*\n([\s\S]*?)#\s+\w+\s+code\s+end', block_code)
+                if not inner_code_match:
+                    logger.log_message(f"Could not extract inner code for {agent_name}", level=logging.WARNING)
+                    continue
+                    
+                inner_code = inner_code_match.group(1).strip()
+                
+                # Find markers
+                start_marker_match = re.search(r'(#\s+\w+\s+code\s+start)', block_code)
+                end_marker_match = re.search(r'(#\s+\w+\s+code\s+end)', block_code)
+                
+                if not start_marker_match or not end_marker_match:
+                    logger.log_message(f"Could not find start/end markers for {agent_name}", level=logging.WARNING)
+                    continue
+                    
+                start_marker = start_marker_match.group(1)
+                end_marker = end_marker_match.group(1)
+                
+                # Extract the error type and actual error message
+                error_type = ""
+                error_msg = specific_error
+                
+                # Look for common error patterns to provide focused context to the LLM
+                error_type_match = re.search(r'(TypeError|ValueError|AttributeError|IndexError|KeyError|NameError):\s*([^\n]+)', specific_error)
+                if error_type_match:
+                    error_type = error_type_match.group(1)
+                    error_msg = f"{error_type}: {error_type_match.group(2)}"
+                
+                # Add problem location if available
+                if "Problem at this location:" in specific_error:
+                    problem_section = re.search(r'Problem at this location:([\s\S]*?)(?:\n\n|$)', specific_error)
+                    if problem_section:
+                        error_msg = f"{error_msg}\n\nProblem at: {problem_section.group(1).strip()}"
+                
                 # Fix only the inner code
                 result = code_fixer(
                     dataset_context=str(dataset_context),
                     faulty_code=str(inner_code),
-                    error=str(specific_error),
+                    error=str(error_msg),
                 )   
                 
+                # Ensure the fixed code is properly stripped and doesn't include markers
+                fixed_inner_code = result.fixed_code.strip()
+                if fixed_inner_code.startswith('#') and 'code start' in fixed_inner_code:
+                    # If LLM included markers in response, extract only inner code
+                    inner_match = re.search(r'#\s+\w+\s+code\s+start\s*\n([\s\S]*?)#\s+\w+\s+code\s+end', fixed_inner_code)
+                    if inner_match:
+                        fixed_inner_code = inner_match.group(1).strip()
+                
                 # Reconstruct the block with fixed code
-                fixed_block = f"{start_marker}\n{result.fixed_code.strip()}\n{end_marker}"
+                fixed_block = f"{start_marker}\n\n{fixed_inner_code}\n\n{end_marker}"
                 
-                # Replace the original block with the fixed block
+                # Replace the original block with the fixed block in the full code
                 result_code = result_code.replace(block_code, fixed_block)
+                logger.log_message(f"Fixed {agent_name} block successfully", level=logging.INFO)
                 
-            except Exception:
-                # Skip if fixing fails
+            except Exception as e:
+                # Log the error but continue with other blocks
+                logger.log_message(f"Error fixing {agent_name} block: {str(e)}", level=logging.ERROR)
                 continue
     
     return result_code

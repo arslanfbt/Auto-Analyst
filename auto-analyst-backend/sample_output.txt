@@ -1,72 +1,72 @@
-=== OUTPUT FROM PLANNER_PREPROCESSING_AGENT ===
-
-First few rows of the processed dataset:
-      price  ...  furnishing_unfurnished
-0  4.566365  ...                   False
-1  4.004484  ...                   False
-2  4.004484  ...                    True
-3  3.985755  ...                   False
-4  3.554979  ...                    True
-
-[5 rows x 15 columns]
-
-Numeric columns: ['price', 'area', 'bedrooms', 'bathrooms', 'stories', 'parking', 'mainroad', 'guestroom', 'basement', 'hotwaterheating', 'airconditioning', 'prefarea', 'furnishing_furnished', 'furnishing_semi-furnished', 'furnishing_unfurnished']
-
-Categorical columns: []
 
 
-
-=== ERROR IN PLANNER_STATISTICAL_ANALYTICS_AGENT ===
-Error in planner_statistical_analytics_agent: "['furnishing_furnished', 'furnishing_semi-furnished', 'furnishing_unfurnished'] not in index"
+=== ERROR IN PLANNER_PREPROCESSING_AGENT ===
+Error in planner_preprocessing_agent: cannot do positional indexing on RangeIndex with these indexers [33.0] of type float
 Traceback (most recent call last):
   File "D:\Firebird2\Auto-Analyst-CS\auto-analyst-backend\scripts\format_response.py", line 196, in execute_code_from_markdown
     exec(block_code, context)  # Execute the block
-    ~~~~^^^^^^^^^^^^^^^^^^^^^
-  File "<string>", line 8, in <module>
-  File "D:\Firebird2\Auto-Analyst-CS\auto-analyst-backend\venv\Lib\site-packages\pandas\core\frame.py", line 4108, in __getitem__
-    indexer = self.columns._get_indexer_strict(key, "columns")[1]
-              ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^
-  File "D:\Firebird2\Auto-Analyst-CS\auto-analyst-backend\venv\Lib\site-packages\pandas\core\indexes\base.py", line 6200, in _get_indexer_strict
-    self._raise_if_missing(keyarr, indexer, axis_name)
-    ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "D:\Firebird2\Auto-Analyst-CS\auto-analyst-backend\venv\Lib\site-packages\pandas\core\indexes\base.py", line 6252, in _raise_if_missing
-    raise KeyError(f"{not_found} not in index")
-KeyError: "['furnishing_furnished', 'furnishing_semi-furnished', 'furnishing_unfurnished'] not in index"
+
+Problem at this location:
+1: 
+2: >>> print(df.head(33.)) <<<
+3: 
+4: # planner_preprocessing_agent code end
+
+Full error details:
+  File "D:\Firebird2\Auto-Analyst-CS\auto-analyst-backend\venv\Lib\site-packages\pandas\core\indexes\base.py", line 4301, in _raise_invalid_indexer
+    raise TypeError(msg)
+TypeError: cannot do positional indexing on RangeIndex with these indexers [33.0] of type float
 
 
-
-=== OUTPUT FROM PLANNER_SK_LEARN_AGENT ===
-
-Feature Importance (Random Forest):
-                      feature  importance
-0                        area    0.493645
-2                   bathrooms    0.160665
-9                     parking    0.067107
-3                     stories    0.064416
-1                    bedrooms    0.055034
-13     furnishing_unfurnished    0.021252
-8             airconditioning    0.020847
-5                   guestroom    0.020097
-11       furnishing_furnished    0.019927
-6                    basement    0.017920
-10                   prefarea    0.017536
-7             hotwaterheating    0.015705
-4                    mainroad    0.014374
-12  furnishing_semi-furnished    0.011474
-
-Regression Results:
-Random Forest R² Score: 0.4975
-Random Forest RMSE: 0.85
-Linear Regression R² Score: 0.5530
-Linear Regression RMSE: 0.80
-
-
-
-=== ERROR IN PLANNER_DATA_VIZ_AGENT ===
-Error in planner_data_viz_agent: imshow() got an unexpected keyword argument 'text'
+=== ERROR IN PREPROCESSING_AGENT ===
+Error in preprocessing_agent: cannot do positional indexing on RangeIndex with these indexers [33.33] of type float
 Traceback (most recent call last):
   File "D:\Firebird2\Auto-Analyst-CS\auto-analyst-backend\scripts\format_response.py", line 196, in execute_code_from_markdown
     exec(block_code, context)  # Execute the block
+
+Problem at this location:
+1: 
+2: >>> print(df.head(33.33)) <<<
+3: 
+4: # preprocessing_agent code end
+
+Full error details:
+  File "D:\Firebird2\Auto-Analyst-CS\auto-analyst-backend\venv\Lib\site-packages\pandas\core\indexes\base.py", line 4301, in _raise_invalid_indexer
+    raise TypeError(msg)
+TypeError: cannot do positional indexing on RangeIndex with these indexers [33.33] of type float
+
+
+=== ERROR IN PLANNER_AGENT ===
+Error in planner_agent: NDFrame.head() takes from 1 to 2 positional arguments but 3 were given
+Traceback (most recent call last):
+  File "D:\Firebird2\Auto-Analyst-CS\auto-analyst-backend\scripts\format_response.py", line 196, in execute_code_from_markdown
+    exec(block_code, context)  # Execute the block
+
+Problem at this location:
+1: 
+2: >>> print(df.head(32,3)) <<<
+3: 
+4: # planner_agent code end
+
+Full error details:
     ~~~~^^^^^^^^^^^^^^^^^^^^^
-  File "<string>", line 27, in <module>
-TypeError: imshow() got an unexpected keyword argument 'text'
+  File "<string>", line 2, in <module>
+TypeError: NDFrame.head() takes from 1 to 2 positional arguments but 3 were given
+
+
+=== ERROR IN STATS_AGENT ===
+Error in stats_agent: 'tuple' object is not callable
+Traceback (most recent call last):
+  File "D:\Firebird2\Auto-Analyst-CS\auto-analyst-backend\scripts\format_response.py", line 196, in execute_code_from_markdown
+    exec(block_code, context)  # Execute the block
+
+Problem at this location:
+1: 
+2: >>> print(df.shape(3)) <<<
+3: 
+4: # stats_agent code end
+
+Full error details:
+    ~~~~^^^^^^^^^^^^^^^^^^^^^
+  File "<string>", line 2, in <module>
+TypeError: 'tuple' object is not callable
