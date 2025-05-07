@@ -45,7 +45,7 @@ export async function POST(request: NextRequest) {
     // Test Redis connection
     try {
       await redis.ping();
-      console.log('✅ Redis connection successful in update-credits');
+      // logger.log('✅ Redis connection successful in update-credits');
     } catch (error) {
       console.error('⚠️ Redis connection failed in update-credits:', error);
       return NextResponse.json({ error: 'Redis connection failed' }, { status: 500 });
@@ -79,7 +79,7 @@ export async function POST(request: NextRequest) {
       renewalDate.setFullYear(now.getFullYear() + 1)
     }
 
-    console.log(`Updating user subscription: ${userId} to plan ${planName}`);
+    // logger.log(`Updating user subscription: ${userId} to plan ${planName}`);
 
     // Calculate the reset date based on the billing interval
     const resetDate = interval === 'month' 
@@ -99,7 +99,7 @@ export async function POST(request: NextRequest) {
       planType = 'STANDARD';
     }
 
-    console.log(`Setting ${creditsToAdd} credits for user ${userId} based on plan ${planName}`);
+    // logger.log(`Setting ${creditsToAdd} credits for user ${userId} based on plan ${planName}`);
     
     try {
       // Update user subscription using the new hash-based approach

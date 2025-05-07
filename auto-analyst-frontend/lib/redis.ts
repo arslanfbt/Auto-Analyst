@@ -1,4 +1,5 @@
 import { Redis } from '@upstash/redis'
+import logger from '@/lib/utils/logger'
 
 // Initialize Redis client with Upstash credentials
 const redis = new Redis({
@@ -10,7 +11,7 @@ const redis = new Redis({
 const testConnection = async () => {
   try {
     await redis.ping();
-    console.log('✅ Redis connection successful');
+    logger.log('✅ Redis connection successful');
     return true;
   } catch (error) {
     console.error('⚠️ Redis connection failed:', error);
@@ -70,7 +71,7 @@ export const creditUtils = {
         resetDate: this.getNextMonthFirstDay()
       });
       
-      console.log(`Credits initialized successfully for ${userId}: ${credits}`);
+      logger.log(`Credits initialized successfully for ${userId}: ${credits}`);
     } catch (error) {
       console.error('Error initializing credits:', error);
     }
@@ -267,7 +268,7 @@ export const subscriptionUtils = {
           const now = new Date();
           if (renewalDate < now) {
             // Subscription has expired, downgrade to free plan
-            console.log(`Subscription expired for user ${userId}. Downgrading to Free plan.`);
+            logger.log(`Subscription expired for user ${userId}. Downgrading to Free plan.`);
             await this.downgradeToFreePlan(userId);
             return false;
           }
@@ -478,7 +479,7 @@ export const subscriptionUtils = {
       await redis.hset(KEYS.USER_SUBSCRIPTION(userId), subscriptionData);
       await redis.hset(KEYS.USER_CREDITS(userId), creditData);
       
-      console.log(`Successfully downgraded user ${userId} to the Free plan`);
+      logger.log(`Successfully downgraded user ${userId} to the Free plan`);
       return true;
     } catch (error) {
       console.error('Error downgrading to free plan:', error);
@@ -503,6 +504,34 @@ export const subscriptionUtils = {
       }
     } catch (error) {
       console.error('Error checking expired subscriptions:', error);
+    }
+  }
+};
+
+export const profileUtils = {
+  // Save user profile info (at least email)
+  async saveUserProfile(userId: string, profile: { email: string, name?: string, image?: string, joinedDate?: string, role?: string }): Promise<void> {
+    try {
+      await redis.hset(KEYS.USER_PROFILE(userId), {
+        email: profile.email,
+        name: profile.name || '',
+        image: profile.image || '',
+        joinedDate: profile.joinedDate || '',
+        role: profile.role || '',
+      });
+      logger.log(`User profile saved for ${userId}`);
+    } catch (error) {
+      console.error('Error saving user profile:', error);
+    }
+  },
+
+  // Optionally, get user profile info
+  async getUserProfile(userId: string): Promise<any> {
+    try {
+      return await redis.hgetall(KEYS.USER_PROFILE(userId));
+    } catch (error) {
+      console.error('Error fetching user profile:', error);
+      return null;
     }
   }
 };

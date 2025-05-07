@@ -6,7 +6,7 @@ import { AlertTriangle } from 'lucide-react'
 import Link from 'next/link'
 import { useCredits } from '@/lib/contexts/credit-context'
 import { useEffect, useCallback } from 'react'
-
+import logger from '@/lib/utils/logger'
 interface InsufficientCreditsModalProps {
   isOpen: boolean
   onClose: () => void
@@ -24,7 +24,7 @@ export default function InsufficientCreditsModal({
   // Force ensure chat is blocked when modal opens
   useEffect(() => {
     if (isOpen) {
-      console.log("[Credits Modal] Modal opened - checking credits and ensuring chat is blocked");
+      logger.log("[Credits Modal] Modal opened - checking credits and ensuring chat is blocked");
       
       // Check if we have sufficient credits (this will set isChatBlocked=true if not enough)
       const checkCreditBalance = async () => {
@@ -42,7 +42,7 @@ export default function InsufficientCreditsModal({
   
   // Create a custom close handler to maintain the blocked state
   const handleClose = useCallback(() => {
-    console.log("[Credits Modal] Modal closing - ensuring chat remains blocked");
+    logger.log("[Credits Modal] Modal closing - ensuring chat remains blocked");
     
     // Force another credit check when closing to ensure block state persists
     // This should happen after the modal closes to avoid UI glitches

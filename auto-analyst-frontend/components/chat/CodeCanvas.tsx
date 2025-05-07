@@ -19,6 +19,7 @@ import { Label } from "@/components/ui/label"
 import { useSession } from "next-auth/react"
 import { useCredits } from '@/lib/contexts/credit-context'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
+import logger from '@/lib/utils/logger'
 
 interface CodeEntry {
   id: string;
@@ -231,7 +232,7 @@ const CodeCanvas: React.FC<CodeCanvasProps> = ({
         
         // Only execute Python code automatically
         if (activeEntry && activeEntry.language === "python" && !editingMap[activeEntryId]) {
-          console.log("Auto-running code for entry:", activeEntry.id);
+          logger.log("Auto-running code for entry:", activeEntry.id);
           // Execute immediately - no need to check if canvas is open
           executeCode(activeEntryId, activeEntry.code, activeEntry.language);
           
@@ -248,7 +249,7 @@ const CodeCanvas: React.FC<CodeCanvasProps> = ({
       
       // Reset code fix counters when a new message is complete
       setCodeFixes({});
-      console.log("Code fix counters reset for new message");
+      logger.log("Code fix counters reset for new message");
     }
     
     // Update the ref for the next check

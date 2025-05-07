@@ -1,4 +1,5 @@
 import nodemailer from 'nodemailer';
+import logger from '@/lib/utils/logger'
 
 // Configure email transporter
 const transporter = nodemailer.createTransport({
@@ -20,7 +21,7 @@ if (process.env.NODE_ENV === 'development') {
     if (error) {
       console.error('SMTP connection error:', error);
     } else {
-      console.log('SMTP server connection verified');
+      logger.log('SMTP server connection verified');
     }
   });
 }
@@ -47,7 +48,7 @@ export async function sendEmail({
       html,
     });
     
-    console.log('Email sent:', info.messageId);
+    logger.log('Email sent:', info.messageId);
     return true;
   } catch (error) {
     console.error('Failed to send email:', error);

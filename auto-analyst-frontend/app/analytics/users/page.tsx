@@ -148,7 +148,7 @@ export default function UserActivityPage() {
       };
       
       socket.onclose = () => {
-        console.log('WebSocket connection closed');
+        // logger.log('WebSocket connection closed');
       };
       
       return () => {

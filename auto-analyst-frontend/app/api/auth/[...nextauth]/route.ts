@@ -1,6 +1,7 @@
 import NextAuth from "next-auth"
 import GoogleProvider from "next-auth/providers/google"
 import CredentialsProvider from "next-auth/providers/credentials"
+import { profileUtils } from "@/lib/redis"
 
 const handler = NextAuth({
   providers: [
@@ -52,6 +53,24 @@ const handler = NextAuth({
         token.isAdmin = true
       }
       return token
+    },
+    async signIn({ user, account, profile }) {
+      // Save the user profile info to Redis when they sign in
+      if (user && user.email) {
+        try {
+          await profileUtils.saveUserProfile(user.id || user.email, {
+            email: user.email,
+            name: user.name || '',
+            image: user.image || '',
+            joinedDate: new Date().toISOString().split('T')[0],
+            role: 'Free'
+          });
+        } catch (error) {
+          console.error('Error saving user profile during signin:', error);
+          // Continue with sign in even if profile saving fails
+        }
+      }
+      return true
     },
   },
 })

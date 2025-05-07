@@ -6,6 +6,7 @@ import { useSession } from 'next-auth/react';
 import { useToast } from '@/components/ui/use-toast';
 import { Loader2, ShieldAlert, CheckCircle } from 'lucide-react'
 import Layout from '@/components/layout'
+import logger from '@/lib/utils/logger'
 
 export default function CheckoutSuccess() {
   const router = useRouter()
@@ -27,7 +28,7 @@ export default function CheckoutSuccess() {
     if (payment_intent) {
       const processPayment = async () => {
         try {
-          console.log(`Processing payment intent: ${payment_intent}`)
+          // logger.log(`Processing payment intent: ${payment_intent}`)
           
           // Send payment intent to our verification API
           const response = await fetch('/api/verify-payment', {
@@ -47,17 +48,18 @@ export default function CheckoutSuccess() {
             throw new Error(data.error || 'Payment verification failed');
           }
           
-          console.log('Payment verification successful:', data);
+          // logger.log('Payment verification successful:', data);
           
           // Check if it was already processed
           if (data.alreadyProcessed) {
-            console.log('Payment was already processed');
+            logger.log('Payment was already processed');
           }
           
           // Success! Show toast and redirect
           toast({
             title: 'Subscription Activated!',
             description: 'Your plan has been successfully activated.',
+            duration: 4000
           });
           
           // Wait 1 second before redirecting to account page
@@ -75,7 +77,7 @@ export default function CheckoutSuccess() {
           // If we haven't tried too many times, retry
           if (retryCount < 3) {
             setRetryCount(prev => prev + 1);
-            console.log(`Retrying payment verification (${retryCount + 1}/3)...`);
+            // logger.log(`Retrying payment verification (${retryCount + 1}/3)...`);
             
             // Wait 2 seconds before retrying
             setTimeout(() => {

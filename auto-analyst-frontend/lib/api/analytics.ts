@@ -1,8 +1,9 @@
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+import logger from '@/lib/utils/logger'
 
 // Helper function to add admin API key to headers
 const getHeaders = (adminKey: string) => {
-  console.log(`Using admin key: ${adminKey.substring(0, 3)}...`); // Log partial key for debugging
+  logger.log(`Using admin key: ${adminKey.substring(0, 3)}...`); // Log partial key for debugging
   return {
     'Content-Type': 'application/json',
     'X-Admin-API-Key': adminKey,
@@ -32,7 +33,7 @@ export async function fetchUsageSummary(
     url += `?${params.toString()}`;
   }
   
-  console.log(`Fetching usage summary from ${url}`);
+  logger.log(`Fetching usage summary from ${url}`);
   
   const response = await fetch(url, {
     method: 'GET',

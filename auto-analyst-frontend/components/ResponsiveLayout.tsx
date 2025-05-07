@@ -4,7 +4,7 @@ import React, { useState } from "react"
 import { motion } from "framer-motion"
 import Sidebar from "./chat/Sidebar"
 import { useChatHistoryStore } from "@/lib/store/chatHistoryStore"
-
+import logger from "@/lib/utils/logger"
 interface ResponsiveLayoutProps {
   children: React.ReactNode
 }
@@ -19,12 +19,12 @@ const ResponsiveLayout: React.FC<ResponsiveLayoutProps> = ({ children }) => {
   }
 
   const handleChatSelect = (chatId: number) => {
-    console.log("Chat selected:", chatId)
+    logger.log("Chat selected:", chatId)
     setSidebarOpen(false)
   }
 
   const handleDeleteChat = (chatId: number) => {
-    console.log("Delete chat:", chatId)
+    logger.log("Delete chat:", chatId)
   }
 
   return (

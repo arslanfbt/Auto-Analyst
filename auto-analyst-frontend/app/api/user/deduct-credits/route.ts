@@ -44,7 +44,7 @@ export async function POST(request: NextRequest) {
       lastUpdate: new Date().toISOString()
     })
     
-    console.log(`Deducted ${credits} credits for user ${userId}. New total: ${total - newUsed}`)
+    // logger.log(`Deducted ${credits} credits for user ${userId}. New total: ${total - newUsed}`)
     
     // Return updated credit information
     return NextResponse.json({
