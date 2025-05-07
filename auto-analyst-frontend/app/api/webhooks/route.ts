@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import Stripe from 'stripe'
 import { Readable } from 'stream'
-import redis, { creditUtils, KEYS } from '@/lib/redis'
+import redis, { creditUtils, KEYS, profileUtils } from '@/lib/redis'
 import { sendSubscriptionConfirmation, sendPaymentConfirmationEmail } from '@/lib/email'
 
 // Use the correct App Router configuration instead of the default body parser
@@ -115,7 +115,7 @@ async function updateUserSubscription(userId: string, session: Stripe.Checkout.S
     let userEmail = session.customer_email || ''
     if (!userEmail && userId) {
       // Try to fetch email from Redis user profile
-      const userProfile = await redis.hgetall(`user:${userId}`)
+      const userProfile = await profileUtils.getUserProfile(userId)
       if (userProfile && userProfile.email) {
         userEmail = userProfile.email as string
       }

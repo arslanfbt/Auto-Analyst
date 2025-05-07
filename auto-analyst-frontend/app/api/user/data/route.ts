@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getToken } from 'next-auth/jwt'
-import redis, { KEYS, subscriptionUtils } from '@/lib/redis'
+import redis, { KEYS, subscriptionUtils, profileUtils } from '@/lib/redis'
 
 // Define subscription plan options to match pricing.tsx tiers
 const SUBSCRIPTION_PLANS = {
@@ -166,6 +166,15 @@ export async function GET(request: NextRequest) {
         planKey
       }
     }
+    
+    // Save user profile to Redis
+    await profileUtils.saveUserProfile(userId, {
+      email: userEmail,
+      name: token.name || 'User',
+      image: token.picture as string || '',
+      joinedDate: userData.profile.joinedDate,
+      role: planDetails.name
+    });
     
     return NextResponse.json(userData)
   } catch (error) {

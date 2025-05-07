@@ -506,3 +506,31 @@ export const subscriptionUtils = {
     }
   }
 };
+
+export const profileUtils = {
+  // Save user profile info (at least email)
+  async saveUserProfile(userId: string, profile: { email: string, name?: string, image?: string, joinedDate?: string, role?: string }): Promise<void> {
+    try {
+      await redis.hset(KEYS.USER_PROFILE(userId), {
+        email: profile.email,
+        name: profile.name || '',
+        image: profile.image || '',
+        joinedDate: profile.joinedDate || '',
+        role: profile.role || '',
+      });
+      console.log(`User profile saved for ${userId}`);
+    } catch (error) {
+      console.error('Error saving user profile:', error);
+    }
+  },
+
+  // Optionally, get user profile info
+  async getUserProfile(userId: string): Promise<any> {
+    try {
+      return await redis.hgetall(KEYS.USER_PROFILE(userId));
+    } catch (error) {
+      console.error('Error fetching user profile:', error);
+      return null;
+    }
+  }
+};
