@@ -36,6 +36,7 @@ import { Button } from "../ui/button"
 import DatasetResetPopup from './DatasetResetPopup'
 import { useModelSettings } from '@/lib/hooks/useModelSettings'
 import logger from '@/lib/utils/logger'
+import { OnboardingTooltip } from '../onboarding/OnboardingTooltips'
 
 interface PlotlyMessage {
   type: "plotly"
@@ -105,10 +106,27 @@ const ChatInterface: React.FC = () => {
   const popupShownForChatIdsRef = useRef<Set<number>>(new Set());
   const [isNewLoginSession, setIsNewLoginSession] = useState(false);
   const [chatNameGenerated, setChatNameGenerated] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(false);
 
   useEffect(() => {
     setMounted(true)
   }, [])
+
+  // Check if it's the user's first time and show onboarding tooltip
+  useEffect(() => {
+    if (mounted && session?.user) {
+      const showOnboardingFlag = localStorage.getItem('showOnboarding');
+      if (showOnboardingFlag === 'true') {
+        // Delay showing the tooltip slightly to ensure the UI is fully loaded
+        const timer = setTimeout(() => {
+          setShowOnboarding(true);
+          // Remove the flag so it doesn't show again on page refresh
+          localStorage.removeItem('showOnboarding');
+        }, 1500);
+        return () => clearTimeout(timer);
+      }
+    }
+  }, [mounted, session]);
 
   useEffect(() => {
     const fetchAgents = async () => {
@@ -1481,6 +1499,12 @@ const ChatInterface: React.FC = () => {
           />
         )}
       </motion.div>
+      
+      {/* Onboarding Tooltip */}
+      <OnboardingTooltip 
+        isOpen={showOnboarding} 
+        onClose={() => setShowOnboarding(false)} 
+      />
     </div>
   )
 }

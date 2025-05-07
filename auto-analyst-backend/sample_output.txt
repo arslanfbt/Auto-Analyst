@@ -3,7 +3,7 @@
 === ERROR IN PLANNER_PREPROCESSING_AGENT ===
 Error in planner_preprocessing_agent: cannot do positional indexing on RangeIndex with these indexers [33.0] of type float
 Traceback (most recent call last):
-  File "D:\Firebird2\Auto-Analyst-CS\auto-analyst-backend\scripts\format_response.py", line 196, in execute_code_from_markdown
+  File "D:\Firebird2\Auto-Analyst-CS\auto-analystbackend\scripts\format_response.py", line 196, in execute_code_from_markdown
     exec(block_code, context)  # Execute the block
 
 Problem at this location:
