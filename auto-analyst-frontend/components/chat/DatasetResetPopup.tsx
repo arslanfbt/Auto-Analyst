@@ -2,6 +2,7 @@ import React from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { AlertTriangle, Database } from 'lucide-react';
+import logger from '@/lib/utils/logger';
 
 interface DatasetResetPopupProps {
   isOpen: boolean;
@@ -20,7 +21,7 @@ const DatasetResetPopup: React.FC<DatasetResetPopupProps> = ({
 }) => {
   React.useEffect(() => {
     if (silentOnLogin && isOpen) {
-      console.log("Silent dataset reset mode - automatically using default dataset without prompt");
+      logger.log("Silent dataset reset mode - automatically using default dataset without prompt");
       onConfirm();
     }
   }, [silentOnLogin, isOpen, onConfirm]);

@@ -85,7 +85,7 @@ export default function AccountPage() {
 
   const fetchUserData = async () => {
     try {
-      // console.log('Fetching user data from API')
+      // logger.log('Fetching user data from API')
       setIsRefreshing(true)
       
       // Add cache-busting parameter and force flag to ensure fresh data
@@ -95,13 +95,13 @@ export default function AccountPage() {
       }
       
       const data: UserDataResponse = await response.json()
-      // console.log('Received user data:', data)
+      // logger.log('Received user data:', data)
       
       setProfile(data.profile)
       setSubscription(data.subscription)
       
       // Enhanced credits handling with special attention to plan changes
-      // console.log('Credits data:', data.credits)
+      // logger.log('Credits data:', data.credits)
       
       if (data.credits) {
         // Determine plan-specific default total
@@ -124,7 +124,7 @@ export default function AccountPage() {
                   parseInt(String(data.credits.total || planDefaultTotal))
         };
         
-        console.log('Formatted credits with plan-specific defaults:', formattedCredits);
+        // logger.log('Formatted credits with plan-specific defaults:', formattedCredits);
         setCredits(formattedCredits);
       }
       
@@ -297,7 +297,7 @@ export default function AccountPage() {
               try {
                 const res = await fetch('/api/debug/redis-check');
                 const data = await res.json();
-                console.log('Redis debug data:', data);
+                // logger.log('Redis debug data:', data);
                 toast({
                   title: 'Redis data logged',
                   description: 'Check the console for details',
@@ -326,7 +326,7 @@ export default function AccountPage() {
                 // Call the fix-status API
                 const res = await fetch('/api/user/fix-status');
                 const data = await res.json();
-                console.log('Fix status result:', data);
+                // logger.log('Fix status result:', data);
                 
                 // Refresh the account data to see the changes
                 refreshUserData();
@@ -378,7 +378,7 @@ export default function AccountPage() {
       }
       
       const result = await response.json()
-      console.log('Plan downgrade result:', result)
+      // logger.log('Plan downgrade result:', result)
       
       // Refresh user data to reflect the changes
       await refreshUserData()
@@ -439,7 +439,7 @@ export default function AccountPage() {
       }
       
       const result = await response.json()
-      console.log('Subscription cancellation result:', result)
+      //  logger.log('Subscription cancellation result:', result)
       
       // Refresh user data to reflect the changes
       await refreshUserData()
@@ -934,7 +934,7 @@ export default function AccountPage() {
                                   defaultChecked 
                                   onChange={() => {
                                     // TODO: Add email notification logic
-                                    console.log('Email notifications toggled');
+                                    // logger.log('Email notifications toggled');
                                   }}
                                   className="sr-only"
                                 />
@@ -960,7 +960,7 @@ export default function AccountPage() {
                                   className="sr-only"
                                   onChange={() => {
                                     // TODO: Add usage alert logic
-                                    console.log('Usage alerts toggled');
+                                    // logger.log('Usage alerts toggled');
                                   }}
                                 />
                                 <label
@@ -981,7 +981,7 @@ export default function AccountPage() {
                               className="text-white bg-[#FF7F7F] hover:bg-[#FF6666]"
                               onClick={() => {
                                 // TODO: Add change password logic
-                                console.log('Change password clicked');
+                                // logger.log('Change password clicked');
                               }}
                             >
                               Change Password
@@ -991,7 +991,7 @@ export default function AccountPage() {
                               className="text-white bg-[#FF7F7F] hover:bg-[#FF6666]"
                               onClick={() => {
                                 // TODO: Add delete account logic
-                                console.log('Delete account clicked');
+                                // logger.log('Delete account clicked');
                               }}
                             >
                               Delete Account

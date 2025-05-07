@@ -40,16 +40,16 @@ export async function POST(request: NextRequest) {
     const isProcessed = await redis.get(processedKey)
     
     if (isProcessed) {
-      console.log(`Payment ${payment_intent} already processed, skipping`)
+      // logger.log(`Payment ${payment_intent} already processed, skipping`)
       return NextResponse.json({ success: true, alreadyProcessed: true })
     }
 
     // Log the payment intent for debugging
-    console.log(`Verifying payment intent: ${payment_intent}`)
+    // logger.log(`Verifying payment intent: ${payment_intent}`)
     
     // First get the payment intent directly to verify its status
     const intent = await stripe.paymentIntents.retrieve(payment_intent)
-    console.log(`Payment intent status: ${intent.status}`)
+    // logger.log(`Payment intent status: ${intent.status}`)
     
     if (intent.status !== 'succeeded') {
       return NextResponse.json(
@@ -64,11 +64,11 @@ export async function POST(request: NextRequest) {
     
     // Get metadata from the payment intent if available
     const metadata = intent.metadata || {}
-    console.log('Payment intent metadata:', metadata)
+    // logger.log('Payment intent metadata:', metadata)
     
     // Get the customer ID from the payment intent
     const customerId = intent.customer as string
-    console.log(`Customer ID from payment intent: ${customerId}`)
+    // logger.log(`Customer ID from payment intent: ${customerId}`)
     
     // Try to get the product ID from the metadata or use a fallback approach
     let productId = metadata.product_id
@@ -78,19 +78,19 @@ export async function POST(request: NextRequest) {
     if (!productId || !priceId) {
       try {
         // Try retrieving the session from the payment intent (first approach)
-        console.log(`Attempting to find session by payment intent ${payment_intent}`)
+        // logger.log(`Attempting to find session by payment intent ${payment_intent}`)
         const sessions = await stripe.checkout.sessions.list({
           payment_intent: payment_intent,
           limit: 1,
         })
         
         if (sessions.data.length > 0) {
-          console.log(`Found session: ${sessions.data[0].id}`)
+          // logger.log(`Found session: ${sessions.data[0].id}`)
           const session = sessions.data[0]
           
           // If we have a session, update subscription from it
           const updateResult = await updateUserSubscriptionFromSession(userId, session)
-          console.log(`Session-based update result: ${updateResult ? 'success' : 'failed'}`)
+          // logger.log(`Session-based update result: ${updateResult ? 'success' : 'failed'}`)
           
           // Mark payment as processed
           await redis.set(processedKey, 'true')
@@ -107,7 +107,7 @@ export async function POST(request: NextRequest) {
                 planName = product.name;
               }
             } catch (err) {
-              console.log('Could not retrieve product details:', err);
+              // logger.log('Could not retrieve product details:', err);
             }
           }
 
@@ -127,25 +127,25 @@ export async function POST(request: NextRequest) {
                 })
               });
               
-              console.log(`Payment confirmation email sent to ${session.customer_details.email}`);
+              // logger.log(`Payment confirmation email sent to ${session.customer_details.email}`);
             } catch (emailError) {
               // Log the error but don't fail the request
-              console.error('Failed to send payment confirmation email:', emailError);
+              // console.error('Failed to send payment confirmation email:', emailError);
             }
           }
 
           return NextResponse.json({ success: true })
         } else {
-          console.log('No session found by payment intent, using fallback method')
+          // logger.log('No session found by payment intent, using fallback method')
         }
       } catch (err) {
-        console.error('Error finding session:', err)
-        console.log('Using fallback method')
+        // console.error('Error finding session:', err)
+        // logger.log('Using fallback method')
       }
       
       // FALLBACK: If no session found, use hardcoded values based on amount
       const amount = intent.amount / 100 // Convert from cents to dollars
-      console.log(`Payment amount: ${amount}`)
+      // logger.log(`Payment amount: ${amount}`)
       
       // Determine the plan based on the amount
       let planName = 'Free Plan'
@@ -185,7 +185,7 @@ export async function POST(request: NextRequest) {
       }
       
       // Don't determine interval based on amount anymore - it's set above
-      console.log(`Determined plan: ${planName} (${interval}) with ${creditAmount} credits`)
+      // logger.log(`Determined plan: ${planName} (${interval}) with ${creditAmount} credits`)
       
       // Create subscription data
       const now = new Date()
@@ -212,7 +212,7 @@ export async function POST(request: NextRequest) {
         stripeSubscriptionId: intent.id || 'unknown'
       }
       
-      console.log('Storing fallback subscription data:', subscriptionData)
+      // logger.log('Storing fallback subscription data:', subscriptionData)
       await redis.hset(KEYS.USER_SUBSCRIPTION(userId), subscriptionData)
       
       // Calculate next credits reset date (one month from current date)
@@ -233,7 +233,7 @@ export async function POST(request: NextRequest) {
         lastUpdate: now.toISOString()
       }
       
-      console.log('Storing credit data:', creditData)
+      // logger.log('Storing credit data:', creditData)
       await redis.hset(KEYS.USER_CREDITS(userId), creditData)
 
       // Get user email (first try from session, then from token)
@@ -251,17 +251,17 @@ export async function POST(request: NextRequest) {
           creditResetDate.toISOString().split('T')[0]
         )
       } else {
-        console.log('No email found for user, cannot send confirmation email')
+        // logger.log('No email found for user, cannot send confirmation email')
       }
     }
     
     // Mark this payment as processed
     await redis.set(processedKey, 'true')
     
-    console.log(`Successfully processed payment ${payment_intent}`)
+    // logger.log(`Successfully processed payment ${payment_intent}`)
     return NextResponse.json({ success: true })
   } catch (error: any) {
-    console.error('Error verifying payment:', error)
+    // console.error('Error verifying payment:', error)
     return NextResponse.json(
       { error: error.message || 'Failed to verify payment' }, 
       { status: 500 }
@@ -272,19 +272,19 @@ export async function POST(request: NextRequest) {
 // Helper function to update subscription data from a checkout session
 async function updateUserSubscriptionFromSession(userId: string, session: Stripe.Checkout.Session) {
   try {
-    console.log(`Processing subscription update for user ${userId} from session ${session.id}`)
+    // logger.log(`Processing subscription update for user ${userId} from session ${session.id}`)
     
     // Get line items to extract product details
     const lineItems = await stripe!.checkout.sessions.listLineItems(session.id)
     if (!lineItems.data.length) {
-      console.error('No line items found in checkout session')
+      // console.error('No line items found in checkout session')
       return false
     }
     
     // Get the price ID
     const priceId = lineItems.data[0].price?.id
     if (!priceId) {
-      console.error('No price ID found in line item')
+      // console.error('No price ID found in line item')
       return false
     }
     
@@ -294,13 +294,13 @@ async function updateUserSubscriptionFromSession(userId: string, session: Stripe
     
     // Extract details
     const planName = product.name
-    console.log(`Plan name from Stripe: ${planName}`)
+    // logger.log(`Plan name from Stripe: ${planName}`)
     const interval = price.recurring?.interval || 'month'
     const amount = price.unit_amount! / 100 // Convert from cents
     
     // Extract metadata if available (can be useful for additional plan data)
     const metadata = product.metadata || {}
-    console.log('Product metadata:', metadata)
+    // logger.log('Product metadata:', metadata)
     
     // Calculate next renewal date
     const now = new Date()
@@ -334,7 +334,7 @@ async function updateUserSubscriptionFromSession(userId: string, session: Stripe
       }
     }
     
-    console.log(`Mapped plan type: ${planType} with ${creditAmount} credits`)
+    // logger.log(`Mapped plan type: ${planType} with ${creditAmount} credits`)
     
     // Create complete subscription data
     const subscriptionData = {
@@ -350,7 +350,7 @@ async function updateUserSubscriptionFromSession(userId: string, session: Stripe
       stripeSubscriptionId: session.subscription || ''
     }
     
-    console.log('Storing subscription data in Redis:', subscriptionData)
+    // logger.log('Storing subscription data in Redis:', subscriptionData)
     
     // Update user's subscription in Redis
     await redis.hset(KEYS.USER_SUBSCRIPTION(userId), subscriptionData)
@@ -373,7 +373,7 @@ async function updateUserSubscriptionFromSession(userId: string, session: Stripe
       lastUpdate: now.toISOString()
     }
     
-    console.log('Storing credit data in Redis:', creditData)
+    // logger.log('Storing credit data in Redis:', creditData)
     await redis.hset(KEYS.USER_CREDITS(userId), creditData)
 
     // Get user email (first try from session, then from token)
@@ -390,10 +390,10 @@ async function updateUserSubscriptionFromSession(userId: string, session: Stripe
         creditResetDate.toISOString().split('T')[0]
       )
     } else {
-      console.log('No email found for user, cannot send confirmation email')
+      logger.log('No email found for user, cannot send confirmation email')
     }
 
-    console.log('Successfully updated user subscription and credits')
+    // logger.log('Successfully updated user subscription and credits')
     return true
   } catch (error) {
     console.error('Error updating subscription from session:', error)

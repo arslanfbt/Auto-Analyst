@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback } from 'react'
 import axios from 'axios'
 import API_URL from '@/config/api'
 import { useSessionStore } from '@/lib/store/sessionStore'
+import logger from '@/lib/utils/logger'
+
 
 export interface ModelSettings {
   provider: string
@@ -115,7 +117,7 @@ export function useModelSettings() {
         setModelSettings(updatedSettings)
         saveSettingsToLocalStorage(updatedSettings)
         
-        console.log(`[Settings] Fetched model settings: ${response.data.model}`)
+        logger.log(`[Settings] Fetched model settings: ${response.data.model}`)
       }
     } catch (error) {
       console.error('Failed to fetch model settings:', error)
@@ -149,7 +151,7 @@ export function useModelSettings() {
         }
       })
       
-      console.log(`[Settings] Synced model settings to backend: ${completeSettings.model}`)
+      logger.log(`[Settings] Synced model settings to backend: ${completeSettings.model}`)
       
       // If the sync was successful, update local state to match what we sent
       if (response.status === 200) {
@@ -202,7 +204,7 @@ export function useModelSettings() {
       setModelSettings(newSettings)
       saveSettingsToLocalStorage(newSettings)
       
-      console.log(`[Settings] Updated model settings to ${updatedSettings.model}`)
+      logger.log(`[Settings] Updated model settings to ${updatedSettings.model}`)
       
       // Fetch the latest settings to ensure consistency
       await fetchModelSettings()
@@ -226,11 +228,11 @@ export function useModelSettings() {
       if (localSettings && localSettings.model) {
         // If we have local settings, immediately sync them to the backend
         // This ensures backend uses the same model as shown in frontend after refresh
-        console.log(`[Settings] Syncing local settings to backend: ${localSettings.model}`);
+        logger.log(`[Settings] Syncing local settings to backend: ${localSettings.model}`);
         syncSettingsToBackend()
           .then(success => {
             if (success) {
-              console.log('[Settings] Successfully synced local settings to backend');
+              logger.log('[Settings] Successfully synced local settings to backend');
             } else {
               console.warn('[Settings] Failed to sync local settings, fetching from backend instead');
               fetchModelSettings();

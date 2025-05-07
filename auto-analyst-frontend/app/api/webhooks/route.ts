@@ -134,7 +134,7 @@ async function updateUserSubscription(userId: string, session: Stripe.Checkout.S
         resetDate
       )
     } else {
-      console.log(`No email found for user ${userId}, cannot send confirmation email`)
+      logger.log(`No email found for user ${userId}, cannot send confirmation email`)
     }
     
     return true
@@ -170,7 +170,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: `Webhook Error: ${err.message}` }, { status: 400 })
     }
     
-    console.log(`Event received: ${event.type}`)
+    // logger.log(`Event received: ${event.type}`)
     
     // Handle different event types
     switch (event.type) {
@@ -222,7 +222,7 @@ export async function POST(request: NextRequest) {
               billingCycle: cycle === 'yearly' ? 'Annual' : 'Monthly',
               date: date
             });
-            console.log(`Payment confirmation email sent to ${customerEmail}`);
+            // logger.log(`Payment confirmation email sent to ${customerEmail}`);
           } catch (error) {
             console.error('Failed to send payment confirmation email:', error);
             // Continue processing - don't fail the webhook due to email issues
@@ -235,7 +235,7 @@ export async function POST(request: NextRequest) {
       case 'customer.subscription.updated': {
         const subscription = event.data.object as Stripe.Subscription
         // Handle subscription update logic
-        console.log('Subscription updated event received:', subscription.id)
+        // logger.log('Subscription updated event received:', subscription.id)
         
         // Check if the subscription status has changed to canceled or unpaid
         if (subscription.status === 'canceled' || subscription.status === 'unpaid') {
@@ -254,7 +254,7 @@ export async function POST(request: NextRequest) {
           }
           
           const userId = userKey.toString()
-          console.log(`Found user ${userId} for Stripe customer ${customerId}`)
+          // logger.log(`Found user ${userId} for Stripe customer ${customerId}`)
           
           // Get current subscription data
           const subscriptionData = await redis.hgetall(KEYS.USER_SUBSCRIPTION(userId))
@@ -277,7 +277,7 @@ export async function POST(request: NextRequest) {
               lastUpdate: new Date().toISOString()
             })
             
-            console.log(`Updated subscription status to canceling for user ${userId}`)
+            // logger.log(`Updated subscription status to canceling for user ${userId}`)
           } else if (subscription.status === 'unpaid') {
             // Handle unpaid subscriptions by marking them as inactive
             await redis.hset(KEYS.USER_SUBSCRIPTION(userId), {
@@ -295,7 +295,7 @@ export async function POST(request: NextRequest) {
               lastUpdate: new Date().toISOString()
             })
             
-            console.log(`Updated subscription status to inactive for user ${userId} due to unpaid status`)
+            // logger.log(`Updated subscription status to inactive for user ${userId} due to unpaid status`)
           }
         } 
         // Check if the subscription has changed plans
@@ -306,7 +306,7 @@ export async function POST(request: NextRequest) {
           // Look up the user by customer ID in our database
           const userKey = await redis.get(`stripe:customer:${customerId}`)
           if (!userKey) {
-            console.log(`No user found for Stripe customer ${customerId}`)
+            // logger.log(`No user found for Stripe customer ${customerId}`)
             return NextResponse.json({ received: true })
           }
           
@@ -338,7 +338,7 @@ export async function POST(request: NextRequest) {
       case 'customer.subscription.deleted': {
         const subscription = event.data.object as Stripe.Subscription
         // Handle subscription cancellation/deletion
-        console.log('Subscription deleted event received:', subscription.id)
+        // logger.log('Subscription deleted event received:', subscription.id)
         
         // Get the customer ID from the subscription
         const customerId = subscription.customer as string
@@ -355,7 +355,7 @@ export async function POST(request: NextRequest) {
         }
         
         const userId = userKey.toString()
-        console.log(`Found user ${userId} for Stripe customer ${customerId}`)
+        // logger.log(`Found user ${userId} for Stripe customer ${customerId}`)
         
         // Get the current subscription data
         const subscriptionData = await redis.hgetall(KEYS.USER_SUBSCRIPTION(userId))
@@ -398,7 +398,7 @@ export async function POST(request: NextRequest) {
           lastUpdate: now.toISOString()
         })
         
-        console.log(`User ${userId} downgraded to Free plan after subscription cancellation`)
+        // logger.log(`User ${userId} downgraded to Free plan after subscription cancellation`)
         
         return NextResponse.json({ received: true })
       }
@@ -406,7 +406,7 @@ export async function POST(request: NextRequest) {
       // Add more event types as needed
       
       default:
-        console.log(`Unhandled event type: ${event.type}`)
+        // logger.log(`Unhandled event type: ${event.type}`)
         return NextResponse.json({ received: true })
     }
   } catch (error: any) {

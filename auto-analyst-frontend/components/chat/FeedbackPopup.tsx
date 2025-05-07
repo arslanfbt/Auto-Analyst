@@ -16,7 +16,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { useSession } from "next-auth/react"
 import { useSessionStore } from '@/lib/store/sessionStore'
 import API_URL from '@/config/api'
-
+import logger from '@/lib/utils/logger'
 interface FeedbackPopupProps {
   isOpen: boolean
   onClose: () => void
@@ -69,7 +69,7 @@ const FeedbackPopup = ({ isOpen, onClose }: FeedbackPopupProps) => {
           }
           
           setModelSettings(settings)
-          console.log('Model settings retrieved from localStorage:', settings)
+          logger.log('Model settings retrieved from localStorage:', settings)
         } else {
           // Fallback to environment defaults
           const settings: ModelSettings = {

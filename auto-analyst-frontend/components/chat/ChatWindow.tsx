@@ -13,6 +13,7 @@ import { v4 as uuidv4 } from 'uuid'
 import { Code, AlertTriangle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import axios from "axios"
+import logger from '@/lib/utils/logger'
 
 interface PlotlyMessage {
   type: "plotly"
@@ -87,7 +88,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
   
   // Extract code blocks from messages
   const extractCodeFromMessages = useCallback((messagesToExtract: ChatMessage[], messageIndex: number) => {
-    console.log("messagesToExtract", messagesToExtract)
+    logger.log("messagesToExtract", messagesToExtract)
     // Use a map to group code blocks by language
     const codeByLanguage: Record<string, { code: string, blocks: string[], agents: string[] }> = {};
     
@@ -226,7 +227,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
   useEffect(() => {
     if (pendingCodeExecution && !isLoading) {
       // The entire response is now complete (loading finished)
-      console.log("Loading complete - triggering code execution for all messages");
+      logger.log("Loading complete - triggering code execution for all messages");
       
       // Process all AI messages to find and execute code
       // This ensures we wait for the ENTIRE conversation/response to complete
