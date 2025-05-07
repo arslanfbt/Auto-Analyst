@@ -2,7 +2,6 @@ import requests
 import uuid
 import time
 
-
 def test_session_workflow():
     # Base URL
     base_url = "http://localhost:8000"

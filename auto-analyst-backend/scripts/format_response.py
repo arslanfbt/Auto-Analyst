@@ -198,7 +198,150 @@ def execute_code_from_markdown(code_str, dataframe=None):
             all_outputs.append((block_name, output, None))  # None means no error
         except Exception as e:
             error_traceback = traceback.format_exc()
-            all_outputs.append((block_name, None, f"Error in {block_name}_agent: {str(e)}\n{error_traceback}"))
+            
+            # Extract error message and error type
+            error_message = str(e)
+            error_type = type(e).__name__
+            error_lines = error_traceback.splitlines()
+            
+            # Format error with context of the actual code
+            formatted_error = f"Error in {block_name}_agent: {error_message}\n"
+            
+            # Add first few lines of traceback
+            first_lines = error_lines[:3]
+            formatted_error += "\n".join(first_lines) + "\n"
+            
+            # Parse problem variables/values from the error message
+            problem_vars = []
+            
+            # Look for common error patterns
+            if "not in index" in error_message:
+                # Extract column names for 'not in index' errors
+                column_match = re.search(r"\['([^']+)'(?:, '([^']+)')*\] not in index", error_message)
+                if column_match:
+                    problem_vars = [g for g in column_match.groups() if g is not None]
+                    
+                    # Look for DataFrame accessing operations and list/variable definitions
+                    potential_lines = []
+                    code_lines = block_code.splitlines()
+                    
+                    # First, find all DataFrame column access patterns
+                    df_access_patterns = []
+                    for i, line in enumerate(code_lines):
+                        # Find DataFrame variables from patterns like "df_name[...]" or "df_name.loc[...]"
+                        df_matches = re.findall(r'(\w+)(?:\[|\.)(?:loc|iloc|columns|at|iat|\.select)', line)
+                        for df_var in df_matches:
+                            df_access_patterns.append((i, df_var))
+                        
+                        # Find variables that might contain column lists
+                        for var in problem_vars:
+                            if re.search(r'\b(numeric_columns|categorical_columns|columns|features|cols)\b', line):
+                                potential_lines.append(i)
+                    
+                    # Identify the most likely problematic lines
+                    if df_access_patterns:
+                        for i, df_var in df_access_patterns:
+                            if any(re.search(rf'{df_var}\[.*?\]', line) for line in code_lines):
+                                potential_lines.append(i)
+                    
+                    # If no specific lines found yet, look for any DataFrame operations
+                    if not potential_lines:
+                        for i, line in enumerate(code_lines):
+                            if re.search(r'(?:corr|drop|groupby|pivot|merge|join|concat|apply|map|filter|loc|iloc)\(', line):
+                                potential_lines.append(i)
+                    
+                    # Sort and deduplicate
+                    potential_lines = sorted(set(potential_lines))
+            elif "name" in error_message and "is not defined" in error_message:
+                # Extract variable name for NameError
+                var_match = re.search(r"name '([^']+)' is not defined", error_message)
+                if var_match:
+                    problem_vars = [var_match.group(1)]
+            elif "object has no attribute" in error_message:
+                # Extract attribute name for AttributeError
+                attr_match = re.search(r"'([^']+)' object has no attribute '([^']+)'", error_message)
+                if attr_match:
+                    problem_vars = [f"{attr_match.group(1)}.{attr_match.group(2)}"]
+            
+            # Scan code for lines containing the problem variables
+            if problem_vars:
+                formatted_error += "\nProblem likely in these lines:\n"
+                code_lines = block_code.splitlines()
+                problem_lines = []
+                
+                # First try direct variable references
+                direct_matches = False
+                for i, line in enumerate(code_lines):
+                    if any(var in line for var in problem_vars):
+                        direct_matches = True
+                        # Get line and its context (1 line before and after)
+                        start_idx = max(0, i-1)
+                        end_idx = min(len(code_lines), i+2)
+                        
+                        for j in range(start_idx, end_idx):
+                            line_prefix = f"{j+1}: "
+                            if j == i:  # The line with the problem variable
+                                problem_lines.append(f"{line_prefix}>>> {code_lines[j]} <<<")
+                            else:
+                                problem_lines.append(f"{line_prefix}{code_lines[j]}")
+                        
+                        problem_lines.append("") # Empty line between sections
+                
+                # If no direct matches found but we identified potential problematic lines for DataFrame issues
+                if not direct_matches and "not in index" in error_message and 'potential_lines' in locals():
+                    for i in potential_lines:
+                        start_idx = max(0, i-1)
+                        end_idx = min(len(code_lines), i+2)
+                        
+                        for j in range(start_idx, end_idx):
+                            line_prefix = f"{j+1}: "
+                            if j == i:
+                                problem_lines.append(f"{line_prefix}>>> {code_lines[j]} <<<")
+                            else:
+                                problem_lines.append(f"{line_prefix}{code_lines[j]}")
+                        
+                        problem_lines.append("") # Empty line between sections
+                
+                if problem_lines:
+                    formatted_error += "\n".join(problem_lines)
+                else:
+                    # Special message for column errors when we can't find the exact reference
+                    if "not in index" in error_message:
+                        formatted_error += (f"Unable to locate direct reference to columns: {', '.join(problem_vars)}\n"
+                                           f"Check for variables that might contain these column names (like numeric_columns, "
+                                           f"categorical_columns, etc.)\n")
+                    else:
+                        formatted_error += f"Unable to locate lines containing: {', '.join(problem_vars)}\n"
+            else:
+                # If we couldn't identify specific variables, check for line numbers in traceback
+                for line in reversed(error_lines):  # Search from the end of traceback
+                    # Look for user code references in the traceback
+                    if ', line ' in line and '<module>' in line:
+                        try:
+                            line_num = int(re.search(r', line (\d+)', line).group(1))
+                            code_lines = block_code.splitlines()
+                            if 0 < line_num <= len(code_lines):
+                                line_idx = line_num - 1
+                                start_idx = max(0, line_idx-2)
+                                end_idx = min(len(code_lines), line_idx+3)
+                                
+                                formatted_error += "\nProblem at this location:\n"
+                                for i in range(start_idx, end_idx):
+                                    line_prefix = f"{i+1}: "
+                                    if i == line_idx:
+                                        formatted_error += f"{line_prefix}>>> {code_lines[i]} <<<\n"
+                                    else:
+                                        formatted_error += f"{line_prefix}{code_lines[i]}\n"
+                                break
+                        except (ValueError, AttributeError, IndexError):
+                            pass
+            
+            # Add the last few lines of the traceback
+            formatted_error += "\nFull error details:\n"
+            last_lines = error_lines[-3:]
+            formatted_error += "\n".join(last_lines)
+            
+            all_outputs.append((block_name, None, formatted_error))
     
     # Compile all outputs and errors
     output_text = ""
