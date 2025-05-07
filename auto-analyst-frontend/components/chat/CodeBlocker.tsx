@@ -14,6 +14,7 @@ import API_URL from '@/config/api'
 import MonacoEditor from '@monaco-editor/react'
 import { Textarea } from "@/components/ui/textarea"
 import { useToast } from "@/components/ui/use-toast"
+import logger from '@/lib/utils/logger'
 
 interface CodeBlockProps {
   language: string

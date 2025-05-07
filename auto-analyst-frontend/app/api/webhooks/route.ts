@@ -3,6 +3,7 @@ import Stripe from 'stripe'
 import { Readable } from 'stream'
 import redis, { creditUtils, KEYS, profileUtils } from '@/lib/redis'
 import { sendSubscriptionConfirmation, sendPaymentConfirmationEmail } from '@/lib/email'
+import logger from '@/lib/utils/logger'
 
 // Use the correct App Router configuration instead of the default body parser
 export const dynamic = 'force-dynamic'

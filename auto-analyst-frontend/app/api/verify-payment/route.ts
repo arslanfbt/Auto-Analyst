@@ -3,7 +3,7 @@ import { getToken } from 'next-auth/jwt'
 import Stripe from 'stripe'
 import redis, { KEYS } from '@/lib/redis'
 import { sendSubscriptionConfirmation, sendPaymentConfirmationEmail } from '@/lib/email'
-
+import logger from '@/lib/utils/logger'
 export const dynamic = 'force-dynamic'
 
 // Initialize Stripe only if the secret key exists

@@ -1,4 +1,5 @@
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+import logger from '@/lib/utils/logger'
 
 // Helper function to add admin API key to headers
 const getHeaders = (adminKey: string) => {

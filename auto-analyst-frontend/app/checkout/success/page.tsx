@@ -6,6 +6,7 @@ import { useSession } from 'next-auth/react';
 import { useToast } from '@/components/ui/use-toast';
 import { Loader2, ShieldAlert, CheckCircle } from 'lucide-react'
 import Layout from '@/components/layout'
+import logger from '@/lib/utils/logger'
 
 export default function CheckoutSuccess() {
   const router = useRouter()

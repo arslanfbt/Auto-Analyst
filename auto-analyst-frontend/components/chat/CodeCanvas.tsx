@@ -19,6 +19,7 @@ import { Label } from "@/components/ui/label"
 import { useSession } from "next-auth/react"
 import { useCredits } from '@/lib/contexts/credit-context'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
+import logger from '@/lib/utils/logger'
 
 interface CodeEntry {
   id: string;

@@ -3,6 +3,7 @@
 import { useEffect } from 'react'
 import { useModelSettings } from "@/lib/hooks/useModelSettings"
 import SettingsPopup from './SettingsPopup'
+import logger from '@/lib/utils/logger'
 
 interface ChatSettingsModalProps {
   isOpen: boolean
