@@ -56,16 +56,33 @@ const MessageContent: React.FC<MessageContentProps> = ({
       }))
     }
 
+    // Pass the fixed code to the parent component
+    // This will cause ChatWindow to update the code in the canvas
+    if (onCodeExecute) {
+      // First save the code
+      onCodeExecute({ savedCode: fixedCode }, (code) => {});
+      
+      // Then trigger execution after a short delay
+      setTimeout(() => {
+        // Execute the fixed code (the parent will handle this)
+        onCodeExecute({ 
+          autoRun: true, 
+          codeId: codeId, 
+          code: fixedCode 
+        }, (code) => {});
+      }, 500);
+    }
+
     // Show toast notification
     toast({
       title: "Code fixed",
-      description: "The error has been fixed in code canvas. Please run the code to see if it works.",
+      description: "The error has been fixed and code is now running automatically.",
       duration: 3000,
     })
 
     // Reset fixing state
     setIsFixingCode(prev => ({ ...prev, [codeId]: false }))
-  }, [setCodeFixes, toast])
+  }, [setCodeFixes, onCodeExecute, toast])
 
   const renderContent = useCallback(
     (content: string) => {
