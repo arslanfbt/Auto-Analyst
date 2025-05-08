@@ -11,14 +11,11 @@ import CodeCanvas from "./CodeCanvas"
 import CodeIndicator from "./CodeIndicator"
 import CodeFixButton from "./CodeFixButton"
 import { v4 as uuidv4 } from 'uuid'
-import { Code, AlertTriangle, Copy, Check } from "lucide-react"
+import { Code, AlertTriangle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import axios from "axios"
 import { useSessionStore } from '@/lib/store/sessionStore'
 import logger from '@/lib/utils/logger'
-import { useCodeOutputStore } from '@/lib/store/codeOutputStore'
-import API_URL from '@/config/api'
-import { toast } from "@/components/ui/use-toast"
 
 interface PlotlyMessage {
   type: "plotly"
@@ -43,6 +40,13 @@ interface CodeEntry {
   messageIndex: number; // Track which message this code belongs to
 }
 
+interface CodeOutput {
+  type: 'output' | 'error' | 'plotly';
+  content: string | any;
+  messageIndex: number;
+  codeId: string;
+}
+
 interface ChatWindowProps {
   messages: ChatMessage[]
   isLoading: boolean
@@ -64,7 +68,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
   const [codeCanvasOpen, setCodeCanvasOpen] = useState(false)
   const [codeEntries, setCodeEntries] = useState<CodeEntry[]>([])
   const [currentMessageIndex, setCurrentMessageIndex] = useState<number | null>(null)
-  const { addOutput, removeOutput, getOutputsForSession, clearSessionOutputs } = useCodeOutputStore()
+  const [codeOutputs, setCodeOutputs] = useState<CodeOutput[]>([])
   const [chatCompleted, setChatCompleted] = useState(false)
   const [autoRunEnabled, setAutoRunEnabled] = useState(true)
   const [hiddenCanvas, setHiddenCanvas] = useState<boolean>(true)
@@ -72,9 +76,6 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
   const [codeFixes, setCodeFixes] = useState<Record<string, number>>({})
   const [codeFixState, setCodeFixState] = useState<CodeFixState>({ isFixing: false, codeBeingFixed: null })
   const { sessionId: storeSessionId } = useSessionStore()
-  
-  // Use the session ID for storing outputs
-  const currentSessionId = sessionId || storeSessionId || 'default-session'
   
   // Set chatCompleted when chat name is generated
   useEffect(() => {
@@ -191,11 +192,10 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
   // Clear code entries for new chats or messages
   const clearCodeEntries = useCallback(() => {
     setCodeEntries([])
-    // Clear outputs for this session in the store
-    clearSessionOutputs(currentSessionId)
+    setCodeOutputs([])
     // Don't close the canvas anymore, just hide it
     setHiddenCanvas(true)
-  }, [clearSessionOutputs, currentSessionId])
+  }, [])
   
   // Clear only code entries but keep outputs (for new AI messages)
   const clearCodeEntriesKeepOutput = useCallback(() => {
@@ -403,30 +403,33 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
       return;
     }
     
-    // Instead of removing outputs from local state, remove from the store
-    removeOutput(currentSessionId, entryId);
+    // Remove previous output for this message (not just this code entry)
+    // This ensures each message has only one output box
+    setCodeOutputs(prev => prev.filter(output => output.messageIndex !== codeEntry.messageIndex));
     
-    // Add outputs to the persistent store based on what's available
-    // Changed from else-if to separate if statements to allow both text and plotly outputs
+    // Add/update outputs for this message
     if (result.error) {
       // Add error output
-      addOutput(currentSessionId, {
-        type: 'error',
-        content: result.error,
-        messageIndex: codeEntry.messageIndex,
-        codeId: entryId
-      });
-    }
-    
-    // Always add text output if available (not just when there's no error)
-    if (result.output) {
+      setCodeOutputs(prev => [
+        ...prev,
+        {
+          type: 'error',
+          content: result.error,
+          messageIndex: codeEntry.messageIndex,
+          codeId: entryId
+        }
+      ]);
+    } else if (result.output) {
       // Add text output
-      addOutput(currentSessionId, {
-        type: 'output',
-        content: result.output,
-        messageIndex: codeEntry.messageIndex,
-        codeId: entryId
-      });
+      setCodeOutputs(prev => [
+        ...prev,
+        {
+          type: 'output',
+          content: result.output,
+          messageIndex: codeEntry.messageIndex,
+          codeId: entryId
+        }
+      ]);
     }
     
     // Add plotly outputs if any
@@ -434,29 +437,21 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
       result.plotly_outputs.forEach((plotlyOutput: string) => {
         try {
           const plotlyData = JSON.parse(plotlyOutput.replace(/```plotly\n|\n```/g, ""));
-          addOutput(currentSessionId, {
-            type: 'plotly',
-            content: plotlyData,
-            messageIndex: codeEntry.messageIndex,
-            codeId: entryId
-          });
+          setCodeOutputs(prev => [
+            ...prev,
+            {
+              type: 'plotly',
+              content: plotlyData,
+              messageIndex: codeEntry.messageIndex,
+              codeId: entryId
+            }
+          ]);
         } catch (e) {
           console.error("Error parsing Plotly data:", e);
         }
       });
     }
-    
-    // Always add a success output if there's no error and no other outputs
-    // This ensures the output container is visible even for successful runs with no output
-    if (!result.error && !result.output && (!result.plotly_outputs || result.plotly_outputs.length === 0)) {
-      addOutput(currentSessionId, {
-        type: 'success',
-        content: 'Code executed successfully with no output',
-        messageIndex: codeEntry.messageIndex,
-        codeId: entryId
-      });
-    }
-  }, [codeEntries, addOutput, removeOutput, currentSessionId]);
+  }, [codeEntries]);
 
   // Handle fix start
   const handleFixStart = useCallback((codeId: string) => {
@@ -483,7 +478,6 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
     // Update the code in the appropriate entry
     const codeEntry = codeEntries.find(entry => entry.id === codeId)
     if (codeEntry) {
-      // Update the code entry
       setCodeEntries(prev =>
         prev.map(entry =>
           entry.id === codeId
@@ -492,43 +486,22 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
         )
       )
 
-      // First notify parent about the code change
+      // Notify parent about the code change
       handleCodeCanvasExecute(codeId, { savedCode: fixedCode })
 
-      // Clear error output from the store
-      removeOutput(currentSessionId, codeId);
-      
-      // Automatically execute the fixed code without opening the canvas
-      // This is only for Python code
-      if (codeEntry.language === "python") {
-        setTimeout(() => {
-          // Call the API directly to execute the code
-          axios.post(`${API_URL}/code/execute`, {
-            code: fixedCode,
-            session_id: currentSessionId,
-          }, {
-            headers: {
-              ...(currentSessionId && { 'X-Session-ID': currentSessionId }),
-            },
-          }).then(response => {
-            // Process the execution result
-            if (response.data) {
-              // Pass execution result to code canvas handler
-              handleCodeCanvasExecute(codeId, response.data);
-            }
-          }).catch(error => {
-            console.error("Error executing fixed code:", error);
-            // Still need to handle the error case
-            const errorMessage = error instanceof Error ? error.message : "Failed to execute code";
-            handleCodeCanvasExecute(codeId, { error: errorMessage });
-          });
-        }, 500); // Small delay to ensure state updates are processed
-      }
+      // Clear error output
+      setCodeOutputs(prev => {
+        const output = prev.find(output => output.codeId === codeId)
+        if (output) {
+          return prev.filter(o => o.codeId !== codeId)
+        }
+        return prev
+      })
     }
 
     // Reset fixing state
     setCodeFixState({ isFixing: false, codeBeingFixed: null })
-  }, [codeEntries, handleCodeCanvasExecute, removeOutput, currentSessionId])
+  }, [codeEntries, handleCodeCanvasExecute])
 
   const renderMessage = (message: ChatMessage, index: number) => {
     if (typeof message.text === "object" && message.text.type === "plotly") {
@@ -656,12 +629,9 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
     return null;
   };
 
-  // Modified renderCodeOutputs to get outputs from the store
+  // Replace the entire renderCodeOutputs function with a fixed implementation
   const renderCodeOutputs = (messageIndex: number) => {
-    // Get outputs for this session from the store and filter by message index
-    const sessionOutputs = getOutputsForSession(currentSessionId);
-    const allOutputs = Object.values(sessionOutputs).flat();
-    const relevantOutputs = allOutputs.filter(output => output.messageIndex === messageIndex);
+    const relevantOutputs = codeOutputs.filter(output => output.messageIndex === messageIndex);
     
     if (relevantOutputs.length === 0) return null;
     
@@ -669,36 +639,15 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
     const errorOutputs = relevantOutputs.filter(output => output.type === 'error');
     const textOutputs = relevantOutputs.filter(output => output.type === 'output');
     const plotlyOutputs = relevantOutputs.filter(output => output.type === 'plotly');
-    const successOutputs = relevantOutputs.filter(output => output.type === 'success');
     
-        return (
+    return (
       <div className="mt-2 space-y-4">
         {/* Show error outputs first */}
         {errorOutputs.length > 0 && (
           <div className="bg-red-50 border border-red-200 rounded-md p-3 overflow-auto relative">
-            <div className="flex items-center justify-between text-red-600 font-medium mb-2">
-              <div className="flex items-center">
+            <div className="flex items-center text-red-600 font-medium mb-2">
               <AlertTriangle size={16} className="mr-2" />
-                <span>Error Output</span>
-              </div>
-              {/* Add copy button for error outputs */}
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => {
-                  // Copy the error as markdown
-                  const content = errorOutputs[0].content.toString();
-                  navigator.clipboard.writeText("```error\n" + content + "\n```");
-                  toast({
-                    title: "Copied to clipboard",
-                    description: "Error copied as markdown",
-                    duration: 2000,
-                  });
-                }}
-                className="h-6 w-6 p-0 rounded-full bg-blue-50 hover:bg-blue-100 border border-blue-200"
-              >
-                <Copy className="h-4 w-4 text-blue-500" />
-              </Button>
+              Error Output
             </div>
             
             {errorOutputs[0].codeId && (
@@ -725,35 +674,15 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
         {/* Show text outputs */}
         {textOutputs.length > 0 && (
           <div className="bg-gray-50 border border-gray-200 rounded-md p-3 relative">
-            <div className="flex items-center justify-between text-gray-700 font-medium mb-2">
-              <span>Output</span>
-              {/* Add copy button for all outputs */}
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => {
-                  // Copy the output as markdown
-                  const content = textOutputs[0].content.toString();
-                  navigator.clipboard.writeText("```\n" + content + "\n```");
-                  toast({
-                    title: "Copied to clipboard",
-                    description: "Output copied as markdown",
-                    duration: 2000,
-                  });
-                }}
-                className="h-6 w-6 p-0 rounded-full bg-blue-50 hover:bg-blue-100 border border-blue-200"
-              >
-                <Copy className="h-4 w-4 text-blue-500" />
-              </Button>
+            <div className="flex items-center text-gray-700 font-medium mb-2">
+              Output
             </div>
             
-            {/* Add a fix button only for outputs that actually contain errors */}
+            {/* Add a fix button for outputs that look like errors */}
             {textOutputs[0].codeId && 
              (textOutputs[0].content.toString().toLowerCase().includes("error") || 
               textOutputs[0].content.toString().toLowerCase().includes("traceback") || 
-              textOutputs[0].content.toString().toLowerCase().includes("exception") ||
-              textOutputs[0].content.toString().toLowerCase().includes("failed") ||
-              textOutputs[0].content.toString().toLowerCase().includes("syntax error")) && (
+              textOutputs[0].content.toString().toLowerCase().includes("exception")) && (
               <CodeFixButton
                 codeId={textOutputs[0].codeId}
                 errorOutput={textOutputs[0].content as string}
@@ -790,49 +719,30 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
         {/* Show plotly visualizations */}
         {plotlyOutputs.map((output, idx) => (
           <div key={`plotly-${messageIndex}-${idx}`} className="bg-white border border-gray-200 rounded-md p-3 overflow-auto relative">
-            <div className="flex items-center justify-between text-gray-700 font-medium mb-2">
-              <span>Visualization</span>
-              {/* Add copy button for visualization data */}
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => {
-                  // Copy the visualization data as JSON
-                  const jsonData = JSON.stringify(output.content, null, 2);
-                  navigator.clipboard.writeText("```json\n" + jsonData + "\n```");
-                  toast({
-                    title: "Copied to clipboard",
-                    description: "Visualization data copied as markdown",
-                    duration: 2000,
-                  });
-                }}
-                className="h-6 w-6 p-0 rounded-full bg-blue-50 hover:bg-blue-100 border border-blue-200"
-              >
-                <Copy className="h-4 w-4 text-blue-500" />
-              </Button>
+            <div className="flex items-center text-gray-700 font-medium mb-2">
+              Visualization
             </div>
             
-            {/* For successful plotly visualizations, don't show any fix button */}
+            {output.codeId && (
+              <CodeFixButton
+                codeId={output.codeId}
+                errorOutput={""}
+                code={codeEntries.find(entry => entry.id === output.codeId)?.code || ''}
+                isFixing={codeFixState.isFixing && codeFixState.codeBeingFixed === output.codeId}
+                codeFixes={codeFixes}
+                sessionId={sessionId || storeSessionId || ''}
+                onFixStart={handleFixStart}
+                onFixComplete={handleFixComplete}
+                onCreditCheck={handleCreditCheck}
+                variant="inline"
+              />
+            )}
+            
             <div className="w-full">
               <PlotlyChart data={output.content.data} layout={output.content.layout} />
             </div>
           </div>
         ))}
-        
-        {/* Show success message when code executed successfully with no output */}
-        {successOutputs.length > 0 && !errorOutputs.length && !textOutputs.length && !plotlyOutputs.length && (
-          <div className="bg-green-50 border border-green-200 rounded-md p-3 overflow-auto relative">
-            <div className="flex items-center justify-between text-green-600 font-medium mb-2">
-              <div className="flex items-center">
-                <Check size={16} className="mr-2" />
-                <span>Success</span>
-              </div>
-            </div>
-            <pre className="text-xs text-green-700 font-mono whitespace-pre-wrap">
-              {successOutputs[0].content}
-            </pre>
-          </div>
-        )}
       </div>
     );
   };

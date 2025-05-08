@@ -4,11 +4,10 @@ import React, { useCallback, useState } from "react"
 import ReactMarkdown from "react-markdown"
 import rehypeRaw from "rehype-raw"
 import remarkGfm from "remark-gfm"
-import { AlertTriangle, Copy, Check } from "lucide-react"
+import { AlertTriangle } from "lucide-react"
 import CodeFixButton from "./CodeFixButton"
 import { useSessionStore } from '@/lib/store/sessionStore'
 import { useToast } from "@/components/ui/use-toast"
-import { Button } from "@/components/ui/button"
 
 interface MessageContentProps {
   message: string
@@ -28,7 +27,6 @@ const MessageContent: React.FC<MessageContentProps> = ({
   const { sessionId } = useSessionStore()
   const { toast } = useToast()
   const [isFixingCode, setIsFixingCode] = useState<Record<string, boolean>>({})
-  const [copiedId, setCopiedId] = useState<string | null>(null)
   
   // Generate a unique code ID for each error block
   const generateCodeId = (content: string, index: number) => {
@@ -69,24 +67,6 @@ const MessageContent: React.FC<MessageContentProps> = ({
     setIsFixingCode(prev => ({ ...prev, [codeId]: false }))
   }, [setCodeFixes, toast])
 
-  // Copy to clipboard function
-  const copyToClipboard = useCallback((content: string, format: string = "") => {
-    let textToCopy = content;
-    
-    // Add markdown formatting if requested
-    if (format) {
-      textToCopy = "```" + format + "\n" + content + "\n```";
-    }
-    
-    navigator.clipboard.writeText(textToCopy);
-    
-    toast({
-      title: "Copied to clipboard",
-      description: format ? `Content copied as ${format} markdown` : "Content copied",
-      duration: 2000,
-    });
-  }, [toast]);
-
   const renderContent = useCallback(
     (content: string) => {
       // Remove plotly blocks as they'll be handled separately
@@ -115,13 +95,7 @@ const MessageContent: React.FC<MessageContentProps> = ({
                   // Check if this looks like an error but isn't explicitly marked as one
                   const containsError = codeContent.toLowerCase().includes("error") || 
                                       codeContent.toLowerCase().includes("traceback") ||
-                                      codeContent.toLowerCase().includes("exception") ||
-                                      codeContent.toLowerCase().includes("failed") ||
-                                      codeContent.toLowerCase().includes("syntax error") ||
-                                      codeContent.toLowerCase().includes("name error") ||
-                                      codeContent.toLowerCase().includes("type error") ||
-                                      codeContent.toLowerCase().includes("value error") ||
-                                      codeContent.toLowerCase().includes("index error")
+                                      codeContent.toLowerCase().includes("exception")
                   
                   // Check if this is likely tabular data
                   const matches = codeContent.match(/\|\s*\w+\s*\|/g);
@@ -129,9 +103,6 @@ const MessageContent: React.FC<MessageContentProps> = ({
                                        (codeContent.includes('DataFrame') || 
                                         codeContent.includes('Column Types') ||
                                         (matches !== null && matches.length > 1));
-                  
-                  // Check if this is a success output
-                  const isSuccessOutput = match && match[1] === 'success';
 
                   if (!isInline && match) {
                     // Special handling for explicit error blocks
@@ -139,19 +110,9 @@ const MessageContent: React.FC<MessageContentProps> = ({
                       const codeId = generateCodeId(codeContent, index)
                       return (
                         <div className="bg-red-50 border border-red-200 rounded-md p-3 my-3 overflow-auto relative">
-                          <div className="flex items-center justify-between text-red-600 font-medium mb-2">
-                            <div className="flex items-center">
-                              <AlertTriangle size={16} className="mr-2" />
-                              <span>Error Output</span>
-                            </div>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => copyToClipboard(codeContent, "error")}
-                              className="h-6 w-6 p-0 rounded-full bg-blue-50 hover:bg-blue-100 border border-blue-200"
-                            >
-                              <Copy className="h-4 w-4 text-blue-500" />
-                            </Button>
+                          <div className="flex items-center text-red-600 font-medium mb-2">
+                            <AlertTriangle size={16} className="mr-2" />
+                            Error Output
                           </div>
                           <CodeFixButton
                             codeId={codeId}
@@ -172,46 +133,13 @@ const MessageContent: React.FC<MessageContentProps> = ({
                       )
                     }
                     
-                    // Handle success blocks
-                    if (isSuccessOutput) {
-                      return (
-                        <div className="bg-green-50 border border-green-200 rounded-md p-3 my-3 overflow-auto relative">
-                          <div className="flex items-center justify-between text-green-600 font-medium mb-2">
-                            <div className="flex items-center">
-                              <Check size={16} className="mr-2" />
-                              <span>Success</span>
-                            </div>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => copyToClipboard(codeContent, "success")}
-                              className="h-6 w-6 p-0 rounded-full bg-blue-50 hover:bg-blue-100 border border-blue-200"
-                            >
-                              <Copy className="h-4 w-4 text-blue-500" />
-                            </Button>
-                          </div>
-                          <pre className="text-xs text-green-700 font-mono whitespace-pre-wrap">
-                            {codeContent}
-                          </pre>
-                        </div>
-                      )
-                    }
-                    
                     // Handle code blocks that contain errors but aren't explicitly marked as errors
                     if (containsError && codeFixes !== undefined && setCodeFixes) {
                       const codeId = generateCodeId(codeContent, index)
                       return (
                         <div className="bg-gray-50 border border-gray-200 rounded-md p-3 my-2 overflow-auto relative">
-                          <div className="flex items-center justify-between text-gray-700 font-medium mb-2">
+                          <div className="flex items-center text-gray-700 font-medium mb-2">
                             <span>Output</span>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => copyToClipboard(codeContent)}
-                              className="h-6 w-6 p-0 rounded-full bg-blue-50 hover:bg-blue-100 border border-blue-200"
-                            >
-                              <Copy className="h-4 w-4 text-blue-500" />
-                            </Button>
                           </div>
                           <CodeFixButton
                             codeId={codeId}
@@ -236,17 +164,6 @@ const MessageContent: React.FC<MessageContentProps> = ({
                     if (isTabularData) {
                       return (
                         <div className="overflow-x-auto max-w-full my-2">
-                          <div className="flex items-center justify-between text-gray-700 font-medium mb-2">
-                            <span>Data Table</span>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => copyToClipboard(codeContent)}
-                              className="h-6 w-6 p-0 rounded-full bg-blue-50 hover:bg-blue-100 border border-blue-200"
-                            >
-                              <Copy className="h-4 w-4 text-blue-500" />
-                            </Button>
-                          </div>
                           <pre className="text-sm p-2 bg-gray-100 rounded font-mono whitespace-pre min-w-max">
                             {codeContent}
                           </pre>
@@ -257,17 +174,6 @@ const MessageContent: React.FC<MessageContentProps> = ({
                     // For regular code blocks
                     return (
                       <div className="overflow-x-auto my-2">
-                        <div className="flex items-center justify-between text-gray-700 font-medium mb-2">
-                          <span>{match && match[1] ? match[1] : "Code"}</span>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => copyToClipboard(codeContent, match && match[1] ? match[1] : "")}
-                            className="h-6 w-6 p-0 rounded-full bg-blue-50 hover:bg-blue-100 border border-blue-200"
-                          >
-                            <Copy className="h-4 w-4 text-blue-500" />
-                          </Button>
-                        </div>
                         <code className={`text-sm p-1 bg-gray-100 rounded font-mono block ${className}`} {...props}>
                           {children}
                         </code>
