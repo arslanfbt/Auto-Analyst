@@ -16,6 +16,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogClose
 } from "@/components/ui/dialog"
 import { useSessionStore } from '@/lib/store/sessionStore'
 import { useCredits } from '@/lib/contexts/credit-context'
@@ -96,6 +97,8 @@ const ChatInput = forwardRef<
   const [errorNotification, setErrorNotification] = useState<{ message: string, details?: string } | null>(null);
   // Add timeout ref to manage error notification cleanup
   const errorTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  // Add state to track description generation in progress
+  const [isGeneratingDescription, setIsGeneratingDescription] = useState(false);
 
   // Expose handlePreviewDefaultDataset to parent
   useImperativeHandle(ref, () => ({
@@ -566,6 +569,16 @@ const ChatInput = forwardRef<
           // If we got a new session ID from the upload, save it
           if (uploadResponse.data.session_id) {
             setSessionId(uploadResponse.data.session_id);
+          }
+          
+          // Auto-generate description for new datasets if the description is the placeholder
+          if (isNewDataset && 
+              (descriptionToUse === 'Please describe what this dataset contains and its purpose' || 
+               !descriptionToUse)) {
+            // Wait a brief moment to ensure session is ready
+            setTimeout(() => {
+              generateDatasetDescription();
+            }, 300);
           }
         } catch (error: any) {
           // Handle upload errors
@@ -1179,6 +1192,9 @@ const ChatInput = forwardRef<
     if (!sessionId) return;
     
     try {
+      // Set generation in progress state
+      setIsGeneratingDescription(true);
+      
       setDatasetDescription(prev => ({
         ...prev, 
         description: "Generating description..."
@@ -1207,6 +1223,9 @@ const ChatInput = forwardRef<
         ...prev,
         description: prev.description === "Generating description..." ? "" : prev.description
       }));
+    } finally {
+      // Clear generation in progress state
+      setIsGeneratingDescription(false);
     }
   };
 
@@ -1558,7 +1577,8 @@ const ChatInput = forwardRef<
           <Dialog 
             open={showPreview} 
             onOpenChange={(open) => {
-              if (!open) {
+              // Only allow closing when not generating
+              if (!open && !isGeneratingDescription) {
                 // When dialog is closed without completing upload
                 setShowPreview(false);
                 
@@ -1572,14 +1592,38 @@ const ChatInput = forwardRef<
                     fileInputRef.current.value = "";
                   }
                 }
+              } else if (!open && isGeneratingDescription) {
+                // Prevent dialog from closing during generation
+                return false;
               }
             }}
           >
-            <DialogContent className="w-[90vw] max-w-4xl h-[90vh] overflow-hidden bg-gray-50 fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
+            <DialogContent 
+              className="w-[90vw] max-w-4xl h-[90vh] overflow-hidden bg-gray-50 fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2"
+              onPointerDownOutside={(e) => {
+                // Prevent closing when clicking outside during generation
+                if (isGeneratingDescription) {
+                  e.preventDefault();
+                }
+              }}
+              onEscapeKeyDown={(e) => {
+                // Prevent closing with ESC key during generation
+                if (isGeneratingDescription) {
+                  e.preventDefault();
+                }
+              }}
+            >
               <DialogHeader className="border-b pb-4 bg-gray-50 z-8">
                 <DialogTitle className="text-xl text-gray-800">
                   Dataset Details
                 </DialogTitle>
+                {/* Make close button disabled during generation */}
+                <DialogClose 
+                  className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-muted-foreground" 
+                  disabled={isGeneratingDescription}
+                >
+                  <span className="sr-only">Close</span>
+                </DialogClose>
               </DialogHeader>
               <div className="flex flex-col gap-6 p-4 overflow-y-auto h-[calc(90vh-8rem)]">
                 <div className="space-y-4">
@@ -1593,6 +1637,7 @@ const ChatInput = forwardRef<
                       onChange={(e) => setDatasetDescription(prev => ({ ...prev, name: e.target.value }))}
                       className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-[#FF7F7F] focus:border-transparent text-gray-800"
                       placeholder="Enter dataset name"
+                      disabled={isGeneratingDescription}
                     />
                   </div>
                   <div>
@@ -1614,9 +1659,14 @@ const ChatInput = forwardRef<
                         <button
                           type="button"
                           onClick={generateDatasetDescription}
-                          className="px-2 py-1 text-xs font-medium bg-gray-100 text-gray-700 rounded hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-[#FF7F7F]"
+                          className={`px-2 py-1 text-xs font-medium ${
+                            isGeneratingDescription 
+                              ? 'bg-gray-300 text-gray-500 cursor-not-allowed' 
+                              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                          } rounded focus:outline-none focus:ring-2 focus:ring-[#FF7F7F]`}
+                          disabled={isGeneratingDescription}
                         >
-                          Auto-generate
+                          {isGeneratingDescription ? 'Generating...' : 'Auto-generate'}
                         </button>
                       </div>
                       <TabsContent value="edit" className="mt-0">
@@ -1626,14 +1676,22 @@ const ChatInput = forwardRef<
                           className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-[#FF7F7F] focus:border-transparent text-gray-800"
                           rows={5}
                           placeholder="Describe what this dataset contains and its purpose"
+                          disabled={isGeneratingDescription}
                         />
                       </TabsContent>
                       <TabsContent value="preview" className="mt-0">
                         <div className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm bg-white min-h-[132px] prose prose-sm max-w-none overflow-y-auto">
                           {datasetDescription.description ? (
-                            <ReactMarkdown>
-                              {datasetDescription.description}
-                            </ReactMarkdown>
+                            datasetDescription.description === "Generating description..." ? (
+                              <div className="flex items-center justify-center h-full">
+                                <Loader2 className="w-5 h-5 text-gray-400 animate-spin mr-2" />
+                                <p className="text-gray-400">Generating description...</p>
+                              </div>
+                            ) : (
+                              <ReactMarkdown>
+                                {datasetDescription.description}
+                              </ReactMarkdown>
+                            )
                           ) : (
                             <p className="text-gray-400 italic">No description provided</p>
                           )}
@@ -1650,14 +1708,21 @@ const ChatInput = forwardRef<
                     </h3>
                     <button
                       onClick={handleUploadWithDescription}
-                      disabled={!filePreview?.name || !filePreview?.description}
+                      disabled={!filePreview?.name || !filePreview?.description || isGeneratingDescription || datasetDescription.description === "Generating description..."}
                       className={`px-3 py-1.5 text-xs font-medium text-white rounded-md flex items-center gap-2 ${
-                        !filePreview?.name || !filePreview?.description
+                        !filePreview?.name || !filePreview?.description || isGeneratingDescription || datasetDescription.description === "Generating description..."
                           ? 'bg-gray-400 cursor-not-allowed'
                           : 'bg-[#FF7F7F] hover:bg-[#FF6666]'
                       }`}
                     >
-                      {fileUpload ? 'Upload Dataset' : 'Use Default Dataset'}
+                      {isGeneratingDescription ? (
+                        <>
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                          Generating...
+                        </>
+                      ) : (
+                        fileUpload ? 'Upload Dataset' : 'Use Default Dataset'
+                      )}
                     </button>
                   </div>
                   <div className="overflow-x-auto">
@@ -1700,7 +1765,12 @@ const ChatInput = forwardRef<
                 <div className="flex justify-end gap-3 mt-4">
                   <button
                     onClick={() => setShowPreview(false)}
-                    className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-[#FF7F7F] focus:border-transparent transition-colors"
+                    className={`px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md ${
+                      isGeneratingDescription 
+                        ? 'opacity-50 cursor-not-allowed' 
+                        : 'hover:bg-gray-50'
+                    } focus:outline-none focus:ring-2 focus:ring-[#FF7F7F] focus:border-transparent transition-colors`}
+                    disabled={isGeneratingDescription}
                   >
                     Close
                   </button>
