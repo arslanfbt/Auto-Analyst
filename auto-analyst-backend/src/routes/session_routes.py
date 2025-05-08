@@ -401,11 +401,15 @@ async def create_dataset_description(
         }
         
         # Get session-specific model
-        from app import get_session_lm
-        session_lm = get_session_lm(session_state)
+        lm = dspy.LM(
+            model="gpt-4o-mini",
+            api_key=os.getenv("OPENAI_API_KEY"),
+            temperature=0.7,
+            max_tokens=3000
+        )
         
         # Generate description using session model
-        with dspy.context(lm=session_lm):
+        with dspy.context(lm=lm):
             # If there's an existing description, have the agent improve it
             if existing_description:
                 description = dspy.Predict(dataset_description_agent)(

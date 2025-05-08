@@ -159,8 +159,8 @@ def identify_error_blocks(code: str, error_output: str) -> List[Tuple[str, str, 
                     matched_blocks.add(block_name)
                     break
     
-    logger.log_message(f"Faulty blocks found: {len(faulty_blocks)}", level=logging.INFO)
-    logger.log_message(f"Faulty blocks: {faulty_blocks}", level=logging.INFO)
+    # logger.log_message(f"Faulty blocks found: {len(faulty_blocks)}", level=logging.INFO)
+    # logger.log_message(f"Faulty blocks: {faulty_blocks}", level=logging.INFO)
     return faulty_blocks
 
 def extract_relevant_error_section(error_message: str) -> str:
@@ -226,9 +226,9 @@ def fix_code_with_dspy(code: str, error: str, dataset_context: str = ""):
         with dspy.context(lm=gemini):
             code_fixer = dspy.ChainOfThought(code_fix)
             result = code_fixer(
-                dataset_context=str(dataset_context),
-                faulty_code=str(code),
-                error=str(error),
+                dataset_context=str(dataset_context) or "",
+                faulty_code=str(code) or "",
+                error=str(error) or "",
             )
             return result.fixed_code
     
@@ -280,9 +280,9 @@ def fix_code_with_dspy(code: str, error: str, dataset_context: str = ""):
                 
                 # Fix only the inner code
                 result = code_fixer(
-                    dataset_context=str(dataset_context),
-                    faulty_code=str(inner_code),
-                    error=str(error_msg),
+                    dataset_context=str(dataset_context) or "",
+                    faulty_code=str(inner_code) or "",
+                    error=str(error_msg) or "",
                 )   
                 
                 # Ensure the fixed code is properly stripped and doesn't include markers

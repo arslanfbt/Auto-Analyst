@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useEffect, useRef, useCallback } from "react"
+import React, { useState, useEffect, useRef, useCallback, Dispatch, SetStateAction } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter"
 import { vscDarkPlus } from "react-syntax-highlighter/dist/esm/styles/prism"
@@ -20,6 +20,7 @@ import { useSession } from "next-auth/react"
 import { useCredits } from '@/lib/contexts/credit-context'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
 import logger from '@/lib/utils/logger'
+import CodeFixButton from './CodeFixButton'
 
 interface CodeEntry {
   id: string;
@@ -39,6 +40,8 @@ interface CodeCanvasProps {
   onCodeExecute?: (entryId: string, result: any) => void;
   chatCompleted?: boolean;
   hiddenCanvas?: boolean;
+  codeFixes: Record<string, number>;
+  setCodeFixes: Dispatch<SetStateAction<Record<string, number>>>;
 }
 
 interface SelectionPosition {
@@ -53,7 +56,9 @@ const CodeCanvas: React.FC<CodeCanvasProps> = ({
   codeEntries,
   onCodeExecute,
   chatCompleted = false,
-  hiddenCanvas = false
+  hiddenCanvas = false,
+  codeFixes,
+  setCodeFixes
 }) => {
   const { toast } = useToast()
   const { sessionId } = useSessionStore()
@@ -80,7 +85,6 @@ const CodeCanvas: React.FC<CodeCanvasProps> = ({
   const [creditAction, setCreditAction] = useState<'edit' | 'fix' | null>(null)
   const [pendingEntryId, setPendingEntryId] = useState<string | null>(null)
   const [showFeedbackPopup, setShowFeedbackPopup] = useState(false)
-  const [codeFixes, setCodeFixes] = useState<Record<string, number>>({})
   const [showFixLimitNotification, setShowFixLimitNotification] = useState(false)
   const [canvasJustOpened, setCanvasJustOpened] = useState(false)
 
@@ -571,83 +575,40 @@ const CodeCanvas: React.FC<CodeCanvasProps> = ({
     }
   };
   
-  // Direct code fix without animations
+  // Direct code fix without animations (modified to use CodeFixButton)
   const handleFixCode = async (entryId: string) => {
     const errorOutput = execOutputMap[entryId]?.output;
     const hasError = execOutputMap[entryId]?.hasError;
     
     if (!errorOutput || !hasError) return;
     
-    // Track number of fixes for this entry
-    const fixCount = codeFixes[entryId] || 0;
-    const newFixCount = fixCount + 1;
-    setCodeFixes(prev => ({ ...prev, [entryId]: newFixCount }));
-    
-    // Check if user has reached free limit (3 fixes)
-    const needsCredits = newFixCount > 3;
-    
-    // Show notification after 3rd fix
-    if (newFixCount == 4) {
-      toast({
-        title: "Free fix limit reached",
-        description: "You've used your 3 free code fixes. Additional fixes will use 1 credit each.",
-        duration: 5000,
-      });
-      setShowFixLimitNotification(true);
-      setTimeout(() => setShowFixLimitNotification(false), 5000);
-    }
-    
-    // Check if user has credits for AI fix (only if beyond free limit)
-    if (needsCredits && session) {
-      try {
-        // Credit cost for AI code fix is 1
-        const creditCost = 1;
-        const hasEnough = await hasEnoughCredits(creditCost);
-        
-        if (!hasEnough) {
-          // Show insufficient credits dialog
-          setCreditAction('fix');
-          setPendingEntryId(entryId);
-          setInsufficientCreditsOpen(true);
-          return;
-        }
-      } catch (error) {
-        console.error("Error checking credits:", error);
-      }
-    }
-    
     setIsFixingCode(true);
-    try {
-      const codeToFix = editedCodeMap[entryId] || codeEntries.find(entry => entry.id === entryId)?.code || '';
-      
-      toast({
-        title: "Fixing code",
-        description: "AI is attempting to fix the errors...",
-        duration: 3000,
-      });
-      
-      const response = await axios.post(`${API_URL}/code/fix`, {
-        code: codeToFix,
-        error: errorOutput,
-        session_id: sessionId,
-      }, {
-        headers: {
-          ...(sessionId && { 'X-Session-ID': sessionId }),
-        },
-      });
+    
+    // The actual fix logic is now handled in CodeFixButton
+    // This is just a wrapper to maintain compatibility
+  };
 
-      if (response.data && response.data.fixed_code) {
-        const fixedCode = response.data.fixed_code;
+  // Handle fix start from CodeFixButton
+  const handleFixStart = (codeId: string) => {
+    setIsFixingCode(true);
+  };
+
+  // Handle fix complete from CodeFixButton
+  const handleFixComplete = (codeId: string, fixedCode: string) => {
+    // Find the entry and update the code
+    const entryIndex = codeEntries.findIndex(entry => entry.id === codeId);
+    if (entryIndex === -1) {
+      setIsFixingCode(false);
+          return;
+    }
         
         // If fixing code, ensure we're in edit mode
-        if (!editingMap[entryId]) {
-          startEditing(entryId, codeToFix);
-          // Small delay to ensure editor is ready
-          await new Promise(resolve => setTimeout(resolve, 100));
-        }
-        
-        // Apply the fix directly
-        if (editorRef.current) {
+    if (!editingMap[codeId]) {
+      startEditing(codeId, codeEntries[entryIndex].code);
+    }
+
+    // Update the code in editor if it's open
+    if (editorRef.current && activeEntryId === codeId) {
           editorRef.current.executeEdits('apply-fix', [{
             range: {
               startLineNumber: 1,
@@ -660,89 +621,42 @@ const CodeCanvas: React.FC<CodeCanvasProps> = ({
           }]);
         }
         
-        // Update the code state
+    // Update the edited code state
         setEditedCodeMap(prev => ({
           ...prev,
-          [entryId]: fixedCode
-        }));
-        
-        // Update the code entry
-        const entryIndex = codeEntries.findIndex(entry => entry.id === entryId);
-        if (entryIndex !== -1) {
-          const updatedEntries = [...codeEntries];
-      updatedEntries[entryIndex] = {
-        ...updatedEntries[entryIndex],
-            code: fixedCode
-          };
-      }
-      
-        // Notify parent component of the code change
-      if (onCodeExecute) {
-          onCodeExecute(entryId, { savedCode: fixedCode });
-        }
+      [codeId]: fixedCode
+    }));
         
         // Clear the error
         setExecOutputMap(prev => {
           const newMap = { ...prev };
-          delete newMap[entryId];
+      delete newMap[codeId];
           return newMap;
         });
         
-        // Deduct credits for successful fix (only for logged in users beyond free limit)
-        if (needsCredits && session?.user) {
-          try {
-            // Determine user ID for credit deduction
-            let userIdForCredits = '';
-            
-            if ((session.user as any).sub) {
-              userIdForCredits = (session.user as any).sub;
-            } else if ((session.user as any).id) {
-              userIdForCredits = (session.user as any).id;
-            } else if (session.user.email) {
-              userIdForCredits = session.user.email;
-            }
-            
-            if (userIdForCredits) {
-              // Deduct 1 credit for AI code fix
-              await axios.post('/api/user/deduct-credits', {
-                userId: userIdForCredits,
-                credits: 1,
-                description: 'Used AI to fix code errors'
-              });
-              
-              // Refresh credits display
-              if (checkCredits) {
-                await checkCredits();
-              }
-            }
-          } catch (creditError) {
-            console.error("Failed to deduct credits for code fix:", creditError);
-          }
-        }
-        
+    // Notify parent component of the code change
+    if (onCodeExecute) {
+      onCodeExecute(codeId, { savedCode: fixedCode });
+    }
+    
+    // Show success toast
         toast({
           title: "Code fixed",
           description: "AI has fixed your code. Run it to see if the fix works.",
           variant: "default",
           duration: 3000,
         });
-      } else if (response.data && response.data.error) {
-        toast({
-          title: "Error fixing code",
-          description: response.data.error,
-          variant: "destructive",
-          duration: 5000,
-        });
-      }
-    } catch (error) {
-      console.error("Error fixing code with AI:", error);
-      toast({
-        title: "Error",
-        description: "Failed to fix code. Please try again.",
-        variant: "destructive",
-        duration: 5000,
-      });
-    } finally {
+    
+    setIsFixingCode(false);
+  };
+
+  // Handle insufficient credits
+  const handleCreditCheck = (codeId: string, hasEnough: boolean) => {
+    if (!hasEnough) {
+      // Show insufficient credits dialog
+      setCreditAction('fix');
+      setPendingEntryId(codeId);
+      setInsufficientCreditsOpen(true);
       setIsFixingCode(false);
     }
   };
@@ -849,6 +763,55 @@ const CodeCanvas: React.FC<CodeCanvasProps> = ({
   // This ensures auto-run still works even when canvas is closed
   const activeEntry = getActiveEntry();
   const hasError = activeEntry ? execOutputMap[activeEntry.id]?.hasError : false;
+
+  // Check for pending error fix data
+  useEffect(() => {
+    // Only run this when the canvas becomes visible
+    if (isOpen && !hiddenCanvas) {
+      try {
+        const pendingFixData = localStorage.getItem('pending-error-fix');
+        
+        if (pendingFixData) {
+          const fixData = JSON.parse(pendingFixData);
+          
+          // Only process if the data is less than 5 seconds old
+          const now = Date.now();
+          if (now - fixData.timestamp < 5000) {
+            const { codeId, error } = fixData;
+            
+            // Find the matching code entry
+            const entry = codeEntries.find(e => e.id === codeId);
+            
+            if (entry) {
+              // Set as active entry
+              setActiveEntryId(entry.id);
+              
+              // Delay slightly to ensure entry is selected
+              setTimeout(() => {
+                // Initiate the fix
+                logger.log("Auto-initiating fix for code:", codeId);
+                logger.log("Error message:", error);
+                
+                // Store the error in execOutputMap to enable the fix button
+                setExecOutputMap(prev => ({
+                  ...prev,
+                  [entry.id]: {
+                    output: error,
+                    hasError: true
+                  }
+                }));
+              }, 500);
+            }
+          }
+          
+          // Clean up
+          localStorage.removeItem('pending-error-fix');
+        }
+      } catch (e) {
+        console.error("Error processing pending fix data:", e);
+      }
+    }
+  }, [isOpen, hiddenCanvas, codeEntries]);
 
   if (!isOpen) {
     // Return an empty div instead of null to keep the component mounted
@@ -997,63 +960,18 @@ const CodeCanvas: React.FC<CodeCanvasProps> = ({
                     )}
                     
                     {hasError && activeEntry.language === "python" && !editingMap[activeEntry.id] && (
-                      <TooltipProvider>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <div className="flex items-center">
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => handleFixCode(activeEntry.id)}
-                                disabled={isFixingCode}
-                                className="text-[#FF7F7F] hover:bg-[#FF7F7F]/20 relative"
-                              >
-                                {isFixingCode ? (
-                                  <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                                  </svg>
-                                ) : (
-                                  <>
-                                    <WrenchIcon className="h-4 w-4" />
-                                    {(codeFixes[activeEntry.id] || 0) < 3 && (
-                                      <div className="absolute -top-1 -right-1 flex items-center justify-center">
-                                        <div className="bg-gradient-to-r from-blue-500 to-cyan-400 text-white text-[9px] px-1.5 py-0.5 rounded-full font-semibold shadow-sm">
-                                          {3 - (codeFixes[activeEntry.id] || 0)}
-                                        </div>
-                                      </div>
-                                    )}
-                                    {(codeFixes[activeEntry.id] || 0) >= 3 && (
-                                      <div className="absolute -top-1 -right-1 flex items-center justify-center">
-                                        <div className="bg-amber-500 text-white text-[9px] px-1.5 py-0.5 rounded-full font-semibold shadow-sm flex items-center">
-                                          <CreditCard className="h-2 w-2 mr-0.5" />1
-                                        </div>
-                                      </div>
-                                    )}
-                                  </>
-                                )}
-                              </Button>
-                            </div>
-                          </TooltipTrigger>
-                          <TooltipContent side="bottom" className="px-3 py-1.5">
-                            {(codeFixes[activeEntry.id] || 0) < 3 ? (
-                              <div className="space-y-1">
-                                <p className="text-sm font-medium">Fix code error</p>
-                                <p className="text-xs text-gray-500">
-                                  {3 - (codeFixes[activeEntry.id] || 0)} free {3 - (codeFixes[activeEntry.id] || 0) === 1 ? 'fix' : 'fixes'} remaining
-                                </p>
-                              </div>
-                            ) : (
-                              <div className="space-y-1">
-                                <p className="text-sm font-medium">Fix code error</p>
-                                <p className="text-xs text-amber-500 flex items-center">
-                                  <CreditCard className="h-3 w-3 mr-1" /> Uses 1 credit per fix
-                                </p>
-                              </div>
-                            )}
-                          </TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
+                      <CodeFixButton
+                        codeId={activeEntry.id}
+                        errorOutput={execOutputMap[activeEntry.id]?.output || ''}
+                        code={activeEntry.code}
+                        isFixing={isFixingCode}
+                        codeFixes={codeFixes}
+                        sessionId={sessionId || ''}
+                        onFixStart={handleFixStart}
+                        onFixComplete={handleFixComplete}
+                        onCreditCheck={handleCreditCheck}
+                        variant="button"
+                      />
                     )}
                     
                     <TooltipProvider>

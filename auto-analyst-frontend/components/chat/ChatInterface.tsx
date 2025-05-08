@@ -1477,6 +1477,7 @@ const ChatInterface: React.FC = () => {
             onSendMessage={handleSendMessage}
             showWelcome={showWelcome}
             chatNameGenerated={chatNameGenerated}
+            setSidebarOpen={setSidebarOpen}
           />
         </div>
         <ChatInput 

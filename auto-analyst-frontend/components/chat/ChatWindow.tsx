@@ -9,11 +9,14 @@ import { ChatMessage } from "@/lib/store/chatHistoryStore"
 import WelcomeSection from "./WelcomeSection"
 import CodeCanvas from "./CodeCanvas"
 import CodeIndicator from "./CodeIndicator"
+import CodeFixButton from "./CodeFixButton"
 import { v4 as uuidv4 } from 'uuid'
 import { Code, AlertTriangle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import axios from "axios"
+import { useSessionStore } from '@/lib/store/sessionStore'
 import logger from '@/lib/utils/logger'
+import { useToast } from "@/components/ui/use-toast"
 
 interface PlotlyMessage {
   type: "plotly"
@@ -52,9 +55,15 @@ interface ChatWindowProps {
   showWelcome: boolean
   chatNameGenerated?: boolean
   sessionId?: string
+  setSidebarOpen?: (isOpen: boolean) => void
 }
 
-const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMessage, showWelcome, chatNameGenerated = false, sessionId }) => {
+interface CodeFixState {
+  isFixing: boolean
+  codeBeingFixed: string | null
+}
+
+const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMessage, showWelcome, chatNameGenerated = false, sessionId, setSidebarOpen }) => {
   const chatWindowRef = useRef<HTMLDivElement>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const [localMessages, setLocalMessages] = useState<ChatMessage[]>(messages)
@@ -66,6 +75,10 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
   const [autoRunEnabled, setAutoRunEnabled] = useState(true)
   const [hiddenCanvas, setHiddenCanvas] = useState<boolean>(true)
   const [pendingCodeExecution, setPendingCodeExecution] = useState(false)
+  const [codeFixes, setCodeFixes] = useState<Record<string, number>>({})
+  const [codeFixState, setCodeFixState] = useState<CodeFixState>({ isFixing: false, codeBeingFixed: null })
+  const { sessionId: storeSessionId } = useSessionStore()
+  const { toast } = useToast()
   
   // Set chatCompleted when chat name is generated
   useEffect(() => {
@@ -295,8 +308,36 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
     if (!showWelcome && messages.length > 0) {
       setLocalMessages(messages);
       processAllAiMessages();
+      
+      // Trigger auto-run when switching between chats
+      if (!isLoading) {
+        setChatCompleted(true);
+        
+        // Reset after a delay
+        const timer = setTimeout(() => {
+          setChatCompleted(false);
+        }, 1000);
+        
+        return () => clearTimeout(timer);
+      }
     }
-  }, [showWelcome, messages, processAllAiMessages, setLocalMessages]);
+  }, [showWelcome, messages, processAllAiMessages, setLocalMessages, isLoading]);
+
+  // Track sessionId changes to detect chat switching
+  useEffect(() => {
+    if (sessionId && messages.length > 0 && !isLoading) {
+      // When session ID changes (switching chats), run the last chat's code
+      processAllAiMessages();
+      setChatCompleted(true);
+      
+      // Reset chatCompleted after a delay
+      const timer = setTimeout(() => {
+        setChatCompleted(false);
+      }, 1000);
+      
+      return () => clearTimeout(timer);
+    }
+  }, [sessionId, messages, processAllAiMessages, isLoading]);
 
   // Auto-scroll to bottom when messages change
   useEffect(() => {
@@ -443,6 +484,137 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
     }
   }, [codeEntries]);
 
+  // Handle fix start
+  const handleFixStart = useCallback((codeId: string) => {
+    setCodeFixState({ isFixing: true, codeBeingFixed: codeId })
+  }, [])
+
+  // Handle insufficient credits
+  const handleCreditCheck = useCallback((codeId: string, hasEnough: boolean) => {
+    if (!hasEnough) {
+      // You would typically show a credits modal here
+      // For now, just reset the fixing state
+      setCodeFixState({ isFixing: false, codeBeingFixed: null })
+    }
+  }, [])
+
+  // Handle fix complete
+  const handleFixComplete = useCallback((codeId: string, fixedCode: string) => {
+    // Increment the fix count
+    setCodeFixes(prev => ({
+      ...prev,
+      [codeId]: (prev[codeId] || 0) + 1
+    }))
+
+    // Update the code in the appropriate entry
+    const codeEntry = codeEntries.find(entry => entry.id === codeId)
+    if (codeEntry) {
+      setCodeEntries(prev =>
+        prev.map(entry =>
+          entry.id === codeId
+            ? { ...entry, code: fixedCode }
+            : entry
+        )
+      )
+
+      // Notify parent about the code change
+      handleCodeCanvasExecute(codeId, { savedCode: fixedCode })
+
+      // Clear error output
+      setCodeOutputs(prev => {
+        const output = prev.find(output => output.codeId === codeId)
+        if (output) {
+          return prev.filter(o => o.codeId !== codeId)
+        }
+        return prev
+      })
+      
+      // Open the code canvas if it's not already open
+      if (!codeCanvasOpen) {
+        setCodeCanvasOpen(true)
+      }
+      
+      // Make sure canvas is visible
+      setHiddenCanvas(false)
+    }
+
+    // Reset fixing state
+    setCodeFixState({ isFixing: false, codeBeingFixed: null })
+    
+    // Show a toast to guide the user
+    toast({
+      title: "Code fixed",
+      description: "The code has been fixed and is ready to run in the code canvas.",
+      duration: 5000,
+    })
+  }, [codeEntries, handleCodeCanvasExecute, codeCanvasOpen, setCodeCanvasOpen, setHiddenCanvas])
+
+  // Add a handleOpenCanvasForFix function to ChatWindow which passes the error message to CodeCanvas
+  const handleOpenCanvasForFix = useCallback((errorMessage: string, codeId: string) => {
+    // Set current message index if we've passed a valid codeId
+    const codeEntry = codeEntries.find(entry => entry.id === codeId);
+    
+    if (codeEntry) {
+      // If we have a matching code entry, use it directly
+      setCurrentMessageIndex(codeEntry.messageIndex);
+      setCodeCanvasOpen(true);
+      setHiddenCanvas(false);
+      
+      // Close sidebar if it's open
+      if (setSidebarOpen) {
+        setSidebarOpen(false);
+      }
+      
+      // Mark as fixing
+      setCodeFixState({ isFixing: true, codeBeingFixed: codeId });
+      
+      // Set the AI to fix this specific code with the provided error
+      if (codeEntry.code) {
+        logger.log("Setting up code fixing for:", codeId);
+        
+        try {
+          // Store the error message in localStorage temporarily
+          // This is a workaround to pass the error message to CodeCanvas
+          // without having to modify all the prop chains
+          localStorage.setItem('pending-error-fix', JSON.stringify({
+            codeId,
+            error: errorMessage,
+            timestamp: Date.now()
+          }));
+        } catch (e) {
+          console.error("Failed to store error fix data:", e);
+        }
+      }
+    } else {
+      // Otherwise, we need to search the message for appropriate code
+      const aiMessages = messages.filter(m => m.sender === "ai");
+      
+      if (aiMessages.length > 0) {
+        const lastAiMessage = aiMessages[aiMessages.length - 1];
+        const messageIndex = messages.findIndex(m => m === lastAiMessage);
+        
+        if (messageIndex !== -1) {
+          setCurrentMessageIndex(messageIndex);
+          clearCodeEntriesKeepOutput();
+          extractCodeFromMessages([lastAiMessage], messageIndex);
+          setCodeCanvasOpen(true);
+          setHiddenCanvas(false);
+          
+          // Store the error info for later use
+          try {
+            localStorage.setItem('pending-error-fix', JSON.stringify({
+              codeId: 'new-code-' + Date.now(),
+              error: errorMessage,
+              timestamp: Date.now()
+            }));
+          } catch (e) {
+            console.error("Failed to store error fix data:", e);
+          }
+        }
+      }
+    }
+  }, [codeEntries, messages, clearCodeEntriesKeepOutput, extractCodeFromMessages]);
+
   const renderMessage = (message: ChatMessage, index: number) => {
     if (typeof message.text === "object" && message.text.type === "plotly") {
       return (
@@ -460,14 +632,14 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
       : JSON.stringify(message.text);
     
     // Render the entire message
-            return (
-              <motion.div
+    return (
+      <motion.div
         key={index}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.3 }}
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3 }}
         className={`flex ${message.sender === "user" ? "justify-end" : "justify-start"} mb-8`}
-              >
+      >
         <div
           className={`relative rounded-2xl p-6 transition-shadow duration-200 hover:shadow-lg ${
             message.sender === "user"
@@ -487,13 +659,29 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
                       if (plotlyPart.startsWith('```plotly') && plotlyPart.endsWith('```')) {
                         return renderPlotlyBlock(plotlyPart, `${index}-${partIndex}-${plotlyIndex}`);
                       } else if (plotlyPart.trim()) {
-                        return <MessageContent key={`${index}-${partIndex}-${plotlyIndex}`} message={plotlyPart} onCodeExecute={handleCodeExecute} />;
+                        return <MessageContent 
+                          key={`${index}-${partIndex}-${plotlyIndex}`} 
+                          message={plotlyPart} 
+                          onCodeExecute={handleCodeExecute}
+                          codeFixes={codeFixes}
+                          setCodeFixes={setCodeFixes}
+                          onOpenCanvas={handleOpenCanvasForFix}
+                          isFixingError={codeFixState.isFixing}
+                        />;
                       }
                       return null;
                     });
                   }
                   // Regular text part
-                  return <MessageContent key={`${index}-${partIndex}`} message={part} onCodeExecute={handleCodeExecute} />;
+                  return <MessageContent 
+                    key={`${index}-${partIndex}`} 
+                    message={part} 
+                    onCodeExecute={handleCodeExecute}
+                    codeFixes={codeFixes}
+                    setCodeFixes={setCodeFixes}
+                    onOpenCanvas={handleOpenCanvasForFix}
+                    isFixingError={codeFixState.isFixing}
+                  />;
                 } else if (part.type === 'code') {
                   // Code indicator
                   return (
@@ -508,6 +696,11 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
                         setCodeCanvasOpen(true);
                         setHiddenCanvas(false); // Make the canvas visible when clicked
                         
+                        // Close sidebar if it's open
+                        if (setSidebarOpen) {
+                          setSidebarOpen(false);
+                        }
+                        
                         // Remove auto-run trigger when manually opening canvas
                         // setChatCompleted(true);
                         // setTimeout(() => {
@@ -521,11 +714,18 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
               })
             ) : (
               // Fallback for non-array content
-              <MessageContent message={typeof messageContent === 'string' ? messageContent : JSON.stringify(messageContent)} onCodeExecute={handleCodeExecute} />
+              <MessageContent 
+                message={typeof messageContent === 'string' ? messageContent : JSON.stringify(messageContent)} 
+                onCodeExecute={handleCodeExecute}
+                codeFixes={codeFixes}
+                setCodeFixes={setCodeFixes}
+                onOpenCanvas={handleOpenCanvasForFix}
+                isFixingError={codeFixState.isFixing}
+              />
             )}
-                  </div>
-                </div>
-              </motion.div>
+          </div>
+        </div>
+      </motion.div>
     );
   };
 
@@ -552,7 +752,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
     return null;
   };
 
-  // Render code outputs after their associated messages
+  // Replace the entire renderCodeOutputs function with a fixed implementation
   const renderCodeOutputs = (messageIndex: number) => {
     const relevantOutputs = codeOutputs.filter(output => output.messageIndex === messageIndex);
     
@@ -563,15 +763,31 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
     const textOutputs = relevantOutputs.filter(output => output.type === 'output');
     const plotlyOutputs = relevantOutputs.filter(output => output.type === 'plotly');
     
-        return (
+    return (
       <div className="mt-2 space-y-4">
         {/* Show error outputs first */}
         {errorOutputs.length > 0 && (
-          <div className="bg-red-50 border border-red-200 rounded-md p-3 overflow-auto">
+          <div className="bg-red-50 border border-red-200 rounded-md p-3 overflow-auto relative">
             <div className="flex items-center text-red-600 font-medium mb-2">
               <AlertTriangle size={16} className="mr-2" />
               Error Output
             </div>
+            
+            {errorOutputs[0].codeId && (
+              <CodeFixButton
+                codeId={errorOutputs[0].codeId}
+                errorOutput={errorOutputs[0].content as string}
+                code={codeEntries.find(entry => entry.id === errorOutputs[0].codeId)?.code || ''}
+                isFixing={codeFixState.isFixing && codeFixState.codeBeingFixed === errorOutputs[0].codeId}
+                codeFixes={codeFixes}
+                sessionId={sessionId || storeSessionId || ''}
+                onFixStart={handleFixStart}
+                onFixComplete={handleFixComplete}
+                onCreditCheck={handleCreditCheck}
+                variant="inline"
+              />
+            )}
+            
             <pre className="text-xs text-red-700 font-mono whitespace-pre-wrap">
               {errorOutputs[0].content}
             </pre>
@@ -580,8 +796,30 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
         
         {/* Show text outputs */}
         {textOutputs.length > 0 && (
-          <div className="bg-gray-50 border border-gray-200 rounded-md p-3">
-            <div className="text-gray-700 font-medium mb-2">Output</div>
+          <div className="bg-gray-50 border border-gray-200 rounded-md p-3 relative">
+            <div className="flex items-center text-gray-700 font-medium mb-2">
+              Output
+            </div>
+            
+            {/* Add a fix button for outputs that look like errors */}
+            {textOutputs[0].codeId && 
+             (textOutputs[0].content.toString().toLowerCase().includes("error") || 
+              textOutputs[0].content.toString().toLowerCase().includes("traceback") || 
+              textOutputs[0].content.toString().toLowerCase().includes("exception")) && (
+              <CodeFixButton
+                codeId={textOutputs[0].codeId}
+                errorOutput={textOutputs[0].content as string}
+                code={codeEntries.find(entry => entry.id === textOutputs[0].codeId)?.code || ''}
+                isFixing={codeFixState.isFixing && codeFixState.codeBeingFixed === textOutputs[0].codeId}
+                codeFixes={codeFixes}
+                sessionId={sessionId || storeSessionId || ''}
+                onFixStart={handleFixStart}
+                onFixComplete={handleFixComplete}
+                onCreditCheck={handleCreditCheck}
+                variant="inline"
+              />
+            )}
+            
             {(() => {
               const content = textOutputs[0].content;
               // Check if the output looks like a DataFrame or tabular data
@@ -603,8 +841,26 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
         
         {/* Show plotly visualizations */}
         {plotlyOutputs.map((output, idx) => (
-          <div key={`plotly-${messageIndex}-${idx}`} className="bg-white border border-gray-200 rounded-md p-3 overflow-auto">
-            <div className="text-gray-700 font-medium mb-2">Visualization</div>
+          <div key={`plotly-${messageIndex}-${idx}`} className="bg-white border border-gray-200 rounded-md p-3 overflow-auto relative">
+            <div className="flex items-center text-gray-700 font-medium mb-2">
+              Visualization
+            </div>
+            
+            {output.codeId && (
+              <CodeFixButton
+                codeId={output.codeId}
+                errorOutput={""}
+                code={codeEntries.find(entry => entry.id === output.codeId)?.code || ''}
+                isFixing={codeFixState.isFixing && codeFixState.codeBeingFixed === output.codeId}
+                codeFixes={codeFixes}
+                sessionId={sessionId || storeSessionId || ''}
+                onFixStart={handleFixStart}
+                onFixComplete={handleFixComplete}
+                onCreditCheck={handleCreditCheck}
+                variant="inline"
+              />
+            )}
+            
             <div className="w-full">
               <PlotlyChart data={output.content.data} layout={output.content.layout} />
             </div>
@@ -679,6 +935,9 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
           onCodeExecute={handleCodeCanvasExecute}
           chatCompleted={chatCompleted}
           hiddenCanvas={hiddenCanvas}
+          // @ts-ignore - We'll add these props to CodeCanvas in the next step
+          codeFixes={codeFixes}
+          setCodeFixes={setCodeFixes}
         />
       )}
     </div>
