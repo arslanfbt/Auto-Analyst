@@ -188,9 +188,6 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
     
     if (newEntries.length > 0) {
       setCodeEntries(newEntries);
-      logger.log("Extracted code entries:", newEntries.length);
-      // Set pending execution for any new code
-      setPendingCodeExecution(true);
     }
   }, []);
   
@@ -234,15 +231,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
     // Extract code from the latest AI message
     extractCodeFromMessages([messages[lastAiMessageIndex]], lastAiMessageIndex);
     
-    // Set chatCompleted to trigger auto-run
-    setTimeout(() => {
-      setChatCompleted(true);
-      
-      // Reset chatCompleted after a delay
-      setTimeout(() => {
-        setChatCompleted(false);
-      }, 5000);
-    }, 500);
+    // Trigger auto-run for the code will happen via the chatCompleted state
     
   }, [messages, clearCodeEntriesKeepOutput, extractCodeFromMessages]);
   
@@ -258,8 +247,18 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
       // individual message as it arrives
       processAllAiMessages();
       
+      // Set chatCompleted to true to trigger auto-run
+      setChatCompleted(true);
+      
       // Reset flags
       setPendingCodeExecution(false);
+      
+      // Reset chatCompleted after a delay
+      const timer = setTimeout(() => {
+        setChatCompleted(false);
+      }, 10000);
+      
+      return () => clearTimeout(timer);
     }
   }, [isLoading, pendingCodeExecution, processAllAiMessages]);
   
@@ -291,11 +290,8 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
           if (typeof messages[newMessageIndex].text === "string") {
             extractCodeFromMessages([messages[newMessageIndex]], newMessageIndex)
             
-            // If not currently loading, trigger code execution immediately
-            if (!isLoading) {
-              logger.log("New AI message added, not loading - executing immediately");
-              setPendingCodeExecution(true);
-            }
+            // We'll wait for loading to complete before auto-running
+            // so we've removed the setChatCompleted(true) calls here
           }
         }
       } else if (messages.length < localMessages.length || messages.length === 0) {
@@ -304,19 +300,43 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
         setCurrentMessageIndex(null)
       }
     }
-  }, [messages, localMessages.length, clearCodeEntries, clearCodeEntriesKeepOutput, extractCodeFromMessages, isLoading])
+  }, [messages, localMessages.length, clearCodeEntries, clearCodeEntriesKeepOutput, extractCodeFromMessages])
 
   // Modify the useEffect for loading chat to process all messages
   useEffect(() => {
     if (!showWelcome && messages.length > 0) {
       setLocalMessages(messages);
+      processAllAiMessages();
       
-      // If we already have messages and we're not loading anymore, process them
+      // Trigger auto-run when switching between chats
       if (!isLoading) {
-        processAllAiMessages();
+        setChatCompleted(true);
+        
+        // Reset after a delay
+        const timer = setTimeout(() => {
+          setChatCompleted(false);
+        }, 1000);
+        
+        return () => clearTimeout(timer);
       }
     }
   }, [showWelcome, messages, processAllAiMessages, setLocalMessages, isLoading]);
+
+  // Track sessionId changes to detect chat switching
+  useEffect(() => {
+    if (sessionId && messages.length > 0 && !isLoading) {
+      // When session ID changes (switching chats), run the last chat's code
+      processAllAiMessages();
+      setChatCompleted(true);
+      
+      // Reset chatCompleted after a delay
+      const timer = setTimeout(() => {
+        setChatCompleted(false);
+      }, 1000);
+      
+      return () => clearTimeout(timer);
+    }
+  }, [sessionId, messages, processAllAiMessages, isLoading]);
 
   // Auto-scroll to bottom when messages change
   useEffect(() => {
@@ -360,9 +380,42 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
     return parts;
   }, []);
 
+  const handleCodeExecute = useCallback((result: any, updateCodeBlock: (code: string) => void) => {
+    if (result.savedCode) {
+      // Just update the code block without adding a message
+      updateCodeBlock(result.savedCode)
+    } else {
+      // Add execution output as a separate message
+      let executionResult = ""
 
-   // Handle code execution from CodeCanvas
-   const handleCodeCanvasExecute = useCallback((entryId: string, result: any) => {
+      if (result.error) {
+        executionResult = `\`\`\`error\n${result.error}\n\`\`\``
+      } else {
+        if (result.output) {
+          executionResult = `\`\`\`output\n${result.output}\n\`\`\``
+        }
+        if (result.plotly_outputs && result.plotly_outputs.length > 0) {
+          executionResult += "\nPlotly charts generated:\n"
+          result.plotly_outputs.forEach((plotlyOutput: string, index: number) => {
+            executionResult += `\`\`\`plotly\n${plotlyOutput}\n\`\`\`\n\n`
+          })
+        }
+      }
+
+      // if (executionResult) {
+      //   setLocalMessages((prev) => [
+      //     ...prev,
+      //     {
+      //       text: executionResult,
+      //       sender: "ai",
+      //     },
+      //   ])
+      // }
+    }
+  }, [])
+  
+  // Handle code execution from CodeCanvas
+  const handleCodeCanvasExecute = useCallback((entryId: string, result: any) => {
     // Find the code entry
     const codeEntry = codeEntries.find(entry => entry.id === entryId);
     if (!codeEntry) return;
@@ -430,77 +483,6 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
     }
   }, [codeEntries]);
 
-
-  const handleCodeExecute = useCallback((result: any, updateCodeBlock: (code: string) => void) => {
-    if (result.savedCode) {
-      // Just update the code block without adding a message
-      updateCodeBlock(result.savedCode)
-    } else if (result.fixedCode && result.codeId && result.autoRun) {
-      // Handle fixed code with auto-run flag from MessageContent
-      // Find the corresponding code entry
-      const codeEntry = codeEntries.find(entry => entry.id === result.codeId);
-      if (codeEntry) {
-        // Update the code in our entries
-        setCodeEntries(prev =>
-          prev.map(entry =>
-            entry.id === result.codeId
-              ? { ...entry, code: result.fixedCode }
-              : entry
-          )
-        );
-        
-        // Notify CodeCanvas about the code change
-        handleCodeCanvasExecute(result.codeId, { savedCode: result.fixedCode });
-        
-        // Trigger auto-run
-        setTimeout(() => {
-          // Set flags to trigger auto-run
-          setPendingCodeExecution(true);
-          setChatCompleted(true);
-          
-          // Reset flags after a delay
-          setTimeout(() => {
-            setPendingCodeExecution(false);
-            setChatCompleted(false);
-          }, 2000);
-          
-          // Show code canvas if it's hidden
-          if (hiddenCanvas) {
-            setHiddenCanvas(false);
-          }
-        }, 500);
-      }
-    } else {
-      // Add execution output as a separate message
-      let executionResult = ""
-
-      if (result.error) {
-        executionResult = `\`\`\`error\n${result.error}\n\`\`\``
-      } else {
-        if (result.output) {
-          executionResult = `\`\`\`output\n${result.output}\n\`\`\``
-        }
-        if (result.plotly_outputs && result.plotly_outputs.length > 0) {
-          executionResult += "\nPlotly charts generated:\n"
-          result.plotly_outputs.forEach((plotlyOutput: string, index: number) => {
-            executionResult += `\`\`\`plotly\n${plotlyOutput}\n\`\`\`\n\n`
-          })
-        }
-      }
-
-      // if (executionResult) {
-      //   setLocalMessages((prev) => [
-      //     ...prev,
-      //     {
-      //       text: executionResult,
-      //       sender: "ai",
-      //     },
-      //   ])
-      // }
-    }
-  }, [codeEntries, handleCodeCanvasExecute, setPendingCodeExecution, setChatCompleted, hiddenCanvas, setHiddenCanvas])
-  
- 
   // Handle fix start
   const handleFixStart = useCallback((codeId: string) => {
     setCodeFixState({ isFixing: true, codeBeingFixed: codeId })
@@ -546,37 +528,86 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
         return prev
       })
       
-      // Trigger auto-run of the fixed code
-      // This will make the code canvas execute the fixed code automatically
-      setTimeout(() => {
-        // Set pending execution
-        setPendingCodeExecution(true);
-        
-        // Set chatCompleted to trigger auto-run via the useEffect in CodeCanvas
-        setChatCompleted(true);
-        
-        // Reset flags after a delay
-        setTimeout(() => {
-          setPendingCodeExecution(false);
-          setChatCompleted(false);
-        }, 2000);
-        
-        // Open code canvas if it's hidden to show execution results
-        if (hiddenCanvas) {
-          setHiddenCanvas(false);
-        }
-        
-        toast({
-          title: "Running fixed code",
-          description: "Fixed code is being executed automatically",
-          duration: 3000,
-        });
-      }, 500);
+      // Open the code canvas if it's not already open
+      if (!codeCanvasOpen) {
+        setCodeCanvasOpen(true)
+      }
+      
+      // Make sure canvas is visible
+      setHiddenCanvas(false)
     }
 
     // Reset fixing state
     setCodeFixState({ isFixing: false, codeBeingFixed: null })
-  }, [codeEntries, handleCodeCanvasExecute, setPendingCodeExecution, setChatCompleted, hiddenCanvas, setHiddenCanvas, toast]);
+    
+    // Show a toast to guide the user
+    toast({
+      title: "Code fixed",
+      description: "The code has been fixed and is ready to run in the code canvas.",
+      duration: 5000,
+    })
+  }, [codeEntries, handleCodeCanvasExecute, codeCanvasOpen, setCodeCanvasOpen, setHiddenCanvas])
+
+  // Add a handleOpenCanvasForFix function to ChatWindow which passes the error message to CodeCanvas
+  const handleOpenCanvasForFix = useCallback((errorMessage: string, codeId: string) => {
+    // Set current message index if we've passed a valid codeId
+    const codeEntry = codeEntries.find(entry => entry.id === codeId);
+    
+    if (codeEntry) {
+      // If we have a matching code entry, use it directly
+      setCurrentMessageIndex(codeEntry.messageIndex);
+      setCodeCanvasOpen(true);
+      setHiddenCanvas(false);
+      
+      // Mark as fixing
+      setCodeFixState({ isFixing: true, codeBeingFixed: codeId });
+      
+      // Set the AI to fix this specific code with the provided error
+      if (codeEntry.code) {
+        logger.log("Setting up code fixing for:", codeId);
+        
+        try {
+          // Store the error message in localStorage temporarily
+          // This is a workaround to pass the error message to CodeCanvas
+          // without having to modify all the prop chains
+          localStorage.setItem('pending-error-fix', JSON.stringify({
+            codeId,
+            error: errorMessage,
+            timestamp: Date.now()
+          }));
+        } catch (e) {
+          console.error("Failed to store error fix data:", e);
+        }
+      }
+    } else {
+      // Otherwise, we need to search the message for appropriate code
+      const aiMessages = messages.filter(m => m.sender === "ai");
+      
+      if (aiMessages.length > 0) {
+        const lastAiMessage = aiMessages[aiMessages.length - 1];
+        const messageIndex = messages.findIndex(m => m === lastAiMessage);
+        
+        if (messageIndex !== -1) {
+          setCurrentMessageIndex(messageIndex);
+          clearCodeEntriesKeepOutput();
+          extractCodeFromMessages([lastAiMessage], messageIndex);
+          setCodeCanvasOpen(true);
+          setHiddenCanvas(false);
+          
+          // Store the error info for later use
+          try {
+            localStorage.setItem('pending-error-fix', JSON.stringify({
+              codeId: 'new-code-' + Date.now(),
+              error: errorMessage,
+              timestamp: Date.now()
+            }));
+          } catch (e) {
+            console.error("Failed to store error fix data:", e);
+          }
+        }
+      }
+    }
+  }, [codeEntries, messages, clearCodeEntriesKeepOutput, extractCodeFromMessages]);
 
   const renderMessage = (message: ChatMessage, index: number) => {
     if (typeof message.text === "object" && message.text.type === "plotly") {
@@ -595,14 +626,14 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
       : JSON.stringify(message.text);
     
     // Render the entire message
-            return (
-              <motion.div
+    return (
+      <motion.div
         key={index}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.3 }}
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3 }}
         className={`flex ${message.sender === "user" ? "justify-end" : "justify-start"} mb-8`}
-              >
+      >
         <div
           className={`relative rounded-2xl p-6 transition-shadow duration-200 hover:shadow-lg ${
             message.sender === "user"
@@ -628,6 +659,8 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
                           onCodeExecute={handleCodeExecute}
                           codeFixes={codeFixes}
                           setCodeFixes={setCodeFixes}
+                          onOpenCanvas={handleOpenCanvasForFix}
+                          isFixingError={codeFixState.isFixing}
                         />;
                       }
                       return null;
@@ -640,6 +673,8 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
                     onCodeExecute={handleCodeExecute}
                     codeFixes={codeFixes}
                     setCodeFixes={setCodeFixes}
+                    onOpenCanvas={handleOpenCanvasForFix}
+                    isFixingError={codeFixState.isFixing}
                   />;
                 } else if (part.type === 'code') {
                   // Code indicator
@@ -673,11 +708,13 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
                 onCodeExecute={handleCodeExecute}
                 codeFixes={codeFixes}
                 setCodeFixes={setCodeFixes}
+                onOpenCanvas={handleOpenCanvasForFix}
+                isFixingError={codeFixState.isFixing}
               />
             )}
-                  </div>
-                </div>
-              </motion.div>
+          </div>
+        </div>
+      </motion.div>
     );
   };
 
@@ -797,6 +834,22 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
             <div className="flex items-center text-gray-700 font-medium mb-2">
               Visualization
             </div>
+            
+            {output.codeId && (
+              <CodeFixButton
+                codeId={output.codeId}
+                errorOutput={""}
+                code={codeEntries.find(entry => entry.id === output.codeId)?.code || ''}
+                isFixing={codeFixState.isFixing && codeFixState.codeBeingFixed === output.codeId}
+                codeFixes={codeFixes}
+                sessionId={sessionId || storeSessionId || ''}
+                onFixStart={handleFixStart}
+                onFixComplete={handleFixComplete}
+                onCreditCheck={handleCreditCheck}
+                variant="inline"
+              />
+            )}
+            
             <div className="w-full">
               <PlotlyChart data={output.content.data} layout={output.content.layout} />
             </div>

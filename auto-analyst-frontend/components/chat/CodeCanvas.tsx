@@ -206,7 +206,7 @@ const CodeCanvas: React.FC<CodeCanvasProps> = ({
       
       // If autoRun is enabled and this is a new entry, execute it automatically
       // Note: We only auto-run when chatCompleted is true, not when the canvas opens
-      if (autoRunEnabled && chatCompleted) {
+      if (autoRunEnabled && chatCompleted && !isOpen) {
         const newestEntry = codeEntries[codeEntries.length - 1];
         
         // Only auto-run Python code
@@ -233,18 +233,14 @@ const CodeCanvas: React.FC<CodeCanvasProps> = ({
   useEffect(() => {
     // Auto-run ONLY when chatCompleted changes from false to true
     if (chatCompleted && !previousChatCompletedRef.current) {
-      if (autoRunEnabled && codeEntries.length > 0) {
-        // Find Python code to run (prioritize the most recent entry)
-        const pythonEntries = codeEntries
-          .filter(entry => entry.language === "python" && !editingMap[entry.id])
-          .sort((a, b) => b.timestamp - a.timestamp);
+      if (autoRunEnabled && codeEntries.length > 0 && activeEntryId) {
+        const activeEntry = codeEntries.find(entry => entry.id === activeEntryId);
         
-        if (pythonEntries.length > 0) {
-          const entryToRun = pythonEntries[0];
-          logger.log("Auto-running code for entry:", entryToRun.id);
-          
-          // Execute immediately - even if canvas is hidden
-          executeCode(entryToRun.id, entryToRun.code, entryToRun.language);
+        // Only execute Python code automatically
+        if (activeEntry && activeEntry.language === "python" && !editingMap[activeEntryId]) {
+          logger.log("Auto-running code for entry:", activeEntry.id);
+          // Execute immediately - no need to check if canvas is open
+          executeCode(activeEntryId, activeEntry.code, activeEntry.language);
           
           // Only show toast notification if canvas is open and not hidden
           if (isOpen && !hiddenCanvas) {
@@ -264,7 +260,7 @@ const CodeCanvas: React.FC<CodeCanvasProps> = ({
     
     // Update the ref for the next check
     previousChatCompletedRef.current = chatCompleted;
-  }, [chatCompleted, autoRunEnabled, codeEntries, editingMap, executeCode, isOpen, hiddenCanvas, toast, setCodeFixes]);
+  }, [chatCompleted, autoRunEnabled, codeEntries, activeEntryId, editingMap, executeCode, isOpen, hiddenCanvas, toast]);
 
   // Track canvas opening to prevent auto-run when canvas opens
   useEffect(() => {
@@ -767,6 +763,55 @@ const CodeCanvas: React.FC<CodeCanvasProps> = ({
   // This ensures auto-run still works even when canvas is closed
   const activeEntry = getActiveEntry();
   const hasError = activeEntry ? execOutputMap[activeEntry.id]?.hasError : false;
+
+  // Check for pending error fix data
+  useEffect(() => {
+    // Only run this when the canvas becomes visible
+    if (isOpen && !hiddenCanvas) {
+      try {
+        const pendingFixData = localStorage.getItem('pending-error-fix');
+        
+        if (pendingFixData) {
+          const fixData = JSON.parse(pendingFixData);
+          
+          // Only process if the data is less than 5 seconds old
+          const now = Date.now();
+          if (now - fixData.timestamp < 5000) {
+            const { codeId, error } = fixData;
+            
+            // Find the matching code entry
+            const entry = codeEntries.find(e => e.id === codeId);
+            
+            if (entry) {
+              // Set as active entry
+              setActiveEntryId(entry.id);
+              
+              // Delay slightly to ensure entry is selected
+              setTimeout(() => {
+                // Initiate the fix
+                logger.log("Auto-initiating fix for code:", codeId);
+                logger.log("Error message:", error);
+                
+                // Store the error in execOutputMap to enable the fix button
+                setExecOutputMap(prev => ({
+                  ...prev,
+                  [entry.id]: {
+                    output: error,
+                    hasError: true
+                  }
+                }));
+              }, 500);
+            }
+          }
+          
+          // Clean up
+          localStorage.removeItem('pending-error-fix');
+        }
+      } catch (e) {
+        console.error("Error processing pending fix data:", e);
+      }
+    }
+  }, [isOpen, hiddenCanvas, codeEntries]);
 
   if (!isOpen) {
     // Return an empty div instead of null to keep the component mounted

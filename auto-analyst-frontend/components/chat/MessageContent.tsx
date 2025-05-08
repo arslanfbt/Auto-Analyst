@@ -4,10 +4,12 @@ import React, { useCallback, useState } from "react"
 import ReactMarkdown from "react-markdown"
 import rehypeRaw from "rehype-raw"
 import remarkGfm from "remark-gfm"
-import { AlertTriangle } from "lucide-react"
+import { AlertTriangle, WrenchIcon } from "lucide-react"
 import CodeFixButton from "./CodeFixButton"
 import { useSessionStore } from '@/lib/store/sessionStore'
 import { useToast } from "@/components/ui/use-toast"
+import { Button } from "@/components/ui/button"
+import { motion } from "framer-motion"
 
 interface MessageContentProps {
   message: string
@@ -15,6 +17,8 @@ interface MessageContentProps {
   agentName?: string
   codeFixes?: Record<string, number>
   setCodeFixes?: React.Dispatch<React.SetStateAction<Record<string, number>>>
+  onOpenCanvas?: (errorMessage: string, codeId: string) => void
+  isFixingError?: boolean
 }
 
 const MessageContent: React.FC<MessageContentProps> = ({ 
@@ -22,16 +26,39 @@ const MessageContent: React.FC<MessageContentProps> = ({
   onCodeExecute, 
   agentName,
   codeFixes = {},
-  setCodeFixes
+  setCodeFixes,
+  onOpenCanvas,
+  isFixingError = false
 }) => {
   const { sessionId } = useSessionStore()
   const { toast } = useToast()
   const [isFixingCode, setIsFixingCode] = useState<Record<string, boolean>>({})
+  const [hovered, setHovered] = useState<Record<string, boolean>>({})
   
   // Generate a unique code ID for each error block
   const generateCodeId = (content: string, index: number) => {
     return `error-${index}-${content.substring(0, 20).replace(/\s+/g, '-')}`
   }
+  
+  // Handle opening canvas for fixing
+  const handleOpenCanvasForFixing = useCallback((errorMessage: string, codeId: string) => {
+    if (onOpenCanvas) {
+      onOpenCanvas(errorMessage, codeId)
+      
+      toast({
+        title: "Opening code canvas",
+        description: "Opening code canvas to fix the error.",
+        duration: 3000,
+      })
+    } else {
+      toast({
+        title: "Cannot fix code",
+        description: "This error cannot be fixed automatically.",
+        variant: "destructive",
+        duration: 3000,
+      })
+    }
+  }, [onOpenCanvas, toast])
   
   // Handle fix start
   const handleFixStart = useCallback((codeId: string) => {
@@ -65,19 +92,55 @@ const MessageContent: React.FC<MessageContentProps> = ({
 
     // Reset fixing state
     setIsFixingCode(prev => ({ ...prev, [codeId]: false }))
-    
-    // Notify parent component about the fixed code so it can be executed
-    if (onCodeExecute) {
-      onCodeExecute(
-        { 
-          fixedCode, 
-          codeId,
-          autoRun: true // Signal that this code should be auto-run
-        }, 
-        (code: string) => fixedCode
-      );
-    }
-  }, [setCodeFixes, toast, onCodeExecute])
+  }, [setCodeFixes, toast])
+
+  // Custom fix button component for inline use
+  const InlineFixButton = useCallback(({ codeId, errorContent }: { codeId: string, errorContent: string }) => {
+    return (
+      <div className="inline-flex items-center absolute top-3 right-3"
+          onMouseEnter={() => setHovered(prev => ({ ...prev, [codeId]: true }))}
+          onMouseLeave={() => setHovered(prev => ({ ...prev, [codeId]: false }))}>
+        <motion.div
+          initial={{ width: "auto" }}
+          animate={{ 
+            width: hovered[codeId] ? "auto" : "auto",
+            backgroundColor: hovered[codeId] ? "rgba(254, 226, 226, 0.5)" : "transparent"
+          }}
+          transition={{ duration: 0.2 }}
+          className="rounded-md overflow-hidden flex items-center justify-end px-1 cursor-pointer"
+          onClick={() => handleOpenCanvasForFixing(errorContent, codeId)}
+        >
+          <motion.span 
+            initial={{ opacity: 0, width: 0 }}
+            animate={{ 
+              opacity: hovered[codeId] ? 1 : 0,
+              width: hovered[codeId] ? "auto" : 0,
+              marginRight: hovered[codeId] ? "4px" : 0
+            }}
+            transition={{ duration: 0.2 }}
+            className="text-xs font-medium whitespace-nowrap text-red-500 overflow-hidden"
+          >
+            {codeFixes[codeId] && codeFixes[codeId] >= 3 
+              ? "Fix error with AI (1 credit)" 
+              : `Fix error with AI (${3 - (codeFixes[codeId] || 0)} free left)`}
+          </motion.span>
+          
+          <div className="flex items-center">
+            <div className="h-6 w-6 p-0 flex items-center justify-center rounded-full bg-red-50 border border-red-200">
+              {isFixingCode[codeId] ? (
+                <svg className="animate-spin h-3 w-3 text-red-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+              ) : (
+                <WrenchIcon className="h-3 w-3 text-red-500" />
+              )}
+            </div>
+          </div>
+        </motion.div>
+      </div>
+    );
+  }, [codeFixes, hovered, isFixingCode, handleOpenCanvasForFixing]);
 
   const renderContent = useCallback(
     (content: string) => {
@@ -126,18 +189,9 @@ const MessageContent: React.FC<MessageContentProps> = ({
                             <AlertTriangle size={16} className="mr-2" />
                             Error Output
                           </div>
-                          <CodeFixButton
-                            codeId={codeId}
-                            errorOutput={codeContent}
-                            code="" // We don't have the code here, it will be used from CodeCanvas
-                            isFixing={isFixingCode[codeId] || false}
-                            codeFixes={codeFixes}
-                            sessionId={sessionId || ''}
-                            onFixStart={handleFixStart}
-                            onFixComplete={handleFixComplete}
-                            onCreditCheck={handleCreditCheck}
-                            variant="inline"
-                          />
+                          {onOpenCanvas && (
+                            <InlineFixButton codeId={codeId} errorContent={codeContent} />
+                          )}
                           <pre className="text-xs text-red-700 font-mono whitespace-pre-wrap">
                             {codeContent}
                           </pre>
@@ -146,25 +200,14 @@ const MessageContent: React.FC<MessageContentProps> = ({
                     }
                     
                     // Handle code blocks that contain errors but aren't explicitly marked as errors
-                    if (containsError && codeFixes !== undefined && setCodeFixes) {
+                    if (containsError && onOpenCanvas) {
                       const codeId = generateCodeId(codeContent, index)
                       return (
                         <div className="bg-gray-50 border border-gray-200 rounded-md p-3 my-2 overflow-auto relative">
                           <div className="flex items-center text-gray-700 font-medium mb-2">
                             <span>Output</span>
                           </div>
-                          <CodeFixButton
-                            codeId={codeId}
-                            errorOutput={codeContent}
-                            code="" // We don't have the code here, it will be used from CodeCanvas
-                            isFixing={isFixingCode[codeId] || false}
-                            codeFixes={codeFixes}
-                            sessionId={sessionId || ''}
-                            onFixStart={handleFixStart}
-                            onFixComplete={handleFixComplete}
-                            onCreditCheck={handleCreditCheck}
-                            variant="inline"
-                          />
+                          <InlineFixButton codeId={codeId} errorContent={codeContent} />
                           <pre className="text-sm p-2 bg-gray-100 rounded font-mono whitespace-pre">
                             {codeContent}
                           </pre>
@@ -235,7 +278,7 @@ const MessageContent: React.FC<MessageContentProps> = ({
         }
       })
     },
-    [codeFixes, handleCreditCheck, handleFixComplete, handleFixStart, isFixingCode, sessionId, setCodeFixes, toast, onCodeExecute],
+    [codeFixes, handleCreditCheck, handleFixComplete, handleFixStart, isFixingCode, sessionId, setCodeFixes, toast, onOpenCanvas, InlineFixButton],
   )
 
   return <>{renderContent(message)}</>
