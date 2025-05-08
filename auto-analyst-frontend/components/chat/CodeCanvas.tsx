@@ -42,7 +42,6 @@ interface CodeCanvasProps {
   hiddenCanvas?: boolean;
   codeFixes: Record<string, number>;
   setCodeFixes: Dispatch<SetStateAction<Record<string, number>>>;
-  executeCode?: (entryId: string, code: string, language: string) => Promise<void>;
 }
 
 interface SelectionPosition {
@@ -59,8 +58,7 @@ const CodeCanvas: React.FC<CodeCanvasProps> = ({
   chatCompleted = false,
   hiddenCanvas = false,
   codeFixes,
-  setCodeFixes,
-  executeCode: externalExecuteCode
+  setCodeFixes
 }) => {
   const { toast } = useToast()
   const { sessionId } = useSessionStore()
@@ -92,12 +90,6 @@ const CodeCanvas: React.FC<CodeCanvasProps> = ({
 
   // Define executeCode with useCallback at the top
   const executeCode = useCallback(async (entryId: string, code: string, language: string) => {
-    // If external executeCode is provided, use it
-    if (externalExecuteCode) {
-      return externalExecuteCode(entryId, code, language);
-    }
-    
-    // Otherwise use the internal implementation
     // Only execute Python code for now
     if (language !== "python") return
     
@@ -205,7 +197,7 @@ const CodeCanvas: React.FC<CodeCanvasProps> = ({
         });
       }
     }
-  }, [codeEntries, editedCodeMap, editingMap, onCodeExecute, sessionId, externalExecuteCode]);
+  }, [codeEntries, editedCodeMap, editingMap, onCodeExecute, sessionId]);
 
   // Set the most recent entry as active when entries change
   useEffect(() => {
@@ -214,7 +206,7 @@ const CodeCanvas: React.FC<CodeCanvasProps> = ({
       
       // If autoRun is enabled and this is a new entry, execute it automatically
       // Note: We only auto-run when chatCompleted is true, not when the canvas opens
-      if (autoRunEnabled && chatCompleted && !isOpen) {
+      if (autoRunEnabled && chatCompleted) {
         const newestEntry = codeEntries[codeEntries.length - 1];
         
         // Only auto-run Python code
@@ -241,21 +233,24 @@ const CodeCanvas: React.FC<CodeCanvasProps> = ({
   useEffect(() => {
     // Auto-run ONLY when chatCompleted changes from false to true
     if (chatCompleted && !previousChatCompletedRef.current) {
-      if (autoRunEnabled && codeEntries.length > 0 && activeEntryId) {
-        const activeEntry = codeEntries.find(entry => entry.id === activeEntryId);
+      if (autoRunEnabled && codeEntries.length > 0) {
+        // Find Python code to run (prioritize the most recent entry)
+        const pythonEntries = codeEntries
+          .filter(entry => entry.language === "python" && !editingMap[entry.id])
+          .sort((a, b) => b.timestamp - a.timestamp);
         
-        // Only execute Python code automatically
-        if (activeEntry && activeEntry.language === "python" && !editingMap[activeEntryId]) {
-          logger.log("Auto-running code for entry:", activeEntry.id);
+        if (pythonEntries.length > 0) {
+          const entryToRun = pythonEntries[0];
+          logger.log("Auto-running code for entry:", entryToRun.id);
           
-          // Execute code regardless of whether the canvas is open or not
-          executeCode(activeEntryId, activeEntry.code, activeEntry.language);
+          // Execute immediately - even if canvas is hidden
+          executeCode(entryToRun.id, entryToRun.code, entryToRun.language);
           
           // Only show toast notification if canvas is open and not hidden
           if (isOpen && !hiddenCanvas) {
             toast({
               title: "Auto-running code",
-              description: "Code is automatically running after loading chat",
+              description: "Code is automatically running after AI response completed",
               duration: 3000,
             });
           }
@@ -269,7 +264,7 @@ const CodeCanvas: React.FC<CodeCanvasProps> = ({
     
     // Update the ref for the next check
     previousChatCompletedRef.current = chatCompleted;
-  }, [chatCompleted, autoRunEnabled, codeEntries, activeEntryId, editingMap, executeCode, isOpen, hiddenCanvas, toast, setCodeFixes]);
+  }, [chatCompleted, autoRunEnabled, codeEntries, editingMap, executeCode, isOpen, hiddenCanvas, toast, setCodeFixes]);
 
   // Track canvas opening to prevent auto-run when canvas opens
   useEffect(() => {

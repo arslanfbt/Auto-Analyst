@@ -226,9 +226,9 @@ def fix_code_with_dspy(code: str, error: str, dataset_context: str = ""):
         with dspy.context(lm=gemini):
             code_fixer = dspy.ChainOfThought(code_fix)
             result = code_fixer(
-                dataset_context=str(dataset_context),
-                faulty_code=str(code),
-                error=str(error),
+                dataset_context=str(dataset_context) or "",
+                faulty_code=str(code) or "",
+                error=str(error) or "",
             )
             return result.fixed_code
     
@@ -280,9 +280,9 @@ def fix_code_with_dspy(code: str, error: str, dataset_context: str = ""):
                 
                 # Fix only the inner code
                 result = code_fixer(
-                    dataset_context=str(dataset_context),
-                    faulty_code=str(inner_code),
-                    error=str(error_msg),
+                    dataset_context=str(dataset_context) or "",
+                    faulty_code=str(inner_code) or "",
+                    error=str(error_msg) or "",
                 )   
                 
                 # Ensure the fixed code is properly stripped and doesn't include markers

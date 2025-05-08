@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react'
 import { Button } from '@/components/ui/button'
-import { WrenchIcon, CreditCard, Copy, Check } from 'lucide-react'
+import { WrenchIcon, CreditCard } from 'lucide-react'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { useToast } from "@/components/ui/use-toast"
 import axios from "axios"
@@ -40,9 +40,8 @@ const CodeFixButton: React.FC<CodeFixButtonProps> = ({
 }) => {
   const { toast } = useToast()
   const { data: session } = useSession()
-  const { hasEnoughCredits } = useCredits()
+  const { hasEnoughCredits, checkCredits } = useCredits()
   const [hovered, setHovered] = useState(false)
-  const [copied, setCopied] = useState(false)
   
   // Get the number of fixes for this code entry
   const fixCount = codeFixes[codeId] || 0
@@ -109,6 +108,44 @@ const CodeFixButton: React.FC<CodeFixButtonProps> = ({
       if (response.data && response.data.fixed_code) {
         const fixedCode = response.data.fixed_code
         
+        // Deduct credits if this was not a free fix and user is logged in
+        if (needsCredits && session?.user) {
+          try {
+            // Determine user ID for credit deduction
+            let userIdForCredits = '';
+            
+            if ((session.user as any).sub) {
+              userIdForCredits = (session.user as any).sub;
+            } else if ((session.user as any).id) {
+              userIdForCredits = (session.user as any).id;
+            } else if (session.user.email) {
+              userIdForCredits = session.user.email;
+            }
+            
+            if (userIdForCredits) {
+              // Deduct 1 credit for AI code fix
+              await axios.post('/api/user/deduct-credits', {
+                userId: userIdForCredits,
+                credits: 1,
+                description: 'Used AI to fix code error'
+              });
+              
+              // Refresh credits display
+              if (checkCredits) {
+                await checkCredits();
+              }
+              
+              toast({
+                title: "Credit used",
+                description: "1 credit has been deducted for this code fix",
+                duration: 3000,
+              });
+            }
+          } catch (creditError) {
+            console.error("Failed to deduct credits for code fix:", creditError);
+          }
+        }
+        
         // Notify parent component that fix is complete
         onFixComplete(codeId, fixedCode)
         
@@ -137,47 +174,21 @@ const CodeFixButton: React.FC<CodeFixButtonProps> = ({
     }
   }
 
-  const copyToClipboard = async () => {
-    try {
-      // Format the output as a markdown code block with appropriate syntax
-      const formattedOutput = `\`\`\`\n${errorOutput}\n\`\`\``;
-      await navigator.clipboard.writeText(formattedOutput);
-      
-      // Show success indicator
-      setCopied(true);
-      toast({
-        title: "Copied to clipboard",
-        description: "Output has been copied",
-        duration: 2000,
-      });
-      
-      // Reset copy state after 2 seconds
-      setTimeout(() => {
-        setCopied(false);
-      }, 2000);
-    } catch (error) {
-      console.error("Failed to copy output:", error);
-      toast({
-        title: "Copy failed",
-        description: "Could not copy output to clipboard",
-        variant: "destructive",
-        duration: 3000,
-      });
-    }
-  };
-
   // Render different button styles based on variant
   if (variant === 'inline') {
     return (
-      <div className={`inline-flex items-center gap-2 absolute top-3 right-3 ${className}`}>
-        {/* Fix Button with hover expansion */}
+      <div className={`inline-flex items-center absolute top-3 right-3 ${className}`}
+           onMouseEnter={() => setHovered(true)}
+           onMouseLeave={() => setHovered(false)}>
         <motion.div
-          className="rounded-md overflow-hidden flex items-center px-1"
-          initial={{ backgroundColor: "transparent" }}
-          animate={{ backgroundColor: hovered ? "rgba(254, 226, 226, 0.5)" : "transparent" }}
+          initial={{ width: "auto" }}
+          animate={{ 
+            width: hovered ? "auto" : "auto",
+            backgroundColor: hovered ? "rgba(254, 226, 226, 0.5)" : "transparent"
+          }}
           transition={{ duration: 0.2 }}
-          onMouseEnter={() => setHovered(true)}
-          onMouseLeave={() => setHovered(false)}
+          className="rounded-md overflow-hidden flex items-center justify-end px-1 cursor-pointer"
+          onClick={handleFixCode}
         >
           <motion.span 
             initial={{ opacity: 0, width: 0 }}
@@ -189,40 +200,22 @@ const CodeFixButton: React.FC<CodeFixButtonProps> = ({
             transition={{ duration: 0.2 }}
             className="text-xs font-medium whitespace-nowrap text-red-500 overflow-hidden"
           >
-            {isFreeFix ? `Fix error (${3 - fixCount} free left)` : "Fix error (1 credit)"}
+            {isFreeFix ? `Fix error with AI (${3 - fixCount} free left)` : "Fix error with AI (1 credit)"}
           </motion.span>
           
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={handleFixCode}
-            disabled={isFixing}
-            className="h-6 w-6 p-0 rounded-full bg-red-50 hover:bg-red-100 border border-red-200"
-          >
-            {isFixing ? (
-              <svg className="animate-spin h-3 w-3 text-red-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-              </svg>
-            ) : (
-              <WrenchIcon className="h-4 w-4 text-red-500" />
-            )}
-          </Button>
+          <div className="flex items-center">
+            <div className="h-6 w-6 p-0 flex items-center justify-center rounded-full bg-red-50 border border-red-200">
+              {isFixing ? (
+                <svg className="animate-spin h-3 w-3 text-red-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+              ) : (
+                <WrenchIcon className="h-3 w-3 text-red-500" />
+              )}
+            </div>
+          </div>
         </motion.div>
-        
-        {/* Copy Button */}
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={copyToClipboard}
-          className="h-6 w-6 p-0 rounded-full bg-blue-50 hover:bg-blue-100 border border-blue-200"
-        >
-          {copied ? (
-            <Check className="h-4 w-4 text-blue-500" />
-          ) : (
-            <Copy className="h-4 w-4 text-blue-500" />
-          )}
-        </Button>
       </div>
     )
   }
