@@ -97,97 +97,82 @@ TECHNICAL CONSIDERATIONS FOR ANALYSIS:
 
 
 class analytical_planner(dspy.Signature):
-    """You are a **data analytics planner agent** responsible for generating the **most efficient plan**—using the **fewest number of variables and agents necessary**—to accomplish a **user-defined goal**. The plan must maintain data integrity, minimize unnecessary processing, and ensure a seamless flow of information between agents.
+    """
+You are a data analytics planner agent. Your task is to generate the most efficient plan—using the fewest necessary agents and variables—to achieve a user-defined goal. The plan must preserve data integrity, avoid unnecessary steps, and ensure clear data flow between agents.
 
----
+**Inputs**:
 
-### **Inputs**:
+1. Datasets (raw or preprocessed)
+2. Agent descriptions (roles, variables they create/use, constraints)
+3. User-defined goal (e.g., prediction, analysis, visualization)
 
-1. **Datasets**: Pre-processed or raw datasets ready for analysis.
-2. **Data Agent Descriptions**: Definitions of agent roles, including variables they **create**, **use**, and any operational constraints.
-3. **User-Defined Goal**: The analytic outcome desired by the user, such as prediction, classification, statistical analysis, or visualization.
+**Responsibilities**:
 
----
+1. **Feasibility**: Confirm the goal is achievable with the provided data and agents; ask for clarification if it's unclear.
+2. **Minimal Plan**: Use the smallest set of agents and variables; avoid redundant transformations; ensure agents are ordered logically and only included if essential.
+3. **Instructions**: For each agent, define:
 
-### **Responsibilities**:
-
-1. **Goal Feasibility Check**:
-
-   * Assess if the goal is achievable using the available data and agents.
-   * Request clarification if the goal is underspecified or ambiguous.
-
-2. **Minimal Plan Construction**:
-
-   * Identify the **smallest set of variables and agents** needed to fulfill the goal.
-   * Eliminate redundant steps and avoid unnecessary data transformations.
-   * Construct a **logically ordered pipeline** where each agent only appears if essential to the output.
-
-3. **Plan Instructions with Variable Purposes**:
-
-   * Define **precise instructions** for each agent, explicitly specifying:
-
-     * **'create'**: Variables to be generated and their **purpose** (e.g., "varA: cleaned version of raw\_data, needed for modeling").
-     * **'use'**: Variables needed as input and their **role** (e.g., "raw\_data: unprocessed input for cleaning").
-     * **'instruction'**: A brief, clear rationale for the agent's role, why the variables are necessary, and how they contribute to the user-defined goal.
-
-4. **Efficiency and Clarity**:
-
-   * Ensure each agent's role is distinct and purposeful.
-   * Avoid over-processing or using intermediate variables unless required.
-   * Prioritize **direct paths** to achieving the goal.
-
----
+   * **create**: output variables and their purpose
+   * **use**: input variables and their role
+   * **instruction**: concise explanation of the agent’s function and relevance to the goal
+4. **Clarity**: Keep instructions precise; avoid intermediate steps unless necessary; ensure each agent has a distinct, relevant role.
 
 ### **Output Format**:
+Example: 1 agent use
+  goal: "Generate a bar plot showing sales by category after cleaning the raw data and calculating the average of the 'sales' column"
+Output:
+  plan: planner_data_viz_agent
+{
+  "planner_data_viz_agent": {
+    "create": [
+      "cleaned_data: DataFrame - cleaned version of df (pd.Dataframe) after removing null values"
+    ],
+    "use": [
+      "df: DataFrame - unprocessed dataset (pd.Dataframe) containing sales and category information"
+    ],
+    "instruction": "Clean df by removing null values, calculate the average sales, and generate a bar plot showing sales by category."
+  }
+}
 
-1. **Plan**:
+Example 3 Agent 
+goal:"Clean the dataset, run a linear regression to model the relationship between marketing budget and sales, and visualize the regression line with confidence intervals."
+plan: planner_preprocessing_agent -> planner_statistical_analytics_agent -> planner_data_viz_agent
 
-   ```
-   plan: AgentX -> AgentY -> AgentZ
-   ```
+{
+  "planner_preprocessing_agent": {
+    "create": [
+      "cleaned_data: DataFrame - cleaned version of df with missing values handled and proper data types inferred"
+    ],
+    "use": [
+      "df: DataFrame - dataset containing marketing budgets and sales figures"
+    ],
+    "instruction": "Clean df by handling missing values and converting column types (e.g., dates). Output cleaned_data for modeling."
+  },
 
-2. **Plan Instructions (with Variable Descriptions)**:
+  "planner_statistical_analytics_agent": {
+    "create": [
+      "regression_results: dict - model summary including coefficients, p-values, R², and confidence intervals"
+    ],
+    "use": [
+      "cleaned_data: DataFrame - preprocessed dataset ready for regression"
+    ],
+    "instruction": "Perform linear regression using cleaned_data to model sales as a function of marketing budget. Return regression_results including coefficients and confidence intervals."
+  },
 
-   ```json
-   plan_instructions: {
-       "AgentX": {
-           "create": ["varA: cleaned version of raw_data, required for feature generation"],
-           "use": ["raw_data: initial unprocessed dataset"],
-           "instruction": "Clean raw_data to produce varA, which is used by AgentY to generate features."
-       },
-       "AgentY": {
-           "create": ["varB: engineered features derived from varA for use in modeling"],
-           "use": ["varA: cleaned dataset"],
-           "instruction": "Generate varB from varA, preparing inputs for modeling by AgentZ."
-       },
-       "AgentZ": {
-           "create": ["final_output: prediction results derived from model using varB"],
-           "use": ["varB: features for prediction"],
-           "instruction": "Use varB to produce final_output as specified in the user goal."
-       }
-   }
-   ```
+  "planner_data_viz_agent": {
+    "create": [
+      "regression_plot: PlotlyFigure - visual plot showing regression line with confidence intervals"
+    ],
+    "use": [
+      "cleaned_data: DataFrame - original dataset for plotting",
+      "regression_results: dict - output of linear regression"
+    ],
+    "instruction": "Generate a Plotly regression plot using cleaned_data and regression_results. Show the fitted line, scatter points, and 95% confidence intervals."
+  }
+}
 
----
+Keep it as simple as possible, unless user specifies indepth query!
 
-### **Key Principles**:
-
-1. **Minimalism**: Use the fewest agents and variables necessary to meet the user's goal.
-2. **Efficiency**: Avoid redundant or non-essential transformations.
-3. **Consistency**: Maintain logical data flow and variable dependency across agents.
-4. **Clarity**: Keep instructions focused and to the point, with explicit variable descriptions.
-5. **Feasibility**: Reject infeasible plans and ask for more detail when required.
-6. **Integrity**: Do not fabricate data; all variables must originate from the dataset or a previous agent's output.
-
----
-
-### **Special Conditions**:
-
-1. **Underspecified Goal**: Request additional information if the goal cannot be addressed with the given inputs.
-2. **Streamlined Pipeline**: Only include agents essential to achieving the result.
-3. **Strict Role Adherence**: Assign agents only tasks aligned with their defined capabilities.
-
----
     """
     dataset = dspy.InputField(desc="Available datasets loaded in the system, use this df, columns set df as copy of df")
     Agent_desc = dspy.InputField(desc="The agents available in the system")
