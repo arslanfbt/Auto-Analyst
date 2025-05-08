@@ -1,0 +1,53 @@
+name: Deploy Backend to Hugging Face Spaces
+
+on:
+  push:
+    branches: [ main, master ]
+    paths:
+      - 'auto-analyst-backend/**'
+  workflow_dispatch:  # Allow manual triggering
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    defaults:
+      run:
+        working-directory: ./auto-analyst-backend
+        
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+        
+      - name: Login to Hugging Face
+        run: |
+          pip install huggingface_hub
+          huggingface-cli login --token ${{ secrets.HF_TOKEN }}
+        
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v4
+        with:
+          context: ./auto-analyst-backend
+          push: true
+          tags: ${{ secrets.HF_SPACE_REPO }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          
+      - name: Deploy to Hugging Face Spaces
+        run: |
+          # Clone the Space repository
+          git clone https://huggingface.co/${{ secrets.HF_SPACE_ID }} hf_space
+          cd hf_space
+          
+          # Update the Space with the Docker image reference
+          echo "FROM ${{ secrets.HF_SPACE_REPO }}:latest" > Dockerfile
+          
+          # Push changes
+          git config --global user.email "github-actions@github.com"
+          git config --global user.name "GitHub Actions"
+          git add Dockerfile
+          git commit -m "Update Dockerfile to use latest image"
+          git push https://${{ secrets.HF_TOKEN }}@huggingface.co/${{ secrets.HF_SPACE_ID }} main 
