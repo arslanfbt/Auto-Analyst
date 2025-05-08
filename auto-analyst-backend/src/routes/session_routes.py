@@ -63,7 +63,16 @@ async def upload_dataframe(
         
         # Now process the new file
         contents = await file.read()
-        new_df = pd.read_csv(io.BytesIO(contents))
+        try:
+            new_df = pd.read_csv(io.BytesIO(contents), encoding='utf-8')
+        except Exception as e:
+            try:
+                new_df = pd.read_csv(io.BytesIO(contents), encoding='unicode_escape')
+            except Exception as e:
+                try:
+                    new_df = pd.read_csv(io.BytesIO(contents), encoding='ISO-8859-1')
+                except Exception as e:
+                    raise HTTPException(status_code=400, detail=f"Error reading file: {str(e)}")
         desc = f"{name} Dataset: {description}"
         
         logger.log_message(f"Updating session dataset with description: '{desc}'", level=logging.INFO)
@@ -411,15 +420,11 @@ async def create_dataset_description(
         # Generate description using session model
         with dspy.context(lm=lm):
             # If there's an existing description, have the agent improve it
-            if existing_description:
-                description = dspy.Predict(dataset_description_agent)(
-                    dataset=str(dataset_info),
-                    existing_description=existing_description
-                )
-            else:
-                description = dspy.Predict(dataset_description_agent)(
-                    dataset=str(dataset_info)
-                )
+            description = dspy.Predict(dataset_description_agent)(
+                dataset=str(dataset_info),
+                existing_description=existing_description
+            )
+            
         
         return {"description": description.description}
     except Exception as e:

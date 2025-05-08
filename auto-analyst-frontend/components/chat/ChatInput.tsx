@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef, forwardRef, useImperativeHandle } from "react"
 import { motion, AnimatePresence } from "framer-motion"
-import { Send, Paperclip, X, Square, Loader2, CheckCircle2, XCircle, Eye, CreditCard, Edit, FileText, MessageSquare, AlertTriangle } from 'lucide-react'
+import { Send, Paperclip, X, Square, Loader2, CheckCircle2, XCircle, Eye, CreditCard, Edit, FileText, MessageSquare, AlertTriangle, FileSpreadsheet } from 'lucide-react'
 import AgentHint from './AgentHint'
 import { Button } from "../ui/button"
 import { Textarea } from "../ui/textarea"
@@ -31,10 +31,24 @@ import logger from '@/lib/utils/logger'
 // const PREVIEW_API_URL = 'http://localhost:8000';
 const PREVIEW_API_URL = API_URL;
 
+// Add interfaces for Excel sheets
+interface ExcelSheet {
+  name: string;
+  data: any[][];
+  headers: string[];
+}
+
 interface FileUpload {
   file: File
   status: 'loading' | 'success' | 'error'
   errorMessage?: string
+}
+
+// Add Excel sheet selection interface
+interface ExcelSheetSelection {
+  file: File;
+  sheets: ExcelSheet[];
+  selectedSheet?: string;
 }
 
 interface AgentSuggestion {
@@ -99,6 +113,9 @@ const ChatInput = forwardRef<
   const errorTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   // Add state to track description generation in progress
   const [isGeneratingDescription, setIsGeneratingDescription] = useState(false);
+  // Add state for Excel sheet selection
+  const [excelSheets, setExcelSheets] = useState<ExcelSheetSelection | null>(null)
+  const [showSheetSelector, setShowSheetSelector] = useState(false)
 
   // Expose handlePreviewDefaultDataset to parent
   useImperativeHandle(ref, () => ({
@@ -402,17 +419,24 @@ const ChatInput = forwardRef<
       const isCSVByExtension = file.name.toLowerCase().endsWith('.csv');
       const isCSVByType = file.type === 'text/csv' || file.type === 'application/csv';
       
-      if (!isCSVByExtension || (!isCSVByType && file.type !== '')) {
+      // Check for Excel files
+      const isExcelByExtension = file.name.toLowerCase().endsWith('.xlsx') || file.name.toLowerCase().endsWith('.xls');
+      const isExcelByType = file.type === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' || 
+                            file.type === 'application/vnd.ms-excel' ||
+                            file.type === 'application/excel';
+      
+      if ((!isCSVByExtension && !isExcelByExtension) || 
+          (!isCSVByType && !isExcelByType && file.type !== '')) {
         setFileUpload({ 
           file, 
           status: 'error', 
-          errorMessage: 'Please upload a CSV file only' 
+          errorMessage: 'Please upload a CSV or Excel file only' 
         });
         
         // Show error notification instead of just file error
         setErrorNotification({
           message: 'Invalid file format',
-          details: 'Please upload a CSV file only. Other file formats are not supported.'
+          details: 'Please upload a CSV or Excel (.xlsx, .xls) file only. Other file formats are not supported.'
         });
         
         errorTimeoutRef.current = setTimeout(() => {
@@ -435,6 +459,14 @@ const ChatInput = forwardRef<
         // Mark that we've shown the popup to prevent it from appearing after upload
         popupShownForChatIdsRef.current = new Set();
         
+        // Handle Excel files differently
+        if (isExcelByExtension || isExcelByType) {
+          // Process Excel file and show sheet selector
+          await handleExcelFile(file);
+          return;
+        }
+        
+        // For CSV files, continue with the original flow
         // First preview the file - always do a fresh upload
         // Pass true to indicate this is a new dataset
         await handleFilePreview(file, true);
@@ -455,6 +487,158 @@ const ChatInput = forwardRef<
           setErrorNotification(null);
         }, 5000);
       }
+    }
+  }
+
+  // Add function to handle Excel files
+  const handleExcelFile = async (file: File) => {
+    try {
+      // Try to import Excel libraries dynamically to avoid increasing initial bundle size
+      let XLSX;
+      try {
+        // Import the module
+        const xlsxModule = await import('xlsx');
+        // Handle both ESM and CommonJS module formats
+        XLSX = xlsxModule.default || xlsxModule;
+
+        // Log in a TypeScript-safe way
+        logger.log('XLSX module loaded - Type: ' + typeof XLSX);
+        
+        if (!XLSX || typeof XLSX.read !== 'function') {
+          throw new Error('XLSX library loaded but read method not found');
+        }
+      } catch (importError) {
+        // If import fails, the library is not installed
+        logger.error('Excel import error:', importError);
+        throw new Error(
+          "The xlsx library is not installed or cannot be loaded. Please run 'npm install xlsx' to enable Excel file processing."
+        );
+      }
+      
+      // Read the Excel file
+      const data = await file.arrayBuffer();
+      const workbook = XLSX.read(data);
+      
+      // Extract sheet names and data
+      const sheets: ExcelSheet[] = workbook.SheetNames.map(name => {
+        const sheet = workbook.Sheets[name];
+        const jsonData = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+        
+        // Assume first row is headers
+        const headers = jsonData.length > 0 ? jsonData[0] as string[] : [];
+        const rows = jsonData.slice(1) as any[][];
+        
+        return {
+          name,
+          headers,
+          data: rows
+        };
+      });
+      
+      // Store Excel data and show sheet selector
+      setExcelSheets({
+        file,
+        sheets
+      });
+      
+      setShowSheetSelector(true);
+      
+      // Update file upload status
+      setFileUpload(prev => prev ? { ...prev, status: 'success' } : null);
+    } catch (error) {
+      logger.error('Excel processing error:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to process Excel file';
+      
+      setFileUpload(prev => prev ? { 
+        ...prev, 
+        status: 'error', 
+        errorMessage: 'Failed to process Excel file: ' + errorMessage 
+      } : null);
+      
+      setErrorNotification({
+        message: 'Excel processing failed',
+        details: errorMessage
+      });
+      
+      // If there was an error, clear the file input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
+    }
+  }
+
+  // Function to handle sheet selection and convert to CSV
+  const handleSheetSelect = async (sheetName: string) => {
+    if (!excelSheets) return;
+    
+    try {
+      // Update the selected sheet
+      setExcelSheets(prev => prev ? {...prev, selectedSheet: sheetName} : null);
+      
+      // Get the selected sheet
+      const selectedSheet = excelSheets.sheets.find(sheet => sheet.name === sheetName);
+      if (!selectedSheet) {
+        throw new Error('Selected sheet not found');
+      }
+      
+      // Import Excel libraries dynamically using the same pattern as handleExcelFile
+      let XLSX;
+      try {
+        // Import the module
+        const xlsxModule = await import('xlsx');
+        // Handle both ESM and CommonJS module formats
+        XLSX = xlsxModule.default || xlsxModule;
+        
+        if (!XLSX || typeof XLSX.utils?.json_to_sheet !== 'function') {
+          throw new Error('XLSX library loaded but required methods not found');
+        }
+      } catch (importError) {
+        logger.error('Excel import error in sheet selection:', importError);
+        throw new Error('Failed to load Excel processing library for sheet conversion');
+      }
+      
+      // Create a new workbook with just the selected sheet
+      const newWorkbook = XLSX.utils.book_new();
+      const worksheet = XLSX.utils.json_to_sheet(
+        [selectedSheet.headers, ...selectedSheet.data], 
+        { skipHeader: true }
+      );
+      
+      XLSX.utils.book_append_sheet(newWorkbook, worksheet, selectedSheet.name);
+      
+      // Convert to CSV
+      const csvContent = XLSX.utils.sheet_to_csv(worksheet, { 
+        blankrows: false,
+        forceQuotes: true
+      });
+      
+      // Create a new CSV file
+      const csvFile = new File(
+        [csvContent], 
+        `${excelSheets.file.name.replace(/\.(xlsx|xls)$/i, '')}_${sheetName}.csv`, 
+        { type: 'text/csv' }
+      );
+      
+      // Close the sheet selector
+      setShowSheetSelector(false);
+      
+      // Process the CSV file
+      await handleFilePreview(csvFile, true);
+      setFileUpload({ file: csvFile, status: 'success' });
+    } catch (error) {
+      logger.error('Sheet conversion error:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to process selected sheet';
+      
+      setFileUpload(prev => prev ? { 
+        ...prev, 
+        status: 'error', 
+        errorMessage: 'Failed to process selected sheet: ' + errorMessage 
+      } : null);
+      
+      setErrorNotification({
+        message: 'Sheet conversion failed',
+        details: errorMessage
+      });
     }
   }
 
@@ -1775,6 +1959,111 @@ const ChatInput = forwardRef<
                     Close
                   </button>
                 </div>
+              </div>
+            </DialogContent>
+          </Dialog>
+        )}
+      </AnimatePresence>
+      
+      {/* Excel Sheet Selector Dialog */}
+      <AnimatePresence>
+        {showSheetSelector && excelSheets && (
+          <Dialog 
+            open={showSheetSelector} 
+            onOpenChange={(open) => {
+              if (!open) {
+                // When dialog is closed without selecting a sheet
+                setShowSheetSelector(false);
+                // Reset the file upload if no sheet was selected
+                if (!excelSheets.selectedSheet) {
+                  setFileUpload(null);
+                  setExcelSheets(null);
+                  if (fileInputRef.current) {
+                    fileInputRef.current.value = "";
+                  }
+                }
+              }
+            }}
+          >
+            <DialogContent 
+              className="w-[90vw] max-w-xl overflow-hidden bg-white fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 rounded-lg"
+            >
+              <DialogHeader className="border-b pb-4 bg-white z-8">
+                <DialogTitle className="text-xl text-gray-800 flex items-center gap-2">
+                  <FileSpreadsheet className="w-5 h-5 text-gray-600" />
+                  Select Excel Sheet
+                </DialogTitle>
+                <DialogClose className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-muted-foreground">
+                  <X className="w-4 h-4" />
+                  <span className="sr-only">Close</span>
+                </DialogClose>
+              </DialogHeader>
+              
+              <div className="flex flex-col gap-4 p-6">
+                <p className="text-sm text-gray-600 mb-1">
+                  Select a sheet from <span className="font-medium">{excelSheets.file.name}</span> to use for analysis:
+                </p>
+                
+                <div className="relative">
+                  <select 
+                    className="w-full px-4 py-3 pr-10 text-gray-800 bg-white border border-gray-300 rounded-md shadow-sm appearance-none focus:outline-none focus:ring-2 focus:ring-[#FF7F7F] focus:border-transparent"
+                    onChange={(e) => {
+                      if (e.target.value) {
+                        handleSheetSelect(e.target.value);
+                      }
+                    }}
+                    defaultValue=""
+                  >
+                    <option value="" disabled>Choose a sheet...</option>
+                    {excelSheets.sheets.map((sheet) => (
+                      <option key={sheet.name} value={sheet.name}>
+                        {sheet.name} ({sheet.data.length} rows × {sheet.headers.length} columns)
+                      </option>
+                    ))}
+                  </select>
+                  <div className="absolute inset-y-0 right-0 flex items-center px-2 pointer-events-none">
+                    <svg className="w-5 h-5 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
+                    </svg>
+                  </div>
+                </div>
+                
+                {excelSheets.sheets.length === 0 && (
+                  <div className="p-4 bg-orange-50 border border-orange-200 rounded-md flex items-center gap-2">
+                    <AlertTriangle className="w-5 h-5 text-orange-500" />
+                    <p className="text-sm text-orange-700">
+                      No valid sheets found in this Excel file. Please try another file.
+                    </p>
+                  </div>
+                )}
+              </div>
+              
+              <div className="flex justify-end gap-3 p-6 border-t bg-gray-50">
+                <button
+                  onClick={() => {
+                    setShowSheetSelector(false);
+                    setFileUpload(null);
+                    setExcelSheets(null);
+                    if (fileInputRef.current) {
+                      fileInputRef.current.value = "";
+                    }
+                  }}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-[#FF7F7F] focus:border-transparent transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => {
+                    // Only enable if a sheet is selected in the dropdown
+                    const selectElement = document.querySelector('select') as HTMLSelectElement;
+                    if (selectElement && selectElement.value) {
+                      handleSheetSelect(selectElement.value);
+                    }
+                  }}
+                  className="px-4 py-2 text-sm font-medium text-white bg-[#FF7F7F] rounded-md hover:bg-[#FF6666] focus:outline-none focus:ring-2 focus:ring-[#FF7F7F] focus:ring-offset-2 transition-colors"
+                >
+                  Select Sheet
+                </button>
               </div>
             </DialogContent>
           </Dialog>

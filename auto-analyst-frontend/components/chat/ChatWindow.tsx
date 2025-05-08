@@ -846,21 +846,6 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
               Visualization
             </div>
             
-            {output.codeId && (
-              <CodeFixButton
-                codeId={output.codeId}
-                errorOutput={""}
-                code={codeEntries.find(entry => entry.id === output.codeId)?.code || ''}
-                isFixing={codeFixState.isFixing && codeFixState.codeBeingFixed === output.codeId}
-                codeFixes={codeFixes}
-                sessionId={sessionId || storeSessionId || ''}
-                onFixStart={handleFixStart}
-                onFixComplete={handleFixComplete}
-                onCreditCheck={handleCreditCheck}
-                variant="inline"
-              />
-            )}
-            
             <div className="w-full">
               <PlotlyChart data={output.content.data} layout={output.content.layout} />
             </div>
