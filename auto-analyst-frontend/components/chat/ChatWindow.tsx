@@ -55,6 +55,7 @@ interface ChatWindowProps {
   showWelcome: boolean
   chatNameGenerated?: boolean
   sessionId?: string
+  setSidebarOpen?: (isOpen: boolean) => void
 }
 
 interface CodeFixState {
@@ -62,7 +63,7 @@ interface CodeFixState {
   codeBeingFixed: string | null
 }
 
-const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMessage, showWelcome, chatNameGenerated = false, sessionId }) => {
+const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMessage, showWelcome, chatNameGenerated = false, sessionId, setSidebarOpen }) => {
   const chatWindowRef = useRef<HTMLDivElement>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const [localMessages, setLocalMessages] = useState<ChatMessage[]>(messages)
@@ -559,6 +560,11 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
       setCodeCanvasOpen(true);
       setHiddenCanvas(false);
       
+      // Close sidebar if it's open
+      if (setSidebarOpen) {
+        setSidebarOpen(false);
+      }
+      
       // Mark as fixing
       setCodeFixState({ isFixing: true, codeBeingFixed: codeId });
       
@@ -689,6 +695,11 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
                         extractCodeFromMessages([message], index);
                         setCodeCanvasOpen(true);
                         setHiddenCanvas(false); // Make the canvas visible when clicked
+                        
+                        // Close sidebar if it's open
+                        if (setSidebarOpen) {
+                          setSidebarOpen(false);
+                        }
                         
                         // Remove auto-run trigger when manually opening canvas
                         // setChatCompleted(true);

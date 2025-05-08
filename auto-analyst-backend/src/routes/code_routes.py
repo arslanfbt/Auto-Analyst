@@ -159,8 +159,8 @@ def identify_error_blocks(code: str, error_output: str) -> List[Tuple[str, str, 
                     matched_blocks.add(block_name)
                     break
     
-    logger.log_message(f"Faulty blocks found: {len(faulty_blocks)}", level=logging.INFO)
-    logger.log_message(f"Faulty blocks: {faulty_blocks}", level=logging.INFO)
+    # logger.log_message(f"Faulty blocks found: {len(faulty_blocks)}", level=logging.INFO)
+    # logger.log_message(f"Faulty blocks: {faulty_blocks}", level=logging.INFO)
     return faulty_blocks
 
 def extract_relevant_error_section(error_message: str) -> str:
