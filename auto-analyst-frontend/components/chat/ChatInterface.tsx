@@ -114,8 +114,9 @@ const ChatInterface: React.FC = () => {
 
   // Check if it's the user's first time and show onboarding tooltip
   useEffect(() => {
-    if (mounted && session?.user) {
+    if (mounted) {
       const showOnboardingFlag = localStorage.getItem('showOnboarding');
+      // Show for both signed-in users and free trial users
       if (showOnboardingFlag === 'true') {
         // Delay showing the tooltip slightly to ensure the UI is fully loaded
         const timer = setTimeout(() => {
@@ -125,8 +126,20 @@ const ChatInterface: React.FC = () => {
         }, 1500);
         return () => clearTimeout(timer);
       }
+      
+      // Set the onboarding flag for first-time free trial users
+      if (!session && hasFreeTrial() && !localStorage.getItem('hasSeenOnboarding')) {
+        localStorage.setItem('showOnboarding', 'true');
+        
+        const timer = setTimeout(() => {
+          setShowOnboarding(true);
+          localStorage.removeItem('showOnboarding');
+          localStorage.setItem('hasSeenOnboarding', 'true');
+        }, 1500);
+        return () => clearTimeout(timer);
+      }
     }
-  }, [mounted, session]);
+  }, [mounted, session, hasFreeTrial]);
 
   useEffect(() => {
     const fetchAgents = async () => {
@@ -831,6 +844,12 @@ const ChatInterface: React.FC = () => {
     // Counting user queries for free trial
     if (!session) {
       incrementQueries();
+      
+      // Check if this is the first free trial message and user hasn't seen onboarding
+      if (queriesUsed === 0 && !localStorage.getItem('hasSeenOnboarding')) {
+        // Set flag to show onboarding after this message completes
+        localStorage.setItem('showFirstQueryOnboarding', 'true');
+      }
     }
 
     setIsLoading(true);
@@ -1030,8 +1049,16 @@ const ChatInterface: React.FC = () => {
         logger.log("Message processing complete, resetting recentlyUploadedDataset flag");
         setRecentlyUploadedDataset(false);
       }
+      
+      // Check if this was a free trial user's first query
+      const showFirstQueryOnboarding = localStorage.getItem('showFirstQueryOnboarding');
+      if (showFirstQueryOnboarding === 'true') {
+        localStorage.removeItem('showFirstQueryOnboarding');
+        setShowOnboarding(true);
+        localStorage.setItem('hasSeenOnboarding', 'true');
+      }
     }
-  }, [addMessage, clearMessages, incrementQueries, session, isAdmin, activeChatId, userId, sessionId, modelSettings, hasEnoughCredits, processRegularMessage, processAgentMessage, fetchChatHistories, checkCredits, recentlyUploadedDataset, chatHistories, syncSettingsToBackend]);
+  }, [addMessage, clearMessages, incrementQueries, session, isAdmin, activeChatId, userId, sessionId, modelSettings, hasEnoughCredits, processRegularMessage, processAgentMessage, fetchChatHistories, checkCredits, recentlyUploadedDataset, chatHistories, syncSettingsToBackend, queriesUsed]);
 
   const handleFileUpload = async (file: File) => {
     // File validation
