@@ -155,7 +155,7 @@ export default function Sidebar() {
                 <div>
                   <span className="font-medium text-gray-700">API URL:</span>
                   <div className="mt-1">
-                    <code className="bg-gray-100 px-2 py-1 rounded block truncate text-gray-700">{process.env.BACKEND_API_URL || 'http://localhost:8000'}</code>
+                    <code className="bg-gray-100 px-2 py-1 rounded block truncate text-gray-700">{process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}</code>
                   </div>
                 </div>
               </div>

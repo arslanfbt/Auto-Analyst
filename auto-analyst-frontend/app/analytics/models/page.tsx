@@ -64,7 +64,7 @@ export default function ModelUsagePage() {
         return;
       }
       
-      const API_BASE_URL = process.env.BACKEND_API_URL || 'http://localhost:8000';
+      const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
       
       // Fetch model usage breakdown
       const modelRes = await fetch(`${API_BASE_URL}/analytics/usage/models`, { 

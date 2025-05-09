@@ -144,7 +144,7 @@ const ChatInterface: React.FC = () => {
   useEffect(() => {
     const fetchAgents = async () => {
       try {
-        const API_URL = process.env.BACKEND_API_URL || 'http://localhost:8000'
+        const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
         const response = await axios.get(`${API_URL}/agents`)
         if (response.data && response.data.available_agents) {
           const agentList: AgentInfo[] = response.data.available_agents.map((name: string) => ({
