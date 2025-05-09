@@ -1717,7 +1717,7 @@ const ChatInput = forwardRef<
                       </span>
                       {fileUpload.isExcel && fileUpload.selectedSheet && (
                         <span className="ml-1 text-blue-500 font-normal whitespace-nowrap">
-                          [Sheet: {fileUpload.selectedSheet}]
+                          {fileUpload.selectedSheet}
                         </span>
                       )}
                     </div>
@@ -2222,12 +2222,16 @@ const ChatInput = forwardRef<
                   } : null);
                 }}
               >
-                <SelectTrigger className="w-full">
+                <SelectTrigger className="w-full cursor-pointer">
                   <SelectValue placeholder="Select a sheet" />
                 </SelectTrigger>
                 <SelectContent>
                   {fileUpload.sheets.map(sheet => (
-                    <SelectItem key={sheet} value={sheet}>
+                    <SelectItem 
+                      key={sheet} 
+                      value={sheet} 
+                      className="cursor-pointer hover:bg-blue-50 hover:text-[#FF7F7F] transition-colors"
+                    >
                       {sheet}
                     </SelectItem>
                   ))}
