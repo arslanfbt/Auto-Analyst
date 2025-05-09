@@ -143,12 +143,12 @@ export async function POST(request: NextRequest) {
       // Use model settings from localStorage with proper values
       const modelName = modelSettings?.model_name || 
                         sessionInfo?.model_settings?.model_name || 
-                        process.env.NEXT_PUBLIC_DEFAULT_MODEL || 
+                        process.env.DEFAULT_PUBLIC_MODEL || 
                         'Not available';
                         
       const modelProvider = modelSettings?.model_provider || 
                            sessionInfo?.model_settings?.model_provider || 
-                           process.env.NEXT_PUBLIC_DEFAULT_MODEL_PROVIDER || 
+                           process.env.DEFAULT_MODEL_PROVIDER || 
                            'Not available';
                            
       const temperature = modelSettings?.temperature ?? 

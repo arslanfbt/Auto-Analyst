@@ -81,12 +81,12 @@ export function useModelSettings() {
     // Use a function to initialize state to avoid multiple localStorage reads
     const localSettings = getSettingsFromLocalStorage()
     return {
-      provider: localSettings?.provider || process.env.NEXT_PUBLIC_DEFAULT_MODEL_PROVIDER || 'openai',
-      model: localSettings?.model || process.env.NEXT_PUBLIC_DEFAULT_MODEL || 'gpt-4o-mini',
+      provider: localSettings?.provider || process.env.DEFAULT_MODEL_PROVIDER || 'openai',
+      model: localSettings?.model || process.env.DEFAULT_PUBLIC_MODEL || 'gpt-4o-mini',
       hasCustomKey: localSettings?.hasCustomKey || false,
       apiKey: process.env.NEXT_PUBLIC_OPENAI_API_KEY || '', // Never load API key from localStorage
-      temperature: localSettings?.temperature || process.env.NEXT_PUBLIC_DEFAULT_TEMPERATURE || 0.7,
-      maxTokens: localSettings?.maxTokens || process.env.NEXT_PUBLIC_DEFAULT_MAX_TOKENS || 6000
+      temperature: localSettings?.temperature || process.env.DEFAULT_TEMPERATURE || 0.7,
+      maxTokens: localSettings?.maxTokens || process.env.PUBLIC_DEFAULT_MAX_TOKENS || 6000
     }
   })
   

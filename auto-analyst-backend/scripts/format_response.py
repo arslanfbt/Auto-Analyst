@@ -19,6 +19,122 @@ def stdoutIO(stdout=None):
     yield stdout
     sys.stdout = old
     
+# Precompile regex patterns for better performance
+SENSITIVE_MODULES = re.compile(r"(os|sys|subprocess|dotenv|requests|http|socket|smtplib|ftplib|telnetlib|paramiko)")
+IMPORT_PATTERN = re.compile(r"^\s*import\s+(" + SENSITIVE_MODULES.pattern + r").*?(\n|$)", re.MULTILINE)
+FROM_IMPORT_PATTERN = re.compile(r"^\s*from\s+(" + SENSITIVE_MODULES.pattern + r").*?(\n|$)", re.MULTILINE)
+DYNAMIC_IMPORT_PATTERN = re.compile(r"__import__\s*\(\s*['\"](" + SENSITIVE_MODULES.pattern + r")['\"].*?\)")
+ENV_ACCESS_PATTERN = re.compile(r"(os\.getenv|os\.environ|load_dotenv|\.__import__\s*\(\s*['\"]os['\"].*?\.environ)")
+FILE_ACCESS_PATTERN = re.compile(r"(open\(|read\(|write\(|file\(|with\s+open)")
+
+# Enhanced API key detection patterns
+API_KEY_PATTERNS = [
+    # Direct key assignments
+    re.compile(r"(?i)(api_?key|access_?token|secret_?key|auth_?token|password|credential|secret)s?\s*=\s*[\"\'][\w\-\+\/\=]{8,}[\"\']"),
+    # Function calls with keys
+    re.compile(r"(?i)\.set_api_key\(\s*[\"\'][\w\-\+\/\=]{8,}[\"\']"),
+    # Dictionary assignments
+    re.compile(r"(?i)['\"](?:api_?key|access_?token|secret_?key|auth_?token|password|credential|secret)['\"](?:\s*:\s*)[\"\'][\w\-\+\/\=]{8,}[\"\']"),
+    # Common key formats (base64-like, hex)
+    re.compile(r"[\"\'](?:[A-Za-z0-9\+\/\=]{32,}|[0-9a-fA-F]{32,})[\"\']"),
+    # Bearer token pattern
+    re.compile(r"[\"\'](Bearer\s+[\w\-\+\/\=]{8,})[\"\']"),
+    # Inline URL with auth
+    re.compile(r"https?:\/\/[\w\-\+\/\=]{8,}@")
+]
+
+# Network request patterns
+NETWORK_REQUEST_PATTERNS = re.compile(r"(requests\.|urllib\.|http\.|\.post\(|\.get\(|\.connect\()")
+
+def check_security_concerns(code_str):
+    """Check code for security concerns and return info about what was found"""
+    security_concerns = {
+        "has_concern": False,
+        "messages": [],
+        "blocked_imports": False,
+        "blocked_dynamic_imports": False,
+        "blocked_env_access": False,
+        "blocked_file_access": False,
+        "blocked_api_keys": False,
+        "blocked_network": False
+    }
+    
+    # Check for sensitive imports
+    if IMPORT_PATTERN.search(code_str) or FROM_IMPORT_PATTERN.search(code_str):
+        security_concerns["has_concern"] = True
+        security_concerns["blocked_imports"] = True
+        security_concerns["messages"].append("Sensitive module imports blocked")
+    
+    # Check for __import__ bypass technique
+    if DYNAMIC_IMPORT_PATTERN.search(code_str):
+        security_concerns["has_concern"] = True
+        security_concerns["blocked_dynamic_imports"] = True
+        security_concerns["messages"].append("Dynamic import of sensitive modules blocked")
+    
+    # Check for environment variables access
+    if ENV_ACCESS_PATTERN.search(code_str):
+        security_concerns["has_concern"] = True
+        security_concerns["blocked_env_access"] = True
+        security_concerns["messages"].append("Environment variables access blocked")
+    
+    # Check for file operations
+    if FILE_ACCESS_PATTERN.search(code_str):
+        security_concerns["has_concern"] = True
+        security_concerns["blocked_file_access"] = True
+        security_concerns["messages"].append("File operations blocked")
+    
+    # Check for API key patterns
+    for pattern in API_KEY_PATTERNS:
+        if pattern.search(code_str):
+            security_concerns["has_concern"] = True
+            security_concerns["blocked_api_keys"] = True
+            security_concerns["messages"].append("API key/token usage blocked")
+            break
+    
+    # Check for network requests
+    if NETWORK_REQUEST_PATTERNS.search(code_str):
+        security_concerns["has_concern"] = True
+        security_concerns["blocked_network"] = True
+        security_concerns["messages"].append("Network requests blocked")
+    
+    return security_concerns
+
+def clean_code_for_security(code_str, security_concerns):
+    """Apply security modifications to the code based on detected concerns"""
+    modified_code = code_str
+    
+    # Block sensitive imports if needed
+    if security_concerns["blocked_imports"]:
+        modified_code = IMPORT_PATTERN.sub(r'# BLOCKED: import \1\n', modified_code)
+        modified_code = FROM_IMPORT_PATTERN.sub(r'# BLOCKED: from \1\n', modified_code)
+    
+    # Block dynamic imports if needed
+    if security_concerns["blocked_dynamic_imports"]:
+        modified_code = DYNAMIC_IMPORT_PATTERN.sub(r'"BLOCKED_DYNAMIC_IMPORT"', modified_code)
+    
+    # Block environment access if needed
+    if security_concerns["blocked_env_access"]:
+        modified_code = ENV_ACCESS_PATTERN.sub(r'"BLOCKED_ENV_ACCESS"', modified_code)
+    
+    # Block file operations if needed
+    if security_concerns["blocked_file_access"]:
+        modified_code = FILE_ACCESS_PATTERN.sub(r'"BLOCKED_FILE_ACCESS"', modified_code)
+    
+    # Block API keys if needed
+    if security_concerns["blocked_api_keys"]:
+        for pattern in API_KEY_PATTERNS:
+            modified_code = pattern.sub(r'"BLOCKED_API_KEY"', modified_code)
+    
+    # Block network requests if needed
+    if security_concerns["blocked_network"]:
+        modified_code = NETWORK_REQUEST_PATTERNS.sub(r'"BLOCKED_NETWORK_REQUEST"', modified_code)
+    
+    # Add warning banner if needed
+    if security_concerns["has_concern"]:
+        security_message = "⚠️ SECURITY WARNING: " + ". ".join(security_concerns["messages"]) + "."
+        modified_code = f"print('{security_message}')\n\n" + modified_code
+    
+    return modified_code
     
 def clean_print_statements(code_block):
     """
@@ -107,6 +223,12 @@ def execute_code_from_markdown(code_str, dataframe=None):
     import sys
     from io import StringIO
 
+    # Check for security concerns in the code
+    security_concerns = check_security_concerns(code_str)
+    
+    # Apply security modifications to the code
+    modified_code = clean_code_for_security(code_str, security_concerns)
+    
     context = {
         'pd': pd,
         'px': px,
@@ -124,7 +246,7 @@ def execute_code_from_markdown(code_str, dataframe=None):
     modified_code = re.sub(
         r'(\w*_?)fig(\w*)\.show\(\)',
         r'json_outputs.append(plotly.io.to_json(\1fig\2, pretty=True))',
-        code_str
+        modified_code
     )
 
     modified_code = re.sub(

@@ -67,7 +67,7 @@ export default function UserActivityPage() {
         return;
       }
       
-      const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+      const API_BASE_URL = process.env.BACKEND_API_URL || 'http://localhost:8000';
       
       // Fetch users with pagination support
       const usersRes = await fetch(`${API_BASE_URL}/analytics/users?limit=100`, { 
@@ -114,7 +114,7 @@ export default function UserActivityPage() {
 
   // Add WebSocket for real-time updates
   const setupRealtimeUpdates = () => {
-    const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+    const API_BASE_URL = process.env.BACKEND_API_URL || 'http://localhost:8000';
     const wsUrl = API_BASE_URL.replace('http', 'ws') + '/analytics/realtime';
     
     try {

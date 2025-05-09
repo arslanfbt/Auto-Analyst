@@ -75,7 +75,7 @@ export default function AnalyticsDashboard() {
   const verifyAdminKey = async (key: string) => {
     setIsLoading(true);
     try {
-      const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+      const API_BASE_URL = process.env.BACKEND_API_URL || 'http://localhost:8000';
       const response = await fetch(`${API_BASE_URL}/analytics/debug/model_usage`, {
         headers: {
           'X-Admin-API-Key': key
@@ -103,7 +103,7 @@ export default function AnalyticsDashboard() {
     setError(null);
     
     try {
-      const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+      const API_BASE_URL = process.env.BACKEND_API_URL || 'http://localhost:8000';
       
       // Fetch summary data
       const summaryRes = await fetch(`${API_BASE_URL}/analytics/usage/summary`, { 
