@@ -887,12 +887,36 @@ Strict instructions:
 - The output must be complete and executable as-is.
 
 Be precise, minimal, and reliable. Prioritize functional correctness.
+
+One-shot example:
+===
+dataset_context: 
+"This dataset contains historical price and trading data for two major financial assets: the S&P 500 index and Bitcoin (BTC). The data includes daily price metrics (open, high, low, close) and percentage changes for both assets... Change % columns are stored as strings with '%' symbol (e.g., '-5.97%') and require cleaning."
+
+faulty_code:
+# Convert percentage strings to floats
+df['Change %'] = df['Change %'].str.rstrip('%').astype(float)
+df['Change % BTC'] = df['Change % BTC'].str.rstrip('%').astype(float)
+
+error:
+Error in data_viz_agent: Can only use .str accessor with string values!
+Traceback (most recent call last):
+  File "/app/scripts/format_response.py", line 196, in execute_code_from_markdown
+    exec(block_code, context)
+AttributeError: Can only use .str accessor with string values!
+
+fixed_code:
+# Convert percentage strings to floats
+df['Change %'] = df['Change %'].astype(str).str.rstrip('%').astype(float)
+df['Change % BTC'] = df['Change % BTC'].astype(str).str.rstrip('%').astype(float)
+===
+
     """
     dataset_context = dspy.InputField(desc="The dataset context to be used for the code fix")
     faulty_code = dspy.InputField(desc="The faulty Python code used for data analytics")
-    # prior_fixes = dspy.InputField(desc="If a fix for this code exists in our error retriever", default="use the error message")
     error = dspy.InputField(desc="The error message thrown when running the code")
     fixed_code = dspy.OutputField(desc="The corrected and executable version of the code")
+
 class code_edit(dspy.Signature):
     """
 You are an expert AI code editor that specializes in modifying existing data analytics code based on user requests. The user provides a working or partially working code snippet, a natural language prompt describing the desired change, and dataset context information.

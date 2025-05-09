@@ -62,8 +62,8 @@ const FeedbackPopup = ({ isOpen, onClose }: FeedbackPopupProps) => {
           
           // Map the userModelSettings format to our ModelSettings interface
           const settings: ModelSettings = {
-            model_name: userSettings.model || process.env.NEXT_PUBLIC_DEFAULT_MODEL || 'gpt-4',
-            model_provider: userSettings.provider || process.env.NEXT_PUBLIC_DEFAULT_MODEL_PROVIDER || 'openai',
+            model_name: userSettings.model || process.env.DEFAULT_PUBLIC_MODEL || 'gpt-4',
+            model_provider: userSettings.provider || process.env.DEFAULT_MODEL_PROVIDER || 'openai',
             temperature: userSettings.temperature ?? 0.7,
             max_tokens: userSettings.maxTokens ?? 6000
           }
@@ -73,10 +73,10 @@ const FeedbackPopup = ({ isOpen, onClose }: FeedbackPopupProps) => {
         } else {
           // Fallback to environment defaults
           const settings: ModelSettings = {
-            model_name: process.env.NEXT_PUBLIC_DEFAULT_MODEL || 'gpt-4',
-            model_provider: process.env.NEXT_PUBLIC_DEFAULT_MODEL_PROVIDER || 'openai',
-            temperature: parseFloat(process.env.NEXT_PUBLIC_DEFAULT_TEMPERATURE || '0.7'),
-            max_tokens: parseInt(process.env.NEXT_PUBLIC_DEFAULT_MAX_TOKENS || '6000')
+            model_name: process.env.DEFAULT_PUBLIC_MODEL || 'gpt-4',
+            model_provider: process.env.DEFAULT_MODEL_PROVIDER || 'openai',
+            temperature: parseFloat(process.env.DEFAULT_TEMPERATURE || '0.7'),
+            max_tokens: parseInt(process.env.PUBLIC_DEFAULT_MAX_TOKENS || '6000')
           }
           
           setModelSettings(settings)

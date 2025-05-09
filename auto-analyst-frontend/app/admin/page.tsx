@@ -14,7 +14,7 @@ export default function AdminLogin() {
     e.preventDefault()
     
     // Simple admin bypass - replace with secure method in production
-    if (password === process.env.NEXT_PUBLIC_ADMIN_PASSWORD) {
+    if (password === process.env.ANALYTICS_ADMIN_PASSWORD) {
       // Store admin status in localStorage
       localStorage.setItem('isAdmin', 'true')
       router.push("/chat")

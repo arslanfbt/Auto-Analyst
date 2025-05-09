@@ -23,7 +23,7 @@ const handler = NextAuth({
         isAdmin: { label: "Is Admin", type: "text" }
       },
       async authorize(credentials) {
-        if (credentials?.password === process.env.NEXT_PUBLIC_ADMIN_PASSWORD && credentials?.isAdmin === "true") {
+        if (credentials?.password === process.env.ANALYTICS_ADMIN_PASSWORD && credentials?.isAdmin === "true") {
           return {
             id: "admin",
             name: "Administrator",

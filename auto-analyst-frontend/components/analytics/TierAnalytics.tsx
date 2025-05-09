@@ -41,7 +41,7 @@ export default function TierAnalytics({ adminKey }: { adminKey: string }) {
   const [selectedPeriod, setSelectedPeriod] = useState('30d');
   const [tierDefinitions, setTierDefinitions] = useState<any>(MODEL_TIERS);
 
-  const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+  const API_BASE_URL = process.env.BACKEND_API_URL || 'http://localhost:8000';
 
   const fetchTierData = async () => {
     setIsLoading(true);
