@@ -67,7 +67,7 @@ export default function CostAnalysisPage() {
         return;
       }
       
-      const API_BASE_URL = process.env.BACKEND_API_URL || 'http://localhost:8000';
+      const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
       
       // Fetch cost summary with real-time data
       const summaryRes = await fetch(`${API_BASE_URL}/analytics/costs/summary?period=${dateRange}`, { 
@@ -121,7 +121,7 @@ export default function CostAnalysisPage() {
 
   // Add real-time cost tracker
   useEffect(() => {
-    const API_BASE_URL = process.env.BACKEND_API_URL || 'http://localhost:8000';
+    const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
     
     // Set up polling for real-time cost updates
     const costTrackerInterval = setInterval(async () => {

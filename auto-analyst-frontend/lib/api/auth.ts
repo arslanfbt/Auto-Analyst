@@ -1,7 +1,7 @@
 import { v4 as uuidv4 } from 'uuid';
 import logger from '@/lib/utils/logger'
 
-const API_BASE_URL = process.env.BACKEND_API_URL || 'http://localhost:8000';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
 export async function loginUser(username: string, email: string, sessionId?: string) {
   const response = await fetch(`${API_BASE_URL}/auth/login`, {
