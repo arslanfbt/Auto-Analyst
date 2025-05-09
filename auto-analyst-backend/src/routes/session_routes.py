@@ -3,7 +3,7 @@ import logging
 import json
 import os
 from io import StringIO
-from typing import Optional
+from typing import Optional, List
 
 import pandas as pd
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
@@ -39,6 +39,104 @@ class ResetSessionRequest(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
     preserveModelSettings: Optional[bool] = False
+
+# Define a response model for Excel sheets
+class ExcelSheetsResponse(BaseModel):
+    sheets: List[str]
+
+@router.post("/api/excel-sheets")
+async def get_excel_sheets(
+    file: UploadFile = File(...),
+    app_state = Depends(get_app_state),
+    session_id: str = Depends(get_session_id_dependency)
+):
+    """Get the list of sheet names from an Excel file"""
+    try:
+        # Read the uploaded Excel file
+        contents = await file.read()
+        
+        # Load Excel file using pandas
+        excel_file = pd.ExcelFile(io.BytesIO(contents))
+        
+        # Get sheet names
+        sheet_names = excel_file.sheet_names
+        
+        # Log the sheets found
+        logger.log_message(f"Found {len(sheet_names)} sheets in Excel file: {', '.join(sheet_names)}", level=logging.INFO)
+        
+        # Return the sheet names
+        return {"sheets": sheet_names}
+    except Exception as e:
+        logger.log_message(f"Error getting Excel sheets: {str(e)}", level=logging.ERROR)
+        raise HTTPException(status_code=400, detail=f"Error reading Excel file: {str(e)}")
+
+@router.post("/upload_excel")
+async def upload_excel(
+    file: UploadFile = File(...),
+    name: str = Form(...),
+    description: str = Form(...),
+    sheet_name: str = Form(...),
+    app_state = Depends(get_app_state),
+    session_id: str = Depends(get_session_id_dependency),
+    request: Request = None
+):
+    """Upload and process an Excel file with a specific sheet"""
+    try:
+        # Log the incoming request details
+        logger.log_message(f"Excel upload request for session {session_id}: name='{name}', description='{description}', sheet='{sheet_name}'", level=logging.INFO)
+        
+        # Check if we need to force a complete session reset before upload
+        force_refresh = request.headers.get("X-Force-Refresh") == "true" if request else False
+        
+        if force_refresh:
+            logger.log_message(f"Force refresh requested for session {session_id} before Excel upload", level=logging.INFO)
+            # Reset the session but don't completely wipe it, so we maintain user association
+            app_state.reset_session_to_default(session_id)
+        
+        # Read the uploaded Excel file
+        contents = await file.read()
+        
+        try:
+            # Read the specific sheet with basic preprocessing
+            excel_df = pd.read_excel(io.BytesIO(contents), sheet_name=sheet_name)
+            
+            # Preprocessing steps
+            # 1. Drop empty rows and columns
+            excel_df.dropna(how='all', inplace=True)  # Remove empty rows
+            excel_df.dropna(how='all', axis=1, inplace=True)  # Remove empty columns
+            
+            # 2. Clean column names
+            excel_df.columns = excel_df.columns.str.strip()  # Remove extra spaces
+            
+            # 3. Convert Excel data to CSV with UTF-8-sig encoding
+            csv_buffer = io.StringIO()
+            excel_df.to_csv(csv_buffer, index=False, encoding='utf-8-sig')
+            csv_buffer.seek(0)
+            
+            # Read the processed CSV back into a dataframe
+            new_df = pd.read_csv(csv_buffer)
+            
+            # Log some info about the processed data
+            logger.log_message(f"Processed Excel sheet '{sheet_name}' into dataframe with {len(new_df)} rows and {len(new_df.columns)} columns", level=logging.INFO)
+            
+        except Exception as e:
+            logger.log_message(f"Error processing Excel file: {str(e)}", level=logging.ERROR)
+            raise HTTPException(status_code=400, detail=f"Error processing Excel file: {str(e)}")
+        
+        # Update the dataset description to include sheet name
+        desc = f"{name} Dataset (from Excel sheet '{sheet_name}'): {description}"
+        
+        logger.log_message(f"Updating session dataset with Excel data and description: '{desc}'", level=logging.INFO)
+        app_state.update_session_dataset(session_id, new_df, name, desc)
+        
+        # Log the final state
+        session_state = app_state.get_session_state(session_id)
+        logger.log_message(f"Session dataset updated with Excel data and description: '{session_state.get('description')}'", level=logging.INFO)
+        
+        return {"message": "Excel file processed successfully", "session_id": session_id, "sheet": sheet_name}
+    except Exception as e:
+        logger.log_message(f"Error in upload_excel: {str(e)}", level=logging.ERROR)
+        raise HTTPException(status_code=400, detail=str(e))
 
 @router.post("/upload_dataframe")
 async def upload_dataframe(
