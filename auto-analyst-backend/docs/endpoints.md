@@ -8,3 +8,4 @@ For more specific details regarding the various functionalities offered by the A
 - [Analytics Endpoints](./analytics.md): Explore the endpoints dedicated to analytics, providing insights into usage statistics and performance metrics.
 - [Chat Endpoints](./chats.md): Discover the endpoints that manage chat interactions, enabling users to create, retrieve, and manage chat sessions effectively.
 - [Core Endpoints](./core.md): Review the core endpoints that handle fundamental operations within the application, including data uploads and session management.
+- [Code Endpoints](./code.md): 

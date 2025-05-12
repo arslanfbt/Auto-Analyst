@@ -1,0 +1,56 @@
+name: Deploy to HuggingFace Spaces
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "auto-analyst-backend/**"
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./auto-analyst-backend
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Create .huggingface.yaml
+        run: |
+          echo "sdk: docker" > .huggingface.yaml
+
+      - name: Configure Git
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          git config --global user.email "actions@github.com"
+          git config --global user.name "GitHub Actions"
+          git config --global credential.helper store
+          echo "https://USER:${HF_TOKEN}@huggingface.co" > ~/.git-credentials
+
+      - name: Push to HuggingFace Space
+        env:
+          SPACE_NAME: ${{ secrets.HF_SPACE_NAME }}
+          HF_USERNAME: ${{ secrets.HF_USERNAME }}
+        run: |
+          SPACE_REPO="https://huggingface.co/spaces/${HF_USERNAME}/${SPACE_NAME}"
+          
+          # Clone space repo to a separate directory
+          git clone $SPACE_REPO hf-space || (mkdir hf-space && cd hf-space && git init && git remote add origin $SPACE_REPO)
+          
+          # Copy backend files to the space repo (excluding the newly created directory)
+          cp -r .huggingface.yaml Dockerfile requirements.txt app.py hf-space/
+          # Add any other directories/files you need
+          if [ -d "app" ]; then
+            cp -r app hf-space/
+          fi
+          
+          # Push changes
+          cd hf-space
+          git add .
+          git commit -m "${{ github.event.head_commit.message || 'Update from GitHub Actions' }}"
+          git push -f origin main 
