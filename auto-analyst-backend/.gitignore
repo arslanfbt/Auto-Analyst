@@ -26,3 +26,5 @@ migrations/
 *.pyc
 alembic.ini
 
+
+*.db

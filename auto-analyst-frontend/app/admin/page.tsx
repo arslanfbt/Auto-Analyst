@@ -13,8 +13,8 @@ export default function AdminLogin() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
-    // Simple admin bypass - replace with secure method in production
-    if (password === process.env.ANALYTICS_ADMIN_PASSWORD) {
+    // Simple admin bypass
+    if (password === process.env.NEXT_PUBLIC_ANALYTICS_ADMIN_PASSWORD) {
       // Store admin status in localStorage
       localStorage.setItem('isAdmin', 'true')
       router.push("/chat")

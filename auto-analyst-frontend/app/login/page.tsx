@@ -23,7 +23,7 @@ export default function LoginPage() {
 
   const handleAdminSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (adminPassword === process.env.ANALYTICS_ADMIN_PASSWORD) {
+    if (adminPassword === process.env.NEXT_PUBLIC_ANALYTICS_ADMIN_PASSWORD) {
       localStorage.setItem('isAdmin', 'true')
       // Set a flag for first-time login to show onboarding tooltips
       if (!localStorage.getItem('hasSeenOnboarding')) {

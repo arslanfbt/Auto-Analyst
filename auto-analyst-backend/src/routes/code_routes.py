@@ -465,7 +465,9 @@ async def edit_code(
         
         # Get dataset context
         dataset_context = get_dataset_context(session_state["current_df"])
-        
+        logger.log_message(f"Dataset context: {dataset_context}", level=logging.INFO)
+        logger.log_message(f"Original code: {request_data.original_code}", level=logging.INFO)
+        logger.log_message(f"User prompt: {request_data.user_prompt}", level=logging.INFO)
         try:
             # Use the configured language model with dataset context
             edited_code = edit_code_with_dspy(
@@ -473,7 +475,9 @@ async def edit_code(
                 request_data.user_prompt,
                 dataset_context
             )
+            logger.log_message(f"Edited code: {edited_code}", level=logging.INFO)
             edited_code = format_code_block(edited_code)
+            logger.log_message(f"Formatted edited code: {edited_code}", level=logging.INFO)
             return {
                 "edited_code": edited_code,
             }
