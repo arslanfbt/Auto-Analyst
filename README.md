@@ -249,6 +249,6 @@ The following areas require attention to improve system stability and performanc
 ---
 
 ## 📞 Support
-- Open an [issue](https://github.com/your-username/Auto-Analyst-CS/issues) for bugs
-- Use [discussions](https://github.com/your-username/Auto-Analyst-CS/discussions) for questions
+- Open an [issue](https://github.com/FireBird-Technologies/Auto-Analyst/issues) for bugs
+- Use [discussions](https://github.com/FireBird-Technologies/Auto-Analyst/discussions) for questions
 - Contact maintainers for enterprise support 
