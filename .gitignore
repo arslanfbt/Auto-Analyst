@@ -6,3 +6,5 @@ terraform/terraform.tfstate.backup
 terraform/.tfvars
 
 try*
+
+*.db

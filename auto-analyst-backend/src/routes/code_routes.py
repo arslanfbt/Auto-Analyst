@@ -350,7 +350,7 @@ def get_dataset_context(df):
         return "Could not generate dataset context information."
 
 def edit_code_with_dspy(original_code: str, user_prompt: str, dataset_context: str = ""):
-    gemini = dspy.LM("gemini/gemini-2.5-pro-preview-03-25", api_key = os.environ['GEMINI_API_KEY'], max_tokens=2000)
+    gemini = dspy.LM("claude-3-5-sonnet-latest", api_key = os.environ['ANTHROPIC_API_KEY'], max_tokens=3000)
     with dspy.context(lm=gemini):
         code_editor = dspy.ChainOfThought(code_edit)
         
