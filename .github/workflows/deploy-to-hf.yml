@@ -22,7 +22,6 @@ jobs:
       - name: Create .huggingface.yaml
         run: |
           echo "sdk: docker" > .huggingface.yaml
-
       - name: Configure Git
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
@@ -31,7 +30,6 @@ jobs:
           git config --global user.name "GitHub Actions"
           git config --global credential.helper store
           echo "https://USER:${HF_TOKEN}@huggingface.co" > ~/.git-credentials
-
       - name: Push to HuggingFace Space
         env:
           SPACE_NAME: ${{ secrets.HF_SPACE_NAME }}
