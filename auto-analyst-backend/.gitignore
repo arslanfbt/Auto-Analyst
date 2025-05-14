@@ -28,3 +28,5 @@ alembic.ini
 
 
 *.db
+
+schema*.md

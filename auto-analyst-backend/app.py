@@ -289,13 +289,55 @@ app = FastAPI(title="AI Analytics API", version="1.0")
 app.state = AppState()
 
 # Configure middleware
+# Use a wildcard for local development or read from environment
+is_development = os.getenv("ENVIRONMENT", "development").lower() == "development"
+
+allowed_origins = []
+frontend_url = os.getenv("FRONTEND_URL", "").strip()
+print(f"FRONTEND_URL: {frontend_url}")
+if is_development:
+    allowed_origins = ["*"]
+elif frontend_url:
+    allowed_origins = [frontend_url]
+else:
+    logger.log_message("CORS misconfigured: FRONTEND_URL not set", level=logging.ERROR)
+    allowed_origins = []  # or set a default safe origin
+
+# Add a strict origin verification middleware
+@app.middleware("http")
+async def verify_origin_middleware(request: Request, call_next):
+    # Skip origin check in development mode
+    if is_development:
+        return await call_next(request)
+    
+    # Get the origin from the request headers
+    origin = request.headers.get("origin")
+    
+    # Log the origin for debugging
+    if origin:
+        print(f"Request from origin: {origin}")
+    
+    # If no origin header or origin not in allowed list, reject the request
+    if origin and frontend_url and origin != frontend_url:
+        print(f"Blocked request from unauthorized origin: {origin}")
+        return JSONResponse(
+            status_code=403,
+            content={"detail": "Not authorized"}
+        )
+    
+    # Continue processing the request if origin is allowed
+    return await call_next(request)
+
+# CORS middleware (still needed for browser preflight)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=allowed_origins,
+    allow_origin_regex=None,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
-    expose_headers=["Content-Type", "Content-Length"]
+    expose_headers=["*"],
+    max_age=600  # Cache preflight requests for 10 minutes (for performance)
 )
 
 # Add these constants at the top of the file with other imports/constants
@@ -677,7 +719,6 @@ async def _generate_streaming_responses(session_state: dict, query: str, session
                     "content": "An error occurred while generating responses. Please try again!",
                     "status": "error"
                 }) + "\n"
-                return
                 
             # Batch write usage records to DB
             if usage_records and session_state.get("user_id"):

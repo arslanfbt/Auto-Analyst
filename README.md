@@ -116,29 +116,6 @@ The following areas require attention to improve system stability and performanc
 - **Improve CI/CD For automated deployment via terraform**
 ---
 
-## 🔄 Development Workflow  
-### **Current Workflow:**  
-- The project is deployed on Hugging Face Spaces and Vercel.
-  - Huging Face Spaces URL: https://ashad001-auto-analyst-backend.hf.space
-  - Vercel URL: https://auto-analyst-frontend.vercel.app
-- The project follows a **main-branch deployment model** with **CI/CD automation**.  
-- **Environment variables** control API endpoints and authentication mechanisms.  
-- The codebase is structured with a **clear separation between frontend and backend components**.  
-
-### **Recommended Improvements:**  
-- **Terraform** should be used for managing infrastructure as code.  
-- **GitHub Actions** should be used for automating the deployment pipeline for AWS.  
-- Adopt a **feature branching strategy** to improve collaboration and code isolation.  
-- Establish formal **code review guidelines** to ensure maintainability.  
-- Document the **contribution workflow** to streamline development efforts.  
-
----
-
-## 🚀 Production Changes  
-### **Deployment Process:**  
-- Changes to the **main branch** trigger **automatic deployment** via GitHub Actions.  
-- **Terraform** should be used for managing infrastructure as code.  
-- AWS resources (**Amplify**) are updated accordingly.  
 
 ### **Environment Variables:**  
 - `ADMIN_API_KEY` – Critical for securing admin access.  
