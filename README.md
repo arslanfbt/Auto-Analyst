@@ -78,11 +78,11 @@ The following areas are part of our development roadmap to improve system stabil
 - **User Guest Creation in DB** - Fix excessive creation of guest users when users first log in.
 
 ### Long-term Goals
-- **Automated Testing** – Implement comprehensive automated testing suites.
-- **CI/CD Improvements** – Enhance CI/CD pipeline for automated deployment via Terraform.
-- **Documentation** – Improve developer and user documentation.
-- **Redis Connection Resilience** – Implement advanced monitoring, analytics and auto-recovery for Redis connections.
-- **Stripe Webhook Reliability** – Improve webhook handling and transaction monitoring.
+Our long-term vision is explained in three principles we would like to follow while developing the latest versions of the product. It is hard to define them in specifics.
+
+- **Usability**: We want the product to be as usable as possible, which can only be achieved through constant experimentation. The optimal UX for such a project is yet to be discovered.
+- **Community-driven**: We want input from data analysts and scientists from around the world to guide us in our future development efforts. Please stay in touch on our socials (LinkedIn, Medium, Substack).
+- **Openness**: We would like to not only open-source the source code but also, through blogs and other forms of communication, share with the world all advancements in the product openly.
 
 ---
 
