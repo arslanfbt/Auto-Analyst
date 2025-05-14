@@ -1,13 +1,20 @@
 ![Auto Analyst Logo](/auto-analyst-backend/images/auto-analyst%20logo.png)
 
+# Auto-Analyst
+An AI-powered data analytics platform with interactive visualizations and real-time insights.
+
+![Auto-Analyst Platform](/auto-analyst-backend/images/Auto-analyst-poster.png)
+
 ## 📌 Overview  
-Auto-Analyst is an analytics platform featuring a **FastAPI backend** and a **Next.js frontend**. The system provides **AI-driven data analytics**, **interactive visualizations**, and an **admin dashboard** for monitoring key usage metrics. The platform leverages **WebSockets** for real-time updates and integrates enterprise-grade functionalities.  
+Auto-Analyst is an analytics platform featuring a **FastAPI backend** and a **Next.js frontend**. The system provides **AI-driven data analytics**, **interactive visualizations**, and an **admin dashboard** for monitoring key usage metrics. The platform leverages **WebSockets** for real-time updates and integrates enterprise-grade functionalities.
+
+![Chat Interface](/auto-analyst-backend/images/AI%20snapshot-chat.png)  
+
 
 ### **Tech Stack**  
 - **Frontend:** Next.js / React  (Learn more about the frontend architecture [here](/docs/frontend.md))
 - **Backend:** Python / FastAPI  (Learn more about the api breakdown [here](/docs/backend.md))
 - **Database:** SQLite for data storage and Redis Upstash for rate limiting and credits management
-- **Infrastructure:** Vercel and Hugging Face Spaces (To be deployed on AWS Amplify via Terraform)  
 - **CI/CD:** GitHub Actions  
 - **Payment Processing:** Stripe Integration
 - **Security:** API Key Management System
@@ -15,57 +22,11 @@ Auto-Analyst is an analytics platform featuring a **FastAPI backend** and a **Ne
 ---
 
 ## 🚀 Development & Contributing
-
-### Quick Start
-1. **Clone the Repository**
-   ```bash
-   git clone https://github.com/your-username/Auto-Analyst.git
-   cd Auto-Analyst
-   ```
-
-2. **Setup Backend**
-   ```bash
-   cd auto-analyst-backend
-   python -m venv venv
-   source venv/bin/activate  # On Windows: venv\Scripts\activate
-   pip install -r requirements.txt
-   ```
-
-3. **Setup Frontend**
-   ```bash
-   cd auto-analyst-frontend
-   npm install
-   ```
-
-4. **Configure Environment**
-   Create `.env` files with required variables (see [Environment Variables](#environment-variables) section)
-
-### Development Guidelines
-- Follow our [Code Style Guidelines](CONTRIBUTING.md#code-style-guidelines)
-- Write tests for new features
-- Update documentation
-- Follow the [Git Workflow](CONTRIBUTING.md#git-workflow)
-
-### Contributing
-We welcome contributions! Please:
-1. Read our [Contributing Guidelines](CONTRIBUTING.md)
-2. Fork the repository
-3. Create a feature branch
-4. Submit a Pull Request
-
-For detailed information about:
-- Code style and standards
-- Testing requirements
-- Documentation guidelines
-- Security practices
-- Pull request process
-
-Please refer to our [Contributing Guide](CONTRIBUTING.md).
+For detailed setup instructions, development guidelines, and information about contributing to this project, please refer to our [Contributing Guide](CONTRIBUTING.md).
 
 ---
 
 ## ✅ Implemented Features  
-The following core functionalities have been developed and integrated into the system:  
 
 ### Core Features
 - **Chat Interface** – Interactive AI-powered chat system with multi-agent support.  
@@ -89,7 +50,7 @@ The following core functionalities have been developed and integrated into the s
 - **Real-time Analytics Enhancements** – WebSocket handling with improved robustness and error recovery.
 
 ### Enterprise Features
-- **Enterprise Deployment Options** – On-premise deployment contact support  for custom API integrations.
+- **Enterprise Deployment Options** – On-premise deployment contact support for custom API integrations.
 - **Documentation** – Comprehensive documentation for developers and maintainers.
 - **Model Credits System** – Redis Upstash-based credits tracking and management.
 - **Stripe Integration** – Secure payment processing for credit purchases and subscription management.
@@ -102,20 +63,30 @@ The following core functionalities have been developed and integrated into the s
 
 ---
 
-## 🛠️ Issues & Fixes Needed  
-The following areas require attention to improve system stability and performance:  
+## 🛠️ Roadmap  
+The following areas are part of our development roadmap to improve system stability, performance and feature set:
 
-- **Error Handling** – Certain API endpoints require more robust exception handling to improve fault tolerance.  
-- **Cost Calculation Precision** – The floating-point precision in cost calculations may need adjustments, particularly for projected estimates.  
-- **Query Performance** – Optimize agents to be more efficient and reduce hallucinated results.
-  - Ideally we want the agents to run even on low tier models.
-- **Redis Connection Stability** – Improve Redis connection handling and implement better fallback mechanisms.
+### Short-term Goals
+- **Error Handling** – Implement more robust exception handling for API endpoints.
+- **Cost Calculation Precision** – Improve floating-point precision in cost calculations.
+- **Redis Connection Stability** – Enhance connection handling with better fallback mechanisms.
+- **User Accounts Page** – Implement email change functionality, plan updates, and other account management features.
+
+### Mid-term Goals  
+- **Query Performance** – Optimize agents to be more efficient and reduce hallucinated results on low tier models.
 - **API Key Rotation** – Implement automated API key rotation for enhanced security.
-- **User Guest Creation in DB** - Excessive amounts of guest users are created in DB (for when user first logs in).
-- **Add automated Testing** 
-- **Improve CI/CD For automated deployment via terraform**
+- **User Guest Creation in DB** - Fix excessive creation of guest users when users first log in.
+
+### Long-term Goals
+- **Automated Testing** – Implement comprehensive automated testing suites.
+- **CI/CD Improvements** – Enhance CI/CD pipeline for automated deployment via Terraform.
+- **Documentation** – Improve developer and user documentation.
+- **Redis Connection Resilience** – Implement advanced monitoring, analytics and auto-recovery for Redis connections.
+- **Stripe Webhook Reliability** – Improve webhook handling and transaction monitoring.
+
 ---
 
+## ⚙️ Configuration
 
 ### **Environment Variables:**  
 - `ADMIN_API_KEY` – Critical for securing admin access.  
@@ -124,94 +95,10 @@ The following areas require attention to improve system stability and performanc
 - **SMTP credentials** – Required for sending emails.  
 - **OpenAI API Key** – Required for the chat interface.  
 - **Groq API Key** – Required for the chat interface.  
-- **Gemini API Key** - Reqiured for Chat interface.
+- **Gemini API Key** - Required for Chat interface.
 - **Anthropic API Key** – Required for the chat interface.  
 - **Redis URL** – Required for rate limiting and credits management.
 - **Stripe Keys** – Required for payment processing.
-
-### **Monitoring Considerations:**  
-- Implement **logging** for critical application paths.  
-- Track **WebSocket connection stability** to prevent data loss.  
-- Validate **cost projections against actual spending trends** to detect anomalies.  
-- Monitor **Redis connection health** and implement alerts.
-- Track **Stripe webhook success rates** and payment processing metrics.
-
----
-
-## 🧪 QA & Testing Strategy  
-### **Automated Testing:**  
-- Develop **unit tests** for core backend functions.  
-- Introduce **integration tests** for API endpoints.  
-- Implement **frontend component tests** for UI elements.  
-
-### **Manual Testing Checklist:**  
-- Verify **dashboard statistics** for accuracy.  
-- Test **real-time updates** via WebSockets.  
-- Validate **cost analytics calculations**.  
-- Confirm **admin authentication** flow security.  
-- Test **chat interface** against diverse query scenarios.  
-  - Test 1: Test the chat interface with a complex query including 'Chat with all' and 'Chat with Agents'
-    - Query 1: "List top 10 Houses by area"
-    - Query 2: "@statistical_analyst_agent What is the average price of houses in the dataset?"
-  - Test 2: Preview Default Dataset and User Uploaded Dataset
-    - Test 2.1: Preview Default Dataset
-    - Test 2.2: Preview User Uploaded Dataset
-    - Test 2.3: User can edit the name and description of the dataset.
-  - Test 3: Test the Chat Interface on User Uploaded Dataset
-    - Test 3.1: User can upload a dataset from the file system.
-  - Test 4: Test the Chat History
-    - Chats should be stored in the database and displayed in the chat interface.
-    - New chats should be added to the top of the chat history.
-    - The chat history should be paginated.
-    - The chat history should be sorted by the date of the chat.
-    - Chats should be displayed in the chat interface via chat history.
-    - Name of the chat history should be a short description of the first query in the chat.
-  - Test 5: Run the Code Snippets
-    - Code snippets should be runnable and should return the expected results.
-    - AI code editing should work correctly.
-    - Code error fixing should handle common errors.
-  - Test 6: Test the Admin Dashboard
-    - Test 6.1: Test the Admin Dashboard Statistics
-    - Test 6.2: Test the Admin Dashboard Cost Analytics
-    - Test 6.3: Test the Admin Dashboard User Analytics
-    - Test 6.4: Test the Admin Dashboard Model Performance
-    - Test 6.5: Test the Admin Dashboard Real-time Updates
-  - Test 7: Test Payment Processing
-    - Test 7.1: Verify Stripe payment flow
-    - Test 7.2: Check credit purchase process
-    - Test 7.3: Validate webhook handling
-  - Test 8: Test Redis Integration
-    - Test 8.1: Verify rate limiting
-    - Test 8.2: Check credits management
-    - Test 8.3: Validate connection stability
-
-### **Deployment Testing:**  
-- Run `verify_session_state.py` to ensure **session management consistency**.  
-- Verify **WebSocket connections remain stable** during high traffic.  
-- Check the **admin dashboard** for expected functionality using test data.  
-- Validate **cost projections against real-time values**.  
-- Test **Redis connection** under load.
-- Verify **Stripe webhook** handling.
-
----
-
-## 📄 Additional Notes  
-- The project is structured with a clear separation of concerns across services.  
-- **Chat Interface** is a core feature requiring thorough manual testing.  
-- **Real-time analytics** is a core feature requiring rigorous testing and monitoring.  
-- **Admin API key security** is crucial to prevent unauthorized access in production.  
-- **Cost calculation accuracy** should be regularly validated against actual expenditures.  
-- **Session management stability** requires further validation to ensure data consistency.  
-- **User Accounts Page** needs some work to be done such as change email, update plans, etc.
-- **Redis integration** requires monitoring for connection stability.
-- **Stripe integration** needs regular testing of webhook handling.
-
-### **Next Steps:**  
-- Improve **documentation** to support development and maintainability.  
-- Deploy the **Database** to be on cloud and persist the data.
-- Implement **automated API key rotation**.
-- Enhance **Redis connection resilience**.
-- Improve **Stripe webhook reliability**. 
 
 ---
 
