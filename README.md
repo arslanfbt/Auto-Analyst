@@ -19,8 +19,8 @@ Auto-Analyst is an analytics platform featuring a **FastAPI backend** and a **Ne
 ### Quick Start
 1. **Clone the Repository**
    ```bash
-   git clone https://github.com/your-username/Auto-Analyst-CS.git
-   cd Auto-Analyst-CS
+   git clone https://github.com/your-username/Auto-Analyst.git
+   cd Auto-Analyst
    ```
 
 2. **Setup Backend**
