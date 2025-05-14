@@ -40,12 +40,17 @@ jobs:
           # Clone space repo to a separate directory
           git clone $SPACE_REPO hf-space || (mkdir hf-space && cd hf-space && git init && git remote add origin $SPACE_REPO)
           
-          # Copy backend files to the space repo (excluding the newly created directory)
-          cp -r .huggingface.yaml Dockerfile requirements.txt app.py hf-space/
-          # Add any other directories/files you need
-          if [ -d "app" ]; then
-            cp -r app hf-space/
+          # Install rsync if not present
+          if ! command -v rsync &> /dev/null; then
+            sudo apt-get update && sudo apt-get install -y rsync
           fi
+          
+          # Copy all backend files to the space repo, respecting .gitignore
+          # First ensure .huggingface.yaml is included
+          cp .huggingface.yaml hf-space/
+          
+          # Use rsync to copy all files except those in .gitignore
+          rsync -av --exclude-from=.gitignore --exclude="hf-space" --exclude=".git" ./ hf-space/
           
           # Push changes
           cd hf-space

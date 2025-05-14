@@ -8,7 +8,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: "Auto-Analyst",
     description: "AI-powered analytics platform",
-    url: process.env.NEXTAUTH_URL || "https://auto-analyst-cs.vercel.app",
+    url: process.env.NEXTAUTH_URL || "http://localhost:3000",
     siteName: "Auto-Analyst",
     images: [
       {
