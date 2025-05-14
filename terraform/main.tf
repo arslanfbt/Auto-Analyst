@@ -1,6 +1,6 @@
 resource "aws_amplify_app" "nextjs_app" {
   name        = "auto-analyst-frontend"
-  repository  = "https://github.com/Ashad001/Auto-Analyst-CS"
+  repository  = "https://github.com/your-username/Auto-Analyst"
   oauth_token = var.github_oauth_token
 
   build_spec = <<-EOT

@@ -28,8 +28,8 @@ By participating in this project, you agree to maintain a respectful and inclusi
 
 1. **Fork and Clone**
    ```bash
-   git clone https://github.com/your-username/Auto-Analyst-CS.git
-   cd Auto-Analyst-CS
+   git clone https://github.com/your-username/Auto-Analyst.git
+   cd Auto-Analyst
    ```
 
 2. **Backend Setup**
