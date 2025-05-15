@@ -31,6 +31,7 @@ interface CodeEntry {
   isExecuting?: boolean;
   output?: string;
   hasError?: boolean;
+  messageIndex: number;
 }
 
 interface CodeCanvasProps {
@@ -97,6 +98,8 @@ const CodeCanvas: React.FC<CodeCanvasProps> = ({
     const entryIndex = codeEntries.findIndex(entry => entry.id === entryId)
     if (entryIndex === -1) return
     
+    const codeEntry = codeEntries[entryIndex]
+    
     // Use the edited code if available, otherwise use the original code
     const codeToExecute = editedCodeMap[entryId] || code
     
@@ -108,9 +111,52 @@ const CodeCanvas: React.FC<CodeCanvasProps> = ({
     }
     
     try {
+      // First ensure the message ID is set in the session
+      // This connects the code execution to the right message
+      if (codeEntry.messageIndex !== undefined) {
+        try {
+          // IMPORTANT: We need to properly correlate the message ID with the message index
+          // The messageIndex field should represent the exact message in the chat history
+          // that this code belongs to, and we use this as the message_id
+          const messageId = codeEntry.messageIndex + 1; // Add 1 to make it a 1-based ID
+          
+          logger.log(`Setting message ID in session before code execution: ${messageId} (from index ${codeEntry.messageIndex})`);
+          logger.log(`Code entry details:`, JSON.stringify({
+            id: codeEntry.id,
+            messageIndex: codeEntry.messageIndex,
+            messageId: messageId,
+            language: codeEntry.language
+          }));
+          
+          // Make the API call to set message info
+          const response = await axios.post(`${API_URL}/set-message-info`, {
+            message_id: messageId,
+          }, {
+            headers: {
+              ...(sessionId && { 'X-Session-ID': sessionId }),
+            },
+          });
+          
+          // Log the response for debugging
+          logger.log("Message info set for code execution:", response.data);
+          
+          // Add a small delay to ensure state is updated on the server
+          await new Promise(resolve => setTimeout(resolve, 100));
+        } catch (error) {
+          console.error("Error setting message info before code execution:", error);
+          // Continue with execution even if this fails
+        }
+      } else {
+        logger.log("Warning: No messageIndex available for code entry", codeEntry);
+      }
+      
+      // Now execute the code
+      logger.log(`Executing code for entryId=${entryId}, messageIndex=${codeEntry.messageIndex}`);
       const response = await axios.post(`${API_URL}/code/execute`, {
         code: codeToExecute, // Use the edited code
         session_id: sessionId,
+        // Include messageIndex directly in the code execution request as an additional safeguard
+        message_index: codeEntry.messageIndex,
       }, {
         headers: {
           ...(sessionId && { 'X-Session-ID': sessionId }),

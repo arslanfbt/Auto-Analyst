@@ -59,13 +59,13 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, onNewChat, chatHisto
         });
         
         // If there's a custom dataset, we'll let the ChatInterface handle it
-        logger.log("Dataset check before new chat:", sessionInfoResponse.data);
+        // logger.log("Dataset check before new chat:", sessionInfoResponse.data);
         const hasCustomDataset = sessionInfoResponse.data && sessionInfoResponse.data.is_custom_dataset;
         
         // Important: Do NOT reset model settings when starting a new chat
         if (!hasCustomDataset) {
           // If no custom dataset, we can reset session data but KEEP model settings
-          logger.log("No custom dataset, resetting session data only");
+          // logger.log("No custom dataset, resetting session data only");
           await axios.post(`${PREVIEW_API_URL}/reset-session`, 
             { preserveModelSettings: true }, // Add flag to preserve model settings
             {
@@ -75,7 +75,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, onNewChat, chatHisto
             }
           );
         } else {
-          logger.log("Custom dataset detected, ChatInterface will handle dataset choice");
+          // logger.log("Custom dataset detected, ChatInterface will handle dataset choice");
           // We'll let ChatInterface handle the custom dataset flow
         }
         

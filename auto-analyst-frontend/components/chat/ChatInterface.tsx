@@ -201,7 +201,7 @@ const ChatInterface: React.FC = () => {
     if (session?.user && mounted && sessionId) {
       const resetToDefaultDatasetOnLogin = async () => {
         try {
-          logger.log("New login detected, checking dataset state");
+          // logger.log("New login detected, checking dataset state");
           
           // Check if user has stored login status in localStorage
           const lastLoginUser = localStorage.getItem('lastLoginUser');
@@ -218,7 +218,7 @@ const ChatInterface: React.FC = () => {
                             (currentTime - parseInt(lastSessionTime)) > SESSION_TIMEOUT;
           
           if (isNewSession) {
-            logger.log("New session detected, silently resetting to default dataset");
+            // logger.log("New session detected, silently resetting to default dataset");
             
             // Mark this as a new login session so popup appears in silent mode
             setIsNewLoginSession(true);
@@ -248,7 +248,7 @@ const ChatInterface: React.FC = () => {
               await axios.get(`${API_URL}/api/default-dataset`, {
                 headers: { 'X-Session-ID': sessionId }
               });
-              logger.log("Default dataset loaded silently on login");
+              // logger.log("Default dataset loaded silently on login");
               
               // Instead of showing the preview directly, use the silent method
               if (chatInputRef.current && chatInputRef.current.handleSilentDefaultDataset) {
@@ -267,7 +267,7 @@ const ChatInterface: React.FC = () => {
               setIsNewLoginSession(false);
             }
           } else {
-            logger.log("Returning user in same session, maintaining dataset state");
+            // logger.log("Returning user in same session, maintaining dataset state");
             // Update the session timestamp
             localStorage.setItem('lastSessionTime', currentTime.toString());
           }
@@ -301,7 +301,7 @@ const ChatInterface: React.FC = () => {
     // Sync model settings to ensure backend uses the right model
     try {
       await syncSettingsToBackend();
-      logger.log('Model settings synced during new chat creation');
+      // logger.log('Model settings synced during new chat creation');
     } catch (error) {
       console.error('Failed to sync model settings:', error);
     }
@@ -433,7 +433,7 @@ const ChatInterface: React.FC = () => {
         headers: { 'X-Session-ID': sessionId }
       });
       
-      logger.log("Fetched chat histories:", response.data);
+      // logger.log("Fetched chat histories:", response.data);
       setChatHistories(response.data);
       
       // If we have chat histories but no active chat, set the most recent one
@@ -629,7 +629,7 @@ const ChatInterface: React.FC = () => {
     // Save the final AI response to the database for signed-in or admin users
     if (currentId && (session || isAdmin)) {
       try {
-        logger.log("Saving AI response for chat ID:", currentId);
+        // logger.log("Saving AI response for chat ID:", currentId);
         
         // More robust save process with retry for the critical first message
         const saveAIResponse = async (retryCount = 0) => {
@@ -643,14 +643,14 @@ const ChatInterface: React.FC = () => {
               headers: { 'X-Session-ID': sessionId }
             });
             
-            logger.log("AI response saved successfully:", response.data);
+            // logger.log("AI response saved successfully:", response.data);
             return response;
           } catch (error) {
             console.error(`Failed to save AI response (attempt ${retryCount + 1}):`, error);
             
             // Retry up to 3 times for the first AI response
             if (retryCount < 3) {
-              logger.log(`Retrying in ${(retryCount + 1) * 500}ms...`);
+              // logger.log(`Retrying in ${(retryCount + 1) * 500}ms...`);
               await new Promise(resolve => setTimeout(resolve, (retryCount + 1) * 500));
               return saveAIResponse(retryCount + 1);
             }
@@ -720,7 +720,7 @@ const ChatInterface: React.FC = () => {
     // Save the final agent response to the database for signed-in or admin users
     if (currentId && (session || isAdmin)) {
       try {
-        logger.log("Saving agent response for chat ID:", currentId);
+        // logger.log("Saving agent response for chat ID:", currentId);
         await axios.post(`${API_URL}/chats/${currentId}/messages`, {
           content: accumulatedResponse.trim(),
           sender: 'ai',
@@ -742,7 +742,7 @@ const ChatInterface: React.FC = () => {
     // If a dataset was recently uploaded, mark it so consent popup doesn't appear
     // during this message processing flow
     if (recentlyUploadedDataset) {
-      logger.log("Dataset was just uploaded, suppressing consent popup for this message");
+      // logger.log("Dataset was just uploaded, suppressing consent popup for this message");
       // Ensure the popup won't show during this entire message flow
       datasetPopupShownRef.current = true;
       if (activeChatId) {
@@ -752,7 +752,7 @@ const ChatInterface: React.FC = () => {
       // IMPORTANT: When a dataset was just uploaded, we need to explicitly
       // check the backend or forcibly set the session state to reflect the custom dataset
       try {
-        logger.log("Explicitly forcing recognition of custom dataset");
+        // logger.log("Explicitly forcing recognition of custom dataset");
         await axios.get(`${API_URL}/api/session-info`, {
           headers: {
             'X-Session-ID': sessionId,
@@ -786,7 +786,7 @@ const ChatInterface: React.FC = () => {
       if (!existingChat) {
         isFirstMessage = true;
         try {
-          logger.log("Creating new chat on first message with user_id:", userId, "isAdmin:", isAdmin);
+          // logger.log("Creating new chat on first message with user_id:", userId, "isAdmin:", isAdmin);
           const response = await axios.post(`${API_URL}/chats/`, { 
             user_id: userId,
             is_admin: isAdmin 
@@ -794,7 +794,7 @@ const ChatInterface: React.FC = () => {
             headers: { 'X-Session-ID': sessionId } 
           });
           
-          logger.log("New chat created:", response.data);
+          // logger.log("New chat created:", response.data);
           currentChatId = response.data.chat_id;
           // Update the activeChatId state - React handles the async update
           setActiveChatId(currentChatId);
@@ -865,13 +865,13 @@ const ChatInterface: React.FC = () => {
         
         // Calculate required credits based on model tier
         const creditCost = getModelCreditCost(modelName);
-        logger.log(`[Credits] Required credits for ${modelName}: ${creditCost}`);
+        // logger.log(`[Credits] Required credits for ${modelName}: ${creditCost}`);
         
         // Check if user has enough credits - this call also sets isChatBlocked=true if insufficient
         const hasEnough = await hasEnoughCredits(creditCost);
         
         if (!hasEnough) {
-          logger.log(`[Credits] Insufficient credits for operation. Required: ${creditCost}, Available: ${remainingCredits}`);
+          // logger.log(`[Credits] Insufficient credits for operation. Required: ${creditCost}, Available: ${remainingCredits}`);
           
           // Store the required credits amount for the modal
           setRequiredCredits(creditCost);
@@ -944,7 +944,7 @@ const ChatInterface: React.FC = () => {
               headers: { 'X-Session-ID': sessionId }
             });
             modelName = settingsResponse.data.model;
-            logger.log(`[Credits] Using freshly fetched model: ${modelName}`);
+            // logger.log(`[Credits] Using freshly fetched model: ${modelName}`);
           } catch (settingsError) {
             console.error('[Credits] Failed to fetch fresh model settings:', settingsError);
             // Fall back to the model in state
@@ -974,7 +974,7 @@ const ChatInterface: React.FC = () => {
           // Calculate credit cost based on the fresh model name
           const creditCost = getModelCreditCost(modelName);
           
-          logger.log(`[Credits] Deducting ${creditCost} credits for user ${userIdForCredits} for model ${modelName}`);
+          // logger.log(`[Credits] Deducting ${creditCost} credits for user ${userIdForCredits} for model ${modelName}`);
           
           // Deduct credits directly through an API call
           const response = await axios.post('/api/user/deduct-credits', {
@@ -983,7 +983,7 @@ const ChatInterface: React.FC = () => {
             description: `Used ${modelName} for chat`
           });
           
-          logger.log('[Credits] Deduction result:', response.data);
+          // logger.log('[Credits] Deduction result:', response.data);
           
           // Refresh the credits display in the UI after deduction
           if (checkCredits) {
@@ -999,12 +999,12 @@ const ChatInterface: React.FC = () => {
       // *but do not* trigger a full history refresh/load immediately
       if (isFirstMessage && currentChatId !== null) {
         try {
-          logger.log("Generating title for new chat using query:", message);
+          // logger.log("Generating title for new chat using query:", message);
           const titleResponse = await axios.post(`${API_URL}/chat_history_name`, {
             query: message
           });
           
-          logger.log("Title response:", titleResponse.data);
+          // logger.log("Title response:", titleResponse.data);
           
           if (titleResponse.data && titleResponse.data.name) {
             await axios.put(`${API_URL}/chats/${currentChatId}`, {
@@ -1046,7 +1046,7 @@ const ChatInterface: React.FC = () => {
       
       // Reset the recently uploaded dataset flag now that message processing is complete
       if (recentlyUploadedDataset) {
-        logger.log("Message processing complete, resetting recentlyUploadedDataset flag");
+        // logger.log("Message processing complete, resetting recentlyUploadedDataset flag");
         setRecentlyUploadedDataset(false);
       }
       
@@ -1494,7 +1494,7 @@ const ChatInterface: React.FC = () => {
           onClose={() => setIsSettingsOpen(false)}
           initialSettings={modelSettings}
           onSettingsUpdated={() => {
-            logger.log("Settings updated");
+            // logger.log("Settings updated");
           }}
         />
         
@@ -1506,7 +1506,7 @@ const ChatInterface: React.FC = () => {
             
             // Force a credits check to ensure the blocked state is maintained
             checkCredits().then(() => {
-              logger.log("[ChatInterface] Credits checked after modal closed");
+              // logger.log("[ChatInterface] Credits checked after modal closed");
             });
           }}
           requiredCredits={requiredCredits}

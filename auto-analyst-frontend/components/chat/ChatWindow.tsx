@@ -17,6 +17,7 @@ import axios from "axios"
 import { useSessionStore } from '@/lib/store/sessionStore'
 import logger from '@/lib/utils/logger'
 import { useToast } from "@/components/ui/use-toast"
+import API_URL from '@/config/api'
 
 interface PlotlyMessage {
   type: "plotly"
@@ -99,9 +100,62 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
   }, [])
   
-  // Extract code blocks from messages
+  // New function to set current message info in the backend session
+  const setMessageInfoInSession = useCallback(async (messageIndex: number) => {
+    try {
+      // Get the message from the array
+      const message = messages[messageIndex];
+      
+      // Skip if no message or no sessionId
+      if (!message || !sessionId) return;
+      
+      // Use a consistent method to generate message IDs:
+      // 1. Use message.message_id if available (from database)
+      // 2. Use message.id if available (locally generated UUID)
+      // 3. Fall back to messageIndex + 1 (to ensure it's never 0)
+      let messageId: number | string;
+      if (message.message_id) {
+        messageId = message.message_id;
+      } else if (message.id) {
+        messageId = message.id;
+      } else {
+        // Use a consistent ID based on index - always add 1 to ensure non-zero
+        messageId = messageIndex + 1;
+      }
+      
+      // Get the chat_id from the message or default to null
+      const chatId = message.chat_id || null;
+      // User ID might not be on the message object directly
+      const userId = null; // We'll get this from the session on the backend if needed
+      
+      logger.log(`Setting message info in session: message_id=${messageId}, chat_id=${chatId}, user_id=${userId}`);
+      
+      // Call the endpoint to set message info in session
+      await axios.post(`${API_URL}/set-message-info`, {
+        message_id: messageId,
+        chat_id: chatId,
+        user_id: userId
+      }, {
+        headers: {
+          ...(sessionId && { 'X-Session-ID': sessionId }),
+        },
+      });
+      
+      // Log success
+      logger.log("Message info set successfully in session");
+    } catch (error) {
+      console.error("Error setting message info in session:", error);
+    }
+  }, [messages, sessionId]);
+  
+  // Modify extractCodeFromMessages to set message info when extracting code
   const extractCodeFromMessages = useCallback((messagesToExtract: ChatMessage[], messageIndex: number) => {
-    logger.log("messagesToExtract", messagesToExtract)
+    logger.log("Extracting code from message index:", messageIndex);
+    logger.log("Message content:", messagesToExtract[0]?.text);
+    
+    // First set the message info in the session
+    setMessageInfoInSession(messageIndex);
+    
     // Use a map to group code blocks by language
     const codeByLanguage: Record<string, { code: string, blocks: string[], agents: string[] }> = {};
     
@@ -176,8 +230,12 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
           }
         }
         
+        // Create a new unique ID for each code entry to prevent reusing old entries
+        const uniqueEntryId = `${language}-${messageIndex}-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+        logger.log(`Creating new code entry with ID ${uniqueEntryId} for message index ${messageIndex}`);
+        
         newEntries.push({
-          id: uuidv4(),
+          id: uniqueEntryId,
           language,
           code: combinedCode,
           timestamp: Date.now(),
@@ -189,8 +247,9 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
     
     if (newEntries.length > 0) {
       setCodeEntries(newEntries);
+      logger.log(`Set ${newEntries.length} new code entries with messageIndex=${messageIndex}`);
     }
-  }, []);
+  }, [setMessageInfoInSession]);
   
   // Clear code entries for new chats or messages
   const clearCodeEntries = useCallback(() => {
@@ -214,7 +273,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
     setHiddenCanvas(false) // Make sure it's not hidden when manually toggled
   }, [codeCanvasOpen])
   
-  // Add a function to process all AI messages in the chat
+  // Modify processAllAiMessages to set message info for the active message
   const processAllAiMessages = useCallback(() => {
     if (messages.length === 0) return;
     
@@ -226,6 +285,9 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
     const lastAiMessageIndex = messages.lastIndexOf(aiMessages[aiMessages.length - 1]);
     setCurrentMessageIndex(lastAiMessageIndex);
     
+    // Set the message info in the session BEFORE processing code
+    setMessageInfoInSession(lastAiMessageIndex);
+    
     // Clear previous code entries but preserve outputs
     clearCodeEntriesKeepOutput();
     
@@ -234,7 +296,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
     
     // Trigger auto-run for the code will happen via the chatCompleted state
     
-  }, [messages, clearCodeEntriesKeepOutput, extractCodeFromMessages]);
+  }, [messages, clearCodeEntriesKeepOutput, extractCodeFromMessages, setMessageInfoInSession]);
   
   // Detect when loading completes and trigger code execution
   useEffect(() => {
@@ -689,6 +751,9 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
                       key={`${index}-${partIndex}-code`}
                       language={part.language}
                       onClick={() => {
+                        // Set message info in the session BEFORE processing code
+                        setMessageInfoInSession(index);
+                        
                         // When clicking on a code indicator, process the message and make the canvas visible
                         setCurrentMessageIndex(index);
                         clearCodeEntriesKeepOutput();
@@ -700,12 +765,6 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
                         if (setSidebarOpen) {
                           setSidebarOpen(false);
                         }
-                        
-                        // Remove auto-run trigger when manually opening canvas
-                        // setChatCompleted(true);
-                        // setTimeout(() => {
-                        //   setChatCompleted(false);
-                        // }, 10000);
                       }}
                     />
                   );

@@ -5,6 +5,7 @@ import uuid
 import logging
 import pandas as pd
 from typing import Dict, Any, List, Optional
+import copy
 
 from llama_index.core import Document, VectorStoreIndex
 from src.utils.logger import Logger
@@ -119,67 +120,37 @@ This dataset appears clean with consistent formatting and no missing values, mak
 
     def get_session_state(self, session_id: str) -> Dict[str, Any]:
         """
-        Get or create session-specific state
+        Get the session state for a session ID, creating a new one if it doesn't exist
         
         Args:
             session_id: The session identifier
             
         Returns:
-            Dictionary containing session state
+            Session state dictionary
         """
-        # Use the global model config from app_state when available
-        # Get the most up-to-date model config
-        if hasattr(self, '_app_model_config') and self._app_model_config:
-            default_model_config = self._app_model_config
-        else:
-            default_model_config = {
-                "provider": os.getenv("MODEL_PROVIDER", "openai"),
-                "model": os.getenv("MODEL_NAME", "gpt-4o-mini"),
-                "api_key": os.getenv("OPENAI_API_KEY"),
-                "temperature": float(os.getenv("TEMPERATURE", 1.0)),
-                "max_tokens": int(os.getenv("MAX_TOKENS", 6000))
-            }
+        # Check if this is a new session
+        session_is_new = session_id not in self._sessions
         
-        if session_id not in self._sessions:
-            # Check if we need to create a brand new session
-            logger.log_message(f"Creating new session state for session_id: {session_id}", level=logging.INFO)
-            
-            # Initialize with default state
+        # Log the session access
+        if session_is_new:
+            logger.log_message(f"Creating new session with ID: {session_id}", level=logging.INFO)
+        
+        # Return existing session or create a new one with the default dataset
+        if session_is_new:
+            # Initialize with default dataset
             self._sessions[session_id] = {
                 "current_df": self._default_df.copy() if self._default_df is not None else None,
-                "retrievers": self._default_retrievers,
-                "ai_system": self._default_ai_system,
-                "make_data": self._make_data,
                 "description": self._dataset_description,
                 "name": self._default_name,
-                "model_config": default_model_config,
-                "creation_time": time.time()
+                "make_data": self._make_data,
+                "model_config": copy.deepcopy(self._app_model_config)
             }
+            logger.log_message(f"New session state created with keys: {self._sessions[session_id].keys()}", level=logging.INFO)
         else:
-            # Verify dataset integrity in existing session
-            session = self._sessions[session_id]
-            
-            # Always update model_config to match global settings
-            session["model_config"] = default_model_config
-            
-            # If dataset is somehow missing, restore it
-            if "current_df" not in session or session["current_df"] is None:
-                logger.log_message(f"Restoring missing dataset for session {session_id}", level=logging.WARNING)
-                session["current_df"] = self._default_df.copy() if self._default_df is not None else None
-                session["retrievers"] = self._default_retrievers
-                session["ai_system"] = self._default_ai_system
-                session["description"] = self._dataset_description
-                session["name"] = self._default_name
-            
-            # Ensure we have the basic required fields
-            if "name" not in session:
-                session["name"] = self._default_name
-            if "description" not in session:
-                session["description"] = self._dataset_description
-            
-            # Update last accessed time
-            session["last_accessed"] = time.time()
-            
+            # Log information about the existing session
+            current_msg_id = self._sessions[session_id].get('current_message_id')
+            logger.log_message(f"Using existing session state for {session_id} with current_message_id={current_msg_id}", level=logging.INFO)
+        
         return self._sessions[session_id]
 
     def clear_session_state(self, session_id: str):
@@ -324,6 +295,33 @@ This dataset appears clean with consistent formatting and no missing values, mak
         
         # Return the updated session data
         return self._sessions[session_id]
+
+    def log_session_details(self, session_id: str):
+        """Log the key details of a session for debugging purposes"""
+        if session_id not in self._sessions:
+            logger.log_message(f"Session {session_id} does not exist", level=logging.WARNING)
+            return
+        
+        session = self._sessions[session_id]
+        
+        # Check what keys are available in the session
+        key_list = list(session.keys())
+        
+        # Log the important keys
+        message_id = session.get("current_message_id", None)
+        chat_id = session.get("chat_id", None)
+        user_id = session.get("user_id", None)
+        
+        # Create a summary log
+        summary = (
+            f"Session {session_id} details:\n"
+            f"  Keys: {key_list}\n"
+            f"  current_message_id: {message_id}\n"
+            f"  chat_id: {chat_id}\n"
+            f"  user_id: {user_id}"
+        )
+        
+        logger.log_message(summary, level=logging.INFO)
 
 async def get_session_id(request, session_manager):
     """

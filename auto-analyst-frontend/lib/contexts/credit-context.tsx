@@ -59,7 +59,7 @@ export function CreditProvider({ children }: { children: ReactNode }) {
       // Use token.sub as the primary ID when available
       const userId = session?.user ? ((session.user as any).sub || session.user.id) : getUserId()
       
-      // logger.log(`[Credits] Checking credits for user ID: ${userId}`);
+      // // logger.log(`[Credits] Checking credits for user ID: ${userId}`);
       
       let currentCredits = 100; // Default
       let resetDate = null;
@@ -71,8 +71,8 @@ export function CreditProvider({ children }: { children: ReactNode }) {
           const data = await response.json();
           currentCredits = data.total === 999999 ? Infinity : data.total - data.used;
           resetDate = data.resetDate; // Get reset date from API
-          // logger.log('[Credits] API credits data:', data);
-          // logger.log('[Credits] Reset date from API:', resetDate);
+          // // logger.log('[Credits] API credits data:', data);
+          // // logger.log('[Credits] Reset date from API:', resetDate);
         } else {
           // Fall back to direct Redis access
           currentCredits = await creditUtils.getRemainingCredits(userId);
@@ -203,7 +203,7 @@ export function CreditProvider({ children }: { children: ReactNode }) {
     if (session?.user) {
       // Fetch comprehensive credit data first
       fetchCredits().then(() => {
-        // logger.log('[Credits] Comprehensive credit data fetched');
+        // // logger.log('[Credits] Comprehensive credit data fetched');
       });
       
       // Also fetch simple credit data as a fallback
