@@ -27,7 +27,6 @@ try_logger = Logger("try_code_routes", see_time=True, console_log=False)
 # Request body model
 class CodeExecuteRequest(BaseModel):
     code: str
-    message_index: Optional[int] = None
     
 class CodeEditRequest(BaseModel):
     original_code: str
@@ -429,31 +428,10 @@ async def execute_code(
         # Get the user_id and chat_id from session state if available
         user_id = session_state.get("user_id")
         chat_id = session_state.get("chat_id")
-        
-        # Get message_id from session state, with fallback to request_data.message_index if provided
         message_id = session_state.get("current_message_id")
-        # If message_id is not in session but is provided in the request, use that
-        if (message_id is None or message_id == 0) and request_data.message_index is not None:
-            # Add 1 to make it a 1-based ID instead of 0-based index
-            message_id = request_data.message_index + 1
-            # Also update the session state
-            session_state["current_message_id"] = message_id
-            logger.log_message(f"Using message_index from request: {request_data.message_index} -> message_id={message_id}", level=logging.INFO)
         
-        # Debug logging
-        logger.log_message(f"Code execution - session info: message_id={message_id}, chat_id={chat_id}, user_id={user_id}", level=logging.INFO)
-        
-        # Log detailed session state
-        if hasattr(app_state._session_manager, 'log_session_details'):
-            app_state._session_manager.log_session_details(session_id)
-            
-        # Check if a different message_id was set within this request's lifetime
-        stored_message_id = session_state.get("current_message_id")
-        if message_id != stored_message_id:
-            logger.log_message(f"Warning: message_id mismatch - using {message_id} for database lookup, but session has {stored_message_id}", 
-                              level=logging.WARNING)
-            # Use the one from the session for consistency
-            message_id = stored_message_id
+        # Log the message ID to help debug
+        logger.log_message(f"Executing code for message_id: {message_id}, chat_id: {chat_id}, session_id: {session_id}", level=logging.INFO)
         
         # Get model configuration
         model_config = session_state.get("model_config", {})
@@ -468,49 +446,49 @@ async def execute_code(
         # Check if we have an existing execution record for this message
         existing_execution = None
         if message_id:
-            logger.log_message(f"Looking for existing code execution with message_id={message_id}", level=logging.INFO)
             try:
-                # Log all current code executions for this session to debug
-                all_executions_query = db.query(CodeExecution)
-                if chat_id:
-                    all_executions_query = all_executions_query.filter(CodeExecution.chat_id == chat_id)
-                
-                all_executions = all_executions_query.all()
-                if all_executions:
-                    logger.log_message(f"All code executions for this session/chat:", level=logging.INFO)
-                    for exec_record in all_executions:
-                        logger.log_message(f"  - ID: {exec_record.execution_id}, message_id: {exec_record.message_id}, is_successful: {exec_record.is_successful}", 
-                                          level=logging.INFO)
-                else:
-                    logger.log_message(f"No existing code executions found for this session/chat", level=logging.INFO)
-                
-                # Now query for the specific message_id
                 existing_execution = db.query(CodeExecution).filter(
                     CodeExecution.message_id == message_id
                 ).first()
                 
                 if existing_execution:
-                    logger.log_message(f"Found existing code execution (ID: {existing_execution.execution_id}) for message_id={message_id}", level=logging.INFO)
+                    logger.log_message(f"Found existing code execution record for message_id: {message_id}", level=logging.INFO)
                 else:
-                    logger.log_message(f"No existing code execution found for message_id={message_id}", level=logging.INFO)
+                    logger.log_message(f"No existing code execution record found for message_id: {message_id}", level=logging.INFO)
             except Exception as query_error:
-                logger.log_message(f"Error querying for existing code execution: {str(query_error)}", level=logging.ERROR)
-                # Continue with execution even if query fails
+                logger.log_message(f"Error querying for existing execution: {str(query_error)}", level=logging.ERROR)
+                # Continue without existing execution
         else:
-            logger.log_message("No message_id available in session, cannot look for existing code execution", level=logging.INFO)
+            logger.log_message("No message_id provided in session state", level=logging.WARNING)
         
         # Execute the code with the dataframe from session state
+        full_output = ""
+        json_outputs = []
+        is_successful = True
+        failed_agents = None
+        error_messages = None
+        
         try:
-            output, json_outputs = execute_code_from_markdown(code, session_state["current_df"])
-            is_successful = True
-            failed_agents = None
-            error_messages = None
+            full_output, json_outputs = execute_code_from_markdown(code, session_state["current_df"])
+            
+            # Even with "successful" execution, check for agent failures in the output
+            failed_blocks = identify_error_blocks(code, full_output)
+            
+            if failed_blocks:
+                # We have some failed agents even though no exception was thrown
+                is_successful = False  # Mark as failed if any agent failed
+                failed_agents = json.dumps([block[0] for block in failed_blocks])
+                error_messages = json.dumps({
+                    block[0]: block[2] for block in failed_blocks
+                })
+                logger.log_message(f"Partial execution failure. Failed agents: {failed_agents}", level=logging.WARNING)
+            
         except Exception as exec_error:
-            output = str(exec_error)
+            full_output = str(exec_error)
             is_successful = False
             
             # Identify which agents failed
-            failed_blocks = identify_error_blocks(code, output)
+            failed_blocks = identify_error_blocks(code, full_output)
             
             # Format the failed agents and error messages
             if failed_blocks:
@@ -518,58 +496,60 @@ async def execute_code(
                 error_messages = json.dumps({
                     block[0]: block[2] for block in failed_blocks
                 })
+                logger.log_message(f"Execution threw exception. Failed agents: {failed_agents}", level=logging.ERROR)
             
-            # Re-raise the error for handling
-            raise exec_error
-        finally:
-            # Create or update the execution record
-            try:
-                if existing_execution:
-                    # Update existing record
-                    logger.log_message(f"Updating existing code execution (ID: {existing_execution.execution_id}) for message_id={message_id}", level=logging.INFO)
-                    existing_execution.latest_code = code
-                    existing_execution.is_successful = is_successful
-                    existing_execution.output = output
+            # Don't re-raise the error - we want to capture the error and send it back to the client
+            # return error details in the response instead
+        
+        # Create or update the execution record regardless of success/failure
+        try:
+            if existing_execution:
+                # Update existing record
+                existing_execution.latest_code = code
+                existing_execution.is_successful = is_successful
+                existing_execution.output = full_output
+                
+                if not is_successful:
+                    existing_execution.failed_agents = failed_agents
+                    existing_execution.error_messages = error_messages
                     
-                    if not is_successful:
-                        existing_execution.failed_agents = failed_agents
-                        existing_execution.error_messages = error_messages
-                        
-                    db.commit()
-                    logger.log_message(f"Updated code execution record successfully", level=logging.INFO)
-                else:
-                    # Create new record
-                    logger.log_message(f"Creating new code execution record for message_id={message_id}, chat_id={chat_id}", level=logging.INFO)
-                    new_execution = CodeExecution(
-                        message_id=message_id,
-                        chat_id=chat_id,
-                        user_id=user_id,
-                        initial_code=code,
-                        latest_code=code,
-                        is_successful=is_successful,
-                        output=output,
-                        model_provider=model_provider,
-                        model_name=model_name,
-                        model_temperature=model_temperature,
-                        model_max_tokens=model_max_tokens,
-                        failed_agents=failed_agents,
-                        error_messages=error_messages
-                    )
-                    db.add(new_execution)
-                    db.commit()
-                    logger.log_message(f"Created new code execution record with ID: {new_execution.execution_id}", level=logging.INFO)
-            except Exception as db_error:
-                db.rollback()
-                logger.log_message(f"Error saving code execution: {str(db_error)}", level=logging.ERROR)
-            finally:
-                db.close()
+                db.commit()
+                logger.log_message(f"Updated existing code execution record for message_id: {message_id}", level=logging.INFO)
+            else:
+                # Create new record
+                new_execution = CodeExecution(
+                    message_id=message_id,
+                    chat_id=chat_id,
+                    user_id=user_id,
+                    initial_code=code,
+                    latest_code=code,
+                    is_successful=is_successful,
+                    output=full_output,
+                    model_provider=model_provider,
+                    model_name=model_name,
+                    model_temperature=model_temperature,
+                    model_max_tokens=model_max_tokens,
+                    failed_agents=failed_agents,
+                    error_messages=error_messages
+                )
+                db.add(new_execution)
+                db.commit()
+                logger.log_message(f"Created new code execution record for message_id: {message_id}, chat_id: {chat_id}", level=logging.INFO)
+        except Exception as db_error:
+            db.rollback()
+            logger.log_message(f"Error saving code execution: {str(db_error)}", level=logging.ERROR)
+        finally:
+            db.close()
         
         # Format plotly outputs for frontend
         plotly_outputs = [f"```plotly\n{json_output}\n```\n" for json_output in json_outputs]
         
+        # Include execution status in the response
         return {
-            "output": output,
-            "plotly_outputs": plotly_outputs if json_outputs else None
+            "output": full_output,
+            "plotly_outputs": plotly_outputs if json_outputs else None,
+            "is_successful": is_successful,
+            "failed_agents": failed_agents
         }
     except Exception as e:
         logger.log_message(f"Error executing code: {str(e)}", level=logging.ERROR)

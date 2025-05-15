@@ -528,7 +528,7 @@ const ChatInterface: React.FC = () => {
     }
   }
 
-  // Move these function definitions to appear BEFORE handleSendMessage
+  // Define the processRegularMessage function to ensure it correctly captures the message_id
   const processRegularMessage = async (
     message: string, 
     controller: AbortController, 
@@ -538,6 +538,7 @@ const ChatInterface: React.FC = () => {
     const baseUrl = API_URL
     const endpoint = `${baseUrl}/chat`
     let lastAgentName = "AI" // Track the last agent name
+    let aiMessageId: number | undefined = undefined // Track the message ID from the response
 
     const headers = {
       'Content-Type': 'application/json',
@@ -590,7 +591,13 @@ const ChatInterface: React.FC = () => {
 
       for (const line of lines) {
         try {
-          const { agent, content, error } = JSON.parse(line)
+          const { agent, content, error, message_id } = JSON.parse(line)
+          
+          // Capture the message_id if provided
+          if (message_id) {
+            aiMessageId = message_id;
+          }
+          
           if (error) {
             accumulatedResponse += `\nError: ${error}`
           } else {
@@ -618,7 +625,8 @@ const ChatInterface: React.FC = () => {
           updateMessage(messageId, {
             text: accumulatedResponse.trim(),
             sender: "ai",
-            agent: agent // Include the agent name from the response
+            agent: agent, // Include the agent name from the response
+            message_id: aiMessageId // Include the message_id if available
           })
         } catch (e) {
           console.error('Error parsing chunk:', e)
@@ -644,6 +652,18 @@ const ChatInterface: React.FC = () => {
             });
             
             // logger.log("AI response saved successfully:", response.data);
+            
+            // If we get a message_id in the response, update our local message with it
+            if (response.data && response.data.message_id && !aiMessageId) {
+              aiMessageId = response.data.message_id;
+              updateMessage(messageId, {
+                text: accumulatedResponse.trim(),
+                sender: "ai",
+                agent: lastAgentName,
+                message_id: aiMessageId
+              });
+            }
+            
             return response;
           } catch (error) {
             console.error(`Failed to save AI response (attempt ${retryCount + 1}):`, error);

@@ -3,12 +3,12 @@ import logging
 import json
 import os
 from io import StringIO
-from typing import Optional, List, Union
+from typing import Optional, List
 
 import pandas as pd
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.security import APIKeyHeader
-from pydantic import BaseModel, validator
+from pydantic import BaseModel
 
 from src.managers.session_manager import get_session_id
 from src.schemas.model_settings import ModelSettings
@@ -37,22 +37,8 @@ async def get_session_id_dependency(request: Request):
 # Define a model for message tracking
 class MessageInfo(BaseModel):
     chat_id: Optional[int] = None
-    message_id: Optional[Union[int, str]] = None
+    message_id: Optional[int] = None
     user_id: Optional[int] = None
-    
-    # Add a validator to ensure message_id is properly converted
-    @validator('message_id')
-    def convert_message_id(cls, v):
-        if v is None:
-            return None
-        # Try to convert string IDs to integers when possible
-        if isinstance(v, str):
-            try:
-                return int(v)
-            except (ValueError, TypeError):
-                # Keep it as a string if it can't be converted
-                return v
-        return v
 
 # Define a model for reset session request
 class ResetSessionRequest(BaseModel):
@@ -619,31 +605,50 @@ async def set_message_info(
         # Get the session state
         session_state = app_state.get_session_state(session_id)
         
-        # Log detailed session state before updates
-        logger.log_message(f"About to update session {session_id} with message info: {message_info.dict()}", level=logging.INFO)
-        if hasattr(app_state._session_manager, 'log_session_details'):
-            app_state._session_manager.log_session_details(session_id)
+        # Make a copy of previous values for logging
+        previous_message_id = session_state.get("current_message_id")
+        previous_chat_id = session_state.get("chat_id")
+        previous_user_id = session_state.get("user_id")
         
         # Update the session with message information
         if message_info.message_id is not None:
-            # Ensure we're using an integer ID if possible (helps with lookups)
-            # Our validator should have already tried to convert string IDs to integers
             session_state["current_message_id"] = message_info.message_id
-            logger.log_message(f"Updated current_message_id to {message_info.message_id} (type: {type(message_info.message_id)})", 
-                              level=logging.INFO)
-            
         if message_info.chat_id is not None:
             session_state["chat_id"] = message_info.chat_id
-            
         if message_info.user_id is not None:
             session_state["user_id"] = message_info.user_id
-        
-        # Log detailed session state after updates
-        logger.log_message(f"Session {session_id} updated with message info", level=logging.INFO)
-        if hasattr(app_state._session_manager, 'log_session_details'):
-            app_state._session_manager.log_session_details(session_id)
             
-        return {"success": True}
+        # Get updated values for logging
+        current_message_id = session_state.get("current_message_id")
+        current_chat_id = session_state.get("chat_id")
+        current_user_id = session_state.get("user_id")
+        
+        # Log changes
+        logger.log_message(
+            f"Message info updated for session {session_id}:\n"
+            f"  message_id: {previous_message_id} -> {current_message_id}\n"
+            f"  chat_id: {previous_chat_id} -> {current_chat_id}\n"
+            f"  user_id: {previous_user_id} -> {current_user_id}",
+            level=logging.INFO
+        )
+        
+        # Verify session state was updated
+        updated_session_state = app_state.get_session_state(session_id)
+        logger.log_message(
+            f"Verified session state after update:\n"
+            f"  current_message_id: {updated_session_state.get('current_message_id')}\n"
+            f"  chat_id: {updated_session_state.get('chat_id')}\n"
+            f"  user_id: {updated_session_state.get('user_id')}",
+            level=logging.INFO
+        )
+        
+        return {
+            "success": True,
+            "session_id": session_id,
+            "message_id": current_message_id,
+            "chat_id": current_chat_id,
+            "user_id": current_user_id
+        }
     except Exception as e:
         logger.log_message(f"Error setting message info: {str(e)}", level=logging.ERROR)
         raise HTTPException(status_code=500, detail=str(e))

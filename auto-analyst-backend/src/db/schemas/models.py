@@ -76,11 +76,6 @@ class CodeExecution(Base):
     chat_id = Column(Integer, ForeignKey('chats.chat_id', ondelete="CASCADE"), nullable=True)
     user_id = Column(Integer, ForeignKey('users.user_id', ondelete="SET NULL"), nullable=True)
     
-    # For development/testing without migrations, we'll modify our code to handle this constraint
-    # In a production environment, we would create a proper migration
-    # The ForeignKey is kept to maintain schema consistency but our code will handle cases
-    # where message_id might not exist in the messages table
-    
     # Code tracking
     initial_code = Column(Text, nullable=True)  # First version of code submitted
     latest_code = Column(Text, nullable=True)  # Most recent version of code
@@ -102,3 +97,5 @@ class CodeExecution(Base):
     # Metadata
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    
