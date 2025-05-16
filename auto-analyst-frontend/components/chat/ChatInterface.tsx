@@ -730,7 +730,21 @@ const ChatInterface: React.FC = () => {
     }
 
     const data = await response.json()
-    accumulatedResponse = data.response || data.content || JSON.stringify(data)
+    let responseContent = data.response || data.content || JSON.stringify(data)
+    
+    // Process code blocks to add agent information
+    const codeBlockRegex = /```([a-zA-Z0-9_]+)?\n([\s\S]*?)```/g;
+    if (responseContent.match(codeBlockRegex)) {
+      // Content contains code blocks, add agent information as a comment before each block
+      responseContent = responseContent.replace(codeBlockRegex, (match: string, language: string, code: string) => {
+        // Add agent information as a markdown comment above each code block
+        return `\n<!-- AGENT: ${agentName} -->\n${match}`;
+      });
+    }
+    
+    accumulatedResponse = responseContent;
+    
+    // Add the message with the processed content
     addMessage({
       text: accumulatedResponse,
       sender: "ai",

@@ -127,9 +127,15 @@ def identify_error_blocks(code: str, error_output: str) -> List[Tuple[str, str, 
     # Parse the error output to find which agents had errors
     faulty_blocks = []
     
-    # Find error patterns like "=== ERROR IN AGENT_NAME ==="
-    error_matches = re.findall(r'===\s+ERROR\s+IN\s+([A-Za-z0-9_]+)\s+===\s*([\s\S]*?)(?:(?===\s+)|$)', error_output)
-    
+    # Find error patterns like "=== ERROR IN AGENT_NAME ===" or "=== ERROR IN UNKNOWN_AGENT ==="
+    error_matches = []
+    for match in re.finditer(
+        r'^===\s+ERROR\s+IN\s+([A-Za-z0-9_]+)\s+===\s*([\s\S]*?)(?=^===\s+[A-Z]+\s+IN\s+[A-Za-z0-9_]+\s+===|\Z)',
+        error_output,
+        re.MULTILINE
+    ):
+        error_matches.append((match.group(1), match.group(2)))
+        
     if not error_matches:
         return []
     

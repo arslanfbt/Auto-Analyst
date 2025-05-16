@@ -213,6 +213,11 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
             }
           }
           
+          // If no agent marker was found and we have an agent in the message, use that
+          if (closestMarkerPos === -1 && message.agent) {
+            blockAgentName = message.agent;
+          }
+          
           codeByLanguage[language].agents.push(blockAgentName);
         }
       }
@@ -240,12 +245,15 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
         // Use the actual message_id from the database if available, otherwise use the index
         const actualMessageId = messagesToExtract[0].message_id || messageIndex;
         
+        // Get the agent name from the message if available
+        const messageAgent = messagesToExtract[0].agent || "AI";
+        
         newEntries.push({
           id: uuidv4(),
           language,
           code: combinedCode,
           timestamp: Date.now(),
-          title: `${language} snippet from AI`,
+          title: `${language} snippet from ${messageAgent}`,
           messageIndex: actualMessageId
         });
       }

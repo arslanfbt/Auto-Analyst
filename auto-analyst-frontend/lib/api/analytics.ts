@@ -105,4 +105,123 @@ export async function fetchDetailedUsage(
   }
   
   return response.json();
+}
+
+/**
+ * Fetch code execution summary data
+ */
+export async function fetchCodeExecutionSummary(
+  adminKey: string,
+  period: string = '30d'
+) {
+  const url = `${API_BASE_URL}/analytics/code-executions/summary?period=${period}`;
+  
+  logger.log(`Fetching code execution summary from ${url}`);
+  
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: getHeaders(adminKey),
+  });
+  
+  if (!response.ok) {
+    console.error(`Error response: ${response.status} ${response.statusText}`);
+    const text = await response.text();
+    console.error(`Response body: ${text}`);
+    throw new Error(`Error fetching code execution summary: ${response.statusText}`);
+  }
+  
+  return response.json();
+}
+
+/**
+ * Fetch detailed code execution data
+ */
+export async function fetchDetailedCodeExecutions(
+  adminKey: string,
+  period: string = '30d',
+  successFilter?: boolean,
+  userId?: number,
+  modelName?: string,
+  limit: number = 100
+) {
+  let url = `${API_BASE_URL}/analytics/code-executions/detailed?period=${period}`;
+  
+  // Add query parameters if provided
+  const params = new URLSearchParams();
+  if (successFilter !== undefined) {
+    params.append('success_filter', successFilter.toString());
+  }
+  if (userId) {
+    params.append('user_id', userId.toString());
+  }
+  if (modelName) {
+    params.append('model_name', modelName);
+  }
+  if (limit) {
+    params.append('limit', limit.toString());
+  }
+  
+  if (params.toString()) {
+    url += `&${params.toString()}`;
+  }
+  
+  logger.log(`Fetching detailed code executions from ${url}`);
+  
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: getHeaders(adminKey),
+  });
+  
+  if (!response.ok) {
+    throw new Error(`Error fetching detailed code executions: ${response.statusText}`);
+  }
+  
+  return response.json();
+}
+
+/**
+ * Fetch user code execution statistics
+ */
+export async function fetchUserCodeExecutionStats(
+  adminKey: string,
+  period: string = '30d',
+  limit: number = 50
+) {
+  const url = `${API_BASE_URL}/analytics/code-executions/users?period=${period}&limit=${limit}`;
+  
+  logger.log(`Fetching user code execution stats from ${url}`);
+  
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: getHeaders(adminKey),
+  });
+  
+  if (!response.ok) {
+    throw new Error(`Error fetching user code execution stats: ${response.statusText}`);
+  }
+  
+  return response.json();
+}
+
+/**
+ * Fetch error analysis data
+ */
+export async function fetchErrorAnalysis(
+  adminKey: string,
+  period: string = '30d'
+) {
+  const url = `${API_BASE_URL}/analytics/code-executions/error-analysis?period=${period}`;
+  
+  logger.log(`Fetching error analysis from ${url}`);
+  
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: getHeaders(adminKey),
+  });
+  
+  if (!response.ok) {
+    throw new Error(`Error fetching error analysis: ${response.statusText}`);
+  }
+  
+  return response.json();
 } 
