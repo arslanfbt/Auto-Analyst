@@ -129,6 +129,8 @@ const CodeCanvas: React.FC<CodeCanvasProps> = ({
     
     try {
       // Set the message ID in the session first so the backend knows which message this code belongs to
+      let sessionMessageId: number | null = null; // To store message ID from session
+      
       if (messageId) {
         try {
           console.log(`Setting message_id in backend: ${messageId}`);
@@ -144,12 +146,38 @@ const CodeCanvas: React.FC<CodeCanvasProps> = ({
         }
       } else {
         console.warn("No message ID available for code execution");
+        
+        // For regular queries without messageId, try to get the latest message_id from session
+        try {
+          const sessionResponse = await axios.get(`${API_URL}/session-info`, {
+            headers: {
+              ...(sessionId && { 'X-Session-ID': sessionId }),
+            },
+          });
+          
+          if (sessionResponse.data && sessionResponse.data.current_message_id) {
+            sessionMessageId = sessionResponse.data.current_message_id;
+            console.log(`Using current message ID from session: ${sessionMessageId}`);
+            
+            // Set this message ID for the current execution
+            await axios.post(`${API_URL}/set-message-info`, {
+              message_id: sessionMessageId
+            }, {
+              headers: {
+                ...(sessionId && { 'X-Session-ID': sessionId }),
+              },
+            });
+          }
+        } catch (sessionError) {
+          console.error("Error getting current message ID from session:", sessionError);
+        }
       }
       
       // Now execute the code with the associated message ID
       const response = await axios.post(`${API_URL}/code/execute`, {
         code: codeToExecute, // Use the edited code
         session_id: sessionId,
+        message_id: messageId || sessionMessageId // Use messageId if available, otherwise use sessionMessageId if retrieved
       }, {
         headers: {
           ...(sessionId && { 'X-Session-ID': sessionId }),
@@ -343,10 +371,94 @@ const CodeCanvas: React.FC<CodeCanvasProps> = ({
         ...updatedEntries[entryIndex],
         code: updatedCode
       }
-      // Update the entries in the parent component
-      if (onCodeExecute) {
-        // Notify parent that code was updated (but not executed)
-        onCodeExecute(entryId, { savedCode: updatedCode });
+      
+      // Get the associated message ID from the code entry
+      const codeEntry = codeEntries[entryIndex];
+      const messageId = codeEntry.messageIndex;
+      
+      // Update the backend with message ID if available
+      if (messageId) {
+        console.log(`Setting message_id in backend for edit: ${messageId}`);
+        axios.post(`${API_URL}/set-message-info`, {
+          message_id: messageId
+        }, {
+          headers: {
+            ...(sessionId && { 'X-Session-ID': sessionId }),
+          },
+        })
+        .then(() => {
+          // Update the entries in the parent component with the message ID we have
+          if (onCodeExecute) {
+            onCodeExecute(entryId, { 
+              savedCode: updatedCode,
+              message_id: messageId
+            });
+          }
+        })
+        .catch(error => {
+          console.error("Error setting message ID for edit:", error);
+          // Still update entries if there's an error
+          if (onCodeExecute) {
+            onCodeExecute(entryId, { 
+              savedCode: updatedCode
+            });
+          }
+        });
+      } else {
+        console.warn("No message ID available for code edit, trying to get from session");
+        // For regular edits without messageId, try to get the latest message_id from session
+        axios.get(`${API_URL}/session-info`, {
+          headers: {
+            ...(sessionId && { 'X-Session-ID': sessionId }),
+          },
+        })
+        .then(sessionResponse => {
+          const sessionMessageId = sessionResponse.data?.current_message_id;
+          if (sessionMessageId) {
+            console.log(`Using current message ID from session for edit: ${sessionMessageId}`);
+            
+            // Update the session with this message ID
+            axios.post(`${API_URL}/set-message-info`, {
+              message_id: sessionMessageId
+            }, {
+              headers: {
+                ...(sessionId && { 'X-Session-ID': sessionId }),
+              },
+            })
+            .then(() => {
+              // Update the entries in the parent component with the message ID from session
+              if (onCodeExecute) {
+                onCodeExecute(entryId, { 
+                  savedCode: updatedCode,
+                  message_id: sessionMessageId
+                });
+              }
+            })
+            .catch(error => {
+              console.error("Error setting session message ID for edit:", error);
+              // Still update entries if there's an error
+              if (onCodeExecute) {
+                onCodeExecute(entryId, { 
+                  savedCode: updatedCode
+                });
+              }
+            });
+          } else {
+            // No message ID found, update the entries in the parent component without it
+            if (onCodeExecute) {
+              onCodeExecute(entryId, { 
+                savedCode: updatedCode
+              });
+            }
+          }
+        })
+        .catch(sessionError => {
+          console.error("Error getting current message ID from session for edit:", sessionError);
+          // Still update the entries in the parent component even if there's an error
+          if (onCodeExecute) {
+            onCodeExecute(entryId, { savedCode: updatedCode });
+          }
+        });
       }
     }
     setEditingMap(prev => ({ ...prev, [entryId]: false }))

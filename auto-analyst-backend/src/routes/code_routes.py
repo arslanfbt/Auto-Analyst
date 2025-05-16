@@ -27,6 +27,8 @@ try_logger = Logger("try_code_routes", see_time=True, console_log=False)
 # Request body model
 class CodeExecuteRequest(BaseModel):
     code: str
+    session_id: Optional[str] = None
+    message_id: Optional[int] = None
     
 class CodeEditRequest(BaseModel):
     original_code: str
@@ -135,7 +137,7 @@ def identify_error_blocks(code: str, error_output: str) -> List[Tuple[str, str, 
         re.MULTILINE
     ):
         error_matches.append((match.group(1), match.group(2)))
-        
+    
     if not error_matches:
         return []
     
@@ -432,8 +434,16 @@ async def execute_code(
         # Get the user_id and chat_id from session state if available
         user_id = session_state.get("user_id")
         chat_id = session_state.get("chat_id")
-        message_id = session_state.get("current_message_id")
+        message_id = request_data.message_id
         
+        # If message_id was not provided in the request, try to get it from the session state
+        if message_id is None:
+            message_id = session_state.get("current_message_id")
+            logger.log_message(f"Using message_id from session state: {message_id}", level=logging.INFO)
+        else:
+            # Update the session state with the provided message_id
+            session_state["current_message_id"] = message_id
+            logger.log_message(f"Using message_id from request body: {message_id}", level=logging.INFO)
         
         # Get model configuration
         model_config = session_state.get("model_config", {})
