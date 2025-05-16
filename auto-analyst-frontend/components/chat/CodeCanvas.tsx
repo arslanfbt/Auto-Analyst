@@ -34,6 +34,16 @@ interface CodeEntry {
   messageIndex: number;
 }
 
+interface CodeExecutionHistoryResponse {
+  execution_id: number;
+  message_id: number;
+  initial_code: string;
+  latest_code: string;
+  is_successful: boolean;
+  output: string;
+  failed_agents: string | null;
+}
+
 interface CodeCanvasProps {
   isOpen: boolean;
   onToggle: () => void;
@@ -88,6 +98,7 @@ const CodeCanvas: React.FC<CodeCanvasProps> = ({
   const [showFeedbackPopup, setShowFeedbackPopup] = useState(false)
   const [showFixLimitNotification, setShowFixLimitNotification] = useState(false)
   const [canvasJustOpened, setCanvasJustOpened] = useState(false)
+  const [currentChatId, setCurrentChatId] = useState<number | null>(null)
 
   // Define executeCode with useCallback at the top
   const executeCode = useCallback(async (entryId: string, code: string, language: string) => {
@@ -146,12 +157,18 @@ const CodeCanvas: React.FC<CodeCanvasProps> = ({
         isExecuting: false
       };
       
+      // Check for execution success/failure from the response
+      const isSuccessful = response.data.is_successful !== undefined ? response.data.is_successful : true;
+      const hasErrorOutput = response.data.output && 
+        (response.data.output.toLowerCase().includes("error") || 
+         response.data.output.toLowerCase().includes("exception"));
+      
       // Store execution output for showing error messages and fix button
-      if (response.data.error) {
+      if (response.data.error || !isSuccessful || hasErrorOutput) {
         setExecOutputMap(prev => ({
           ...prev,
           [entryId]: { 
-            output: response.data.error,
+            output: response.data.output || response.data.error,
             hasError: true
           }
         }));
@@ -289,13 +306,50 @@ const CodeCanvas: React.FC<CodeCanvasProps> = ({
   useEffect(() => {
     if (isOpen) {
       setCanvasJustOpened(true);
+      
+      // Refresh code when canvas opens
+      if (activeEntryId) {
+        const activeEntry = codeEntries.find(entry => entry.id === activeEntryId);
+        if (activeEntry && activeEntry.messageIndex) {
+          const messageId = activeEntry.messageIndex;
+          
+          // Fetch the latest code when reopening the canvas
+          const fetchLatestCode = async () => {
+            try {
+              console.log(`Canvas opened: Fetching latest code for message ID: ${messageId}`);
+              
+              const response = await axios.get(`${API_URL}/code/latest/${messageId}`, {
+                headers: {
+                  ...(sessionId && { 'X-Session-ID': sessionId }),
+                },
+              });
+              
+              console.log("Latest code response on canvas open:", response.data);
+              
+              // If we have data and it contains latest_code
+              if (response.data && response.data.latest_code) {
+                // Update with the latest code from the database
+                if (onCodeExecute) {
+                  console.log(`Updating code for message ID ${messageId} with latest version on canvas open`);
+                  onCodeExecute(activeEntryId, { savedCode: response.data.latest_code });
+                }
+              }
+            } catch (error) {
+              console.error("Error fetching latest code on canvas open:", error);
+            }
+          };
+          
+          fetchLatestCode();
+        }
+      }
+      
       // Reset after a short delay
       const timer = setTimeout(() => {
         setCanvasJustOpened(false);
       }, 1000);
       return () => clearTimeout(timer);
     }
-  }, [isOpen]);
+  }, [isOpen, activeEntryId, codeEntries, sessionId, onCodeExecute]);
 
   // Initialize edited code when switching to edit mode
   const startEditing = (entryId: string, code: string) => {
@@ -303,23 +357,95 @@ const CodeCanvas: React.FC<CodeCanvasProps> = ({
     setEditedCodeMap(prev => ({ ...prev, [entryId]: code }))
   }
 
-  const saveEdit = (entryId: string) => {
-    const updatedCode = editedCodeMap[entryId]
-    // Find the entry and update it
-    const entryIndex = codeEntries.findIndex(entry => entry.id === entryId)
-    if (entryIndex !== -1) {
+  const saveEdit = async (entryId: string) => {
+    try {
+      const updatedCode = editedCodeMap[entryId]
+      if (!updatedCode) return;
+      
+      // Find the entry and update it
+      const entryIndex = codeEntries.findIndex(entry => entry.id === entryId)
+      if (entryIndex === -1) return;
+      
+      const entry = codeEntries[entryIndex];
+      const messageId = entry.messageIndex;
+      
+      // First update the local state
       const updatedEntries = [...codeEntries]
       updatedEntries[entryIndex] = {
         ...updatedEntries[entryIndex],
         code: updatedCode
       }
-      // Update the entries in the parent component
+      
+      // If we have a valid message ID, save the code to the backend
+      if (messageId) {
+        console.log(`Saving edited code for message ID: ${messageId}`);
+        
+        try {
+          // First ensure the session knows which message we're working with
+          await axios.post(`${API_URL}/set-message-info`, {
+            message_id: messageId
+          }, {
+            headers: {
+              ...(sessionId && { 'X-Session-ID': sessionId }),
+            },
+          });
+          
+          // Now save the code by running a blank execution with the updated code
+          // This will update the latest_code field in the database
+          const response = await axios.post(`${API_URL}/code/save`, {
+            code: updatedCode,
+            message_id: messageId,
+            session_id: sessionId,
+          }, {
+            headers: {
+              ...(sessionId && { 'X-Session-ID': sessionId }),
+            },
+          });
+          
+          console.log("Code save response:", response.data);
+          
+          if (response.data.error) {
+            toast({
+              title: "Error saving code",
+              description: response.data.error,
+              variant: "destructive",
+              duration: 3000,
+            });
+          }
+        } catch (error) {
+          console.error("Error saving code to backend:", error);
+          toast({
+            title: "Error saving code",
+            description: "Failed to save code changes to the server.",
+            variant: "destructive",
+            duration: 3000,
+          });
+        }
+      }
+      
+      // Update the parent component that code was updated (but not executed)
       if (onCodeExecute) {
         // Notify parent that code was updated (but not executed)
         onCodeExecute(entryId, { savedCode: updatedCode });
       }
+      
+      // Finally, mark the editing as complete
+      setEditingMap(prev => ({ ...prev, [entryId]: false }));
+      
+      toast({
+        title: "Code saved",
+        description: "Your code changes have been saved.",
+        duration: 2000,
+      });
+    } catch (error) {
+      console.error("Error in saveEdit:", error);
+      toast({
+        title: "Error",
+        description: "Failed to save code changes.",
+        variant: "destructive",
+        duration: 3000,
+      });
     }
-    setEditingMap(prev => ({ ...prev, [entryId]: false }))
   }
 
   const cancelEdit = (entryId: string) => {
@@ -835,6 +961,53 @@ const CodeCanvas: React.FC<CodeCanvasProps> = ({
       }
     }
   }, [isOpen, hiddenCanvas, codeEntries]);
+
+  // Track current chat ID
+  useEffect(() => {
+    if (codeEntries.length > 0 && activeEntryId) {
+      const activeEntry = codeEntries.find(entry => entry.id === activeEntryId);
+      if (activeEntry && activeEntry.messageIndex) {
+        // Extract chat ID from the entry if available or store message ID to detect changes
+        // We'll use this to detect when the user switches to a different chat
+        const messageId = activeEntry.messageIndex;
+        
+        // We don't have direct access to the chat ID, but we can track when the message ID changes
+        // This indicates the user has switched to a different chat
+        if (messageId !== currentChatId) {
+          setCurrentChatId(messageId);
+          console.log(`Active message changed to ${messageId}, will refresh code`);
+          
+          // When switching to a new chat/message, always fetch the latest code
+          const fetchLatestCode = async () => {
+            try {
+              console.log(`Fetching latest code for message ID: ${messageId}`);
+              
+              const response = await axios.get(`${API_URL}/code/latest/${messageId}`, {
+                headers: {
+                  ...(sessionId && { 'X-Session-ID': sessionId }),
+                },
+              });
+              
+              console.log("Latest code response:", response.data);
+              
+              // If we have data and it contains latest_code
+              if (response.data && response.data.latest_code) {
+                // Always update with the latest code from the database when switching chats
+                if (onCodeExecute) {
+                  console.log(`Updating code for message ID ${messageId} with latest version`);
+                  onCodeExecute(activeEntryId, { savedCode: response.data.latest_code });
+                }
+              }
+            } catch (error) {
+              console.error("Error fetching latest code:", error);
+            }
+          };
+          
+          fetchLatestCode();
+        }
+      }
+    }
+  }, [codeEntries, activeEntryId, sessionId, currentChatId, onCodeExecute]);
 
   if (!isOpen) {
     // Return an empty div instead of null to keep the component mounted
