@@ -314,19 +314,51 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
     const lastAiMessageIndex = messages.lastIndexOf(aiMessages[aiMessages.length - 1]);
     setCurrentMessageIndex(lastAiMessageIndex);
     
+    // Get the actual message from the messages array
+    const currentMessage = messages[lastAiMessageIndex];
+    
     // Log the message ID for debugging
-    const messageId = aiMessages[aiMessages.length - 1].message_id;
+    const messageId = currentMessage.message_id;
     logger.log(`Processing AI message at index ${lastAiMessageIndex} with message_id: ${messageId}`);
+    
+    // Skip if this is an empty message
+    if (!currentMessage.text || 
+        (typeof currentMessage.text === 'string' && currentMessage.text.trim() === '') ||
+        (typeof currentMessage.text === 'object' && currentMessage.text.type === 'plotly')) {
+      // Skip empty text messages or plotly messages (which don't contain code)
+      logger.log("Skipping empty message or plotly chart");
+      return;
+    }
     
     // Clear previous code entries but preserve outputs
     clearCodeEntriesKeepOutput();
     
-    // Extract code from the latest AI message
-    extractCodeFromMessages([messages[lastAiMessageIndex]], lastAiMessageIndex);
+    // Extract code from the latest AI message - make sure to use the message_id
+    if (messageId) {
+      // Use the explicit message ID for code operations if available
+      extractCodeFromMessages([currentMessage], messageId);
+      
+      // Update the backend with the current message ID
+      if (sessionId) {
+        axios.post(`${API_URL}/set-message-info`, {
+          message_id: messageId
+        }, {
+          headers: { 'X-Session-ID': sessionId },
+        })
+        .then(() => {
+          logger.log(`Updated backend with message_id: ${messageId} for auto-execution`);
+        })
+        .catch(error => {
+          console.error("Error setting message ID for auto-execution:", error);
+        });
+      }
+    } else {
+      // Fall back to using index if no message_id is available
+      extractCodeFromMessages([currentMessage], lastAiMessageIndex);
+    }
     
     // Trigger auto-run for the code will happen via the chatCompleted state
-    
-  }, [messages, clearCodeEntriesKeepOutput, extractCodeFromMessages]);
+  }, [messages, clearCodeEntriesKeepOutput, extractCodeFromMessages, sessionId]);
   
   // Detect when loading completes and trigger code execution
   useEffect(() => {
@@ -1059,6 +1091,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
           // @ts-ignore - We'll add these props to CodeCanvas in the next step
           codeFixes={codeFixes}
           setCodeFixes={setCodeFixes}
+          setCodeEntries={setCodeEntries}
         />
       )}
     </div>

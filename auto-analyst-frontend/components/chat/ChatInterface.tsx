@@ -745,17 +745,18 @@ const ChatInterface: React.FC = () => {
     accumulatedResponse = responseContent;
     
     // Add the message with the processed content
-    addMessage({
+    const messageId = addMessage({
       text: accumulatedResponse,
       sender: "ai",
       agent: agentName
     })
 
     // Save the final agent response to the database for signed-in or admin users
+    let aiMessageId: number | undefined = undefined;
     if (currentId && (session || isAdmin)) {
       try {
         // logger.log("Saving agent response for chat ID:", currentId);
-        await axios.post(`${API_URL}/chats/${currentId}/messages`, {
+        const saveResponse = await axios.post(`${API_URL}/chats/${currentId}/messages`, {
           content: accumulatedResponse.trim(),
           sender: 'ai',
           agent: agentName
@@ -763,6 +764,34 @@ const ChatInterface: React.FC = () => {
           params: { user_id: userId, is_admin: isAdmin },
           headers: { 'X-Session-ID': sessionId }
         });
+
+        // Capture the message_id from the response
+        if (saveResponse.data && saveResponse.data.message_id) {
+          aiMessageId = saveResponse.data.message_id;
+          
+          // Update the message in the UI with the message_id
+          updateMessage(messageId, {
+            text: accumulatedResponse.trim(),
+            sender: "ai",
+            agent: agentName,
+            message_id: aiMessageId
+          });
+          
+          // Update the backend's current message ID
+          try {
+            await axios.post(`${API_URL}/set-message-info`, {
+              message_id: aiMessageId,
+              chat_id: currentId
+            }, {
+              headers: {
+                ...(sessionId && { 'X-Session-ID': sessionId }),
+              },
+            });
+            console.log(`Updated backend with message_id: ${aiMessageId} for chat_id: ${currentId}`);
+          } catch (error) {
+            console.error("Error setting message ID in backend:", error);
+          }
+        }
       } catch (error) {
         console.error('Failed to save agent response:', error);
       }

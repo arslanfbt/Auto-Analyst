@@ -43,6 +43,7 @@ interface CodeCanvasProps {
   hiddenCanvas?: boolean;
   codeFixes: Record<string, number>;
   setCodeFixes: Dispatch<SetStateAction<Record<string, number>>>;
+  setCodeEntries: Dispatch<SetStateAction<CodeEntry[]>>;
 }
 
 interface SelectionPosition {
@@ -59,7 +60,8 @@ const CodeCanvas: React.FC<CodeCanvasProps> = ({
   chatCompleted = false,
   hiddenCanvas = false,
   codeFixes,
-  setCodeFixes
+  setCodeFixes,
+  setCodeEntries
 }) => {
   const { toast } = useToast()
   const { sessionId } = useSessionStore()
@@ -92,29 +94,44 @@ const CodeCanvas: React.FC<CodeCanvasProps> = ({
   // Define executeCode with useCallback at the top
   const executeCode = useCallback(async (entryId: string, code: string, language: string) => {
     // Only execute Python code for now
-    if (language !== "python") return
+    if (language !== 'python') {
+      toast({
+        title: "Unsupported language",
+        description: `${language} code execution is not supported yet.`,
+        variant: "destructive"
+      })
+      return
+    }
     
-    // Find the entry and mark it as executing
+    // Find the code entry in our list
     const entryIndex = codeEntries.findIndex(entry => entry.id === entryId)
-    if (entryIndex === -1) return
+    if (entryIndex === -1) {
+      toast({
+        title: "Error",
+        description: "Code entry not found",
+        variant: "destructive"
+      })
+      return
+    }
     
-    // Use the edited code if available, otherwise use the original code
-    const codeToExecute = editedCodeMap[entryId] || code
+    // Get the associated message ID or use the fall back to the generic messageId prop
+    const codeToExecute = code.trim()
+    const codeEntry = codeEntries[entryIndex]
+    const messageId = codeEntry.messageIndex
     
+    // Set entry as executing
     const updatedEntries = [...codeEntries]
     updatedEntries[entryIndex] = {
       ...updatedEntries[entryIndex],
-      isExecuting: true,
-      code: codeToExecute // Update the code in the entry to the latest version
+      isExecuting: true
     }
-    
-    // Get the messageIndex (actual message_id) from the entry
-    const messageId = codeEntries[entryIndex].messageIndex;
+    setCodeEntries(updatedEntries)
     
     try {
       // Set the message ID in the session first so the backend knows which message this code belongs to
       if (messageId) {
         try {
+          console.log(`Setting message_id in backend: ${messageId}`);
           await axios.post(`${API_URL}/set-message-info`, {
             message_id: messageId
           }, {
@@ -125,6 +142,8 @@ const CodeCanvas: React.FC<CodeCanvasProps> = ({
         } catch (error) {
           console.error("Error setting message ID:", error);
         }
+      } else {
+        console.warn("No message ID available for code execution");
       }
       
       // Now execute the code with the associated message ID
