@@ -17,6 +17,7 @@ import axios from "axios"
 import { useSessionStore } from '@/lib/store/sessionStore'
 import logger from '@/lib/utils/logger'
 import { useToast } from "@/components/ui/use-toast"
+import API_URL from '@/config/api'
 
 interface PlotlyMessage {
   type: "plotly"
@@ -70,7 +71,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
   const [codeCanvasOpen, setCodeCanvasOpen] = useState(false)
   const [codeEntries, setCodeEntries] = useState<CodeEntry[]>([])
   const [currentMessageIndex, setCurrentMessageIndex] = useState<number | null>(null)
-  const [codeOutputs, setCodeOutputs] = useState<CodeOutput[]>([])
+  const [codeOutputs, setCodeOutputs] = useState<Record<string | number, CodeOutput[]>>({})
   const [chatCompleted, setChatCompleted] = useState(false)
   const [autoRunEnabled, setAutoRunEnabled] = useState(true)
   const [hiddenCanvas, setHiddenCanvas] = useState<boolean>(true)
@@ -99,10 +100,70 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
   }, [])
   
-  // Extract code blocks from messages
-  const extractCodeFromMessages = useCallback((messagesToExtract: ChatMessage[], messageIndex: number) => {
-    logger.log("messagesToExtract", messagesToExtract)
-    // Use a map to group code blocks by language
+  // Add the fetchLatestCode function before extractCodeFromMessages
+  const fetchLatestCode = useCallback(async (messageId: number) => {
+    if (!messageId) {
+      console.log("No message_id provided, skipping latest code fetch");
+      return null;
+    }
+    
+    try {
+      console.log(`Fetching latest code for message_id: ${messageId}`);
+      
+      const response = await axios.post(`${API_URL}/code/get-latest-code`, {
+        message_id: messageId
+      }, {
+        headers: {
+          ...(sessionId && { 'X-Session-ID': sessionId }),
+        },
+      });
+      
+      console.log("Latest code response:", response.data);
+      
+      if (response.data.found) {
+        return response.data;
+      }
+      
+      return null;
+    } catch (error) {
+      console.error("Error fetching latest code:", error);
+      return null;
+    }
+  }, [sessionId]);
+  
+  // Extract code blocks from messages with support for latest code
+  const extractCodeFromMessages = useCallback(async (messagesToExtract: ChatMessage[], messageIndex: number) => {
+    logger.log("messagesToExtract", messagesToExtract);
+    
+    // First, try to fetch the latest code if we have a message_id
+    const message = messagesToExtract[0];
+    const actualMessageId = message?.message_id || messageIndex;
+    
+    if (actualMessageId && typeof actualMessageId === 'number') {
+      const latestCodeData = await fetchLatestCode(actualMessageId);
+      
+      // If we have latest code from a previous execution, use it
+      if (latestCodeData && latestCodeData.latest_code) {
+        console.log(`Using latest code from database for message_id: ${actualMessageId}`);
+        
+        // Get the language from the code (assuming Python for now)
+        const language = 'python'; // Default to Python
+        
+        const newEntry: CodeEntry = {
+          id: uuidv4(),
+          language,
+          code: latestCodeData.latest_code,
+          timestamp: Date.now(),
+          title: `${language} snippet from AI`,
+          messageIndex: actualMessageId
+        };
+        
+        setCodeEntries([newEntry]);
+        return;
+      }
+    }
+    
+    // If no latest code found, extract code blocks from messages as before
     const codeByLanguage: Record<string, { code: string, blocks: string[], agents: string[] }> = {};
     
     messagesToExtract.forEach((message) => {
@@ -152,6 +213,11 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
             }
           }
           
+          // If no agent marker was found and we have an agent in the message, use that
+          if (closestMarkerPos === -1 && message.agent) {
+            blockAgentName = message.agent;
+          }
+          
           codeByLanguage[language].agents.push(blockAgentName);
         }
       }
@@ -176,13 +242,19 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
           }
         }
         
+        // Use the actual message_id from the database if available, otherwise use the index
+        const actualMessageId = messagesToExtract[0].message_id || messageIndex;
+        
+        // Get the agent name from the message if available
+        const messageAgent = messagesToExtract[0].agent || "AI";
+        
         newEntries.push({
           id: uuidv4(),
           language,
           code: combinedCode,
           timestamp: Date.now(),
-          title: `${language} snippet from AI`,
-          messageIndex
+          title: `${language} snippet from ${messageAgent}`,
+          messageIndex: actualMessageId
         });
       }
     }
@@ -190,12 +262,12 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
     if (newEntries.length > 0) {
       setCodeEntries(newEntries);
     }
-  }, []);
+  }, [fetchLatestCode]);
   
   // Clear code entries for new chats or messages
   const clearCodeEntries = useCallback(() => {
     setCodeEntries([])
-    setCodeOutputs([])
+    setCodeOutputs({})  // Clear all outputs
     // Don't close the canvas anymore, just hide it
     setHiddenCanvas(true)
   }, [])
@@ -207,12 +279,28 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
     setHiddenCanvas(true)
   }, [])
   
-  // Handle canvas toggle
+  // Update the handleCanvasToggle function to fetch latest code
   const handleCanvasToggle = useCallback(() => {
     // Toggle canvas visibility instead of existence
     setCodeCanvasOpen(!codeCanvasOpen)
     setHiddenCanvas(false) // Make sure it's not hidden when manually toggled
-  }, [codeCanvasOpen])
+
+    // If we have a current message with a message_id, make sure it's set in the canvas
+    if (currentMessageIndex !== null && messages[currentMessageIndex] && messages[currentMessageIndex].message_id) {
+      // Log to debug
+      logger.log(`Setting message_id in canvas: ${messages[currentMessageIndex].message_id} for message index ${currentMessageIndex}`);
+      
+      // Fetch the latest code for this message_id
+      const messageId = messages[currentMessageIndex].message_id;
+      if (messageId && typeof messageId === 'number') {
+        // Clear previous code entries but preserve outputs
+        clearCodeEntriesKeepOutput();
+        
+        // Extract code with latest version from the database
+        extractCodeFromMessages([messages[currentMessageIndex]], messageId);
+      }
+    }
+  }, [codeCanvasOpen, currentMessageIndex, messages, clearCodeEntriesKeepOutput, extractCodeFromMessages]);
   
   // Add a function to process all AI messages in the chat
   const processAllAiMessages = useCallback(() => {
@@ -226,15 +314,51 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
     const lastAiMessageIndex = messages.lastIndexOf(aiMessages[aiMessages.length - 1]);
     setCurrentMessageIndex(lastAiMessageIndex);
     
+    // Get the actual message from the messages array
+    const currentMessage = messages[lastAiMessageIndex];
+    
+    // Log the message ID for debugging
+    const messageId = currentMessage.message_id;
+    logger.log(`Processing AI message at index ${lastAiMessageIndex} with message_id: ${messageId}`);
+    
+    // Skip if this is an empty message
+    if (!currentMessage.text || 
+        (typeof currentMessage.text === 'string' && currentMessage.text.trim() === '') ||
+        (typeof currentMessage.text === 'object' && currentMessage.text.type === 'plotly')) {
+      // Skip empty text messages or plotly messages (which don't contain code)
+      logger.log("Skipping empty message or plotly chart");
+      return;
+    }
+    
     // Clear previous code entries but preserve outputs
     clearCodeEntriesKeepOutput();
     
-    // Extract code from the latest AI message
-    extractCodeFromMessages([messages[lastAiMessageIndex]], lastAiMessageIndex);
+    // Extract code from the latest AI message - make sure to use the message_id
+    if (messageId) {
+      // Use the explicit message ID for code operations if available
+      extractCodeFromMessages([currentMessage], messageId);
+      
+      // Update the backend with the current message ID
+      if (sessionId) {
+        axios.post(`${API_URL}/set-message-info`, {
+          message_id: messageId
+        }, {
+          headers: { 'X-Session-ID': sessionId },
+        })
+        .then(() => {
+          logger.log(`Updated backend with message_id: ${messageId} for auto-execution`);
+        })
+        .catch(error => {
+          console.error("Error setting message ID for auto-execution:", error);
+        });
+      }
+    } else {
+      // Fall back to using index if no message_id is available
+      extractCodeFromMessages([currentMessage], lastAiMessageIndex);
+    }
     
     // Trigger auto-run for the code will happen via the chatCompleted state
-    
-  }, [messages, clearCodeEntriesKeepOutput, extractCodeFromMessages]);
+  }, [messages, clearCodeEntriesKeepOutput, extractCodeFromMessages, sessionId]);
   
   // Detect when loading completes and trigger code execution
   useEffect(() => {
@@ -419,7 +543,16 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
   const handleCodeCanvasExecute = useCallback((entryId: string, result: any) => {
     // Find the code entry
     const codeEntry = codeEntries.find(entry => entry.id === entryId);
-    if (!codeEntry) return;
+    if (!codeEntry) {
+      console.error("Could not find code entry with ID:", entryId);
+      return;
+    }
+    
+    console.log("Code canvas executed with result:", result);
+    console.log("For code entry:", codeEntry);
+    
+    // Get the unique message identifier
+    const messageId = codeEntry.messageIndex;
     
     // If this is just a code update without execution (savedCode)
     if (result.savedCode) {
@@ -431,58 +564,114 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
             : entry
         )
       );
+      
+      // Even for just saving code, make sure the backend knows the message_id
+      // This ensures code changes are properly tracked in the database
+      if (messageId && sessionId) {
+        // Log to help with debugging
+        logger.log(`Setting message_id in backend for saved code: ${messageId}`);
+        
+        axios.post(`${API_URL}/set-message-info`, {
+          message_id: messageId
+        }, {
+          headers: {
+            'X-Session-ID': sessionId
+          },
+        }).then(() => {
+          logger.log(`Successfully set message_id for saved code: ${messageId}`);
+        }).catch(error => {
+          console.error("Error setting message ID for saved code:", error);
+        });
+      } else {
+        // If no message ID, try to get from session
+        if (sessionId) {
+          axios.get(`${API_URL}/session-info`, {
+            headers: {
+              'X-Session-ID': sessionId
+            },
+          }).then(response => {
+            if (response.data && response.data.current_message_id) {
+              logger.log(`Using current message ID from session for saved code: ${response.data.current_message_id}`);
+            }
+          }).catch(error => {
+            console.error("Error getting session info for saved code:", error);
+          });
+        }
+      }
+      
       return;
     }
     
-    // Remove previous output for this message (not just this code entry)
-    // This ensures each message has only one output box
-    setCodeOutputs(prev => prev.filter(output => output.messageIndex !== codeEntry.messageIndex));
+    // Start with a clean slate for this message's outputs
+    const newOutputs: Record<string | number, CodeOutput[]> = { ...codeOutputs };
+    newOutputs[messageId] = []; // Reset outputs for this message
     
-    // Add/update outputs for this message
+    // Add output if available
     if (result.error) {
       // Add error output
-      setCodeOutputs(prev => [
-        ...prev,
+      console.log("Adding error output:", result.error);
+      newOutputs[messageId] = [
         {
           type: 'error',
           content: result.error,
-          messageIndex: codeEntry.messageIndex,
+          messageIndex: messageId,
           codeId: entryId
         }
-      ]);
+      ];
     } else if (result.output) {
       // Add text output
-      setCodeOutputs(prev => [
-        ...prev,
+      console.log("Adding text output:", result.output);
+      newOutputs[messageId] = [
         {
           type: 'output',
           content: result.output,
-          messageIndex: codeEntry.messageIndex,
+          messageIndex: messageId,
           codeId: entryId
         }
-      ]);
+      ];
     }
     
     // Add plotly outputs if any
     if (result.plotly_outputs && result.plotly_outputs.length > 0) {
+      console.log("Adding plotly outputs:", result.plotly_outputs);
+      
+      // Process all plotly outputs
+      const plotlyOutputItems: CodeOutput[] = [];
+      
       result.plotly_outputs.forEach((plotlyOutput: string) => {
         try {
-          const plotlyData = JSON.parse(plotlyOutput.replace(/```plotly\n|\n```/g, ""));
-          setCodeOutputs(prev => [
-            ...prev,
-            {
-              type: 'plotly',
-              content: plotlyData,
-              messageIndex: codeEntry.messageIndex,
-              codeId: entryId
-            }
-          ]);
+          const plotlyContent = plotlyOutput.replace(/```plotly\n|\n```/g, "");
+          console.log("Parsed plotly content:", plotlyContent);
+          
+          const plotlyData = JSON.parse(plotlyContent);
+          plotlyOutputItems.push({
+            type: 'plotly',
+            content: plotlyData,
+            messageIndex: messageId,
+            codeId: entryId
+          });
         } catch (e) {
           console.error("Error parsing Plotly data:", e);
         }
       });
+      
+      // Add any plotly outputs to the existing text output
+      if (plotlyOutputItems.length > 0) {
+        newOutputs[messageId] = [
+          ...(newOutputs[messageId] || []),
+          ...plotlyOutputItems
+        ];
+      }
     }
-  }, [codeEntries]);
+    
+    // Update state with all the outputs
+    setCodeOutputs(newOutputs);
+    
+    // Log the current outputs after updating
+    setTimeout(() => {
+      console.log("Current code outputs after update:", codeOutputs);
+    }, 100);
+  }, [codeEntries, codeOutputs]);
 
   // Handle fix start
   const handleFixStart = useCallback((codeId: string) => {
@@ -520,14 +709,19 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
       // Notify parent about the code change
       handleCodeCanvasExecute(codeId, { savedCode: fixedCode })
 
-      // Clear error output
+      // Clear error output - need to adjust for the new structure
       setCodeOutputs(prev => {
-        const output = prev.find(output => output.codeId === codeId)
-        if (output) {
-          return prev.filter(o => o.codeId !== codeId)
+        // Find the messageIndex associated with this code ID
+        const messageId = codeEntry.messageIndex;
+        const newOutputs = { ...prev };
+        
+        // If this message has outputs, filter out the ones for this code ID
+        if (newOutputs[messageId]) {
+          newOutputs[messageId] = newOutputs[messageId].filter(output => output.codeId !== codeId);
         }
-        return prev
-      })
+        
+        return newOutputs;
+      });
       
       // Open the code canvas if it's not already open
       if (!codeCanvasOpen) {
@@ -547,7 +741,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
       description: "The code has been fixed and is ready to run in the code canvas.",
       duration: 5000,
     })
-  }, [codeEntries, handleCodeCanvasExecute, codeCanvasOpen, setCodeCanvasOpen, setHiddenCanvas])
+  }, [codeEntries, handleCodeCanvasExecute, codeCanvasOpen, setCodeCanvasOpen, setHiddenCanvas, toast]);
 
   // Add a handleOpenCanvasForFix function to ChatWindow which passes the error message to CodeCanvas
   const handleOpenCanvasForFix = useCallback((errorMessage: string, codeId: string) => {
@@ -688,11 +882,19 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
                     <CodeIndicator
                       key={`${index}-${partIndex}-code`}
                       language={part.language}
-                      onClick={() => {
+                      onClick={async () => {
                         // When clicking on a code indicator, process the message and make the canvas visible
                         setCurrentMessageIndex(index);
                         clearCodeEntriesKeepOutput();
-                        extractCodeFromMessages([message], index);
+                        
+                        // Make sure we're using the correct message_id
+                        const actualMessageId = message.message_id || index;
+                        logger.log(`Code indicator clicked for message at index ${index} with message_id: ${actualMessageId}`);
+                        
+                        // Extract code with the correct message ID - this will fetch the latest code if available
+                        await extractCodeFromMessages([message], actualMessageId);
+                        
+                        // Make the canvas visible
                         setCodeCanvasOpen(true);
                         setHiddenCanvas(false); // Make the canvas visible when clicked
                         
@@ -700,12 +902,6 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
                         if (setSidebarOpen) {
                           setSidebarOpen(false);
                         }
-                        
-                        // Remove auto-run trigger when manually opening canvas
-                        // setChatCompleted(true);
-                        // setTimeout(() => {
-                        //   setChatCompleted(false);
-                        // }, 10000);
                       }}
                     />
                   );
@@ -754,7 +950,14 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
 
   // Replace the entire renderCodeOutputs function with a fixed implementation
   const renderCodeOutputs = (messageIndex: number) => {
-    const relevantOutputs = codeOutputs.filter(output => output.messageIndex === messageIndex);
+    // Detect if we have an actual message ID or just an array index
+    const message = messages[messageIndex];
+    const actualMessageId = message?.message_id || messageIndex;
+    
+    // Get outputs for this specific message
+    const relevantOutputs = codeOutputs[actualMessageId] || [];
+    
+    console.log(`Rendering outputs for message index ${messageIndex}, actual ID ${actualMessageId}:`, relevantOutputs);
     
     if (relevantOutputs.length === 0) return null;
     
@@ -923,6 +1126,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
           // @ts-ignore - We'll add these props to CodeCanvas in the next step
           codeFixes={codeFixes}
           setCodeFixes={setCodeFixes}
+          setCodeEntries={setCodeEntries}
         />
       )}
     </div>

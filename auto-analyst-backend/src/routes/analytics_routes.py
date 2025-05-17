@@ -13,7 +13,7 @@ from sqlalchemy import case, desc, func
 from sqlalchemy.orm import Session
 
 from src.db.init_db import get_db, get_session
-from src.db.schemas.models import ModelUsage
+from src.db.schemas.models import ModelUsage, CodeExecution
 from src.managers.chat_manager import ChatManager
 
 from typing import Any, Dict, List, Optional
@@ -1056,3 +1056,349 @@ async def get_tier_efficiency(
         "start_date": tier_usage["start_date"],
         "end_date": tier_usage["end_date"]
     }
+
+@router.get("/code-executions/summary")
+async def get_code_execution_summary(
+    period: str = "30d",
+    db: Session = Depends(get_db),
+    api_key: str = Depends(verify_admin_api_key)
+):
+    """
+    Get a summary of code execution analytics including success rates, 
+    common errors, and model performance.
+    """
+    logger.log_message(f"Code execution summary requested for period: {period}", logging.INFO)
+    start_date, end_date = get_date_range(period)
+    
+    # Get overall code execution statistics
+    overall_stats = db.query(
+        func.count(CodeExecution.execution_id).label("total_executions"),
+        func.sum(case((CodeExecution.is_successful == True, 1), else_=0)).label("successful_executions"),
+        func.count(func.distinct(CodeExecution.user_id)).filter(CodeExecution.user_id.isnot(None)).label("total_users"),
+        func.count(func.distinct(CodeExecution.chat_id)).filter(CodeExecution.chat_id.isnot(None)).label("total_chats")
+    ).filter(
+        CodeExecution.created_at.between(start_date, end_date)
+    ).first()
+    
+    # Calculate success rate
+    total_executions = overall_stats.total_executions or 0
+    successful_executions = overall_stats.successful_executions or 0
+    success_rate = (successful_executions / total_executions) if total_executions > 0 else 0
+    
+    # Get model performance stats
+    model_stats = db.query(
+        CodeExecution.model_name,
+        func.count(CodeExecution.execution_id).label("total_executions"),
+        func.sum(case((CodeExecution.is_successful == True, 1), else_=0)).label("successful_executions"),
+        func.count(func.distinct(CodeExecution.user_id)).filter(CodeExecution.user_id.isnot(None)).label("user_count")
+    ).filter(
+        CodeExecution.created_at.between(start_date, end_date),
+        CodeExecution.model_name.isnot(None)
+    ).group_by(
+        CodeExecution.model_name
+    ).order_by(
+        desc(func.count(CodeExecution.execution_id))
+    ).all()
+    
+    # Process model stats
+    model_performance = []
+    for model in model_stats:
+        model_executions = model.total_executions or 0
+        model_success_rate = (model.successful_executions / model.total_executions) if model.total_executions > 0 else 0
+        model_performance.append({
+            "model_name": model.model_name,
+            "total_executions": model_executions,
+            "successful_executions": model.successful_executions or 0,
+            "success_rate": model_success_rate,
+            "user_count": model.user_count or 0
+        })
+    
+    # Get failed agent statistics
+    failed_agent_data = []
+    failed_executions = db.query(CodeExecution).filter(
+        CodeExecution.created_at.between(start_date, end_date),
+        CodeExecution.is_successful == False,
+        CodeExecution.failed_agents.isnot(None)
+    ).all()
+    
+    # Count agent failures
+    agent_failure_counts = {}
+    for execution in failed_executions:
+        try:
+            if execution.failed_agents:
+                failed_agents = json.loads(execution.failed_agents)
+                for agent in failed_agents:
+                    agent_failure_counts[agent] = agent_failure_counts.get(agent, 0) + 1
+        except (json.JSONDecodeError, TypeError):
+            logger.log_message(f"Error parsing failed_agents JSON: {execution.failed_agents}", logging.ERROR)
+    
+    # Convert to list for response
+    failed_agent_data = [
+        {"agent_name": agent, "failure_count": count}
+        for agent, count in sorted(agent_failure_counts.items(), key=lambda x: x[1], reverse=True)
+    ]
+    
+    # Return the compiled data
+    result = {
+        "period": period,
+        "start_date": start_date.strftime('%Y-%m-%d'),
+        "end_date": end_date.strftime('%Y-%m-%d'),
+        "overall_stats": {
+            "total_executions": total_executions,
+            "successful_executions": successful_executions,
+            "failed_executions": total_executions - successful_executions,
+            "success_rate": success_rate,
+            "total_users": overall_stats.total_users or 0,
+            "total_chats": overall_stats.total_chats or 0
+        },
+        "model_performance": model_performance,
+        "failed_agents": failed_agent_data
+    }
+    
+    logger.log_message(f"Code execution summary retrieved with {total_executions} executions", logging.INFO)
+    return result
+
+@router.get("/code-executions/detailed")
+async def get_detailed_code_executions(
+    period: str = "30d",
+    success_filter: Optional[bool] = None,
+    user_id: Optional[int] = None,
+    model_name: Optional[str] = None,
+    limit: int = 100,
+    db: Session = Depends(get_db),
+    api_key: str = Depends(verify_admin_api_key)
+):
+    """
+    Get detailed information about individual code executions
+    with filtering options.
+    """
+    logger.log_message(f"Detailed code executions requested for period: {period}", logging.INFO)
+    start_date, end_date = get_date_range(period)
+    
+    # Build the query with filters
+    query = db.query(CodeExecution).filter(
+        CodeExecution.created_at.between(start_date, end_date)
+    )
+    
+    # Apply optional filters
+    if success_filter is not None:
+        query = query.filter(CodeExecution.is_successful == success_filter)
+    
+    if user_id:
+        query = query.filter(CodeExecution.user_id == user_id)
+    
+    if model_name:
+        query = query.filter(CodeExecution.model_name == model_name)
+    
+    # Order by most recent first and limit results
+    query = query.order_by(desc(CodeExecution.created_at)).limit(limit)
+    
+    # Execute query
+    executions = query.all()
+    
+    # Process results
+    detailed_executions = []
+    for execution in executions:
+        # Parse failed agents and error messages if available
+        failed_agents_list = []
+        error_messages_dict = {}
+        
+        try:
+            if execution.failed_agents:
+                failed_agents_list = json.loads(execution.failed_agents)
+            
+            if execution.error_messages:
+                error_messages_dict = json.loads(execution.error_messages)
+        except (json.JSONDecodeError, TypeError):
+            logger.log_message(f"Error parsing JSON data for execution {execution.execution_id}", logging.ERROR)
+        
+        # Format the execution data
+        detailed_executions.append({
+            "execution_id": execution.execution_id,
+            "message_id": execution.message_id,
+            "chat_id": execution.chat_id,
+            "user_id": execution.user_id,
+            "created_at": execution.created_at.isoformat(),
+            "updated_at": execution.updated_at.isoformat() if execution.updated_at else None,
+            "is_successful": execution.is_successful,
+            "model_info": {
+                "provider": execution.model_provider,
+                "name": execution.model_name,
+                "temperature": execution.model_temperature,
+                "max_tokens": execution.model_max_tokens
+            },
+            "failed_agents": failed_agents_list,
+            "error_messages": error_messages_dict,
+            # Include trimmed code snippets
+            "initial_code_preview": execution.initial_code[:500] + "..." if execution.initial_code and len(execution.initial_code) > 500 else execution.initial_code,
+            "latest_code_preview": execution.latest_code[:500] + "..." if execution.latest_code and len(execution.latest_code) > 500 else execution.latest_code,
+        })
+    
+    logger.log_message(f"Retrieved {len(detailed_executions)} detailed code executions", logging.INFO)
+    return {
+        "period": period,
+        "start_date": start_date.strftime('%Y-%m-%d'),
+        "end_date": end_date.strftime('%Y-%m-%d'),
+        "count": len(detailed_executions),
+        "executions": detailed_executions
+    }
+
+@router.get("/code-executions/users")
+async def get_user_code_execution_stats(
+    period: str = "30d",
+    limit: int = 50,
+    db: Session = Depends(get_db),
+    api_key: str = Depends(verify_admin_api_key)
+):
+    """
+    Get statistics about code executions grouped by user
+    """
+    logger.log_message(f"User code execution stats requested for period: {period}", logging.INFO)
+    start_date, end_date = get_date_range(period)
+    
+    # Get user statistics for code executions
+    user_stats = db.query(
+        CodeExecution.user_id,
+        func.count(CodeExecution.execution_id).label("total_executions"),
+        func.sum(case((CodeExecution.is_successful == True, 1), else_=0)).label("successful_executions"),
+        func.min(CodeExecution.created_at).label("first_execution"),
+        func.max(CodeExecution.created_at).label("latest_execution")
+    ).filter(
+        CodeExecution.created_at.between(start_date, end_date),
+        CodeExecution.user_id.isnot(None)
+    ).group_by(
+        CodeExecution.user_id
+    ).order_by(
+        desc(func.count(CodeExecution.execution_id))
+    ).limit(limit).all()
+    
+    # Process user statistics
+    users_data = []
+    for user in user_stats:
+        success_rate = (user.successful_executions / user.total_executions) if user.total_executions > 0 else 0
+        users_data.append({
+            "user_id": user.user_id,
+            "total_executions": user.total_executions,
+            "successful_executions": user.successful_executions,
+            "failed_executions": user.total_executions - user.successful_executions,
+            "success_rate": success_rate,
+            "first_execution": user.first_execution.isoformat() if user.first_execution else None,
+            "latest_execution": user.latest_execution.isoformat() if user.latest_execution else None
+        })
+    
+    logger.log_message(f"Retrieved code execution stats for {len(users_data)} users", logging.INFO)
+    return {
+        "period": period,
+        "start_date": start_date.strftime('%Y-%m-%d'),
+        "end_date": end_date.strftime('%Y-%m-%d'),
+        "users": users_data
+    }
+
+@router.get("/code-executions/error-analysis")
+async def get_error_analysis(
+    period: str = "30d",
+    db: Session = Depends(get_db),
+    api_key: str = Depends(verify_admin_api_key)
+):
+    """
+    Analyze common error patterns in failed code executions
+    """
+    logger.log_message(f"Code execution error analysis requested for period: {period}", logging.INFO)
+    start_date, end_date = get_date_range(period)
+    
+    # Get failed executions
+    failed_executions = db.query(CodeExecution).filter(
+        CodeExecution.created_at.between(start_date, end_date),
+        CodeExecution.is_successful == False,
+        CodeExecution.error_messages.isnot(None)
+    ).all()
+    
+    # Analyze error messages and categorize them
+    error_types = {}
+    error_by_agent = {}
+    
+    for execution in failed_executions:
+        try:
+            if execution.error_messages:
+                error_messages = json.loads(execution.error_messages)
+                for agent, error in error_messages.items():
+                    # Add to agent-specific counts
+                    if agent not in error_by_agent:
+                        error_by_agent[agent] = {
+                            "count": 0,
+                            "common_errors": {}
+                        }
+                    error_by_agent[agent]["count"] += 1
+                    
+                    # Categorize the error
+                    error_category = categorize_error(error)
+                    error_by_agent[agent]["common_errors"][error_category] = error_by_agent[agent]["common_errors"].get(error_category, 0) + 1
+                    
+                    # Add to overall error type counts
+                    error_types[error_category] = error_types.get(error_category, 0) + 1
+        except (json.JSONDecodeError, TypeError):
+            logger.log_message(f"Error parsing error_messages JSON: {execution.error_messages}", logging.ERROR)
+    
+    # Convert to lists for response
+    error_types_list = [
+        {"error_type": error_type, "count": count}
+        for error_type, count in sorted(error_types.items(), key=lambda x: x[1], reverse=True)
+    ]
+    
+    error_by_agent_list = [
+        {
+            "agent_name": agent,
+            "error_count": data["count"],
+            "common_errors": [
+                {"error_type": error_type, "count": count}
+                for error_type, count in sorted(data["common_errors"].items(), key=lambda x: x[1], reverse=True)
+            ]
+        }
+        for agent, data in sorted(error_by_agent.items(), key=lambda x: x[1]["count"], reverse=True)
+    ]
+    
+    logger.log_message(f"Analyzed errors from {len(failed_executions)} failed executions", logging.INFO)
+    return {
+        "period": period,
+        "start_date": start_date.strftime('%Y-%m-%d'),
+        "end_date": end_date.strftime('%Y-%m-%d'),
+        "total_failed_executions": len(failed_executions),
+        "error_types": error_types_list,
+        "error_by_agent": error_by_agent_list
+    }
+
+# Helper function to categorize error messages
+def categorize_error(error_message):
+    """
+    Categorize an error message into common types
+    """
+    error_message = str(error_message).lower()
+    
+    if "nameerror" in error_message or "name '" in error_message:
+        return "NameError"
+    elif "syntaxerror" in error_message:
+        return "SyntaxError"
+    elif "typeerror" in error_message:
+        return "TypeError"
+    elif "attributeerror" in error_message:
+        return "AttributeError"
+    elif "indexerror" in error_message or "keyerror" in error_message:
+        return "IndexError/KeyError"
+    elif "importerror" in error_message or "modulenotfounderror" in error_message:
+        return "ImportError"
+    elif "valueerror" in error_message:
+        return "ValueError"
+    elif "unsupported operand" in error_message:
+        return "OperationError"
+    elif "indent" in error_message:
+        return "IndentationError"
+    elif "permission" in error_message:
+        return "PermissionError"
+    elif "filenotfound" in error_message:
+        return "FileNotFoundError"
+    elif "memory" in error_message:
+        return "MemoryError"
+    elif "timeout" in error_message or "timed out" in error_message:
+        return "TimeoutError"
+    else:
+        return "OtherError"

@@ -8,7 +8,7 @@ from typing import Dict, Any, List, Optional
 
 from llama_index.core import Document, VectorStoreIndex
 from src.utils.logger import Logger
-from src.managers.user_manager import create_user, get_current_user
+from src.managers.user_manager import create_user, get_current_user, get_user_by_email
 from src.agents.agents import auto_analyst, auto_analyst_ind
 from src.agents.retrievers.retrievers import make_data
 from src.managers.chat_manager import ChatManager
@@ -378,15 +378,22 @@ async def get_session_id(request, session_manager):
     
     # Only create a guest user if no authenticated user is found
     try:
-        # Create a guest user for this session
+        # Create a consistent guest username based on the first 8 chars of session_id
         guest_username = f"guest_{session_id[:8]}"
         guest_email = f"{guest_username}@example.com"
         
-        # Create the user
-        user = create_user(username=guest_username, email=guest_email)
-        user_id = user.user_id
+        # First check if this guest user already exists
+        existing_user = get_user_by_email(guest_email)
         
-        logger.log_message(f"Created guest user {user_id} for session {session_id}", level=logging.INFO)
+        if existing_user:
+            # Use existing guest user instead of creating a new one
+            user_id = existing_user.user_id
+            logger.log_message(f"Using existing guest user {user_id} for session {session_id}", level=logging.INFO)
+        else:
+            # Create a new guest user
+            user = create_user(username=guest_username, email=guest_email)
+            user_id = user.user_id
+            logger.log_message(f"Created guest user {user_id} for session {session_id}", level=logging.INFO)
         
         # Associate the user with this session
         session_manager.set_session_user(

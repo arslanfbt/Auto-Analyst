@@ -65,3 +65,37 @@ class ModelUsage(Base):
     # Add relationships
     user = relationship("User", back_populates="usage_records")
     chat = relationship("Chat", back_populates="usage_records")
+
+# Define the Code Execution table
+class CodeExecution(Base):
+    """Tracks code execution attempts and results for analysis and debugging."""
+    __tablename__ = 'code_executions'
+    
+    execution_id = Column(Integer, primary_key=True, autoincrement=True)
+    message_id = Column(Integer, ForeignKey('messages.message_id', ondelete="CASCADE"), nullable=True)
+    chat_id = Column(Integer, ForeignKey('chats.chat_id', ondelete="CASCADE"), nullable=True)
+    user_id = Column(Integer, ForeignKey('users.user_id', ondelete="SET NULL"), nullable=True)
+    
+    # Code tracking
+    initial_code = Column(Text, nullable=True)  # First version of code submitted
+    latest_code = Column(Text, nullable=True)  # Most recent version of code
+    
+    # Execution results
+    is_successful = Column(Boolean, default=False)
+    output = Column(Text, nullable=True)  # Full output including errors
+    
+    # Model and agent information
+    model_provider = Column(String(50), nullable=True)
+    model_name = Column(String(100), nullable=True)
+    model_temperature = Column(Float, nullable=True)
+    model_max_tokens = Column(Integer, nullable=True)
+    
+    # Failure information
+    failed_agents = Column(Text, nullable=True)  # JSON list of agent names that failed
+    error_messages = Column(Text, nullable=True)  # JSON map of error messages by agent
+    
+    # Metadata
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    

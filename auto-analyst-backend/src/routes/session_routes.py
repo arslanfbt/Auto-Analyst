@@ -34,6 +34,12 @@ async def get_session_id_dependency(request: Request):
     app_state = get_app_state(request)
     return await get_session_id(request, app_state._session_manager)
 
+# Define a model for message tracking
+class MessageInfo(BaseModel):
+    chat_id: Optional[int] = None
+    message_id: Optional[int] = None
+    user_id: Optional[int] = None
+
 # Define a model for reset session request
 class ResetSessionRequest(BaseModel):
     name: Optional[str] = None
@@ -586,3 +592,63 @@ async def get_session_info(
             "has_session": False,
             "error": str(e)
         }
+
+# Add a new route to set the current message ID in the session
+@router.post("/set-message-info")
+async def set_message_info(
+    message_info: MessageInfo,
+    app_state = Depends(get_app_state),
+    session_id: str = Depends(get_session_id_dependency)
+):
+    """Set the current message ID, chat ID, and user ID in the session"""
+    try:
+        # Get the session state
+        session_state = app_state.get_session_state(session_id)
+        
+        # Make a copy of previous values for logging
+        previous_message_id = session_state.get("current_message_id")
+        previous_chat_id = session_state.get("chat_id")
+        previous_user_id = session_state.get("user_id")
+        
+        # Update the session with message information
+        if message_info.message_id is not None:
+            session_state["current_message_id"] = message_info.message_id
+        if message_info.chat_id is not None:
+            session_state["chat_id"] = message_info.chat_id
+        if message_info.user_id is not None:
+            session_state["user_id"] = message_info.user_id
+            
+        # Get updated values for logging
+        current_message_id = session_state.get("current_message_id")
+        current_chat_id = session_state.get("chat_id")
+        current_user_id = session_state.get("user_id")
+        
+        # Log changes
+        logger.log_message(
+            f"Message info updated for session {session_id}:\n"
+            f"  message_id: {previous_message_id} -> {current_message_id}\n"
+            f"  chat_id: {previous_chat_id} -> {current_chat_id}\n"
+            f"  user_id: {previous_user_id} -> {current_user_id}",
+            level=logging.INFO
+        )
+        
+        # Verify session state was updated
+        updated_session_state = app_state.get_session_state(session_id)
+        logger.log_message(
+            f"Verified session state after update:\n"
+            f"  current_message_id: {updated_session_state.get('current_message_id')}\n"
+            f"  chat_id: {updated_session_state.get('chat_id')}\n"
+            f"  user_id: {updated_session_state.get('user_id')}",
+            level=logging.INFO
+        )
+        
+        return {
+            "success": True,
+            "session_id": session_id,
+            "message_id": current_message_id,
+            "chat_id": current_chat_id,
+            "user_id": current_user_id
+        }
+    except Exception as e:
+        logger.log_message(f"Error setting message info: {str(e)}", level=logging.ERROR)
+        raise HTTPException(status_code=500, detail=str(e))

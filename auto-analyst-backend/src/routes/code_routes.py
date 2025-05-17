@@ -1,6 +1,7 @@
 import io
 import logging
 import re
+import json
 from fastapi import APIRouter, Depends, HTTPException, Request
 from typing import Dict, Optional, List, Tuple
 from pydantic import BaseModel
@@ -9,6 +10,8 @@ from scripts.format_response import execute_code_from_markdown, format_code_bloc
 from src.utils.logger import Logger
 from src.routes.session_routes import get_session_id_dependency
 from src.agents.agents import code_edit, code_fix
+from src.db.schemas.models import CodeExecution
+from src.db.init_db import get_session
 import dspy
 import os
 # Initialize router
@@ -24,6 +27,8 @@ try_logger = Logger("try_code_routes", see_time=True, console_log=False)
 # Request body model
 class CodeExecuteRequest(BaseModel):
     code: str
+    session_id: Optional[str] = None
+    message_id: Optional[int] = None
     
 class CodeEditRequest(BaseModel):
     original_code: str
@@ -35,6 +40,9 @@ class CodeFixRequest(BaseModel):
     
 class CodeCleanRequest(BaseModel):
     code: str
+    
+class GetLatestCodeRequest(BaseModel):
+    message_id: int
     
 def format_code(code: str) -> str:
     """
@@ -121,8 +129,14 @@ def identify_error_blocks(code: str, error_output: str) -> List[Tuple[str, str, 
     # Parse the error output to find which agents had errors
     faulty_blocks = []
     
-    # Find error patterns like "=== ERROR IN AGENT_NAME ==="
-    error_matches = re.findall(r'===\s+ERROR\s+IN\s+([A-Za-z0-9_]+)\s+===\s*([\s\S]*?)(?:(?===\s+)|$)', error_output)
+    # Find error patterns like "=== ERROR IN AGENT_NAME ===" or "=== ERROR IN UNKNOWN_AGENT ==="
+    error_matches = []
+    for match in re.finditer(
+        r'^===\s+ERROR\s+IN\s+([A-Za-z0-9_]+)\s+===\s*([\s\S]*?)(?=^===\s+[A-Z]+\s+IN\s+[A-Za-z0-9_]+\s+===|\Z)',
+        error_output,
+        re.MULTILINE
+    ):
+        error_matches.append((match.group(1), match.group(2)))
     
     if not error_matches:
         return []
@@ -220,7 +234,6 @@ def fix_code_with_dspy(code: str, error: str, dataset_context: str = ""):
     
     # Find the blocks with errors
     faulty_blocks = identify_error_blocks(code, error)
-    logger.log_message(f"Number of faulty blocks found: {len(faulty_blocks)}", level=logging.INFO)
     if not faulty_blocks:
         # If no specific errors found, fix the entire code
         with dspy.context(lm=gemini):
@@ -240,13 +253,11 @@ def fix_code_with_dspy(code: str, error: str, dataset_context: str = ""):
         code_fixer = dspy.ChainOfThought(code_fix)
         
         for agent_name, block_code, specific_error in faulty_blocks:
-            logger.log_message(f"Fixing {agent_name} block", level=logging.INFO)
             
             try:
                 # Extract inner code between the markers
                 inner_code_match = re.search(r'#\s+\w+\s+code\s+start\s*\n([\s\S]*?)#\s+\w+\s+code\s+end', block_code)
                 if not inner_code_match:
-                    logger.log_message(f"Could not extract inner code for {agent_name}", level=logging.WARNING)
                     continue
                     
                 inner_code = inner_code_match.group(1).strip()
@@ -298,7 +309,6 @@ def fix_code_with_dspy(code: str, error: str, dataset_context: str = ""):
                 
                 # Replace the original block with the fixed block in the full code
                 result_code = result_code.replace(block_code, fixed_block)
-                logger.log_message(f"Fixed {agent_name} block successfully", level=logging.INFO)
                 
             except Exception as e:
                 # Log the error but continue with other blocks
@@ -346,7 +356,6 @@ def get_dataset_context(df):
             context += f"  * {col}: {sample_str}\n"
         return context
     except Exception as e:
-        logger.log_message(f"Error generating dataset context: {str(e)}", level=logging.ERROR)
         return "Could not generate dataset context information."
 
 def edit_code_with_dspy(original_code: str, user_prompt: str, dataset_context: str = ""):
@@ -422,15 +431,137 @@ async def execute_code(
         if not code:
             raise HTTPException(status_code=400, detail="No code provided")
             
+        # Get the user_id and chat_id from session state if available
+        user_id = session_state.get("user_id")
+        chat_id = session_state.get("chat_id")
+        message_id = request_data.message_id
+        
+        # If message_id was not provided in the request, try to get it from the session state
+        if message_id is None:
+            message_id = session_state.get("current_message_id")
+            logger.log_message(f"Using message_id from session state: {message_id}", level=logging.INFO)
+        else:
+            # Update the session state with the provided message_id
+            session_state["current_message_id"] = message_id
+            logger.log_message(f"Using message_id from request body: {message_id}", level=logging.INFO)
+        
+        # Get model configuration
+        model_config = session_state.get("model_config", {})
+        model_provider = model_config.get("provider", "")
+        model_name = model_config.get("model", "")
+        model_temperature = model_config.get("temperature", 0.0)
+        model_max_tokens = model_config.get("max_tokens", 0)
+        
+        # Get database session
+        db = get_session()
+        
+        # Check if we have an existing execution record for this message
+        existing_execution = None
+        if message_id:
+            try:
+                existing_execution = db.query(CodeExecution).filter(
+                    CodeExecution.message_id == message_id
+                ).first()
+                
+                if existing_execution:
+                    logger.log_message(f"Found existing code execution record for message_id: {message_id}", level=logging.INFO)
+                else:
+                    logger.log_message(f"No existing code execution record found for message_id: {message_id}", level=logging.INFO)
+            except Exception as query_error:
+                logger.log_message(f"Error querying for existing execution: {str(query_error)}", level=logging.ERROR)
+                # Continue without existing execution
+        else:
+            logger.log_message("No message_id provided in session state", level=logging.WARNING)
+            
         # Execute the code with the dataframe from session state
-        output, json_outputs = execute_code_from_markdown(code, session_state["current_df"])
+        full_output = ""
+        json_outputs = []
+        is_successful = True
+        failed_agents = None
+        error_messages = None
+        
+        try:
+            full_output, json_outputs = execute_code_from_markdown(code, session_state["current_df"])
+            
+            # Even with "successful" execution, check for agent failures in the output
+            failed_blocks = identify_error_blocks(code, full_output)
+            
+            if failed_blocks:
+                # We have some failed agents even though no exception was thrown
+                is_successful = False  # Mark as failed if any agent failed
+                failed_agents = json.dumps([block[0] for block in failed_blocks])
+                error_messages = json.dumps({
+                    block[0]: block[2] for block in failed_blocks
+                })
+                logger.log_message(f"Partial execution failure. Failed agents: {failed_agents}", level=logging.WARNING)
+            
+        except Exception as exec_error:
+            full_output = str(exec_error)
+            is_successful = False
+            
+            # Identify which agents failed
+            failed_blocks = identify_error_blocks(code, full_output)
+            
+            # Format the failed agents and error messages
+            if failed_blocks:
+                failed_agents = json.dumps([block[0] for block in failed_blocks])
+                error_messages = json.dumps({
+                    block[0]: block[2] for block in failed_blocks
+                })
+                logger.log_message(f"Execution threw exception. Failed agents: {failed_agents}", level=logging.ERROR)
+            
+            # Don't re-raise the error - we want to capture the error and send it back to the client
+            # return error details in the response instead
+        
+        # Create or update the execution record regardless of success/failure
+        try:
+            if existing_execution:
+                # Update existing record
+                existing_execution.latest_code = code
+                existing_execution.is_successful = is_successful
+                existing_execution.output = full_output
+                
+                if not is_successful:
+                    existing_execution.failed_agents = failed_agents
+                    existing_execution.error_messages = error_messages
+                    
+                db.commit()
+                logger.log_message(f"Updated existing code execution record for message_id: {message_id}", level=logging.INFO)
+            else:
+                # Create new record
+                new_execution = CodeExecution(
+                    message_id=message_id,
+                    chat_id=chat_id,
+                    user_id=user_id,
+                    initial_code=code,
+                    latest_code=code,
+                    is_successful=is_successful,
+                    output=full_output,
+                    model_provider=model_provider,
+                    model_name=model_name,
+                    model_temperature=model_temperature,
+                    model_max_tokens=model_max_tokens,
+                    failed_agents=failed_agents,
+                    error_messages=error_messages
+                )
+                db.add(new_execution)
+                db.commit()
+                logger.log_message(f"Created new code execution record for message_id: {message_id}, chat_id: {chat_id}", level=logging.INFO)
+        except Exception as db_error:
+            db.rollback()
+            logger.log_message(f"Error saving code execution: {str(db_error)}", level=logging.ERROR)
+        finally:
+            db.close()
         
         # Format plotly outputs for frontend
         plotly_outputs = [f"```plotly\n{json_output}\n```\n" for json_output in json_outputs]
         
+        # Include execution status in the response
         return {
-            "output": output,
-            "plotly_outputs": plotly_outputs if json_outputs else None
+            "output": full_output,
+            "plotly_outputs": plotly_outputs if json_outputs else None,
+            "is_successful": is_successful,
+            "failed_agents": failed_agents
         }
     except Exception as e:
         logger.log_message(f"Error executing code: {str(e)}", level=logging.ERROR)
@@ -580,4 +711,67 @@ async def clean_code(
         }
     except Exception as e:
         logger.log_message(f"Error cleaning code: {str(e)}", level=logging.ERROR)
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/get-latest-code")
+async def get_latest_code(
+    request_data: GetLatestCodeRequest,
+    request: Request,
+    session_id: str = Depends(get_session_id_dependency)
+):
+    """
+    Retrieve the latest code for a specific message_id
+    
+    Args:
+        request_data: Body containing message_id
+        request: FastAPI Request object
+        session_id: Session identifier
+        
+    Returns:
+        Dictionary containing the latest code and execution status
+    """
+    try:
+        message_id = request_data.message_id
+        
+        if not message_id:
+            raise HTTPException(status_code=400, detail="Message ID is required")
+            
+        logger.log_message(f"Retrieving latest code for message_id: {message_id}", level=logging.INFO)
+        
+        # Get database session
+        db = get_session()
+        
+        try:
+            # Query the database for the latest code execution record
+            execution_record = db.query(CodeExecution).filter(
+                CodeExecution.message_id == message_id
+            ).first()
+            
+            if execution_record:
+                logger.log_message(f"Found execution record for message_id: {message_id}", level=logging.INFO)
+                
+                # Return the latest code and execution status
+                return {
+                    "found": True,
+                    "message_id": message_id,
+                    "latest_code": execution_record.latest_code,
+                    "initial_code": execution_record.initial_code,
+                    "is_successful": execution_record.is_successful,
+                    "failed_agents": execution_record.failed_agents
+                }
+            else:
+                logger.log_message(f"No execution record found for message_id: {message_id}", level=logging.INFO)
+                return {
+                    "found": False,
+                    "message_id": message_id
+                }
+                
+        except Exception as db_error:
+            logger.log_message(f"Database error retrieving latest code: {str(db_error)}", level=logging.ERROR)
+            raise HTTPException(status_code=500, detail=f"Database error: {str(db_error)}")
+        finally:
+            db.close()
+            
+    except Exception as e:
+        logger.log_message(f"Error retrieving latest code: {str(e)}", level=logging.ERROR)
         raise HTTPException(status_code=500, detail=str(e))

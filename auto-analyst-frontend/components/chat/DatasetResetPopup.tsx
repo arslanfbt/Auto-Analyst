@@ -21,7 +21,7 @@ const DatasetResetPopup: React.FC<DatasetResetPopupProps> = ({
 }) => {
   React.useEffect(() => {
     if (silentOnLogin && isOpen) {
-      logger.log("Silent dataset reset mode - automatically using default dataset without prompt");
+      // // logger.log("Silent dataset reset mode - automatically using default dataset without prompt");
       onConfirm();
     }
   }, [silentOnLogin, isOpen, onConfirm]);

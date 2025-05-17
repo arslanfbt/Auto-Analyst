@@ -113,6 +113,8 @@ def get_user_by_email(email: str) -> Optional[User]:
     session = get_session()
     try:
         user = session.query(DBUser).filter(DBUser.email == email).first()
+        if user is None:
+            return None
         return User(
             user_id=user.user_id,
             username=user.username,
@@ -121,3 +123,5 @@ def get_user_by_email(email: str) -> Optional[User]:
     except Exception as e:
         logger.log_message(f"Error getting user by email: {str(e)}", logging.ERROR)
         return None
+    finally:
+        session.close()
