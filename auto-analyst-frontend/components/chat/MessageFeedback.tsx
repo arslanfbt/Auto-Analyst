@@ -26,18 +26,20 @@ const MessageFeedback = ({ messageId, chatId }: MessageFeedbackProps) => {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [showThankYou, setShowThankYou] = useState(false)
   const [existingFeedback, setExistingFeedback] = useState<any>(null)
+  const [isLocked, setIsLocked] = useState(false)
+  const [hasError, setHasError] = useState(false)
   const { data: session } = useSession()
   const { sessionId } = useSessionStore()
   const [modelSettings, setModelSettings] = useState<ModelSettings | null>(null)
 
-  // Add debug logging
-  useEffect(() => {
-    console.log(`MessageFeedback component mounted with messageId: ${messageId}, chatId: ${chatId}`)
-  }, [messageId, chatId])
-
   // Fetch existing feedback on mount
   useEffect(() => {
     const fetchExistingFeedback = async () => {
+      if (!messageId) {
+        console.warn("No messageId provided, skipping feedback fetch")
+        return
+      }
+
       try {
         console.log(`Fetching feedback from ${API_URL}/feedback/message/${messageId}`)
         const response = await axios.get(`${API_URL}/feedback/message/${messageId}`)
@@ -45,27 +47,34 @@ const MessageFeedback = ({ messageId, chatId }: MessageFeedbackProps) => {
           console.log("Received existing feedback:", response.data)
           setExistingFeedback(response.data)
           setRating(response.data.rating)
+          setIsLocked(true) // Lock the feedback if it already exists
+          setHasError(false)
         }
       } catch (error) {
-        // This is expected if no feedback exists yet
-        if (axios.isAxiosError(error) && error.response?.status !== 404) {
-          console.error("Error fetching feedback:", error)
+        // Handle 404 (no feedback yet) differently than other errors
+        if (axios.isAxiosError(error)) {
+          if (error.response?.status === 404) {
+            console.log("No existing feedback found (404 is expected)")
+            setHasError(false)
+          } else {
+            console.error("Error fetching feedback:", error)
+            setHasError(true)
+          }
         } else {
-          console.log("No existing feedback found (404 is expected)")
+          console.error("Unexpected error fetching feedback:", error)
+          setHasError(true)
         }
       }
     }
 
-    if (messageId) {
-      fetchExistingFeedback()
-    } else {
-      console.warn("No messageId provided, skipping feedback fetch")
-    }
+    fetchExistingFeedback()
   }, [messageId])
 
   // Get model settings from localStorage
   useEffect(() => {
     try {
+      if (typeof window === 'undefined') return;
+      
       const userModelSettingsStr = localStorage.getItem('userModelSettings')
       
       if (userModelSettingsStr) {
@@ -96,8 +105,15 @@ const MessageFeedback = ({ messageId, chatId }: MessageFeedbackProps) => {
   }, [])
 
   const handleRatingClick = async (selectedRating: number) => {
+    // Don't allow editing if feedback is locked
+    if (isLocked) {
+      console.log("Feedback is locked, cannot modify")
+      return
+    }
+    
     setIsSubmitting(true)
     setRating(selectedRating)
+    setHasError(false)
     console.log(`Submitting rating ${selectedRating} for message ${messageId}`)
 
     try {
@@ -120,20 +136,37 @@ const MessageFeedback = ({ messageId, chatId }: MessageFeedbackProps) => {
       })
       
       console.log("Rating submitted successfully:", response.data)
-
+      setExistingFeedback(response.data)
       setShowThankYou(true)
+      setIsLocked(true) // Lock feedback after submission
+      
       setTimeout(() => {
         setShowThankYou(false)
       }, 3000)
     } catch (error) {
       console.error("Error submitting feedback:", error)
       setRating(existingFeedback?.rating || null)
+      setHasError(true)
+      
+      // Log more detailed error information
+      if (axios.isAxiosError(error) && error.response) {
+        console.error("Server error response:", error.response.data)
+      }
     } finally {
       setIsSubmitting(false)
     }
   }
 
-  // If already rated, show the current rating
+  // Show error state if there's an API error
+  if (hasError) {
+    return (
+      <div className="text-sm text-red-500 flex items-center">
+        <span>Unable to process feedback. Please try again.</span>
+      </div>
+    )
+  }
+
+  // If already rated, show the current rating (readonly if locked)
   if (rating !== null && !showThankYou) {
     return (
       <div className="flex items-center space-x-1 text-sm text-gray-500">
@@ -143,9 +176,9 @@ const MessageFeedback = ({ messageId, chatId }: MessageFeedbackProps) => {
             key={star}
             size={16}
             className={`${
-              star <= rating ? "text-[#FF7F7F] fill-[#FF7F7F]" : "text-gray-300"
-            } cursor-pointer`}
-            onClick={() => handleRatingClick(star)}
+              star <= (rating || 0) ? "text-[#FF7F7F] fill-[#FF7F7F]" : "text-[#FFD1D1]"
+            } ${isLocked ? "cursor-default" : "cursor-pointer"}`}
+            onClick={() => !isLocked && handleRatingClick(star)}
           />
         ))}
       </div>
@@ -170,7 +203,7 @@ const MessageFeedback = ({ messageId, chatId }: MessageFeedbackProps) => {
           key={star}
           size={16}
           className={`${
-            star <= (hoveredRating || 0) ? "text-[#FF7F7F] fill-[#FF7F7F]" : "text-gray-300"
+            star <= (hoveredRating || 0) ? "text-[#FF7F7F] fill-[#FF7F7F]" : "text-[#FFD1D1]"
           } cursor-pointer transition-colors`}
           onMouseEnter={() => setHoveredRating(star)}
           onMouseLeave={() => setHoveredRating(null)}

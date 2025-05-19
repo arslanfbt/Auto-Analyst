@@ -331,7 +331,7 @@ const MessageContent: React.FC<MessageContentProps> = ({
 
   // Render feedback only if this is an AI message and it's the last part of the message
   // and we have necessary IDs for the API calls
-  const showFeedback = isAIMessage && isLastPart && messageId && chatId;
+  const showFeedback = isAIMessage && isLastPart;
 
   return (
     <div>
@@ -340,7 +340,7 @@ const MessageContent: React.FC<MessageContentProps> = ({
       {showFeedback && (
         <div className="mt-4 pt-2 border-t border-gray-100">
           <div className="bg-gray-50 p-2 rounded-md flex justify-between items-center">
-            <MessageFeedback messageId={messageId} chatId={chatId} />
+            <MessageFeedback messageId={messageId || 0} chatId={chatId || 0} />
             
             {showActionButtons && (
               <div className="flex items-center space-x-2">
