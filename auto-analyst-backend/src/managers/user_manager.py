@@ -25,10 +25,16 @@ async def get_current_user(
     Dependency to get the current authenticated user.
     Returns None if no user is authenticated.
     """
-    # If no API key is provided, return None (anonymous user)
-    if not api_key:
-        # Check for API key in query parameters (fallback)
-        api_key = request.query_params.get("api_key")
+    # FastAPI resolves the `api_key` parameter when this function is used as a dependency. However, when the
+    # function is called directly (e.g. from the session manager), the `api_key` parameter will still hold the
+    # unresolved `Depends` placeholder object. In that case – or when no API key is supplied – we need to
+    # manually look for the key in the request headers or query parameters.
+
+    if not api_key or not isinstance(api_key, str):
+        # Prefer header first for consistency with the dependency implementation
+        api_key = request.headers.get(API_KEY_NAME) or request.query_params.get("api_key")
+
+        # If an API key still isn't available, treat the caller as anonymous
         if not api_key:
             return None
     

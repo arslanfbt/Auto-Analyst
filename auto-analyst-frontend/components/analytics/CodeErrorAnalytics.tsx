@@ -75,7 +75,7 @@ export default function CodeErrorAnalytics() {
     // Get the admin key from local storage
     const storedKey = localStorage.getItem('adminApiKey')
     if (!storedKey) {
-      router.push('/analytics/login')
+      router.push('/analytics/')
       return
     }
     
