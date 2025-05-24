@@ -504,7 +504,8 @@ def format_plan_instructions(plan_instructions):
                 try:
                     instructions = json.loads(cleaned_str)
                 except json.JSONDecodeError:
-                    raise ValueError(f"Invalid JSON format in plan instructions: {str(e)}")
+                    # raise ValueError(f"Invalid JSON format in plan instructions: {str(e)}")
+                    instructions = plan_instructions
         elif isinstance(plan_instructions, dict):
             instructions = plan_instructions
         else:
@@ -572,21 +573,26 @@ def format_complexity(instructions):
         complexity = "unrelated"
     
     if complexity:
+        # Pink color scheme variations
         color_map = {
-            "unrelated": "#913C49",  
-            "basic": "#E35F5F",      
-            "intermediate": "#FFA07A", 
-            "advanced": "#FC754C"
+            "unrelated": "#FFB6B6",  # Light pink
+            "basic": "#FF9E9E",      # Medium pink
+            "intermediate": "#FF7F7F", # Main pink
+            "advanced": "#FF5F5F"    # Dark pink
         }
-        emoji_map = {
-            "unrelated": "❓",
-            "basic": "🟢",
-            "intermediate": "🔵",
-            "advanced": "🟣"
+        
+        indicator_map = {
+            "unrelated": "○",
+            "basic": "●",
+            "intermediate": "●●",
+            "advanced": "●●●"
         }
-        color = color_map.get(complexity.lower(), "#913C49")  # Default to light pink
-        emoji = emoji_map.get(complexity.lower(), "❓")
-        markdown_lines.append(f"<div style='color: white; background-color: {color}; padding: 3px 8px; border-radius: 4px; display: inline-block; font-weight: bold;'>{emoji} COMPLEXITY: {complexity.upper()}</div>\n")
+        
+        color = color_map.get(complexity.lower(), "#FFB6B6")  # Default to light pink
+        indicator = indicator_map.get(complexity.lower(), "○")
+        
+        # Slightly larger display with pink styling
+        markdown_lines.append(f"<div style='color: {color}; border: 2px solid {color}; padding: 2px 8px; border-radius: 12px; display: inline-block; font-size: 14.4px;'>{indicator} {complexity}</div>\n")
 
         return "\n".join(markdown_lines).strip()    
 
