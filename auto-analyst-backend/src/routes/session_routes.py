@@ -4,22 +4,16 @@ import json
 import os
 from io import StringIO
 from typing import Optional, List
-from datetime import datetime
 
 import pandas as pd
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.security import APIKeyHeader
 from pydantic import BaseModel
-from sqlalchemy.orm import Session
-from sqlalchemy import func
 
 from src.managers.session_manager import get_session_id
 from src.schemas.model_settings import ModelSettings
 from src.utils.logger import Logger
 from src.agents.agents import dataset_description_agent
-from src.db.schemas.models import DatasetUpload
-from src.db.init_db import get_db
-
 import dspy
 
 
@@ -90,18 +84,12 @@ async def upload_excel(
     sheet_name: str = Form(...),
     app_state = Depends(get_app_state),
     session_id: str = Depends(get_session_id_dependency),
-    request: Request = None,
-    db: Session = Depends(get_db)
+    request: Request = None
 ):
     """Upload and process an Excel file with a specific sheet"""
-    start_time = datetime.utcnow()
     try:
         # Log the incoming request details
         logger.log_message(f"Excel upload request for session {session_id}: name='{name}', description='{description}', sheet='{sheet_name}'", level=logging.INFO)
-        
-        # Get user_id from session if available
-        session_state = app_state.get_session_state(session_id)
-        user_id = session_state.get("user_id")
         
         # Check if we need to force a complete session reset before upload
         force_refresh = request.headers.get("X-Force-Refresh") == "true" if request else False
@@ -113,24 +101,6 @@ async def upload_excel(
         
         # Read the uploaded Excel file
         contents = await file.read()
-        file_size = len(contents)
-        
-        # Create a dataset upload record - we'll update it with more info later
-        dataset_upload = DatasetUpload(
-            user_id=user_id,
-            filename=f"{name}.csv",  # Will be converted to CSV
-            original_filename=file.filename,
-            file_size=file_size,
-            file_type="excel",
-            status="processing"
-        )
-        
-        db.add(dataset_upload)
-        db.commit()
-        db.refresh(dataset_upload)
-        
-        # Capture the dataset upload ID to update status later
-        dataset_upload_id = dataset_upload.upload_id
         
         try:
             # Read the specific sheet with basic preprocessing
@@ -155,31 +125,8 @@ async def upload_excel(
             # Log some info about the processed data
             logger.log_message(f"Processed Excel sheet '{sheet_name}' into dataframe with {len(new_df)} rows and {len(new_df.columns)} columns", level=logging.INFO)
             
-            # Update dataset information in DB with success
-            dataset_upload.row_count = len(new_df)
-            dataset_upload.column_count = len(new_df.columns)
-            dataset_upload.column_names = new_df.columns.tolist()
-            
-            # Store data types as a dictionary
-            data_types = {}
-            for col in new_df.columns:
-                data_types[col] = str(new_df[col].dtype)
-            
-            dataset_upload.data_types = data_types
-            dataset_upload.status = "completed"
-            
         except Exception as e:
             logger.log_message(f"Error processing Excel file: {str(e)}", level=logging.ERROR)
-            
-            # Update dataset record with error
-            dataset_upload.status = "failed"
-            dataset_upload.error_message = str(e)
-            dataset_upload.error_details = {
-                "error_type": type(e).__name__,
-                "sheet_name": sheet_name
-            }
-            
-            db.commit()
             raise HTTPException(status_code=400, detail=f"Error processing Excel file: {str(e)}")
         
         # Update the dataset description to include sheet name
@@ -192,34 +139,8 @@ async def upload_excel(
         session_state = app_state.get_session_state(session_id)
         logger.log_message(f"Session dataset updated with Excel data and description: '{session_state.get('description')}'", level=logging.INFO)
         
-        # Calculate processing time and update the record
-        end_time = datetime.utcnow()
-        processing_time_ms = int((end_time - start_time).total_seconds() * 1000)
-        dataset_upload.processing_time_ms = processing_time_ms
-        dataset_upload.updated_at = end_time
-        
-        db.commit()
-        
-        return {"message": "Excel file processed successfully", "session_id": session_id, "sheet": sheet_name, "dataset_upload_id": dataset_upload_id}
+        return {"message": "Excel file processed successfully", "session_id": session_id, "sheet": sheet_name}
     except Exception as e:
-        # Make sure to update the dataset record with error if it was created
-        error_details = {
-            "error_type": type(e).__name__,
-            "message": str(e)
-        }
-        
-        try:
-            if 'dataset_upload_id' in locals():
-                dataset_upload = db.query(DatasetUpload).filter(DatasetUpload.upload_id == dataset_upload_id).first()
-                if dataset_upload:
-                    dataset_upload.status = "failed"
-                    dataset_upload.error_message = str(e)
-                    dataset_upload.error_details = error_details
-                    dataset_upload.updated_at = datetime.utcnow()
-                    db.commit()
-        except Exception as db_error:
-            logger.log_message(f"Error updating dataset record: {str(db_error)}", level=logging.ERROR)
-        
         logger.log_message(f"Error in upload_excel: {str(e)}", level=logging.ERROR)
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -230,17 +151,11 @@ async def upload_dataframe(
     description: str = Form(...),
     app_state = Depends(get_app_state),
     session_id: str = Depends(get_session_id_dependency),
-    request: Request = None,
-    db: Session = Depends(get_db)
+    request: Request = None
 ):
-    start_time = datetime.utcnow()
     try:
         # Log the incoming request details
         logger.log_message(f"Upload request for session {session_id}: name='{name}', description='{description}'", level=logging.INFO)
-        
-        # Get user_id from session if available
-        session_state = app_state.get_session_state(session_id)
-        user_id = session_state.get("user_id")
         
         # Check if we need to force a complete session reset before upload
         force_refresh = request.headers.get("X-Force-Refresh") == "true" if request else False
@@ -252,87 +167,16 @@ async def upload_dataframe(
         
         # Now process the new file
         contents = await file.read()
-        file_size = len(contents)
-        
-        # Create a dataset upload record - we'll update it with more info later
-        dataset_upload = DatasetUpload(
-            user_id=user_id,
-            filename=f"{name}.csv",
-            original_filename=file.filename,
-            file_size=file_size,
-            file_type="csv",
-            status="processing"
-        )
-        
-        db.add(dataset_upload)
-        db.commit()
-        db.refresh(dataset_upload)
-        
-        # Capture the dataset upload ID to update status later
-        dataset_upload_id = dataset_upload.upload_id
-        
-        validation_errors = []
         try:
-            # Try different encodings
-            encodings = ['utf-8', 'unicode_escape', 'ISO-8859-1']
-            new_df = None
-            successful_encoding = None
-            
-            for encoding in encodings:
-                try:
-                    new_df = pd.read_csv(io.BytesIO(contents), encoding=encoding)
-                    successful_encoding = encoding
-                    break
-                except Exception as encoding_error:
-                    validation_errors.append({
-                        "encoding": encoding,
-                        "error": str(encoding_error)
-                    })
-                    continue
-            
-            if new_df is None:
-                error_msg = f"Error reading file with all attempted encodings: {', '.join(encodings)}"
-                
-                # Update dataset record with error
-                dataset_upload.status = "failed"
-                dataset_upload.error_message = error_msg
-                dataset_upload.error_details = {
-                    "attempted_encodings": encodings,
-                    "validation_errors": validation_errors
-                }
-                dataset_upload.validation_errors = validation_errors
-                db.commit()
-                
-                raise HTTPException(status_code=400, detail=error_msg)
-            
-            # Update dataset information with success
-            dataset_upload.row_count = len(new_df)
-            dataset_upload.column_count = len(new_df.columns)
-            dataset_upload.column_names = new_df.columns.tolist()
-            
-            # Store data types as a dictionary
-            data_types = {}
-            for col in new_df.columns:
-                data_types[col] = str(new_df[col].dtype)
-            
-            dataset_upload.data_types = data_types
-            dataset_upload.status = "completed"
-            dataset_upload.validation_errors = validation_errors if validation_errors else None
-            
+            new_df = pd.read_csv(io.BytesIO(contents), encoding='utf-8')
         except Exception as e:
-            error_msg = f"Error reading file: {str(e)}"
-            
-            # Update dataset record with error
-            dataset_upload.status = "failed"
-            dataset_upload.error_message = error_msg
-            dataset_upload.error_details = {
-                "error_type": type(e).__name__,
-                "validation_errors": validation_errors if validation_errors else None
-            }
-            db.commit()
-            
-            raise HTTPException(status_code=400, detail=error_msg)
-            
+            try:
+                new_df = pd.read_csv(io.BytesIO(contents), encoding='unicode_escape')
+            except Exception as e:
+                try:
+                    new_df = pd.read_csv(io.BytesIO(contents), encoding='ISO-8859-1')
+                except Exception as e:
+                    raise HTTPException(status_code=400, detail=f"Error reading file: {str(e)}")
         desc = f"{name} Dataset: {description}"
         
         logger.log_message(f"Updating session dataset with description: '{desc}'", level=logging.INFO)
@@ -342,34 +186,8 @@ async def upload_dataframe(
         session_state = app_state.get_session_state(session_id)
         logger.log_message(f"Session dataset updated with description: '{session_state.get('description')}'", level=logging.INFO)
         
-        # Calculate processing time and update the record
-        end_time = datetime.utcnow()
-        processing_time_ms = int((end_time - start_time).total_seconds() * 1000)
-        dataset_upload.processing_time_ms = processing_time_ms
-        dataset_upload.updated_at = end_time
-        
-        db.commit()
-        
-        return {"message": "Dataframe uploaded successfully", "session_id": session_id, "dataset_upload_id": dataset_upload_id}
+        return {"message": "Dataframe uploaded successfully", "session_id": session_id}
     except Exception as e:
-        # Make sure to update the dataset record with error if it was created
-        error_details = {
-            "error_type": type(e).__name__,
-            "message": str(e)
-        }
-        
-        try:
-            if 'dataset_upload_id' in locals():
-                dataset_upload = db.query(DatasetUpload).filter(DatasetUpload.upload_id == dataset_upload_id).first()
-                if dataset_upload:
-                    dataset_upload.status = "failed"
-                    dataset_upload.error_message = str(e)
-                    dataset_upload.error_details = error_details
-                    dataset_upload.updated_at = datetime.utcnow()
-                    db.commit()
-        except Exception as db_error:
-            logger.log_message(f"Error updating dataset record: {str(db_error)}", level=logging.ERROR)
-            
         logger.log_message(f"Error in upload_dataframe: {str(e)}", level=logging.ERROR)
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -451,8 +269,8 @@ async def update_model_settings(
 
         # Test the model configuration without setting it globally
         try:
-            resp = lm("Hello, are you working?")
-            logger.log_message(f"Model Response: {resp}", level=logging.INFO)
+            # resp = lm("Hello, are you working?")
+            # logger.log_message(f"Model Response: {resp}", level=logging.INFO)
             # REMOVED: dspy.configure(lm=lm) - no longer set globally
             return {"message": "Model settings updated successfully"}
         except Exception as model_error:
@@ -834,75 +652,3 @@ async def set_message_info(
     except Exception as e:
         logger.log_message(f"Error setting message info: {str(e)}", level=logging.ERROR)
         raise HTTPException(status_code=500, detail=str(e))
-
-@router.get("/api/dataset-uploads")
-async def get_dataset_uploads(
-    user_id: Optional[int] = None,
-    status: Optional[str] = None,
-    db: Session = Depends(get_db),
-    limit: int = 100
-):
-    """Get dataset upload statistics and history"""
-    try:
-        # Base query
-        query = db.query(DatasetUpload)
-        
-        # Apply filters if provided
-        if user_id:
-            query = query.filter(DatasetUpload.user_id == user_id)
-        if status:
-            query = query.filter(DatasetUpload.status == status)
-            
-        # Get results with limit
-        uploads = query.order_by(DatasetUpload.created_at.desc()).limit(limit).all()
-        
-        # Transform to response format with more detailed metrics
-        result = []
-        for upload in uploads:
-            # Basic details
-            upload_data = {
-                "upload_id": upload.upload_id,
-                "user_id": upload.user_id,
-                "filename": upload.filename,
-                "original_filename": upload.original_filename,
-                "file_size": upload.file_size,
-                "file_type": upload.file_type,
-                "status": upload.status,
-                "created_at": upload.created_at.isoformat() if upload.created_at else None,
-                "updated_at": upload.updated_at.isoformat() if upload.updated_at else None,
-                "processing_time_ms": upload.processing_time_ms
-            }
-            
-            # Add dataset characteristics if available
-            if upload.row_count is not None:
-                upload_data["row_count"] = upload.row_count
-            if upload.column_count is not None:
-                upload_data["column_count"] = upload.column_count
-                
-            # Add error information if any
-            if upload.status == "failed":
-                upload_data["error_message"] = upload.error_message
-                upload_data["error_details"] = upload.error_details
-                
-            result.append(upload_data)
-        
-        # Calculate aggregate statistics
-        stats = {
-            "total_uploads": db.query(DatasetUpload).count(),
-            "successful_uploads": db.query(DatasetUpload).filter(DatasetUpload.status == "completed").count(),
-            "failed_uploads": db.query(DatasetUpload).filter(DatasetUpload.status == "failed").count(),
-            "avg_processing_time_ms": db.query(func.avg(DatasetUpload.processing_time_ms)).filter(
-                DatasetUpload.processing_time_ms != None
-            ).scalar() or 0,
-        }
-            
-        return {
-            "uploads": result,
-            "stats": stats
-        }
-    except Exception as e:
-        logger.log_message(f"Error getting dataset uploads: {str(e)}", level=logging.ERROR)
-        raise HTTPException(
-            status_code=500,
-            detail=f"Error fetching dataset uploads: {str(e)}"
-        )

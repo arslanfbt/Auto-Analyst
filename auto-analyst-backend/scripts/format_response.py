@@ -488,50 +488,70 @@ def format_plan_instructions(plan_instructions):
     Format any plan instructions (JSON string or dict) into markdown sections per agent.
     """
     # Parse input into a dict
+
+    if "basic_qa_agent" in str(plan_instructions):
+        return "**Non-Data Request**: Please ask a data related query, don't waste credits!"
+
+
     try:
         if isinstance(plan_instructions, str):
-            instructions = json.loads(plan_instructions)
+            try:
+                instructions = json.loads(plan_instructions)
+            except json.JSONDecodeError as e:
+                # Try to clean the string if it's not valid JSON
+                cleaned_str = plan_instructions.strip()
+                if cleaned_str.startswith("'") and cleaned_str.endswith("'"):
+                    cleaned_str = cleaned_str[1:-1]
+                try:
+                    instructions = json.loads(cleaned_str)
+                except json.JSONDecodeError:
+                    raise ValueError(f"Invalid JSON format in plan instructions: {str(e)}")
         elif isinstance(plan_instructions, dict):
             instructions = plan_instructions
         else:
-            return f"Unsupported plan instructions type: {type(plan_instructions)}"
-    except json.JSONDecodeError:
-        return f"Invalid plan instructions: {plan_instructions}"
+            raise TypeError(f"Unsupported plan instructions type: {type(plan_instructions)}")
+    except Exception as e:
+        raise ValueError(f"Error processing plan instructions: {str(e)}")
     # logger.log_message(f"Plan instructions: {instructions}", level=logging.INFO)
+
+
 
     markdown_lines = []
     for agent, content in instructions.items():
-        agent_title = agent.replace('_', ' ').title()
-        markdown_lines.append(f"#### {agent_title}")
-        if isinstance(content, dict):
-            # Handle 'create' key
-            create_vals = content.get('create', [])
-            if create_vals:
-                markdown_lines.append(f"- **Create**:")
-                for item in create_vals:
-                    markdown_lines.append(f"  - {item}")
+        if agent != 'basic_qa_agent':
+            agent_title = agent.replace('_', ' ').title()
+            markdown_lines.append(f"#### {agent_title}")
+            if isinstance(content, dict):
+                # Handle 'create' key
+                create_vals = content.get('create', [])
+                if create_vals:
+                    markdown_lines.append(f"- **Create**:")
+                    for item in create_vals:
+                        markdown_lines.append(f"  - {item}")
+                else:
+                    markdown_lines.append(f"- **Create**: None")
+    
+                # Handle 'use' key
+                use_vals = content.get('use', [])
+                if use_vals:
+                    markdown_lines.append(f"- **Use**:")
+                    for item in use_vals:
+                        markdown_lines.append(f"  - {item}")
+                else:
+                    markdown_lines.append(f"- **Use**: None")
+    
+                # Handle 'instruction' key
+                instr = content.get('instruction')
+                if isinstance(instr, str) and instr:
+                    markdown_lines.append(f"- **Instruction**: {instr}")
+                else:
+                    markdown_lines.append(f"- **Instruction**: None")
             else:
-                markdown_lines.append(f"- **Create**: None")
-
-            # Handle 'use' key
-            use_vals = content.get('use', [])
-            if use_vals:
-                markdown_lines.append(f"- **Use**:")
-                for item in use_vals:
-                    markdown_lines.append(f"  - {item}")
-            else:
-                markdown_lines.append(f"- **Use**: None")
-
-            # Handle 'instruction' key
-            instr = content.get('instruction')
-            if isinstance(instr, str) and instr:
-                markdown_lines.append(f"- **Instruction**: {instr}")
-            else:
-                markdown_lines.append(f"- **Instruction**: None")
+                # Fallback for non-dict content
+                markdown_lines.append(f"- {content}")
+            markdown_lines.append("")  # blank line between agents
         else:
-            # Fallback for non-dict content
-            markdown_lines.append(f"- {content}")
-        markdown_lines.append("")  # blank line between agents
+            markdown_lines.append(f"**Non-Data Request**: {content.get('instruction')}")
 
     return "\n".join(markdown_lines).strip()
     
@@ -576,6 +596,8 @@ def format_response_to_markdown(api_response, agent_name = None, dataframe=None)
 
             if 'code' in content:
                 markdown.append(f"### Code Implementation\n{format_code_backticked_block(content['code'])}\n")
+            if 'answer' in content:
+                markdown.append(f"### Answer\n{content['answer']}\n Please ask a query about the data")
                 # if agent_name is not None:
                 #     # execute the code
                 #     clean_code = format_code_block(content['code'])
@@ -642,8 +664,13 @@ def format_response_to_markdown(api_response, agent_name = None, dataframe=None)
     # logger.log_message(f"Generated markdown content for agent '{agent_name}' at {time.strftime('%Y-%m-%d %H:%M:%S')}: {markdown}, length: {len(markdown)}", level=logging.INFO)
     
     if not markdown or len(markdown) <= 1:
-        logger.log_message(f"Generated markdown (ERROR) content for agent '{agent_name}' at {time.strftime('%Y-%m-%d %H:%M:%S')}: {markdown}, length: {len(markdown)}, api_response: {api_response}", level=logging.INFO)
-        return "Please provide a valid query..."
+        logger.log_message(
+            f"Invalid markdown content for agent '{agent_name}' at {time.strftime('%Y-%m-%d %H:%M:%S')}: "
+            f"Content: '{markdown}', Type: {type(markdown)}, Length: {len(markdown) if markdown else 0}, "
+            f"API Response: {api_response}",
+            level=logging.ERROR
+        )
+        return " "
         
     return '\n'.join(markdown)
 

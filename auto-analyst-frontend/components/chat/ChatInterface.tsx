@@ -32,7 +32,7 @@ import {
   DialogFooter,
   DialogDescription
 } from "@/components/ui/dialog"
-import { Button } from "../ui/button"
+import { Button } from "../ui/button" 
 import DatasetResetPopup from './DatasetResetPopup'
 import { useModelSettings } from '@/lib/hooks/useModelSettings'
 import logger from '@/lib/utils/logger'
@@ -362,7 +362,7 @@ const ChatInterface: React.FC = () => {
         if (!isPopupShownForChat && !recentlyUploadedDataset && activeChatId !== chatId) {
           // Clear suppression when switching chats
           localStorage.removeItem('suppressDatasetPopup');
-          
+          logger.log("[ChatInterface] Session ID:", sessionId);
           // Check if we need to show dataset selection popup
           const sessionResponse = await axios.get(`${API_URL}/api/session-info`, {
             headers: { 'X-Session-ID': sessionId }
@@ -787,7 +787,7 @@ const ChatInterface: React.FC = () => {
                 ...(sessionId && { 'X-Session-ID': sessionId }),
               },
             });
-            console.log(`Updated backend with message_id: ${aiMessageId} for chat_id: ${currentId}`);
+            console.log(`[Session ID: ${sessionId}] Updated backend with message_id: ${aiMessageId} for chat_id: ${currentId}`);
           } catch (error) {
             console.error("Error setting message ID in backend:", error);
           }
@@ -1156,14 +1156,14 @@ const ChatInterface: React.FC = () => {
       
       const baseUrl = API_URL
      
-      const uploadResponse = await axios.post(`${baseUrl}/upload_dataframe`, formData, {
-        headers: {
-          "Content-Type": "multipart/form-data",
-          ...(sessionId && { 'X-Session-ID': sessionId }),
-        },
-        timeout: 30000,
-        maxContentLength: 30 * 1024 * 1024,
-      });
+      // const uploadResponse = await axios.post(`${baseUrl}/upload_dataframe`, formData, {
+      //   headers: {
+      //     "Content-Type": "multipart/form-data",
+      //     ...(sessionId && { 'X-Session-ID': sessionId }),
+      //   },
+      //   timeout: 30000,
+      //   maxContentLength: 30 * 1024 * 1024,
+      // });
       
       // Update dataset state
       setRecentlyUploadedDataset(true);
