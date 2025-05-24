@@ -376,31 +376,6 @@ async def get_session_id(request, session_manager):
         except (ValueError, TypeError):
             logger.log_message(f"Invalid user_id in query params: {user_id_param}", level=logging.WARNING)
     
-    # Only create a guest user if no authenticated user is found
-    try:
-        # Create a consistent guest username based on the first 8 chars of session_id
-        guest_username = f"guest_{session_id[:8]}"
-        guest_email = f"{guest_username}@example.com"
-        
-        # First check if this guest user already exists
-        existing_user = get_user_by_email(guest_email)
-        
-        if existing_user:
-            # Use existing guest user instead of creating a new one
-            user_id = existing_user.user_id
-            logger.log_message(f"Using existing guest user {user_id} for session {session_id}", level=logging.INFO)
-        else:
-            # Create a new guest user
-            user = create_user(username=guest_username, email=guest_email)
-            user_id = user.user_id
-            logger.log_message(f"Created guest user {user_id} for session {session_id}", level=logging.INFO)
-        
-        # Associate the user with this session
-        session_manager.set_session_user(
-            session_id=session_id,
-            user_id=user_id
-        )
-    except Exception as e:
-        logger.log_message(f"Error auto-creating user for session {session_id}: {str(e)}", level=logging.ERROR)
-    
+    # No user was found or created - just return the session ID without associating a user
+    logger.log_message(f"No authenticated user found for session {session_id}, continuing without user association", level=logging.INFO)
     return session_id
