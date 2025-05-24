@@ -31,7 +31,9 @@ export const MODEL_COSTS = {
     "claude-3-opus-latest": { input: 0.015, output: 0.075 },  
     "claude-3-7-sonnet-latest": { input: 0.003, output: 0.015 },   
     "claude-3-5-sonnet-latest": { input: 0.003, output: 0.015 }, 
-    "claude-3-5-haiku-latest": { input: 0.0008, output: 0.0004 }
+    "claude-3-5-haiku-latest": { input: 0.0008, output: 0.0004 },
+    "claude-sonnet-4-20250514": { input: 0.003, output: 0.015 },
+    "claude-opus-4-20250514": { input: 0.015, output: 0.075 }
   },
   groq: {
     "deepseek-r1-distill-llama-70b": {"input": 0.00075, "output": 0.00099},
@@ -96,6 +98,7 @@ export const MODEL_TIERS = {
       "claude-3-7-sonnet-latest",
       "claude-3-5-sonnet-latest",
       "claude-3-5-haiku-latest",
+      "claude-sonnet-4-20250514",
       "deepseek-r1-distill-llama-70b",
       "llama-3.3-70b-versatile",
       "llama3-70b-8192",
@@ -110,6 +113,11 @@ export const MODEL_TIERS = {
       "llama3-groq-70b-8192-tool-use-preview",
       "gemini-2.5-pro-preview-03-25"
     ]
+  },
+  tier4: {
+    name: "Enterprise",
+    credits: 10,
+    models: ["claude-opus-4-20250514"]
   }
 };
 
@@ -141,7 +149,8 @@ export const MODEL_METADATA: Record<string, { displayName: string; contextWindow
   "claude-3-7-sonnet-latest": { displayName: "Claude 3.7 Sonnet", contextWindow: 200000 },
   "claude-3-5-sonnet-latest": { displayName: "Claude 3.5 Sonnet", contextWindow: 200000 },
   "claude-3-5-haiku-latest": { displayName: "Claude 3.5 Haiku", contextWindow: 200000 },
-  
+  "claude-sonnet-4-20250514": { displayName: "Claude Sonnet 4", contextWindow: 200000 },
+  "claude-opus-4-20250514": { displayName: "Claude Opus 4", contextWindow: 200000 },
   // GROQ
   "deepseek-r1-distill-llama-70b": { displayName: "DeepSeek R1 Distill Llama 70b", contextWindow: 32768 },
   "deepseek-r1-distill-qwen-32b": { displayName: "DeepSeek R1 Distill Qwen 32b", contextWindow: 32768 },

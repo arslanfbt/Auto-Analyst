@@ -616,7 +616,7 @@ async def get_daily_costs(
             "cost": float(day.cost or 0),
             "tokens": int(day.tokens or 0)
         }
-        for day in daily_costs
+        for day in daily_query
     ]
     
     # Fill in any missing dates with zeros

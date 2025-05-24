@@ -50,8 +50,7 @@ jobs:
           cp .huggingface.yaml hf-space/
           
           # Use rsync to copy all files except those in .gitignore
-          rsync -av --exclude-from=.gitignore --exclude="hf-space" --exclude=".git" ./ hf-space/
-          
+          rsync -av --exclude="*.png" --exclude-from=.gitignore --exclude="hf-space" --exclude=".git" ./ hf-space/
           # Push changes
           cd hf-space
           git add .
