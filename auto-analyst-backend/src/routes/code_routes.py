@@ -419,6 +419,7 @@ async def execute_code(
     # Access app state via request
     app_state = request.app.state
     session_state = app_state.get_session_state(session_id)
+    # logger.log_message(f"Session State: {session_state}", level=logging.INFO)
     
     if session_state["current_df"] is None:
         raise HTTPException(
@@ -439,11 +440,9 @@ async def execute_code(
         # If message_id was not provided in the request, try to get it from the session state
         if message_id is None:
             message_id = session_state.get("current_message_id")
-            logger.log_message(f"Using message_id from session state: {message_id}", level=logging.INFO)
         else:
             # Update the session state with the provided message_id
             session_state["current_message_id"] = message_id
-            logger.log_message(f"Using message_id from request body: {message_id}", level=logging.INFO)
         
         # Get model configuration
         model_config = session_state.get("model_config", {})
@@ -463,10 +462,6 @@ async def execute_code(
                     CodeExecution.message_id == message_id
                 ).first()
                 
-                if existing_execution:
-                    logger.log_message(f"Found existing code execution record for message_id: {message_id}", level=logging.INFO)
-                else:
-                    logger.log_message(f"No existing code execution record found for message_id: {message_id}", level=logging.INFO)
             except Exception as query_error:
                 logger.log_message(f"Error querying for existing execution: {str(query_error)}", level=logging.ERROR)
                 # Continue without existing execution
@@ -526,7 +521,6 @@ async def execute_code(
                     existing_execution.error_messages = error_messages
                     
                 db.commit()
-                logger.log_message(f"Updated existing code execution record for message_id: {message_id}", level=logging.INFO)
             else:
                 # Create new record
                 new_execution = CodeExecution(
@@ -546,7 +540,6 @@ async def execute_code(
                 )
                 db.add(new_execution)
                 db.commit()
-                logger.log_message(f"Created new code execution record for message_id: {message_id}, chat_id: {chat_id}", level=logging.INFO)
         except Exception as db_error:
             db.rollback()
             logger.log_message(f"Error saving code execution: {str(db_error)}", level=logging.ERROR)
@@ -596,9 +589,6 @@ async def edit_code(
         
         # Get dataset context
         dataset_context = get_dataset_context(session_state["current_df"])
-        logger.log_message(f"Dataset context: {dataset_context}", level=logging.INFO)
-        logger.log_message(f"Original code: {request_data.original_code}", level=logging.INFO)
-        logger.log_message(f"User prompt: {request_data.user_prompt}", level=logging.INFO)
         try:
             # Use the configured language model with dataset context
             edited_code = edit_code_with_dspy(
@@ -606,9 +596,7 @@ async def edit_code(
                 request_data.user_prompt,
                 dataset_context
             )
-            logger.log_message(f"Edited code: {edited_code}", level=logging.INFO)
             edited_code = format_code_block(edited_code)
-            logger.log_message(f"Formatted edited code: {edited_code}", level=logging.INFO)
             return {
                 "edited_code": edited_code,
             }
@@ -736,8 +724,6 @@ async def get_latest_code(
         if not message_id:
             raise HTTPException(status_code=400, detail="Message ID is required")
             
-        logger.log_message(f"Retrieving latest code for message_id: {message_id}", level=logging.INFO)
-        
         # Get database session
         db = get_session()
         
@@ -747,9 +733,9 @@ async def get_latest_code(
                 CodeExecution.message_id == message_id
             ).first()
             
+            logger.log_message(f"Execution record: {execution_record.is_successful} for {message_id}", level=logging.INFO)
+            
             if execution_record:
-                logger.log_message(f"Found execution record for message_id: {message_id}", level=logging.INFO)
-                
                 # Return the latest code and execution status
                 return {
                     "found": True,
