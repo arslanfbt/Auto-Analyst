@@ -32,7 +32,7 @@ import {
   DialogFooter,
   DialogDescription
 } from "@/components/ui/dialog"
-import { Button } from "../ui/button"
+import { Button } from "../ui/button" 
 import DatasetResetPopup from './DatasetResetPopup'
 import { useModelSettings } from '@/lib/hooks/useModelSettings'
 import logger from '@/lib/utils/logger'
@@ -362,7 +362,7 @@ const ChatInterface: React.FC = () => {
         if (!isPopupShownForChat && !recentlyUploadedDataset && activeChatId !== chatId) {
           // Clear suppression when switching chats
           localStorage.removeItem('suppressDatasetPopup');
-          
+          logger.log("[ChatInterface] Session ID:", sessionId);
           // Check if we need to show dataset selection popup
           const sessionResponse = await axios.get(`${API_URL}/api/session-info`, {
             headers: { 'X-Session-ID': sessionId }
@@ -576,7 +576,7 @@ const ChatInterface: React.FC = () => {
       throw new Error('No response body')
     }
 
-    // Add initial AI message that we'll update
+    // Add initial AI message that we'll update | this shows an empty blob in the UI
     const messageId = addMessage({
       text: "",
       sender: "ai"
@@ -717,84 +717,100 @@ const ChatInterface: React.FC = () => {
     
     const fullEndpoint = `${endpoint}${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
 
-    // Streaming response handling (potentially with SSE)
-    const response = await fetch(fullEndpoint, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({ query: message }),
-      signal: controller.signal,
-    })
+    try {
+      // Add initial AI message that we'll update
+      const messageId = addMessage({
+        text: "",
+        sender: "ai",
+        agent: agentName
+      })
 
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`)
-    }
+      // Streaming response handling
+      const response = await fetch(fullEndpoint, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ query: message }),
+        signal: controller.signal,
+      })
 
-    const data = await response.json()
-    let responseContent = data.response || data.content || JSON.stringify(data)
-    
-    // Process code blocks to add agent information
-    const codeBlockRegex = /```([a-zA-Z0-9_]+)?\n([\s\S]*?)```/g;
-    if (responseContent.match(codeBlockRegex)) {
-      // Content contains code blocks, add agent information as a comment before each block
-      responseContent = responseContent.replace(codeBlockRegex, (match: string, language: string, code: string) => {
-        // Add agent information as a markdown comment above each code block
-        return `\n<!-- AGENT: ${agentName} -->\n${match}`;
-      });
-    }
-    
-    accumulatedResponse = responseContent;
-    
-    // Add the message with the processed content
-    const messageId = addMessage({
-      text: accumulatedResponse,
-      sender: "ai",
-      agent: agentName
-    })
-
-    // Save the final agent response to the database for signed-in or admin users
-    let aiMessageId: number | undefined = undefined;
-    if (currentId && (session || isAdmin)) {
-      try {
-        // logger.log("Saving agent response for chat ID:", currentId);
-        const saveResponse = await axios.post(`${API_URL}/chats/${currentId}/messages`, {
-          content: accumulatedResponse.trim(),
-          sender: 'ai',
-          agent: agentName
-        }, {
-          params: { user_id: userId, is_admin: isAdmin },
-          headers: { 'X-Session-ID': sessionId }
-        });
-
-        // Capture the message_id from the response
-        if (saveResponse.data && saveResponse.data.message_id) {
-          aiMessageId = saveResponse.data.message_id;
-          
-          // Update the message in the UI with the message_id
-          updateMessage(messageId, {
-            text: accumulatedResponse.trim(),
-            sender: "ai",
-            agent: agentName,
-            message_id: aiMessageId
-          });
-          
-          // Update the backend's current message ID
-          try {
-            await axios.post(`${API_URL}/set-message-info`, {
-              message_id: aiMessageId,
-              chat_id: currentId
-            }, {
-              headers: {
-                ...(sessionId && { 'X-Session-ID': sessionId }),
-              },
-            });
-            console.log(`Updated backend with message_id: ${aiMessageId} for chat_id: ${currentId}`);
-          } catch (error) {
-            console.error("Error setting message ID in backend:", error);
-          }
-        }
-      } catch (error) {
-        console.error('Failed to save agent response:', error);
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
       }
+
+      const data = await response.json()
+      let responseContent = data.response || data.content || JSON.stringify(data)
+      
+      // Process code blocks to add agent information
+      const codeBlockRegex = /```([a-zA-Z0-9_]+)?\n([\s\S]*?)```/g;
+      if (responseContent.match(codeBlockRegex)) {
+        // Content contains code blocks, add agent information as a comment before each block
+        responseContent = responseContent.replace(codeBlockRegex, (match: string, language: string, code: string) => {
+          // Add agent information as a markdown comment above each code block
+          return `\n<!-- AGENT: ${agentName} -->\n${match}`;
+        });
+      }
+      
+      accumulatedResponse = responseContent;
+      
+      // Update the message with the processed content
+      updateMessage(messageId, {
+        text: accumulatedResponse,
+        sender: "ai",
+        agent: agentName
+      })
+
+      // Save the final agent response to the database for signed-in or admin users
+      let aiMessageId: number | undefined = undefined;
+      if (currentId && (session || isAdmin)) {
+        try {
+          // logger.log("Saving agent response for chat ID:", currentId);
+          const saveResponse = await axios.post(`${API_URL}/chats/${currentId}/messages`, {
+            content: accumulatedResponse.trim(),
+            sender: 'ai',
+            agent: agentName
+          }, {
+            params: { user_id: userId, is_admin: isAdmin },
+            headers: { 'X-Session-ID': sessionId }
+          });
+
+          // Capture the message_id from the response
+          if (saveResponse.data && saveResponse.data.message_id) {
+            aiMessageId = saveResponse.data.message_id;
+            
+            // Update the message in the UI with the message_id
+            updateMessage(messageId, {
+              text: accumulatedResponse.trim(),
+              sender: "ai",
+              agent: agentName,
+              message_id: aiMessageId
+            });
+            
+            // Update the backend's current message ID
+            try {
+              await axios.post(`${API_URL}/set-message-info`, {
+                message_id: aiMessageId,
+                chat_id: currentId
+              }, {
+                headers: {
+                  ...(sessionId && { 'X-Session-ID': sessionId }),
+                },
+              });
+              console.log(`[Session ID: ${sessionId}] Updated backend with message_id: ${aiMessageId} for chat_id: ${currentId}`);
+            } catch (error) {
+              console.error("Error setting message ID in backend:", error);
+            }
+          }
+        } catch (error) {
+          console.error('Failed to save agent response:', error);
+        }
+      }
+    } catch (error) {
+      console.error(`Error processing agent message (${agentName}):`, error);
+      // Add error message
+      addMessage({
+        text: `Error with ${agentName} agent: ${error instanceof Error ? error.message : String(error)}`,
+        sender: "ai"
+      });
     }
   }
 
@@ -970,13 +986,7 @@ const ChatInterface: React.FC = () => {
           // Single agent case - use the original logic
           const agentName = agentNames[0]
           
-          // Add a system message indicating which agent is being called
-          addMessage({
-            text: "",
-            sender: "ai",
-            agent: agentName
-          })
-          
+          // Remove the empty agent indicator message
           // Extract the query text by removing the @mentions
           const cleanQuery = message.replace(agentRegex, '').trim()
           await processAgentMessage(agentName, cleanQuery, controller, currentChatId)
@@ -984,13 +994,7 @@ const ChatInterface: React.FC = () => {
           // Multiple agents case - send a single request with comma-separated agent names
           const combinedAgentName = agentNames.join(",")
           
-          // Add a system message indicating which agents are being called
-          addMessage({
-            text: "",
-            sender: "ai",
-            agent: `Using agents: ${agentNames.join(", ")}`
-          })
-          
+          // Remove the empty agent indicator message
           // Extract the query text by removing the @mentions
           const cleanQuery = message.replace(agentRegex, '').trim()
           await processAgentMessage(combinedAgentName, cleanQuery, controller, currentChatId)
@@ -1156,14 +1160,14 @@ const ChatInterface: React.FC = () => {
       
       const baseUrl = API_URL
      
-      const uploadResponse = await axios.post(`${baseUrl}/upload_dataframe`, formData, {
-        headers: {
-          "Content-Type": "multipart/form-data",
-          ...(sessionId && { 'X-Session-ID': sessionId }),
-        },
-        timeout: 30000,
-        maxContentLength: 30 * 1024 * 1024,
-      });
+      // const uploadResponse = await axios.post(`${baseUrl}/upload_dataframe`, formData, {
+      //   headers: {
+      //     "Content-Type": "multipart/form-data",
+      //     ...(sessionId && { 'X-Session-ID': sessionId }),
+      //   },
+      //   timeout: 30000,
+      //   maxContentLength: 30 * 1024 * 1024,
+      // });
       
       // Update dataset state
       setRecentlyUploadedDataset(true);

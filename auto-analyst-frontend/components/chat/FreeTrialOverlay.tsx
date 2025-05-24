@@ -25,7 +25,7 @@ export default function FreeTrialOverlay() {
     >
       <div className="bg-white p-8 rounded-lg shadow-xl max-w-md w-full mx-4">
         <h2 className="text-2xl font-bold text-gray-900 mb-4">
-          Ready to unlock full access?
+          Ready to get started?
         </h2>
         <p className="text-gray-600 mb-6">
           Sign up now to get your free trial and start analyzing your data with our AI-powered platform.

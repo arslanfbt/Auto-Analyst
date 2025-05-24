@@ -855,7 +855,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
                       } else if (plotlyPart.trim()) {
                         return <MessageContent 
                           key={`${index}-${partIndex}-${plotlyIndex}`} 
-                          message={plotlyPart}
+                          message={plotlyPart} 
                           fullMessage={typeof message.text === 'string' ? message.text : ''}
                           onCodeExecute={handleCodeExecute}
                           codeFixes={codeFixes}
@@ -874,7 +874,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
                   // Regular text part
                   return <MessageContent 
                     key={`${index}-${partIndex}`} 
-                    message={part}
+                    message={part} 
                     fullMessage={typeof message.text === 'string' ? message.text : ''}
                     onCodeExecute={handleCodeExecute}
                     codeFixes={codeFixes}
@@ -921,7 +921,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
             ) : (
               // Fallback for non-array content
               <MessageContent 
-                message={typeof messageContent === 'string' ? messageContent : JSON.stringify(messageContent)}
+                message={typeof messageContent === 'string' ? messageContent : JSON.stringify(messageContent)} 
                 fullMessage={typeof message.text === 'string' ? message.text : JSON.stringify(message.text)}
                 onCodeExecute={handleCodeExecute}
                 codeFixes={codeFixes}

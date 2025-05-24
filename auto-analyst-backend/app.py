@@ -9,8 +9,6 @@ from io import StringIO
 from typing import List, Optional
 
 # Third-party imports
-import groq
-import pandas as pd
 import uvicorn
 from dotenv import load_dotenv
 from fastapi import (

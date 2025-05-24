@@ -53,7 +53,6 @@ const pricingTiers = [
       'Advanced data analysis',
       'Access to all models',
       'Priority support',
-      'API access',
     ],
     highlight: true,
   },

@@ -143,7 +143,6 @@ export function useModelSettings() {
         temperature: localSettings.temperature || 0.7,
         max_tokens: localSettings.maxTokens || 6000
       }
-      
       const response = await axios.post(`${API_URL}/settings/model`, completeSettings, {
         headers: {
           'Content-Type': 'application/json',
