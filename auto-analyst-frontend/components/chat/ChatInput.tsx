@@ -46,6 +46,7 @@ interface FileUpload {
   isExcel?: boolean
   sheets?: string[]
   selectedSheet?: string
+  dataset_upload_id?: number
 }
 
 interface AgentSuggestion {
@@ -72,6 +73,104 @@ interface ChatInputProps {
   isLoading?: boolean
   onStopGeneration?: () => void
 }
+
+// Add these interface definitions after the other interfaces
+interface DatasetUploadStats {
+  upload_id: number;
+  status: string;
+  file_size: number;
+  row_count?: number;
+  column_count?: number;
+  processing_time_ms?: number;
+  error_message?: string;
+  error_details?: any;
+}
+
+// Add this component above the ChatInput component
+
+// Component to display dataset upload details
+const DatasetUploadInfo = ({ uploadId }: { uploadId: number }) => {
+  const [uploadStats, setUploadStats] = useState<DatasetUploadStats | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  
+  useEffect(() => {
+    const fetchUploadStats = async () => {
+      try {
+        setIsLoading(true);
+        const response = await axios.get(`${PREVIEW_API_URL}/api/dataset-uploads?limit=1`);
+        
+        // Find the specific upload
+        const upload = response.data.uploads.find((u: any) => u.upload_id === uploadId);
+        if (upload) {
+          setUploadStats(upload);
+        } else {
+          setError(`Upload with ID ${uploadId} not found`);
+        }
+      } catch (error) {
+        console.error('Failed to fetch upload stats:', error);
+        setError('Failed to load upload statistics');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    
+    if (uploadId) {
+      fetchUploadStats();
+    }
+  }, [uploadId]);
+  
+  if (isLoading) {
+    return (
+      <div className="text-xs text-gray-500 flex items-center gap-1 mt-1">
+        <Loader2 className="w-3 h-3 animate-spin" />
+        Loading upload details...
+      </div>
+    );
+  }
+  
+  if (error) {
+    return <div className="text-xs text-red-500 mt-1">{error}</div>;
+  }
+  
+  if (!uploadStats) {
+    return null;
+  }
+  
+  return (
+    <div className="text-xs mt-1">
+      {uploadStats.status === 'completed' ? (
+        <div className="text-green-600 flex items-center gap-1">
+          <CheckCircle2 className="w-3 h-3" />
+          <span>
+            {uploadStats.row_count?.toLocaleString()} rows × {uploadStats.column_count} columns • 
+            {' '}{Math.round(uploadStats.file_size / 1024)} KB •
+            {' '}{uploadStats.processing_time_ms ? `${uploadStats.processing_time_ms}ms` : ''}
+          </span>
+        </div>
+      ) : uploadStats.status === 'failed' ? (
+        <div className="text-red-600">
+          <div className="flex items-center gap-1">
+            <XCircle className="w-3 h-3" />
+            <span>Upload failed: {uploadStats.error_message}</span>
+          </div>
+          {uploadStats.error_details && (
+            <div className="text-xs text-red-500 mt-0.5 pl-4">
+              {typeof uploadStats.error_details === 'object' ? 
+                JSON.stringify(uploadStats.error_details) : 
+                uploadStats.error_details}
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="text-blue-500 flex items-center gap-1">
+          <Loader2 className="w-3 h-3 animate-spin" />
+          <span>Processing upload...</span>
+        </div>
+      )}
+    </div>
+  );
+};
 
 const ChatInput = forwardRef<
   { handlePreviewDefaultDataset: () => void, handleSilentDefaultDataset: () => void },
@@ -600,6 +699,14 @@ const ChatInput = forwardRef<
           
           logger.log('Upload response:', uploadResponse.data);
           const previewSessionId = uploadResponse.data.session_id || sessionId;
+          
+          // Capture the dataset upload ID if available
+          const datasetUploadId = uploadResponse.data.dataset_upload_id;
+          
+          // Update FileUpload state with the dataset upload ID
+          if (datasetUploadId) {
+            setFileUpload(prev => prev ? { ...prev, dataset_upload_id: datasetUploadId } : null);
+          }
           
           // Then request a preview using the session ID
           const previewResponse = await axios.post(`${PREVIEW_API_URL}/api/preview-csv`, null, {
@@ -1490,6 +1597,25 @@ const ChatInput = forwardRef<
         logger.log('Excel upload response:', uploadResponse.data);
         const previewSessionId = uploadResponse.data.session_id || sessionId;
         
+        // Capture the dataset upload ID if available
+        const datasetUploadId = uploadResponse.data.dataset_upload_id;
+        
+        // Update FileUpload state with the dataset upload ID
+        if (datasetUploadId) {
+          setFileUpload(prev => prev ? { 
+            ...prev, 
+            selectedSheet: sheetName,
+            dataset_upload_id: datasetUploadId,
+            status: 'success'
+          } : null);
+        } else {
+          setFileUpload(prev => prev ? { 
+            ...prev, 
+            selectedSheet: sheetName,
+            status: 'success'
+          } : null);
+        }
+        
         // Update file upload state with the selected sheet
         setFileUpload(prev => prev ? { 
           ...prev, 
@@ -1711,21 +1837,26 @@ const ChatInput = forwardRef<
                     }`}
                   >
                     {getStatusIcon(fileUpload.status)}
-                    <div className="flex items-center max-w-[200px] hover:max-w-xs transition-all duration-300">
-                      <span className="text-blue-700 font-medium truncate">
-                        {fileUpload.file.name}
-                      </span>
-                      {fileUpload.isExcel && fileUpload.selectedSheet && (
-                        <span className="ml-1 text-blue-500 font-normal whitespace-nowrap">
-                          {fileUpload.selectedSheet}
+                    <div className="flex flex-col">
+                      <div className="flex items-center max-w-[200px] hover:max-w-xs transition-all duration-300">
+                        <span className="text-blue-700 font-medium truncate">
+                          {fileUpload.file.name}
+                        </span>
+                        {fileUpload.isExcel && fileUpload.selectedSheet && (
+                          <span className="ml-1 text-blue-500 font-normal whitespace-nowrap">
+                            {fileUpload.selectedSheet}
+                          </span>
+                        )}
+                      </div>
+                      {fileUpload.status === 'error' && fileUpload.errorMessage && (
+                        <span className="text-red-600">
+                          • {fileUpload.errorMessage}
                         </span>
                       )}
+                      {fileUpload.dataset_upload_id && fileUpload.status === 'success' && (
+                        <DatasetUploadInfo uploadId={fileUpload.dataset_upload_id} />
+                      )}
                     </div>
-                    {fileUpload.status === 'error' && fileUpload.errorMessage && (
-                      <span className="text-red-600">
-                        • {fileUpload.errorMessage}
-                      </span>
-                    )}
                     {fileUpload.status === 'success' && (
                       <div className="flex items-center gap-1 ml-auto">
                         {fileUpload.isExcel && fileUpload.sheets && fileUpload.sheets.length > 0 && (
