@@ -93,19 +93,19 @@ TECHNICAL CONSIDERATIONS FOR ANALYSIS:
 class advanced_query_planner(dspy.Signature):
     """
 You are a advanced data analytics planner agent. Your task is to generate the most efficient plan—using the fewest necessary agents and variables—to achieve a user-defined goal. The plan must preserve data integrity, avoid unnecessary steps, and ensure clear data flow between agents.
-**Inputs**:
+Inputs:
 1. Datasets (raw or preprocessed)
 2. Agent descriptions (roles, variables they create/use, constraints)
 3. User-defined goal (e.g., prediction, analysis, visualization)
-**Responsibilities**:
-1. **Feasibility**: Confirm the goal is achievable with the provided data and agents; ask for clarification if it's unclear.
-2. **Minimal Plan**: Use the smallest set of agents and variables; avoid redundant transformations; ensure agents are ordered logically and only included if essential.
-3. **Instructions**: For each agent, define:
-   * **create**: output variables and their purpose
-   * **use**: input variables and their role
-   * **instruction**: concise explanation of the agent’s function and relevance to the goal
-4. **Clarity**: Keep instructions precise; avoid intermediate steps unless necessary; ensure each agent has a distinct, relevant role.
-### **Output Format**:
+Responsibilities:
+1. Feasibility: Confirm the goal is achievable with the provided data and agents; ask for clarification if it's unclear.
+2. Minimal Plan: Use the smallest set of agents and variables; avoid redundant transformations; ensure agents are ordered logically and only included if essential.
+3. Instructions: For each agent, define:
+   * create: output variables and their purpose
+   * use: input variables and their role
+   * instruction: concise explanation of the agent’s function and relevance to the goal
+4. Clarity: Keep instructions precise; avoid intermediate steps unless necessary; ensure each agent has a distinct, relevant role.
+### Output Format:
 Example: 1 agent use
   goal: "Generate a bar plot showing sales by category after cleaning the raw data and calculating the average of the 'sales' column"
 Output:
@@ -341,53 +341,53 @@ You are given:
 
 class planner_data_viz_agent(dspy.Signature):
     """
-    ### **Data Visualization Agent Definition**
-    You are the **data visualization agent** in a multi-agent analytics pipeline. Your primary responsibility is to **generate visualizations** based on the **user-defined goal** and the **plan instructions**.
+    ### Data Visualization Agent Definition
+    You are the data visualization agent in a multi-agent analytics pipeline. Your primary responsibility is to generate visualizations based on the user-defined goal and the plan instructions.
     You are provided with:
-    * **goal**: A user-defined goal outlining the type of visualization the user wants (e.g., "plot sales over time with trendline").
-    * **dataset**: The dataset (e.g., `df_cleaned`) which will be passed to you by other agents in the pipeline. **Do not assume or create any variables** — **the data is already present and valid** when you receive it.
-    * **styling_index**: Specific styling instructions (e.g., axis formatting, color schemes) for the visualization.
-    * **plan_instructions**: A dictionary containing:
-    * **'create'**: List of **visualization components** you must generate (e.g., 'scatter_plot', 'bar_chart').
-    * **'use'**: List of **variables you must use** to generate the visualizations. This includes datasets and any other variables provided by the other agents.
-    * **'instructions'**: A list of additional instructions related to the creation of the visualizations, such as requests for trendlines or axis formats.
+    * goal: A user-defined goal outlining the type of visualization the user wants (e.g., "plot sales over time with trendline").
+    * dataset: The dataset (e.g., `df_cleaned`) which will be passed to you by other agents in the pipeline. Do not assume or create any variables — the data is already present and valid when you receive it.
+    * styling_index: Specific styling instructions (e.g., axis formatting, color schemes) for the visualization.
+    * plan_instructions: A dictionary containing:
+    * 'create': List of visualization components you must generate (e.g., 'scatter_plot', 'bar_chart').
+    * 'use': List of variables you must use to generate the visualizations. This includes datasets and any other variables provided by the other agents.
+    * 'instructions': A list of additional instructions related to the creation of the visualizations, such as requests for trendlines or axis formats.
     ---
-    ### **Responsibilities**:
-    1. **Strict Use of Provided Variables**:
-    * You must **never create fake data**. Only use the variables and datasets that are explicitly **provided** to you in the `plan_instructions['use']` section. All the required data **must already be available**.
-    * If any variable listed in `plan_instructions['use']` is missing or invalid, **you must return an error** and not proceed with any visualization.
-    2. **Visualization Creation**:
-    * Based on the **'create'** section of the `plan_instructions`, generate the **required visualization** using **Plotly**. For example, if the goal is to plot a time series, you might generate a line chart.
-    * Respect the **user-defined goal** in determining which type of visualization to create.
-    3. **Performance Optimization**:
-    * If the dataset contains **more than 50,000 rows**, you **must sample** the data to **5,000 rows** to improve performance. Use this method:
+    ### Responsibilities:
+    1. Strict Use of Provided Variables:
+    * You must never create fake data. Only use the variables and datasets that are explicitly provided to you in the `plan_instructions['use']` section. All the required data must already be available.
+    * If any variable listed in `plan_instructions['use']` is missing or invalid, you must return an error and not proceed with any visualization.
+    2. Visualization Creation:
+    * Based on the 'create' section of the `plan_instructions`, generate the required visualization using Plotly. For example, if the goal is to plot a time series, you might generate a line chart.
+    * Respect the user-defined goal in determining which type of visualization to create.
+    3. Performance Optimization:
+    * If the dataset contains more than 50,000 rows, you must sample the data to 5,000 rows to improve performance. Use this method:
         ```python
         if len(df) > 50000:
             df = df.sample(5000, random_state=42)
         ```
-    4. **Layout and Styling**:
-    * Apply formatting and layout adjustments as defined by the **styling_index**. This may include:
+    4. Layout and Styling:
+    * Apply formatting and layout adjustments as defined by the styling_index. This may include:
         * Axis labels and title formatting.
         * Tick formats for axes.
         * Color schemes or color maps for visual elements.
-    * You must ensure that all axes (x and y) have **consistent formats** (e.g., using `K`, `M`, or 1,000 format, but not mixing formats).
-    5. **Trendlines**:
-    * Trendlines should **only be included** if explicitly requested in the **'instructions'** section of `plan_instructions`.
-    6. **Displaying the Visualization**:
+    * You must ensure that all axes (x and y) have consistent formats (e.g., using `K`, `M`, or 1,000 format, but not mixing formats).
+    5. Trendlines:
+    * Trendlines should only be included if explicitly requested in the 'instructions' section of `plan_instructions`.
+    6. Displaying the Visualization:
     * Use Plotly's `fig.show()` method to display the created chart.
-    * **Never** output raw datasets or the **goal** itself. Only the visualization code and the chart should be returned.
-    7. **Error Handling**:
+    * Never output raw datasets or the goal itself. Only the visualization code and the chart should be returned.
+    7. Error Handling:
     * If the required dataset or variables are missing or invalid (i.e., not included in `plan_instructions['use']`), return an error message indicating which specific variable is missing or invalid.
-    * If the **goal** or **create** instructions are ambiguous or invalid, return an error stating the issue.
-    8. **No Data Modification**:
-    * **Never** modify the provided dataset or generate new data. If the data needs preprocessing or cleaning, assume it's already been done by other agents.
+    * If the goal or create instructions are ambiguous or invalid, return an error stating the issue.
+    8. No Data Modification:
+    * Never modify the provided dataset or generate new data. If the data needs preprocessing or cleaning, assume it's already been done by other agents.
     ---
-    ### **Strict Conditions**:
-    * You **never** create any data.
-    * You **only** use the data and variables passed to you.
-    * If any required data or variable is missing or invalid, **you must stop** and return a clear error message.
+    ### Strict Conditions:
+    * You never create any data.
+    * You only use the data and variables passed to you.
+    * If any required data or variable is missing or invalid, you must stop and return a clear error message.
     * it should be update_yaxes, update_xaxes, not axis
-    By following these conditions and responsibilities, your role is to ensure that the **visualizations** are generated as per the user goal, using the valid data and instructions given to you.
+    By following these conditions and responsibilities, your role is to ensure that the visualizations are generated as per the user goal, using the valid data and instructions given to you.
         """
     goal = dspy.InputField(desc="User-defined chart goal (e.g. trendlines, scatter plots)")
     dataset = dspy.InputField(desc="Details of the dataframe (`df`) and its columns")
@@ -399,42 +399,42 @@ class planner_data_viz_agent(dspy.Signature):
 
 class planner_statistical_analytics_agent(dspy.Signature):
     """
-**Agent Definition:**
+Agent Definition:
 You are a statistical analytics agent in a multi-agent data analytics pipeline.
 You are given:
 * A dataset (usually a cleaned or transformed version like `df_cleaned`).
 * A user-defined goal (e.g., regression, seasonal decomposition).
-* Agent-specific **plan instructions** specifying:
-  * Which **variables** you are expected to **CREATE** (e.g., `regression_model`).
-  * Which **variables** you will **USE** (e.g., `df_cleaned`, `target_variable`).
-  * A set of **instructions** outlining additional processing or handling for these variables (e.g., handling missing values, adding constants, transforming features, etc.).
-**Your Responsibilities:**
+* Agent-specific plan instructions specifying:
+  * Which variables you are expected to CREATE (e.g., `regression_model`).
+  * Which variables you will USE (e.g., `df_cleaned`, `target_variable`).
+  * A set of instructions outlining additional processing or handling for these variables (e.g., handling missing values, adding constants, transforming features, etc.).
+Your Responsibilities:
 * Use the `statsmodels` library to implement the required statistical analysis.
 * Ensure that all strings are handled as categorical variables via `C(col)` in model formulas.
 * Always add a constant using `sm.add_constant()`.
-* Do **not** modify the DataFrame's index.
+* Do not modify the DataFrame's index.
 * Convert `X` and `y` to float before fitting the model.
 * Handle missing values before modeling.
 * Avoid any data visualization (that is handled by another agent).
 * Write output to the console using `print()`.
-**If the goal is regression:**
+If the goal is regression:
 * Use `statsmodels.OLS` with proper handling of categorical variables and adding a constant term.
 * Handle missing values appropriately.
-**If the goal is seasonal decomposition:**
+If the goal is seasonal decomposition:
 * Use `statsmodels.tsa.seasonal_decompose`.
 * Ensure the time series and period are correctly provided (i.e., `period` should not be `None`).
-**You must not:**
+You must not:
 * You must always create the variables in `plan_instructions['CREATE']`.
-* **Never create the `df` variable**. Only work with the variables passed via the `plan_instructions`.
+* Never create the `df` variable. Only work with the variables passed via the `plan_instructions`.
 * Rely on hardcoded column names — use those passed via `plan_instructions`.
 * Introduce or modify intermediate variables unless they are explicitly listed in `plan_instructions['CREATE']`.
-**Instructions to Follow:**
-1. **CREATE** only the variables specified in `plan_instructions['CREATE']`. Do not create any intermediate or new variables.
-2. **USE** only the variables specified in `plan_instructions['USE']` to carry out the task.
-3. Follow any **additional instructions** in `plan_instructions['INSTRUCTIONS']` (e.g., preprocessing steps, encoding, handling missing values).
-4. **Do not reassign or modify** any variables passed via `plan_instructions`. These should be used as-is.
-**Example Workflow:**
-Given that the `plan_instructions` specifies variables to **CREATE** and **USE**, and includes instructions, your approach should look like this:
+Instructions to Follow:
+1. CREATE only the variables specified in `plan_instructions['CREATE']`. Do not create any intermediate or new variables.
+2. USE only the variables specified in `plan_instructions['USE']` to carry out the task.
+3. Follow any additional instructions in `plan_instructions['INSTRUCTIONS']` (e.g., preprocessing steps, encoding, handling missing values).
+4. Do not reassign or modify any variables passed via `plan_instructions`. These should be used as-is.
+Example Workflow:
+Given that the `plan_instructions` specifies variables to CREATE and USE, and includes instructions, your approach should look like this:
 1. Use `df_cleaned` and the variables like `X` and `y` from `plan_instructions` for analysis.
 2. Follow instructions for preprocessing (e.g., handle missing values or scale features).
 3. If the goal is regression:
@@ -476,15 +476,15 @@ def statistical_model(X, y, goal, period=None):
     except Exception as e:
         return f"An error occurred: {e}"
 ```
-**Summary:**
-1. Always **USE** the variables passed in `plan_instructions['USE']` to carry out the task.
-2. Only **CREATE** the variables specified in `plan_instructions['CREATE']`. Do not create any additional variables.
-3. Follow any **additional instructions** in `plan_instructions['INSTRUCTIONS']` (e.g., handling missing values, adding constants).
+Summary:
+1. Always USE the variables passed in `plan_instructions['USE']` to carry out the task.
+2. Only CREATE the variables specified in `plan_instructions['CREATE']`. Do not create any additional variables.
+3. Follow any additional instructions in `plan_instructions['INSTRUCTIONS']` (e.g., handling missing values, adding constants).
 4. Ensure reproducibility by setting the random state appropriately and handling categorical variables.
 5. Focus on statistical analysis and avoid any unnecessary data manipulation.
-**Output:**
-* The **code** implementing the statistical analysis, including all required steps.
-* A **summary** of what the statistical analysis does, how it's performed, and why it fits the goal.
+Output:
+* The code implementing the statistical analysis, including all required steps.
+* A summary of what the statistical analysis does, how it's performed, and why it fits the goal.
     """
     dataset = dspy.InputField(desc="Preprocessed dataset, often named df_cleaned")
     goal = dspy.InputField(desc="The user's statistical analysis goal, e.g., regression or seasonal_decompose")
@@ -498,40 +498,40 @@ def statistical_model(X, y, goal, period=None):
     
 class planner_sk_learn_agent(dspy.Signature):
     """
-    **Agent Definition:**
+    Agent Definition:
     You are a machine learning agent in a multi-agent data analytics pipeline.
     You are given:
     * A dataset (often cleaned and feature-engineered).
     * A user-defined goal (e.g., classification, regression, clustering).
-    * Agent-specific **plan instructions** specifying:
-    * Which **variables** you are expected to **CREATE** (e.g., `trained_model`, `predictions`).
-    * Which **variables** you will **USE** (e.g., `df_cleaned`, `target_variable`, `feature_columns`).
-    * A set of **instructions** outlining additional processing or handling for these variables (e.g., handling missing values, applying transformations, or other task-specific guidelines).
-    **Your Responsibilities:**
+    * Agent-specific plan instructions specifying:
+    * Which variables you are expected to CREATE (e.g., `trained_model`, `predictions`).
+    * Which variables you will USE (e.g., `df_cleaned`, `target_variable`, `feature_columns`).
+    * A set of instructions outlining additional processing or handling for these variables (e.g., handling missing values, applying transformations, or other task-specific guidelines).
+    Your Responsibilities:
     * Use the scikit-learn library to implement the appropriate ML pipeline.
     * Always split data into training and testing sets where applicable.
     * Use `print()` for all outputs.
     * Ensure your code is:
-    * **Reproducible**: Set `random_state=42` wherever applicable.
-    * **Modular**: Avoid deeply nested code.
-    * **Focused on model building**, not visualization (leave plotting to the `data_viz_agent`).
+    * Reproducible: Set `random_state=42` wherever applicable.
+    * Modular: Avoid deeply nested code.
+    * Focused on model building, not visualization (leave plotting to the `data_viz_agent`).
     * Your task may include:
     * Preprocessing inputs (e.g., encoding).
     * Model selection and training.
     * Evaluation (e.g., accuracy, RMSE, classification report).
-    **You must not:**
+    You must not:
     * Visualize anything (that's another agent's job).
     * Rely on hardcoded column names — use those passed via `plan_instructions`.
-    * **Never create or modify any variables not explicitly mentioned in `plan_instructions['CREATE']`.**
-    * **Never create the `df` variable**. You will **only** work with the variables passed via the `plan_instructions`.
+    * Never create or modify any variables not explicitly mentioned in `plan_instructions['CREATE']`.
+    * Never create the `df` variable. You will only work with the variables passed via the `plan_instructions`.
     * Do not introduce intermediate variables unless they are listed in `plan_instructions['CREATE']`.
-    **Instructions to Follow:**
-    1. **CREATE** only the variables specified in the `plan_instructions['CREATE']` list. Do not create any intermediate or new variables.
-    2. **USE** only the variables specified in the `plan_instructions['USE']` list. You are **not allowed** to create or modify any variables not listed in the plan instructions.
-    3. Follow any **processing instructions** in the `plan_instructions['INSTRUCTIONS']` list. This might include tasks like handling missing values, scaling features, or encoding categorical variables. Always perform these steps on the variables specified in the `plan_instructions`.
-    4. Do **not reassign or modify** any variables passed via `plan_instructions`. These should be used as-is.
-    **Example Workflow:**
-    Given that the `plan_instructions` specifies variables to **CREATE** and **USE**, and includes instructions, your approach should look like this:
+    Instructions to Follow:
+    1. CREATE only the variables specified in the `plan_instructions['CREATE']` list. Do not create any intermediate or new variables.
+    2. USE only the variables specified in the `plan_instructions['USE']` list. You are not allowed to create or modify any variables not listed in the plan instructions.
+    3. Follow any processing instructions in the `plan_instructions['INSTRUCTIONS']` list. This might include tasks like handling missing values, scaling features, or encoding categorical variables. Always perform these steps on the variables specified in the `plan_instructions`.
+    4. Do not reassign or modify any variables passed via `plan_instructions`. These should be used as-is.
+    Example Workflow:
+    Given that the `plan_instructions` specifies variables to CREATE and USE, and includes instructions, your approach should look like this:
     1. Use `df_cleaned` and `feature_columns` from the `plan_instructions` to extract your features (`X`).
     2. Use `target_column` from `plan_instructions` to extract your target (`y`).
     3. If instructions are provided (e.g., scale or encode), follow them.
@@ -565,15 +565,15 @@ class planner_sk_learn_agent(dspy.Signature):
     print(metrics)
     # Ensure the 'metrics' variable is returned as requested in the plan
     ```
-    **Summary:**
-    1. Always **USE** the variables passed in `plan_instructions['USE']` to build the pipeline.
-    2. Only **CREATE** the variables specified in `plan_instructions['CREATE']`. Do not create any additional variables.
-    3. Follow any **additional instructions** in `plan_instructions['INSTRUCTIONS']` (e.g., preprocessing steps).
+    Summary:
+    1. Always USE the variables passed in `plan_instructions['USE']` to build the pipeline.
+    2. Only CREATE the variables specified in `plan_instructions['CREATE']`. Do not create any additional variables.
+    3. Follow any additional instructions in `plan_instructions['INSTRUCTIONS']` (e.g., preprocessing steps).
     4. Ensure reproducibility by setting `random_state=42` wherever necessary.
     5. Focus on model building, evaluation, and saving the required outputs—avoid any unnecessary variables.
-    **Output:**
-    * The **code** implementing the ML task, including all required steps.
-    * A **summary** of what the model does, how it is evaluated, and why it fits the goal.
+    Output:
+    * The code implementing the ML task, including all required steps.
+    * A summary of what the model does, how it is evaluated, and why it fits the goal.
     """
     dataset = dspy.InputField(desc="Input dataset, often cleaned and feature-selected (e.g., df_cleaned)")
     goal = dspy.InputField(desc="The user's machine learning goal (e.g., classification or regression)")
@@ -767,15 +767,15 @@ class data_viz_agent(dspy.Signature):
     - If len(df) > 50000, always sample the dataset before visualization using:  
     if len(df) > 50000:  
         df = df.sample(50000, random_state=1)
-    - Each visualization must be generated as a **separate figure** using go.Figure().  
+    - Each visualization must be generated as a separate figure using go.Figure().  
     Do NOT use subplots under any circumstances.
     - Each figure must be returned individually using:  
     fig.to_html(full_html=False)
-    - Use update_layout with xaxis and yaxis **only once per figure**.
+    - Use update_layout with xaxis and yaxis only once per figure.
     - Enhance readability and clarity by:  
     • Using low opacity (0.4-0.7) where appropriate  
     • Applying visually distinct colors for different elements or categories  
-    - Make sure the visual **answers the user's specific goal**:  
+    - Make sure the visual answers the user's specific goal:  
     • Identify what insight or comparison the user is trying to achieve  
     • Choose the visualization type and features (e.g., color, size, grouping) to emphasize that goal  
     • For example, if the user asks for "trends in revenue," use a time series line chart; if they ask for "top-performing categories," use a bar chart sorted by value  
@@ -808,16 +808,16 @@ class code_fix(dspy.Signature):
     """
 You are an expert AI developer and data analyst assistant, skilled at identifying and resolving issues in Python code related to data analytics. Another agent has attempted to generate Python code for a data analytics task but produced code that is broken or throws an error.
 Your task is to:
-1. Carefully examine the provided **faulty_code** and the corresponding **error** message.
-2. Identify the **exact cause** of the failure based on the error and surrounding context.
-3. Modify only the necessary portion(s) of the code to fix the issue, utilizing the **dataset_context** to inform your corrections.
-4. Ensure the **intended behavior** of the original code is preserved (e.g., if the code is meant to filter, group, or visualize data, that functionality must be preserved).
-5. Ensure the final output is **runnable**, **error-free**, and **logically consistent**.
+1. Carefully examine the provided faulty_code and the corresponding error message.
+2. Identify the exact cause of the failure based on the error and surrounding context.
+3. Modify only the necessary portion(s) of the code to fix the issue, utilizing the dataset_context to inform your corrections.
+4. Ensure the intended behavior of the original code is preserved (e.g., if the code is meant to filter, group, or visualize data, that functionality must be preserved).
+5. Ensure the final output is runnable, error-free, and logically consistent.
 Strict instructions:
 - Assume the dataset is already loaded and available in the code context; do not include any code to read, load, or create data.
-- Do **not** modify any working parts of the code unnecessarily.
-- Do **not** change variable names, structure, or logic unless it directly contributes to resolving the issue.
-- Do **not** output anything besides the corrected, full version of the code (i.e., no explanations, comments, or logs).
+- Do not modify any working parts of the code unnecessarily.
+- Do not change variable names, structure, or logic unless it directly contributes to resolving the issue.
+- Do not output anything besides the corrected, full version of the code (i.e., no explanations, comments, or logs).
 - Avoid introducing new dependencies or libraries unless absolutely required to fix the problem.
 - The output must be complete and executable as-is.
 Be precise, minimal, and reliable. Prioritize functional correctness.
@@ -1048,8 +1048,11 @@ class auto_analyst(dspy.Module):
         
         module_return = self.planner(goal=dict_['goal'], dataset=dict_['dataset'], Agent_desc=dict_['Agent_desc'])
         plan_dict = dict(module_return['plan'])
-        # plan_dict['complexity'] = module_return['complexity']
-
+        if 'complexity' in module_return:
+            complexity = module_return['complexity']
+        else:
+            complexity = 'basic'
+        plan_dict['complexity'] = complexity
 
         return plan_dict
 
@@ -1130,7 +1133,7 @@ class auto_analyst(dspy.Module):
                 
                 
                 inputs["plan_instructions"] = str(formatted_instructions)
-            logger.log_message(f"Inputs: {inputs}", level=logging.INFO)
+
             future = self.executor.submit(self.execute_agent, agent_name, inputs)
             futures.append((agent_name, inputs, future))
         
