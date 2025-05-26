@@ -19,6 +19,14 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { createDownloadHandler } from "@/lib/utils/exportUtils"
 
+// Define the CodeOutput interface locally to match the one in exportUtils
+interface CodeOutput {
+  type: 'output' | 'error' | 'plotly';
+  content: string | any;
+  messageIndex: number;
+  codeId: string;
+}
+
 interface MessageContentProps {
   message: string
   fullMessage?: string  // The complete message for copying/downloading
@@ -32,6 +40,7 @@ interface MessageContentProps {
   messageId?: number
   chatId?: number
   isLastPart?: boolean
+  outputs?: CodeOutput[]  // Add outputs prop to include code execution results and plots
 }
 
 const MessageContent: React.FC<MessageContentProps> = ({ 
@@ -46,7 +55,8 @@ const MessageContent: React.FC<MessageContentProps> = ({
   isAIMessage = false,
   messageId,
   chatId,
-  isLastPart = true
+  isLastPart = true,
+  outputs = []
 }) => {
   const { sessionId } = useSessionStore()
   const { toast } = useToast()
@@ -137,7 +147,7 @@ const MessageContent: React.FC<MessageContentProps> = ({
   }, [contentToCopy, toast])
 
   // Use the new download handler from exportUtils
-  const handleDownload = useCallback(createDownloadHandler(contentToCopy), [contentToCopy])
+  const handleDownload = useCallback(createDownloadHandler(contentToCopy, outputs), [contentToCopy, outputs])
 
   // Custom fix button component for inline use
   const InlineFixButton = useCallback(({ codeId, errorContent }: { codeId: string, errorContent: string }) => {

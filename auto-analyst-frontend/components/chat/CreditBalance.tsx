@@ -48,6 +48,7 @@ const CreditBalance = () => {
           >
             <motion.div
               className="flex items-center"
+              initial={{ width: 'auto' }}
               animate={{ 
                 width: isHovering ? 'auto' : 'auto',
               }}
@@ -74,20 +75,27 @@ const CreditBalance = () => {
               </motion.span>
             </motion.div>
             
-            {isHovering ? (
+            <motion.div
+              className="flex items-center overflow-hidden"
+              initial={{ width: 0, opacity: 0 }}
+              animate={{ 
+                width: isHovering ? 'auto' : 0,
+                opacity: isHovering ? 1 : 0
+              }}
+              transition={{ duration: 0.3, ease: "easeOut" }}
+            >
               <motion.span 
-                className="flex items-center text-[#FF7F7F] pr-1"
-                initial={{ width: 0, opacity: 0, x: -10 }}
-                animate={{ width: 'auto', opacity: 1, x: 0 }}
-                transition={{ duration: 0.3, ease: "easeOut" }}
+                className="flex items-center text-[#FF7F7F] pr-1 whitespace-nowrap"
               >
                 <ChevronUp className="h-3 w-3 mr-1" />
                 <span className="text-xs font-medium">Upgrade</span>
               </motion.span>
-            ) : (
+            </motion.div>
+            
+            {!isHovering && (
               <motion.span
-                initial={{ width: 'auto' }}
-                animate={{ width: 'auto' }}
+                initial={{ opacity: 1 }}
+                animate={{ opacity: 1 }}
               >
                 <CreditCard className="h-3.5 w-3.5 mr-1 opacity-70" />
               </motion.span>
