@@ -104,7 +104,7 @@ export const supportedConnectors = [
   },
   {
     category: "File Formats",
-    items: ["CSV", "Excel", "JSON", "Parquet"]
+    items: ["CSV", "Excel"]
   }
 ]
 
