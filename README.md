@@ -170,7 +170,7 @@ Auto-Analyst is released under the **MIT License** — feel free to use, remix, 
 
 * 🌐 [Website](https://www.autoanalyst.ai)
 * 📰 [Substack](https://firebirdtech.substack.com)
-* 💼 [LinkedIn](https://www.linkedin.com/company/firebird-technologies/)
+* 💼 [LinkedIn](https://www.linkedin.com/company/firebird-technologies-singapore)
 
 ---
 

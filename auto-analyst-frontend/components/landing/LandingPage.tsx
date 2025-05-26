@@ -4,6 +4,9 @@ import { useRouter } from "next/navigation"
 import { useSession } from "next-auth/react"
 import HeroSection from "./HeroSection"
 import FeaturesSection from "./FeatureSection"
+import AgentsSection from "./AgentsSection"
+import ConnectorsSection from "./ConnectorsSection"
+import MissionSection from "./MissionSection"
 import Footer from "./Footer"
 import { Button } from "../ui/button"
 import CookieConsent from "./CookieConsent"
@@ -80,6 +83,9 @@ export default function LandingPage() {
       </nav>
       <HeroSection />
       <FeaturesSection />
+      <AgentsSection />
+      <ConnectorsSection />
+      <MissionSection />
       <Footer />
       {!isAdmin && <CookieConsent />}
     </div>

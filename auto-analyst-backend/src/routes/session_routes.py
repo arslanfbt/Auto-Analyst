@@ -9,7 +9,7 @@ import pandas as pd
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.security import APIKeyHeader
 from pydantic import BaseModel
-
+import groq
 from src.managers.session_manager import get_session_id
 from src.schemas.model_settings import ModelSettings
 from src.utils.logger import Logger
