@@ -4,12 +4,12 @@ import json
 import os
 from io import StringIO
 from typing import Optional, List
-
+import groq
 import pandas as pd
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.security import APIKeyHeader
 from pydantic import BaseModel
-
+import groq
 from src.managers.session_manager import get_session_id
 from src.schemas.model_settings import ModelSettings
 from src.utils.logger import Logger
@@ -269,6 +269,9 @@ async def update_model_settings(
 
         # Test the model configuration without setting it globally
         try:
+            if settings.provider.lower() == "groq":
+                resp = lm("Hello, are you working?")
+                logger.log_message(f"Model Response: {resp}", level=logging.INFO)
             # resp = lm("Hello, are you working?")
             # logger.log_message(f"Model Response: {resp}", level=logging.INFO)
             # REMOVED: dspy.configure(lm=lm) - no longer set globally
