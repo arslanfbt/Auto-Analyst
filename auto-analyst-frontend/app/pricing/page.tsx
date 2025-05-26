@@ -465,6 +465,21 @@ export default function PricingPage() {
                     </div>
                   </td>
                 </tr>
+                <tr className="hover:bg-gray-50">
+                  <td className="py-4 px-6 text-gray-700">
+                    <span className="font-medium">{MODEL_TIERS.tier4.name}</span>
+                  </td>
+                  <td className="py-4 px-6 text-gray-700">{MODEL_TIERS.tier4.credits}</td>
+                  <td className="py-4 px-6 text-gray-700">
+                    <div className="flex flex-wrap gap-1">
+                      {MODEL_TIERS.tier4.models.map((model: string) => (
+                        <span key={model} className="inline-flex bg-gray-100 text-gray-700 rounded-full px-2 py-1 text-xs">
+                          {model}
+                        </span>
+                      ))}
+                    </div>
+                  </td>
+                </tr>
               </tbody>
             </table>
           </div>
