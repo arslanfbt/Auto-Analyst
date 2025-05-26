@@ -1169,7 +1169,6 @@ const CodeCanvas: React.FC<CodeCanvasProps> = ({
                               variant="ghost" 
                               size="sm"
                               onClick={() => executeCode(activeEntry.id, activeEntry.code, activeEntry.language)}
-                              disabled={activeEntry.isExecuting}
                               aria-label="Execute code"
                             >
                               <Play className="h-4 w-4" />

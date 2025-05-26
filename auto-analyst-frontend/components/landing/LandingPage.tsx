@@ -12,6 +12,7 @@ import { Button } from "../ui/button"
 import CookieConsent from "./CookieConsent"
 import { useState, useEffect } from "react"
 import Image from "next/image"
+import WhyAutoAnalystSection from "./WhyAutoAnalystSection"
 
 export default function LandingPage() {
   const router = useRouter()
@@ -96,8 +97,9 @@ export default function LandingPage() {
       
       <div className="pt-4 sm:pt-0"> {/* Add padding to account for fixed navbar on mobile */}
         <HeroSection />
-        <FeaturesSection />
+        <WhyAutoAnalystSection />
         <AgentsSection />
+        <FeaturesSection />
         <ConnectorsSection />
         <MissionSection />
         <Footer />

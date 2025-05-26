@@ -91,6 +91,10 @@ export const agents = [
 
 export const supportedConnectors = [
   {
+    category: "File Formats",
+    items: ["CSV", "Excel"]
+  },
+  {
     category: "Ad Platforms",
     items: ["LinkedIn Ads", "Google AdSense", "Meta Ads", "Sales Navigator API"]
   },
@@ -101,10 +105,6 @@ export const supportedConnectors = [
   {
     category: "Databases",
     items: ["PostgreSQL", "MySQL", "Oracle", "DuckDB"]
-  },
-  {
-    category: "File Formats",
-    items: ["CSV", "Excel"]
   }
 ]
 

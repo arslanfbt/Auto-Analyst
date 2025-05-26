@@ -8,6 +8,39 @@ import { Badge } from "@/components/ui/badge"
 import { useRouter } from "next/navigation"
 import { useSession } from "next-auth/react"
 
+const screenshots = [
+  {
+    src: "/images/screenshots/autoanalyst-chat.png",
+    alt: "Chat interface screenshot",
+    title: "Intelligent Data Analysis",
+    description: "Ask questions in natural language and get instant insights from your data. Our AI understands context and provides relevant visualizations."
+  },
+  {
+    src: "/images/screenshots/autoanalyst-visualisation.png",
+    alt: "Visualization dashboard screenshot",
+    title: "Beautiful Visualizations",
+    description: "Automatically generate interactive charts and graphs that tell your data's story. Export and share insights with your team."
+  },
+  {
+    src: "/images/screenshots/autoanalyst-code.png",
+    alt: "Code canvas screenshot",
+    title: "Code Canvas",
+    description: "Code Canvas is a tool that allows you to edit your code in real-time."
+  },
+  // {
+  //   src: "/images/screenshots/autoanalyst-code-edit.png",
+  //   alt: "Code editor screenshot",
+  //   title: "Code Editor",
+  //   description: "Select code, click edit, and let AI make it better. Simple as that."
+  // },
+  // {
+  //   src: "/images/screenshots/autoanalyst-code-fixes.png",
+  //   alt: "Code fixes screenshot",
+  //   title: "Code Fixes",
+  //   description: "Buggy code? No problem. Our AI will fix it for you."
+  // }
+]
+
 export default function HeroSection() {
   const [mounted, setMounted] = useState(false)
   const containerRef = useRef(null)
@@ -61,7 +94,7 @@ export default function HeroSection() {
   ]
 
   return (
-    <section ref={containerRef} className="relative min-h-screen flex items-center overflow-hidden pt-20 px-4 sm:px-6 bg-gradient-to-br from-white via-[#fff6f6] to-[#fff]">
+    <section ref={containerRef} className="relative min-h-[70vh] flex items-center overflow-hidden pt-10 pb-8 sm:pt-14 sm:pb-12 px-4 sm:px-6 bg-gradient-to-br from-white via-[#fff6f6] to-[#fff]">
       <motion.div
         className="absolute inset-0 bg-gradient-to-br from-[#FEFEFE] via-[#FFFBFF] to-white opacity-10"
         style={{ y }}
@@ -72,13 +105,13 @@ export default function HeroSection() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.8 }}
-            className="flex flex-wrap items-center justify-center gap-2 sm:gap-4 mb-6 sm:mb-8"
+            className="flex flex-wrap items-center justify-center gap-2 sm:gap-4 mb-4 sm:mb-6"
           >
             <Image
               src="https://4q2e4qu710mvgubg.public.blob.vercel-storage.com/Auto-analysts%20icon%20small-S682Oi8nbFhOADUHXJSD9d0KtSWKCe.png"
               alt="Auto-Analyst Logo"
-              width={70}
-              height={70}
+              width={60}
+              height={60}
               className="object-contain"
             />
             <h1 className="text-3xl sm:text-4xl font-bold text-gray-900">
@@ -90,60 +123,46 @@ export default function HeroSection() {
             </Badge>
           </motion.div>
 
-          <motion.p
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8, delay: 0.05 }}
-            className="text-base sm:text-lg font-semibold text-[#FF7F7F] uppercase tracking-wider mb-2"
-          >
-            AI Data Science, Automated. Open-Source. Yours.
-          </motion.p>
-
           <motion.h2
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.8, delay: 0.1 }}
-            className="text-4xl sm:text-5xl md:text-6xl font-extrabold text-gray-900 mb-4 sm:mb-6 px-2"
+            className="text-4xl sm:text-5xl md:text-6xl font-extrabold mb-2 sm:mb-3 px-2"
           >
-            <span className="block">From Raw Data</span>
-            <span className="block text-[#FF7F7F]">To Insights in Minutes</span>
+            Your AI <span className="text-[#FF7F7F]">Data Scientist</span>
           </motion.h2>
 
           <motion.p
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8, delay: 0.2 }}
-            className="text-lg sm:text-xl text-gray-600 mb-6 sm:mb-8 max-w-3xl px-4"
+            transition={{ duration: 0.8, delay: 0.15 }}
+            className="text-lg sm:text-xl text-gray-600 mb-4 sm:mb-6 max-w-2xl px-4 font-medium"
           >
-            Upload your CSV or Excel data and let Auto-Analyst do the rest: cleaning, analysis, machine learning, and beautiful visualizations. Purpose-built for analytics, not just chat. No vendor lock-in. No black box. Just answers.
+            Vibe Analytics, Real Insights
           </motion.p>
 
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8, delay: 0.3 }}
-            className="flex flex-wrap justify-center gap-2 sm:gap-3 mb-6 sm:mb-8 px-2"
+            transition={{ duration: 0.8, delay: 0.2 }}
+            className="relative w-full max-w-4xl mb-12 sm:mb-16"
           >
-            <Badge variant="outline" className="px-2 sm:px-3 py-1 text-xs sm:text-sm">
-              <Upload className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" />
-              CSV/Excel Support
-            </Badge>
-            <Badge variant="outline" className="px-2 sm:px-3 py-1 text-xs sm:text-sm">
-              Multi-Agent Orchestration
-            </Badge>
-            <Badge variant="outline" className="px-2 sm:px-3 py-1 text-xs sm:text-sm">
-              LLM Agnostic
-            </Badge>
-            <Badge variant="outline" className="px-2 sm:px-3 py-1 text-xs sm:text-sm">
-              On-Premise Deployment
-            </Badge>
+            <div className="rounded-2xl shadow-xl overflow-hidden bg-white border border-gray-100">
+              <Image
+                src={screenshots[0].src}
+                alt={screenshots[0].alt}
+                width={1200}
+                height={675}
+                className="w-full h-auto object-cover"
+              />
+            </div>
           </motion.div>
 
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.8, delay: 0.4 }}
-            className="mb-6 sm:mb-8 w-full px-4"
+            className="mb-6 sm:mb-8 w-full px-4 mt-16 sm:mt-24"
           >
             <p className="text-xs sm:text-sm text-gray-500 mb-2 sm:mb-3">Works with any LLM provider:</p>
             <div className="flex flex-wrap justify-center items-center gap-3 sm:gap-6">
@@ -191,18 +210,62 @@ export default function HeroSection() {
             </motion.div>
           )}
 
+
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8, delay: 0.6 }}
-            className="flex flex-wrap justify-center gap-2 text-xs sm:text-sm text-gray-500 px-4"
+            transition={{ duration: 0.8, delay: 0.3 }}
+            className="flex flex-wrap justify-center gap-2 sm:gap-3 mb-12 sm:mb-16 px-2"
           >
-            <span className="bg-gray-100 rounded-full px-3 py-1">No vendor lock-in</span>
-            <span className="bg-gray-100 rounded-full px-3 py-1">Bring your own API key</span>
-            <span className="bg-gray-100 rounded-full px-3 py-1">Enterprise-ready</span>
-            <span className="bg-gray-100 rounded-full px-3 py-1">MIT Licensed</span>
-            <span className="bg-gray-100 rounded-full px-3 py-1">Self-hostable</span>
+            <Badge variant="outline" className="px-2 sm:px-3 py-1 text-xs sm:text-sm">
+              <Upload className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" />
+              CSV/Excel Support
+            </Badge>
+            <Badge variant="outline" className="px-2 sm:px-3 py-1 text-xs sm:text-sm">
+              Multi-Agent Orchestration
+            </Badge>
+            <Badge variant="outline" className="px-2 sm:px-3 py-1 text-xs sm:text-sm">
+              LLM Agnostic
+            </Badge>
+            <Badge variant="outline" className="px-2 sm:px-3 py-1 text-xs sm:text-sm">
+              On-Premise Deployment
+            </Badge>
           </motion.div>
+
+          <div className="w-full max-w-6xl mx-auto space-y-16 sm:space-y-24">
+            {screenshots.slice(1).map((shot, idx) => (
+              <motion.div
+                key={idx}
+                initial={{ opacity: 0, y: 20 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.8 }}
+                viewport={{ once: true }}
+                className={`flex flex-col ${idx % 2 === 0 ? 'sm:flex-row' : 'sm:flex-row-reverse'} gap-8 sm:gap-12 items-center`}
+              >
+                <div className="w-full sm:w-1/2">
+                  <div className="rounded-2xl shadow-xl overflow-hidden bg-white border border-gray-100 transform hover:scale-[1.02] transition-transform duration-300">
+                    <Image
+                      src={shot.src}
+                      alt={shot.alt}
+                      width={600}
+                      height={400}
+                      className="w-full h-auto object-cover"
+                    />
+                  </div>
+                </div>
+                <div className="w-full sm:w-1/2 text-left">
+                  <h3 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-3">
+                    {shot.title}
+                  </h3>
+                  <p className="text-base sm:text-lg text-gray-600">
+                    {shot.description}
+                  </p>
+                </div>
+              </motion.div>
+            ))}
+          </div>
+
+        
         </div>
       </div>
     </section>
