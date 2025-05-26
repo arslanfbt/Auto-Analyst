@@ -30,3 +30,5 @@ alembic.ini
 *.db
 
 schema*.md
+
+notebooks/

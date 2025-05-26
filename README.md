@@ -1,118 +1,179 @@
 ![Auto Analyst Logo](/auto-analyst-backend/images/auto-analyst%20logo.png)
 
-# Auto-Analyst
-An AI-powered data analytics platform with interactive visualizations and real-time insights.
+# Auto-Analyst — Your Open-Source AI Data Scientist
 
 ![Auto-Analyst Platform](/auto-analyst-backend/images/Auto-analyst-poster.png)
 
-## 📌 Overview  
-Auto-Analyst is an analytics platform featuring a **FastAPI backend** and a **Next.js frontend**. The system provides **AI-driven data analytics**, **interactive visualizations**, and an **admin dashboard** for monitoring key usage metrics. The platform leverages **WebSockets** for real-time updates and integrates enterprise-grade functionalities.
+**By [Firebird Technologies](https://www.firebird-technologies.com)**
 
-![Chat Interface](/auto-analyst-backend/images/AI%20snapshot-chat.png)  
+Auto-Analyst is a fully open-sourced, modular AI system designed to automate data science workflows — from data cleaning and statistical analysis to machine learning and visualization.
 
-
-### **Tech Stack**  
-- **Frontend:** Next.js / React  (Learn more about the frontend architecture [here](/docs/frontend.md))
-- **Backend:** Python / FastAPI  (Learn more about the api breakdown [here](/docs/backend.md))
-- **Database:** SQLite for data storage and Redis Upstash for rate limiting and credits management
-- **CI/CD:** GitHub Actions  
-- **Payment Processing:** Stripe Integration
-- **Security:** API Key Management System
+You can try it live at: [https://www.autoanalyst.ai/chat](https://www.autoanalyst.ai/chat)
 
 ---
 
-## 🚀 Development & Contributing
-For detailed setup instructions, development guidelines, and information about contributing to this project, please refer to our [Contributing Guide](CONTRIBUTING.md).
+## 🚀 Highlights
+
+* ✅ **Open Source**: Licensed under a highly MIT permissive license.
+* 🔄 **LLM Agnostic**: Compatible with any LLM API – OpenAI, Anthropic, Deepseek (groq), etc.
+* 💸 **Bring Your Own API Key**: No vendor lock-in; use your own keys, pay only what you use.
+* 🖥️ **User-Centric UI**: Built with data scientists in mind.
+* 🛡️ **Reliable Outputs**: Guardrails for robust and interpretable responses.
+* ⚙️ **Modular Agent Architecture**: Add or customize agents using [DSPy](https://github.com/stanfordnlp/dspy).
 
 ---
 
-## ✅ Implemented Features  
+## Live App
 
-### Core Features
-- **Chat Interface** – Interactive AI-powered chat system with multi-agent support.  
-- **Chat History** – Chat history is stored in the database and displayed in the chat interface.
-- **Session Management** – Persistent user sessions with state tracking.  
-- **Code Execution** – Python code execution with AI-powered editing and fixing capabilities.
-- **Google OAuth** – Google OAuth is supported for authentication.
-
-### Analytics & Monitoring
-- **Analytics Dashboard** – A comprehensive admin panel displaying usage statistics, model performance metrics, and cost analysis.  
-- **Cost Analytics** – Tracks detailed cost breakdowns, daily spending trends, and cost projections.  
-- **User Analytics** – Monitors user activity, session statistics, and new user acquisition rates.  
-- **Model Performance Tracking** – Evaluates model usage, response times, and token consumption patterns.  
-
-### Security & Authentication
-- **Admin Authentication** – Secure, API key-based authentication for administrative access.  
-- **API Key Management** – Reading API KEYS via code canvas is blocked.
-
-### Real-time Features
-- **Real-time Updates** – WebSocket-based real-time updates for dashboard and analytics views.  
-- **Real-time Analytics Enhancements** – WebSocket handling with improved robustness and error recovery.
-
-### Enterprise Features
-- **Enterprise Deployment Options** – On-premise deployment contact support for custom API integrations.
-- **Documentation** – Comprehensive documentation for developers and maintainers.
-- **Model Credits System** – Redis Upstash-based credits tracking and management.
-- **Stripe Integration** – Secure payment processing for credit purchases and subscription management.
-
-### AI & Code Features
-- **AI Code Editing** – Intelligent code editing with code highlight.
-- **Code Error Fixing** – Automated code error detection and fixing capabilities.
-- **Canvas Implementation** – Interactive data visualization canvas for custom analytics.
-- **Multi-Model Support** – Integration with multiple AI models (OpenAI, Groq, Anthropic, Gemini).
+Start analyzing here:
+👉 **[https://www.autoanalyst.ai/chat](https://www.autoanalyst.ai/chat)**
 
 ---
 
-## 🛠️ Roadmap  
-The following areas are part of our development roadmap to improve system stability, performance and feature set:
+##  How It Works
 
-### Short-term Goals
-- **Error Handling** – Implement more robust exception handling for API endpoints.
-- **Cost Calculation Precision** – Improve floating-point precision in cost calculations.
-- **Redis Connection Stability** – Enhance connection handling with better fallback mechanisms.
-- **User Accounts Page** – Implement email change functionality, plan updates, and other account management features.
+### 🪜 Step-by-Step Walkthrough
 
-### Mid-term Goals  
-- **Query Performance** – Optimize agents to be more efficient and reduce hallucinated results on low tier models.
-- **API Key Rotation** – Implement automated API key rotation for enhanced security.
-- **User Guest Creation in DB** - Fix excessive creation of guest users when users first log in.
+#### 1️⃣ Upload Your Dataset
 
-### Long-term Goals
-Our long-term vision is explained in three principles we would like to follow while developing the latest versions of the product. It is hard to define them in specifics.
+* Click the 📎 icon near the chat input.
+* Upload `.csv` or `.xlsx` files. More connectors (APIs, SQL, etc.) available upon request.
 
-- **Usability**: We want the product to be as usable as possible, which can only be achieved through constant experimentation. The optimal UX for such a project is yet to be discovered.
-- **Community-driven**: We want input from data analysts and scientists from around the world to guide us in our future development efforts. Please stay in touch on our socials (LinkedIn, Medium, Substack).
-- **Openness**: We would like to not only open-source the source code but also, through blogs and other forms of communication, share with the world all advancements in the product openly.
+#### 2️⃣ Describe Your Dataset
 
----
+* Enter a short text description of what your dataset is about.
+* Auto-Analyst will generate a cleaned, structured metadata summary optimized for LLM workflows.
+* ✍️ Tip: Rename generic columns like `var_1` to `price`, `category`, etc., for better analysis.
 
-## ⚙️ Configuration
+#### 3️⃣ Ask a Question
 
-### **Environment Variables:**  
-- `ADMIN_API_KEY` – Critical for securing admin access.  
-- `NEXT_PUBLIC_API_URL` – Backend API endpoint reference.  
-- **AWS credentials** – Required for infrastructure provisioning and deployment.  
-- **SMTP credentials** – Required for sending emails.  
-- **OpenAI API Key** – Required for the chat interface.  
-- **Groq API Key** – Required for the chat interface.  
-- **Gemini API Key** - Required for Chat interface.
-- **Anthropic API Key** – Required for the chat interface.  
-- **Redis URL** – Required for rate limiting and credits management.
-- **Stripe Keys** – Required for payment processing.
+Use either:
+
+* **@agent\_name** to specify which agent to use (e.g. `@preprocessing_agent`)
+* Or **no agent tag** to let the **planner** route your query automatically.
 
 ---
 
-## 🔗 Useful Links
-- [Contributing Guide](CONTRIBUTING.md)
-- [Frontend Documentation](/docs/frontend.md)
-- [Backend Documentation](/docs/backend.md)
-- [API Documentation](/docs/api)
-- [Database Schema](/docs/db_schema.md)
-- [Redis Setup](/docs/redis-setup)
+##  Built-in Agents
+
+| Agent                          | Description                                                                                          |
+| ------------------------------ | ---------------------------------------------------------------------------------------------------- |
+| `@preprocessing_agent`         | Cleans data using `pandas` and `numpy`. Fixes types, handles nulls, computes aggregates.             |
+| `@statistical_analytics_agent` | Performs regression, correlation, ANOVA, and other statistical tests with `statsmodels`.             |
+| `@sk_learn_agent`              | Trains machine learning models like Random Forest, KMeans, Logistic Regression using `scikit-learn`. |
+| `@data_viz_agent`              | Generates visualizations using `plotly`. Includes a retriever to pick optimal chart formats.         |
+
+🌟 Modular and extensible! You can add custom agents for:
+
+* Marketing
+* Quantitative Finance
+* Web APIs (Slack, Notion, etc.)
 
 ---
 
-## 📞 Support
-- Open an [issue](https://github.com/FireBird-Technologies/Auto-Analyst/issues) for bugs
-- Use [discussions](https://github.com/FireBird-Technologies/Auto-Analyst/discussions) for questions
-- Contact maintainers for enterprise support 
+## 💬 Planner Mode
+
+Want to delegate the query routing?
+
+Just type your question without specifying an agent. The **planner** will:
+
+* Select the right agent(s)
+* Generate plan instructions
+* Coordinate inter-agent workflows
+* Collect and display results (including plots & summaries)
+
+---
+
+## 🧑‍💻 Developer Features
+
+### 📁 Modular Agent System (DSPy)
+
+Agents are implemented as `dspy.Signature` classes. Example:
+
+```python
+class google_ads_analyzer_agent(dspy.Signature):
+    goal = dspy.InputField(desc="User goal")
+    dataset = dspy.InputField(desc="DataFrame")
+    plan_instructions = dspy.InputField(desc="Instructions")
+    code = dspy.OutputField(desc="Python code")
+    summary = dspy.OutputField(desc="Analysis summary")
+```
+
+Add your own agent in minutes.
+
+### 🔌 Built-in Dataset Connectors
+
+* **Ads**: Google Ads, Meta, LinkedIn Ads
+* **CRM**: HubSpot, Salesforce
+* **SQL**: Postgres, MySQL, Oracle, DuckDB
+
+Want more? Submit a request: [Contact Us](https://www.autoanalyst.ai/contact)
+
+---
+
+## 🖼️ UI Feature Overview
+
+| Feature                               | Description                                                                                     |
+| ------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| 💬 Chat Interface                     | Ask questions and receive answers like a regular chat.                                          |
+| 🧑‍💻 Code Editor                     | Inspect and edit generated code. Features include: AI-assisted edits, auto-fix for broken code. |
+| 📊 Analytics Dashboard *(Enterprise)* | Monitor usage, set limits, allocate credits, enforce roles & permissions.                       |
+
+---
+
+## 🛠 Backend Highlights
+
+* 🔧 Agent orchestration via DSPy
+* 🧠 Model-agnostic LLM support
+* 📈 Built-in chart formatter for best-guess visualization types
+* 📂 Multi-agent workflows powered by centralized planner
+* 🔄 Daily scheduled reports & auto-regeneration (enterprise-ready)
+
+---
+
+## 📅 Roadmap
+
+### 🔜 Short-Term Goals
+
+* [ ] Deep Analysis Mode (LLM equivalent of longform research)
+* [ ] Multi-CSV / multi-sheet Excel analysis
+* [ ] User-defined analytics agents via UI
+* [ ] Improved code-editing and auto-debugging
+
+### 🔭 Long-Term Vision
+
+* **Usability-First**: Optimize UX through iteration and user feedback
+* **Community-Driven**: Shaped by the global analyst community (follow us on [Substack](https://firebirdtech.substack.com), LinkedIn)
+* **Open Collaboration**: Build and share new agents, retrievers, and datasets
+
+---
+
+## 🧩 Contributing
+
+We welcome contributions! You can:
+
+* Add new agents
+* Suggest UX improvements
+* Contribute templates or datasets
+* Submit bug reports or pull requests
+
+📬 For collaboration or enterprise inquiries: [https://www.autoanalyst.ai/contact](https://www.autoanalyst.ai/contact)
+
+---
+
+## 📄 License
+
+Auto-Analyst is released under the **MIT License** — feel free to use, remix, and build on it.
+
+
+## 🐦 Follow Us
+
+* 🌐 [Website](https://www.autoanalyst.ai)
+* 📰 [Substack](https://firebirdtech.substack.com)
+* 💼 [LinkedIn](https://www.linkedin.com/company/firebird-technologies-singapore)
+
+---
+
+Built with ❤️ by Firebird Technologies
+*AI. Tech. Fire.*
+

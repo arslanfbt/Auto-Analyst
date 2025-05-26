@@ -6,7 +6,7 @@
  */
 
 // Set this to true to disable all non-error logs
-const DISABLE_LOGS = true;
+const DISABLE_LOGS = false;
 
 const logger = {
   log: (...args: any[]) => {

@@ -37,6 +37,7 @@ import DatasetResetPopup from './DatasetResetPopup'
 import { useModelSettings } from '@/lib/hooks/useModelSettings'
 import logger from '@/lib/utils/logger'
 import { OnboardingTooltip } from '../onboarding/OnboardingTooltips'
+import { getDisplayName } from '@/lib/model-registry'
 
 interface PlotlyMessage {
   type: "plotly"
@@ -1501,7 +1502,18 @@ const ChatInterface: React.FC = () => {
 
           {/* Show credit balance and user profile */}
           <div className="flex items-center gap-3">
+            {/* Display current model */}
+            {(session || isAdmin) && (
+              <div 
+                className="px-2.5 py-1 rounded-full bg-gray-100 hover:bg-gray-200 text-xs font-medium text-gray-700 cursor-pointer flex items-center"
+                onClick={() => setIsSettingsOpen(true)}
+              >
+                {getDisplayName(modelSettings.model)}
+              </div>
+            )}
+            
             {(session || isAdmin) && <CreditBalance />}
+            
             
             {(session || isAdmin) && (
               <div className="relative">

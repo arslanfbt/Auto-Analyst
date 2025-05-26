@@ -492,7 +492,6 @@ def format_plan_instructions(plan_instructions):
     if "basic_qa_agent" in str(plan_instructions):
         return "**Non-Data Request**: Please ask a data related query, don't waste credits!"
 
-
     try:
         if isinstance(plan_instructions, str):
             try:
@@ -505,7 +504,8 @@ def format_plan_instructions(plan_instructions):
                 try:
                     instructions = json.loads(cleaned_str)
                 except json.JSONDecodeError:
-                    raise ValueError(f"Invalid JSON format in plan instructions: {str(e)}")
+                    # raise ValueError(f"Invalid JSON format in plan instructions: {str(e)}")
+                    instructions = plan_instructions
         elif isinstance(plan_instructions, dict):
             instructions = plan_instructions
         else:
@@ -554,7 +554,48 @@ def format_plan_instructions(plan_instructions):
             markdown_lines.append(f"**Non-Data Request**: {content.get('instruction')}")
 
     return "\n".join(markdown_lines).strip()
+
+def format_complexity(instructions):
+    markdown_lines = []
+    # Extract complexity from various possible locations in the structure
+    if isinstance(instructions, dict):
+        # Case 1: Direct complexity field
+        if 'complexity' in instructions:
+            complexity = instructions['complexity']
+        # Case 2: Complexity in 'plan' object
+        elif 'plan' in instructions and isinstance(instructions['plan'], dict):
+            if 'complexity' in instructions['plan']:
+                complexity = instructions['plan']['complexity']
+        else:
+            complexity = "unrelated"
     
+    if 'plan' in instructions and isinstance(instructions['plan'], str) and "basic_qa_agent" in instructions['plan']:
+        complexity = "unrelated"
+    
+    if complexity:
+        # Pink color scheme variations
+        color_map = {
+            "unrelated": "#FFB6B6",  # Light pink
+            "basic": "#FF9E9E",      # Medium pink
+            "intermediate": "#FF7F7F", # Main pink
+            "advanced": "#FF5F5F"    # Dark pink
+        }
+        
+        indicator_map = {
+            "unrelated": "○",
+            "basic": "●",
+            "intermediate": "●●",
+            "advanced": "●●●"
+        }
+        
+        color = color_map.get(complexity.lower(), "#FFB6B6")  # Default to light pink
+        indicator = indicator_map.get(complexity.lower(), "○")
+        
+        # Slightly larger display with pink styling
+        markdown_lines.append(f"<div style='color: {color}; border: 2px solid {color}; padding: 2px 8px; border-radius: 12px; display: inline-block; font-size: 14.4px;'>{indicator} {complexity}</div>\n")
+
+        return "\n".join(markdown_lines).strip()    
+
 def format_response_to_markdown(api_response, agent_name = None, dataframe=None):
     try:
         markdown = []
@@ -579,15 +620,18 @@ def format_response_to_markdown(api_response, agent_name = None, dataframe=None)
             agent = agent.split("__")[0] if "__" in agent else agent
             if "memory" in agent or not content:
                 continue
+            
+            if "complexity" in content:
+                markdown.append(f"{format_complexity(content)}\n")
                 
             markdown.append(f"\n## {agent.replace('_', ' ').title()}\n")
             
             if agent == "analytical_planner":
-                # logger.log_message(f"Analytical planner content: {content}", level=logging.INFO)
+                logger.log_message(f"Analytical planner content: {content}", level=logging.INFO)
                 if 'plan_desc' in content:
                     markdown.append(f"### Reasoning\n{content['plan_desc']}\n")
                 if 'plan_instructions' in content:
-                    markdown.append(f"### Plan Instructions\n{format_plan_instructions(content['plan_instructions'])}\n")
+                    markdown.append(f"{format_plan_instructions(content['plan_instructions'])}\n")
                 else:
                     markdown.append(f"### Reasoning\n{content['rationale']}\n")
             else:  
