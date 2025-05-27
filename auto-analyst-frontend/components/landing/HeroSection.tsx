@@ -24,8 +24,8 @@ const screenshots = [
   {
     src: "/images/screenshots/autoanalyst-code.png",
     alt: "Code canvas screenshot",
-    title: "Code Canvas",
-    description: "Code Canvas is a tool that allows you to edit your code in real-time."
+    title: "Advanced Analytics",
+    description: "Auto-Analyst provides advanced analytics capabilities, including time series analysis, trend identification, and predictive modeling."
   },
   // {
   //   src: "/images/screenshots/autoanalyst-code-edit.png",

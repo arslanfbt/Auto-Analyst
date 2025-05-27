@@ -87,7 +87,7 @@ export default function MissionSection() {
               <Button
                 variant="secondary"
                 size="lg"
-                onClick={() => window.open('https://firebird-technologies.substack.com/', '_blank')}
+                onClick={() => window.open('https://www.firebird-technologies.com', '_blank')}
                 className="bg-white text-gray-900 hover:bg-gray-200 w-full sm:w-auto"
               >
                 <BookOpen className="w-4 h-4 sm:w-5 sm:h-5 mr-2" />

@@ -115,7 +115,7 @@ export const MODEL_TIERS = {
     ]
   },
   tier4: {
-    name: "Enterprise",
+    name: "Premium+",
     credits: 10,
     models: ["claude-opus-4-20250514"]
   }
