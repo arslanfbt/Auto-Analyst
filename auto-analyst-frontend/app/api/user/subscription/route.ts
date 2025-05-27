@@ -4,7 +4,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
-import { redis } from '@/lib/redis';
+import redis from '@/lib/redis';
 
 export async function GET(request: NextRequest) {
   try {
@@ -34,14 +34,14 @@ export async function GET(request: NextRequest) {
       tier: subscriptionData.tier || 'free',
       isActive: subscriptionData.isActive === 'true',
       expiresAt: subscriptionData.expiresAt ? subscriptionData.expiresAt : null,
-      features: subscriptionData.features ? JSON.parse(subscriptionData.features) : [],
+      features: subscriptionData.features ? JSON.parse(subscriptionData.features as string) : [],
       stripeCustomerId: subscriptionData.stripeCustomerId || null,
       stripeSubscriptionId: subscriptionData.stripeSubscriptionId || null,
     };
 
     // Check if subscription is expired
     if (subscription.expiresAt) {
-      const expirationDate = new Date(subscription.expiresAt);
+      const expirationDate = new Date(subscription.expiresAt as string);
       const now = new Date();
       
       if (now > expirationDate) {
