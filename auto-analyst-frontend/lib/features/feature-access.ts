@@ -1,19 +1,22 @@
 /**
  * Feature Access Management for Auto-Analyst
- * Handles user permissions and feature availability checks
  */
 
 import { Feature, FeatureAccessLevel, UserTier, FEATURES } from './feature-config';
 
-// User subscription interface
+// User subscription interface matching existing API structure
 export interface UserSubscription {
-  tier: UserTier;
-  isActive: boolean;
-  expiresAt?: Date;
-  features?: string[]; // Custom feature access for enterprise users
+  plan: string;
+  planType?: string;
+  status: string;
+  amount: number;
+  interval: string;
+  renewalDate?: string;
+  isYearly?: boolean;
+  stripeCustomerId?: string;
+  stripeSubscriptionId?: string;
 }
 
-// Feature access result
 export interface FeatureAccessResult {
   hasAccess: boolean;
   reason?: string;
@@ -22,9 +25,32 @@ export interface FeatureAccessResult {
   isComingSoon?: boolean;
 }
 
-/**
- * Check if a user has access to a specific feature
- */
+function planToTier(subscription: UserSubscription | null): UserTier {
+  if (!subscription) return 'free';
+  
+  const planName = subscription.plan?.toLowerCase() || '';
+  const planType = subscription.planType?.toUpperCase() || '';
+  
+  if (planName.includes('enterprise') || planType === 'ENTERPRISE') {
+    return 'enterprise';
+  } else if (planName.includes('standard') || planType === 'STANDARD') {
+    return 'standard';
+  } else if (planName.includes('pro') || planType === 'PRO') {
+    return 'standard';
+  }
+  
+  return 'free';
+}
+
+function isSubscriptionActive(subscription: UserSubscription | null): boolean {
+  if (!subscription) return false;
+  
+  const tier = planToTier(subscription);
+  if (tier === 'free') return true;
+  
+  return subscription.status === 'active';
+}
+
 export function hasFeatureAccess(
   featureId: string,
   userSubscription: UserSubscription | null
@@ -38,7 +64,6 @@ export function hasFeatureAccess(
     };
   }
 
-  // Check if feature is coming soon
   if (feature.status === 'coming_soon') {
     return {
       hasAccess: false,
@@ -47,11 +72,9 @@ export function hasFeatureAccess(
     };
   }
 
-  // If no subscription, user is on free tier
-  const userTier: UserTier = userSubscription?.tier || 'free';
-  const isActiveSubscription = userSubscription?.isActive !== false;
+  const userTier = planToTier(userSubscription);
+  const isActiveSubscription = isSubscriptionActive(userSubscription);
 
-  // Check if subscription is active (for paid tiers)
   if (userTier !== 'free' && !isActiveSubscription) {
     return {
       hasAccess: false,
@@ -61,14 +84,18 @@ export function hasFeatureAccess(
     };
   }
 
-  // Free features are accessible to everyone
   if (feature.accessLevel === 'free') {
     return {
       hasAccess: true,
     };
   }
 
-  // Check tier requirements
+  if (feature.requiredTier && feature.requiredTier.includes(userTier)) {
+    return {
+      hasAccess: true,
+    };
+  }
+  
   if (feature.requiredTier && !feature.requiredTier.includes(userTier)) {
     const lowestRequiredTier = getLowestRequiredTier(feature.requiredTier);
     return {
@@ -79,7 +106,6 @@ export function hasFeatureAccess(
     };
   }
 
-  // Enterprise features require enterprise tier
   if (feature.accessLevel === 'enterprise' && userTier !== 'enterprise') {
     return {
       hasAccess: false,
@@ -89,7 +115,6 @@ export function hasFeatureAccess(
     };
   }
 
-  // Paid features require at least standard tier
   if (feature.accessLevel === 'paid' && userTier === 'free') {
     return {
       hasAccess: false,
@@ -99,22 +124,11 @@ export function hasFeatureAccess(
     };
   }
 
-  // Check custom feature access for enterprise users
-  if (userSubscription?.features && !userSubscription.features.includes(featureId)) {
-    return {
-      hasAccess: false,
-      reason: `${feature.name} is not included in your custom plan`,
-    };
-  }
-
   return {
     hasAccess: true,
   };
 }
 
-/**
- * Get all features accessible to a user
- */
 export function getAccessibleFeatures(
   userSubscription: UserSubscription | null
 ): Feature[] {
@@ -124,9 +138,6 @@ export function getAccessibleFeatures(
   });
 }
 
-/**
- * Get features that require an upgrade
- */
 export function getUpgradeRequiredFeatures(
   userSubscription: UserSubscription | null
 ): Feature[] {
@@ -136,9 +147,6 @@ export function getUpgradeRequiredFeatures(
   });
 }
 
-/**
- * Check if user can access any features in a category
- */
 export function hasCategoryAccess(
   category: string,
   userSubscription: UserSubscription | null
@@ -153,9 +161,6 @@ export function hasCategoryAccess(
   });
 }
 
-/**
- * Get the lowest required tier from a list of tiers
- */
 function getLowestRequiredTier(tiers: UserTier[]): UserTier {
   const tierOrder: UserTier[] = ['free', 'standard', 'enterprise'];
   
@@ -165,12 +170,9 @@ function getLowestRequiredTier(tiers: UserTier[]): UserTier {
     }
   }
   
-  return 'standard'; // Default fallback
+  return 'standard';
 }
 
-/**
- * Get display name for a tier
- */
 function getTierDisplayName(tier: UserTier): string {
   const displayNames: Record<UserTier, string> = {
     free: 'Free',
@@ -181,24 +183,15 @@ function getTierDisplayName(tier: UserTier): string {
   return displayNames[tier];
 }
 
-/**
- * Check if a feature is available (not coming soon)
- */
 export function isFeatureAvailable(featureId: string): boolean {
   const feature = FEATURES[featureId];
   return feature?.status === 'available';
 }
 
-/**
- * Get feature by ID
- */
 export function getFeature(featureId: string): Feature | undefined {
   return FEATURES[featureId];
 }
 
-/**
- * Get upgrade URL for a specific tier
- */
 export function getUpgradeUrl(requiredTier: UserTier): string {
   const baseUrl = '/pricing';
   

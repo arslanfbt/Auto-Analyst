@@ -124,8 +124,11 @@ const ChatInterface: React.FC = () => {
     } else {
       // Set a free tier subscription for non-logged in users
       setSubscription({
-        tier: 'free',
-        isActive: true,
+        plan: 'free',
+        status: 'active',
+        amount: 0,
+        interval: 'month',
+        planType: 'free',
       });
     }
   }, [session, fetchSubscription, setSubscription]);

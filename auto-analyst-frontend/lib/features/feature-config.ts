@@ -1,6 +1,5 @@
 /**
  * Feature Configuration for Auto-Analyst
- * This file serves as the single source of truth for all features in the application
  */
 
 // Feature access levels

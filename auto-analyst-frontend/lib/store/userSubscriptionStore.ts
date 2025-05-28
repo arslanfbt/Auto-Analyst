@@ -1,27 +1,25 @@
 /**
- * User Subscription Store using Zustand
- * Manages user subscription state and tier information
+ * User Subscription Store for Auto-Analyst
+ * Manages user subscription state using Zustand with persistence
  */
 
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { persist, createJSONStorage } from 'zustand/middleware';
 import { UserSubscription } from '../features/feature-access';
-import { UserTier } from '../features/feature-config';
 
 interface UserSubscriptionState {
   subscription: UserSubscription | null;
   isLoading: boolean;
   error: string | null;
+  lastFetched: Date | null;
 }
 
 interface UserSubscriptionActions {
   setSubscription: (subscription: UserSubscription | null) => void;
-  updateTier: (tier: UserTier) => void;
-  setActiveStatus: (isActive: boolean) => void;
-  setLoading: (isLoading: boolean) => void;
+  setLoading: (loading: boolean) => void;
   setError: (error: string | null) => void;
-  clearSubscription: () => void;
   fetchSubscription: () => Promise<void>;
+  clearSubscription: () => void;
 }
 
 type UserSubscriptionStore = UserSubscriptionState & UserSubscriptionActions;
@@ -29,117 +27,109 @@ type UserSubscriptionStore = UserSubscriptionState & UserSubscriptionActions;
 export const useUserSubscriptionStore = create<UserSubscriptionStore>()(
   persist(
     (set, get) => ({
-      // Initial state
+      // State
       subscription: null,
       isLoading: false,
       error: null,
+      lastFetched: null,
 
       // Actions
-      setSubscription: (subscription) => {
-        set({ subscription, error: null });
-      },
+      setSubscription: (subscription) => 
+        set({ subscription, lastFetched: new Date(), error: null }),
 
-      updateTier: (tier) => {
-        const currentSubscription = get().subscription;
-        if (currentSubscription) {
-          set({
-            subscription: {
-              ...currentSubscription,
-              tier,
-            },
-          });
-        }
-      },
+      setLoading: (isLoading) => 
+        set({ isLoading }),
 
-      setActiveStatus: (isActive) => {
-        const currentSubscription = get().subscription;
-        if (currentSubscription) {
-          set({
-            subscription: {
-              ...currentSubscription,
-              isActive,
-            },
-          });
-        }
-      },
-
-      setLoading: (isLoading) => {
-        set({ isLoading });
-      },
-
-      setError: (error) => {
-        set({ error, isLoading: false });
-      },
-
-      clearSubscription: () => {
-        set({ subscription: null, error: null });
-      },
+      setError: (error) => 
+        set({ error, isLoading: false }),
 
       fetchSubscription: async () => {
-        set({ isLoading: true, error: null });
+        const state = get();
         
+        if (state.isLoading) return;
+        
+        set({ isLoading: true, error: null });
+
         try {
-          // Make API call to fetch user subscription
-          const response = await fetch('/api/user/subscription');
+          const response = await fetch('/api/user/data?force=true');
           
           if (!response.ok) {
-            if (response.status === 401) {
-              // User not authenticated - set as free tier
-              set({
-                subscription: {
-                  tier: 'free',
-                  isActive: true,
-                },
-                isLoading: false,
-              });
-              return;
-            }
-            throw new Error('Failed to fetch subscription');
+            throw new Error('Failed to fetch subscription data');
           }
-          
-          const data = await response.json();
-          
-          // Transform API response to UserSubscription format
-          const subscription: UserSubscription = {
-            tier: data.tier || 'free',
-            isActive: data.isActive ?? true,
-            expiresAt: data.expiresAt ? new Date(data.expiresAt) : undefined,
-            features: data.features,
-          };
-          
-          set({ subscription, isLoading: false });
+
+          const userData = await response.json();
+          const subscription: UserSubscription = userData.subscription;
+
+          set({ 
+            subscription, 
+            isLoading: false, 
+            error: null,
+            lastFetched: new Date() 
+          });
         } catch (error) {
-          console.error('Failed to fetch subscription:', error);
-          // Fallback to free tier on error
-          set({
-            subscription: {
-              tier: 'free',
-              isActive: true,
-            },
-            error: error instanceof Error ? error.message : 'Unknown error',
-            isLoading: false,
+          set({ 
+            subscription: null,
+            isLoading: false, 
+            error: error instanceof Error ? error.message : 'Failed to fetch subscription',
+            lastFetched: new Date()
           });
         }
       },
+
+      clearSubscription: () => 
+        set({ 
+          subscription: null, 
+          isLoading: false, 
+          error: null, 
+          lastFetched: null 
+        }),
     }),
     {
       name: 'user-subscription-storage',
-      partialize: (state: UserSubscriptionState) => ({ 
-        subscription: state.subscription 
-      }), // Only persist subscription data, not loading states
+      storage: createJSONStorage(() => localStorage),
+      partialize: (state: UserSubscriptionStore) => ({
+        subscription: state.subscription,
+        lastFetched: state.lastFetched,
+      }),
     }
   )
 );
 
-// Selectors for easy access to specific parts of the state
-export const useUserTier = () => {
-  return useUserSubscriptionStore((state) => state.subscription?.tier || 'free');
-};
+// Selectors
+export const useUserTier = () => useUserSubscriptionStore((state) => {
+  if (!state.subscription) return 'free';
+  
+  const planName = state.subscription.plan?.toLowerCase() || '';
+  const planType = state.subscription.planType?.toUpperCase() || '';
+  
+  if (planName.includes('enterprise') || planType === 'ENTERPRISE') {
+    return 'enterprise';
+  } else if (planName.includes('standard') || planType === 'STANDARD') {
+    return 'standard';
+  } else if (planName.includes('pro') || planType === 'PRO') {
+    return 'standard';
+  }
+  
+  return 'free';
+});
 
-export const useIsSubscriptionActive = () => {
-  return useUserSubscriptionStore((state) => state.subscription?.isActive ?? true);
-};
+export const useIsSubscriptionActive = () => useUserSubscriptionStore((state) => {
+  if (!state.subscription) return false;
+  return state.subscription.status === 'active';
+});
 
-export const useUserSubscription = () => {
-  return useUserSubscriptionStore((state) => state.subscription);
-}; 
+export const useUserSubscription = () => useUserSubscriptionStore((state) => state.subscription);
+
+// Auto-fetch subscription on store initialization
+if (typeof window !== 'undefined') {
+  const store = useUserSubscriptionStore.getState();
+  
+  // Fetch if no subscription data or data is stale (older than 30 minutes)
+  const shouldFetch = !store.subscription || 
+    !store.lastFetched || 
+    (new Date().getTime() - new Date(store.lastFetched).getTime()) > 30 * 60 * 1000;
+    
+  if (shouldFetch) {
+    store.fetchSubscription();
+  }
+} 
