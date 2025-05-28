@@ -11,13 +11,16 @@ import CodeCanvas from "./CodeCanvas"
 import CodeIndicator from "./CodeIndicator"
 import CodeFixButton from "./CodeFixButton"
 import { v4 as uuidv4 } from 'uuid'
-import { Code, AlertTriangle } from "lucide-react"
+import { Code, AlertTriangle, Lock } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import axios from "axios"
 import { useSessionStore } from '@/lib/store/sessionStore'
 import logger from '@/lib/utils/logger'
 import { useToast } from "@/components/ui/use-toast"
 import API_URL from '@/config/api'
+import { useUserSubscription, useUserSubscriptionStore } from '@/lib/store/userSubscriptionStore'
+import { useFeatureAccess } from '@/lib/hooks/useFeatureAccess'
+import { PremiumFeatureButton } from '@/components/features/FeatureGate'
 
 interface PlotlyMessage {
   type: "plotly"
@@ -80,6 +83,9 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
   const [codeFixState, setCodeFixState] = useState<CodeFixState>({ isFixing: false, codeBeingFixed: null })
   const { sessionId: storeSessionId } = useSessionStore()
   const { toast } = useToast()
+  const { subscription } = useUserSubscriptionStore()
+  const codeEditAccess = useFeatureAccess('AI_CODE_EDIT', subscription)
+  const codeFixAccess = useFeatureAccess('AI_CODE_FIX', subscription)
   
   // Set chatCompleted when chat name is generated
   useEffect(() => {
@@ -690,14 +696,17 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
   // Handle fix complete
   const handleFixComplete = useCallback((codeId: string, fixedCode: string) => {
     // Increment the fix count
-    setCodeFixes(prev => ({
-      ...prev,
-      [codeId]: (prev[codeId] || 0) + 1
-    }))
+    setCodeFixes(prev => {
+      const updatedFixes = { ...prev };
+      updatedFixes[codeId] = (prev[codeId] || 0) + 1;
+      console.log("ChatWindow: Updated fix counts:", updatedFixes);
+      return updatedFixes;
+    });
 
     // Update the code in the appropriate entry
     const codeEntry = codeEntries.find(entry => entry.id === codeId)
     if (codeEntry) {
+      // Create a new array to ensure React detects the change
       setCodeEntries(prev =>
         prev.map(entry =>
           entry.id === codeId
@@ -741,10 +750,21 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
       description: "The code has been fixed and is ready to run in the code canvas.",
       duration: 5000,
     })
-  }, [codeEntries, handleCodeCanvasExecute, codeCanvasOpen, setCodeCanvasOpen, setHiddenCanvas, toast]);
+  }, [codeEntries, handleCodeCanvasExecute, codeCanvasOpen, toast]);
 
   // Add a handleOpenCanvasForFix function to ChatWindow which passes the error message to CodeCanvas
   const handleOpenCanvasForFix = useCallback((errorMessage: string, codeId: string) => {
+    // Check if user has access to the code fix feature
+    if (!codeFixAccess.hasAccess) {
+      toast({
+        title: "Feature not available",
+        description: `AI Code Fix requires a ${codeFixAccess.requiredTier} subscription.`,
+        variant: "destructive",
+        duration: 5000,
+      })
+      return
+    }
+    
     // Set current message index if we've passed a valid codeId
     const codeEntry = codeEntries.find(entry => entry.id === codeId);
     
@@ -807,7 +827,48 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
         }
       }
     }
-  }, [codeEntries, messages, clearCodeEntriesKeepOutput, extractCodeFromMessages]);
+  }, [codeEntries, messages, clearCodeEntriesKeepOutput, extractCodeFromMessages, codeFixAccess]);
+
+  // Modified CodeIndicator render function with feature access
+  const renderCodeIndicator = (language: string, index: number, partIndex: number) => {
+    const message = messages[index];
+    return (
+      <CodeIndicator
+        key={`${index}-${partIndex}-code`}
+        language={language}
+        onClick={async () => {
+          // When clicking on a code indicator, process the message and make the canvas visible
+          setCurrentMessageIndex(index);
+          clearCodeEntriesKeepOutput();
+          
+          // Make sure we're using the correct message_id
+          const actualMessageId = message.message_id || index;
+          logger.log(`Code indicator clicked for message at index ${index} with message_id: ${actualMessageId}`);
+          
+          // Extract code with the correct message ID - this will fetch the latest code if available
+          await extractCodeFromMessages([message], actualMessageId);
+          
+          // Make the canvas visible
+          setCodeCanvasOpen(true);
+          setHiddenCanvas(false); // Make the canvas visible when clicked
+          
+          // Close sidebar if it's open
+          if (setSidebarOpen) {
+            setSidebarOpen(false);
+          }
+          
+          // Show premium upgrade toast if needed
+          if (!codeEditAccess.hasAccess) {
+            toast({
+              title: "Premium Feature",
+              description: "AI Code Edit requires a paid subscription.",
+              duration: 5000,
+            });
+          }
+        }}
+      />
+    );
+  };
 
   const renderMessage = (message: ChatMessage, index: number) => {
     if (typeof message.text === "object" && message.text.type === "plotly") {
@@ -890,33 +951,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
                   />;
                 } else if (part.type === 'code') {
                   // Code indicator
-                  return (
-                    <CodeIndicator
-                      key={`${index}-${partIndex}-code`}
-                      language={part.language}
-                      onClick={async () => {
-                        // When clicking on a code indicator, process the message and make the canvas visible
-                        setCurrentMessageIndex(index);
-                        clearCodeEntriesKeepOutput();
-                        
-                        // Make sure we're using the correct message_id
-                        const actualMessageId = message.message_id || index;
-                        logger.log(`Code indicator clicked for message at index ${index} with message_id: ${actualMessageId}`);
-                        
-                        // Extract code with the correct message ID - this will fetch the latest code if available
-                        await extractCodeFromMessages([message], actualMessageId);
-                        
-                        // Make the canvas visible
-                        setCodeCanvasOpen(true);
-                        setHiddenCanvas(false); // Make the canvas visible when clicked
-                        
-                        // Close sidebar if it's open
-                        if (setSidebarOpen) {
-                          setSidebarOpen(false);
-                        }
-                      }}
-                    />
-                  );
+                  return renderCodeIndicator(part.language, index, partIndex);
                 }
                 return null;
               })
@@ -995,18 +1030,27 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
             </div>
             
             {errorOutputs[0].codeId && (
-              <CodeFixButton
-                codeId={errorOutputs[0].codeId}
-                errorOutput={errorOutputs[0].content as string}
-                code={codeEntries.find(entry => entry.id === errorOutputs[0].codeId)?.code || ''}
-                isFixing={codeFixState.isFixing && codeFixState.codeBeingFixed === errorOutputs[0].codeId}
-                codeFixes={codeFixes}
-                sessionId={sessionId || storeSessionId || ''}
-                onFixStart={handleFixStart}
-                onFixComplete={handleFixComplete}
-                onCreditCheck={handleCreditCheck}
-                variant="inline"
-              />
+              codeFixAccess.hasAccess ? (
+                <CodeFixButton
+                  codeId={errorOutputs[0].codeId}
+                  errorOutput={errorOutputs[0].content as string}
+                  code={codeEntries.find(entry => entry.id === errorOutputs[0].codeId)?.code || ''}
+                  isFixing={codeFixState.isFixing && codeFixState.codeBeingFixed === errorOutputs[0].codeId}
+                  codeFixes={codeFixes}
+                  sessionId={sessionId || storeSessionId || ''}
+                  onFixStart={handleFixStart}
+                  onFixComplete={handleFixComplete}
+                  onCreditCheck={handleCreditCheck}
+                  variant="inline"
+                />
+              ) : (
+                <div className="absolute top-3 right-3">
+                  <PremiumFeatureButton
+                    featureId="AI_CODE_FIX"
+                    variant="icon"
+                  />
+                </div>
+              )
             )}
             
             <pre className="text-xs text-red-700 font-mono whitespace-pre-wrap">
@@ -1027,18 +1071,27 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
              (textOutputs[0].content.toString().toLowerCase().includes("error") || 
               textOutputs[0].content.toString().toLowerCase().includes("traceback") || 
               textOutputs[0].content.toString().toLowerCase().includes("exception")) && (
-              <CodeFixButton
-                codeId={textOutputs[0].codeId}
-                errorOutput={textOutputs[0].content as string}
-                code={codeEntries.find(entry => entry.id === textOutputs[0].codeId)?.code || ''}
-                isFixing={codeFixState.isFixing && codeFixState.codeBeingFixed === textOutputs[0].codeId}
-                codeFixes={codeFixes}
-                sessionId={sessionId || storeSessionId || ''}
-                onFixStart={handleFixStart}
-                onFixComplete={handleFixComplete}
-                onCreditCheck={handleCreditCheck}
-                variant="inline"
-              />
+              codeFixAccess.hasAccess ? (
+                <CodeFixButton
+                  codeId={textOutputs[0].codeId}
+                  errorOutput={textOutputs[0].content as string}
+                  code={codeEntries.find(entry => entry.id === textOutputs[0].codeId)?.code || ''}
+                  isFixing={codeFixState.isFixing && codeFixState.codeBeingFixed === textOutputs[0].codeId}
+                  codeFixes={codeFixes}
+                  sessionId={sessionId || storeSessionId || ''}
+                  onFixStart={handleFixStart}
+                  onFixComplete={handleFixComplete}
+                  onCreditCheck={handleCreditCheck}
+                  variant="inline"
+                />
+              ) : (
+                <div className="absolute top-3 right-3">
+                  <PremiumFeatureButton
+                    featureId="AI_CODE_FIX"
+                    variant="icon"
+                  />
+                </div>
+              )
             )}
             
             {(() => {
