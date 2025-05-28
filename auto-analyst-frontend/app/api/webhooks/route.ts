@@ -4,6 +4,7 @@ import { Readable } from 'stream'
 import redis, { creditUtils, KEYS, profileUtils } from '@/lib/redis'
 import { sendSubscriptionConfirmation, sendPaymentConfirmationEmail } from '@/lib/email'
 import logger from '@/lib/utils/logger'
+import { CreditConfig } from '@/lib/credits-config'
 
 // Use the correct App Router configuration instead of the default body parser
 export const dynamic = 'force-dynamic'
@@ -64,22 +65,10 @@ async function updateUserSubscription(userId: string, session: Stripe.Checkout.S
       renewalDate.setDate(now.getDate() + 1)
     }
     
-    // Determine credit amounts based on plan
-    let creditAmount = 100 // Free tier default
-    let planType = 'FREE'
-    
-    if (planName.toLowerCase().includes('pro')) {
-      creditAmount = 999999 // Essentially unlimited
-      planType = 'PRO'
-    } else if (planName.toLowerCase().includes('standard')) {
-      // Check if it's daily billing
-      if (interval === 'day') {
-        creditAmount = 500 // Daily credits
-      } else {
-        creditAmount = 500 // Regular Standard plan credits
-      }
-      planType = 'STANDARD'
-    }
+    // Determine credit amounts based on plan using centralized config
+    const planCredits = CreditConfig.getCreditsForPlan(planName)
+    const creditAmount = planCredits.total
+    const planType = planCredits.type
     
     // Update subscription data
     await redis.hset(KEYS.USER_SUBSCRIPTION(userId), {
@@ -273,7 +262,7 @@ export async function POST(request: NextRequest) {
             
             // Mark the credits to be downgraded on next reset
             await redis.hset(KEYS.USER_CREDITS(userId), {
-              nextTotalCredits: '100',
+              nextTotalCredits: CreditConfig.getCreditsForPlan('Free').total.toString(),
               pendingDowngrade: 'true',
               lastUpdate: new Date().toISOString()
             })
@@ -291,7 +280,7 @@ export async function POST(request: NextRequest) {
             
             // Mark the credits to be downgraded on next reset
             await redis.hset(KEYS.USER_CREDITS(userId), {
-              nextTotalCredits: '100',
+              nextTotalCredits: CreditConfig.getCreditsForPlan('Free').total.toString(),
               pendingDowngrade: 'true',
               lastUpdate: new Date().toISOString()
             })
@@ -372,10 +361,13 @@ export async function POST(request: NextRequest) {
         const resetDate = new Date(now)
         resetDate.setMonth(resetDate.getMonth() + 1)
         
+        // Get Free plan configuration
+        const freeCredits = CreditConfig.getCreditsForPlan('Free')
+        
         // Update subscription data
         await redis.hset(KEYS.USER_SUBSCRIPTION(userId), {
-          plan: 'Free Plan',
-          planType: 'FREE',
+          plan: freeCredits.displayName,
+          planType: freeCredits.type,
           status: 'active', // Free plan is always active
           amount: '0',
           interval: 'month',
@@ -391,10 +383,10 @@ export async function POST(request: NextRequest) {
           ? parseInt(currentCredits.used as string) 
           : 0
         
-        // Set credits to Free plan level (100), but preserve used credits
+        // Set credits to Free plan level using centralized config, but preserve used credits
         await redis.hset(KEYS.USER_CREDITS(userId), {
-          total: '100',
-          used: Math.min(usedCredits, 100).toString(), // Used credits shouldn't exceed new total
+          total: freeCredits.total.toString(),
+          used: Math.min(usedCredits, freeCredits.total).toString(), // Used credits shouldn't exceed new total
           resetDate: resetDate.toISOString().split('T')[0],
           lastUpdate: now.toISOString()
         })

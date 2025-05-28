@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getToken } from 'next-auth/jwt';
 import { creditUtils } from '@/lib/redis';
+import { CreditConfig } from '@/lib/credits-config';
 
 export async function GET(request: NextRequest) {
   try {
@@ -16,7 +17,7 @@ export async function GET(request: NextRequest) {
     const searchParams = request.nextUrl.searchParams;
     const amount = searchParams.get('amount')
       ? parseInt(searchParams.get('amount') as string) 
-      : parseInt(process.env.NEXT_PUBLIC_CREDITS_INITIAL_AMOUNT || '100');
+      : CreditConfig.getDefaultInitialCredits();
     
     // Initialize credits for the user
     await creditUtils.initializeCredits(userId, amount);

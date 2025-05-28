@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getToken } from 'next-auth/jwt'
 import redis, { KEYS } from '@/lib/redis'
+import { CreditConfig } from '@/lib/credits-config'
 
 export async function GET(request: NextRequest) {
   try {
@@ -22,14 +23,14 @@ export async function GET(request: NextRequest) {
       // Use hash data
       creditsTotal = parseInt(creditsHash.total as string)
       creditsUsed = parseInt(creditsHash.used as string || '0')
-      resetDate = creditsHash.resetDate || new Date(new Date().getFullYear(), new Date().getMonth() + 1, 1).toISOString().split('T')[0]
+      resetDate = creditsHash.resetDate || CreditConfig.getNextResetDate()
       lastUpdate = creditsHash.lastUpdate || new Date().toISOString()
       planName = subscriptionHash?.plan || 'Free Plan'
     } else {
-      // Initialize default values for new users
-      creditsTotal = 100
+      // Initialize default values for new users using centralized config
+      creditsTotal = CreditConfig.getDefaultInitialCredits()
       creditsUsed = 0
-      resetDate = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 1).toISOString().split('T')[0]
+      resetDate = CreditConfig.getNextResetDate()
       lastUpdate = new Date().toISOString()
       planName = 'Free Plan'
       
@@ -49,10 +50,10 @@ export async function GET(request: NextRequest) {
       lastUpdate: currentTime
     })
     
-    // Return the credit data
+    // Return the credit data - use centralized config for unlimited check
     return NextResponse.json({
       used: creditsUsed,
-      total: creditsTotal === 999999 ? Infinity : creditsTotal,
+      total: CreditConfig.isUnlimitedTotal(creditsTotal) ? Infinity : creditsTotal,
       resetDate,
       lastUpdate: currentTime,
     })

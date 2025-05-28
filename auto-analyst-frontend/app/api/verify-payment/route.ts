@@ -4,6 +4,8 @@ import Stripe from 'stripe'
 import redis, { KEYS } from '@/lib/redis'
 import { sendSubscriptionConfirmation, sendPaymentConfirmationEmail } from '@/lib/email'
 import logger from '@/lib/utils/logger'
+import { CreditConfig } from '@/lib/credits-config'
+
 export const dynamic = 'force-dynamic'
 
 // Initialize Stripe only if the secret key exists
@@ -150,7 +152,7 @@ export async function POST(request: NextRequest) {
       // Determine the plan based on the amount
       let planName = 'Free Plan'
       let planType = 'FREE'
-      let creditAmount = 100
+      let creditAmount = CreditConfig.getCreditsForPlan('Free').total
       let interval = 'month'
       
       // Updated price ranges to match actual pricing in pricing.tsx
@@ -158,29 +160,29 @@ export async function POST(request: NextRequest) {
         // Daily Standard plan ($5/day)
         planName = 'Standard Plan (Daily)'
         planType = 'STANDARD'
-        creditAmount = 500
+        creditAmount = CreditConfig.getCreditsForPlan('Standard').total
         interval = 'day'
       } else if (amount >= 10 && amount < 25) {
         // Standard monthly plan ($15/month)
         planName = 'Standard Plan' 
         planType = 'STANDARD'
-        creditAmount = 500
+        creditAmount = CreditConfig.getCreditsForPlan('Standard').total
       } else if (amount >= 25 && amount < 100) {
         // Pro monthly plan ($29/month)
         planName = 'Pro Plan'
         planType = 'PRO'
-        creditAmount = 999999 // Unlimited
+        creditAmount = CreditConfig.getCreditsForPlan('Pro').total // Unlimited
       } else if (amount >= 100 && amount < 200) {
         // Standard yearly plan ($126/year)
         planName = 'Standard Plan (Yearly)'
         planType = 'STANDARD'
-        creditAmount = 500
+        creditAmount = CreditConfig.getCreditsForPlan('Standard').total
         interval = 'year'
       } else if (amount >= 200 && amount < 500) {
         // Pro yearly plan ($243.60/year)
         planName = 'Pro Plan (Yearly)'
         planType = 'PRO'
-        creditAmount = 999999 // Unlimited
+        creditAmount = CreditConfig.getCreditsForPlan('Pro').total // Unlimited
         interval = 'year'
       }
       
@@ -215,21 +217,28 @@ export async function POST(request: NextRequest) {
       // logger.log('Storing fallback subscription data:', subscriptionData)
       await redis.hset(KEYS.USER_SUBSCRIPTION(userId), subscriptionData)
       
-      // Calculate next credits reset date (one month from current date)
-      const creditResetDate = new Date(now);
+      // Calculate next credits reset date (using centralized function)
+      let creditResetDate: string;
       
       // Adjust reset date based on interval
       if (interval === 'day') {
-        creditResetDate.setDate(creditResetDate.getDate() + 1);
+        // For daily plans, reset daily (tomorrow)
+        const tomorrow = new Date(now);
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        creditResetDate = tomorrow.toISOString().split('T')[0];
+      } else if (interval === 'year') {
+        // For yearly plans, use yearly reset
+        creditResetDate = CreditConfig.getNextYearlyResetDate();
       } else {
-        creditResetDate.setMonth(creditResetDate.getMonth() + 1);
+        // For monthly plans, use monthly reset
+        creditResetDate = CreditConfig.getNextResetDate();
       }
       
       // Update credits
       const creditData = {
         total: creditAmount.toString(),
         used: '0',
-        resetDate: creditResetDate.toISOString().split('T')[0],
+        resetDate: creditResetDate,
         lastUpdate: now.toISOString()
       }
       
@@ -248,7 +257,7 @@ export async function POST(request: NextRequest) {
           interval,
           renewalDate.toISOString().split('T')[0],
           creditAmount,
-          creditResetDate.toISOString().split('T')[0]
+          creditResetDate
         )
       } else {
         // logger.log('No email found for user, cannot send confirmation email')
@@ -315,7 +324,7 @@ async function updateUserSubscriptionFromSession(userId: string, session: Stripe
     
     // Determine plan type and credits allocation with more robust matching
     let planType = 'FREE'
-    let creditAmount = 100
+    let creditAmount = CreditConfig.getCreditsForPlan('Free').total
     
     // More robust plan name matching
     const planNameUpper = planName.toUpperCase()
@@ -323,14 +332,14 @@ async function updateUserSubscriptionFromSession(userId: string, session: Stripe
     // First check for PRO plans (check first to avoid "STANDARD" matching in "PRO STANDARD")
     if (planNameUpper.includes('PRO')) {
       planType = 'PRO'
-      creditAmount = 999999 // Unlimited
+      creditAmount = CreditConfig.getCreditsForPlan('Pro').total // Unlimited
     } else if (planNameUpper.includes('STANDARD')) {
       planType = 'STANDARD'
       // Check if it's daily billing
       if (interval === 'day') {
-        creditAmount = 500 // Daily credits
+        creditAmount = CreditConfig.getCreditsForPlan('Standard').total // Daily credits
       } else {
-        creditAmount = 500 // Regular Standard plan credits
+        creditAmount = CreditConfig.getCreditsForPlan('Standard').total // Regular Standard plan credits
       }
     }
     
@@ -355,21 +364,28 @@ async function updateUserSubscriptionFromSession(userId: string, session: Stripe
     // Update user's subscription in Redis
     await redis.hset(KEYS.USER_SUBSCRIPTION(userId), subscriptionData)
     
-    // Calculate next credits reset date (one month from current date)
-    const creditResetDate = new Date(now);
+    // Calculate next credits reset date (using centralized function)
+    let creditResetDate: string;
     
     // Adjust reset date based on interval
     if (interval === 'day') {
-      creditResetDate.setDate(creditResetDate.getDate() + 1);
+      // For daily plans, reset daily (tomorrow)
+      const tomorrow = new Date(now);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      creditResetDate = tomorrow.toISOString().split('T')[0];
+    } else if (interval === 'year') {
+      // For yearly plans, use yearly reset
+      creditResetDate = CreditConfig.getNextYearlyResetDate();
     } else {
-      creditResetDate.setMonth(creditResetDate.getMonth() + 1);
+      // For monthly plans, use monthly reset
+      creditResetDate = CreditConfig.getNextResetDate();
     }
     
     // Update credits
     const creditData = {
       total: creditAmount.toString(),
       used: '0',
-      resetDate: creditResetDate.toISOString().split('T')[0],
+      resetDate: creditResetDate,
       lastUpdate: now.toISOString()
     }
     
@@ -387,7 +403,7 @@ async function updateUserSubscriptionFromSession(userId: string, session: Stripe
         interval,
         renewalDate.toISOString().split('T')[0],
         creditAmount,
-        creditResetDate.toISOString().split('T')[0]
+        creditResetDate
       )
     } else {
       logger.log('No email found for user, cannot send confirmation email')
