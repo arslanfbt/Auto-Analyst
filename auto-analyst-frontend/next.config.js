@@ -8,10 +8,10 @@ const nextConfig = {
       'lh3.googleusercontent.com', 
       'deepseek.com'
     ],
-    formats: ['image/webp'],             // ✅ Use only WebP to reduce transformations
-    minimumCacheTTL: 2678400,            // ✅ Cache for 31 days
-    deviceSizes: [640, 768, 1024, 1280], // ✅ Tailor to your design breakpoints
-    imageSizes: [16, 32, 48, 64, 96],    // ✅ For small UI elements/icons
+    formats: ['image/webp'],             // Use only WebP to reduce transformations
+    minimumCacheTTL: 2678400,            // Cache for 31 days
+    deviceSizes: [640, 768, 1024, 1280], // Tailor to your design breakpoints
+    imageSizes: [16, 32, 48, 64, 96],    // For small UI elements/icons
   },
 };
 
