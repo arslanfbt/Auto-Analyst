@@ -213,7 +213,7 @@ def extract_relevant_error_section(error_message: str) -> str:
     
     # If we couldn't find "Problem at this location", include first few and last few lines
     if len(error_lines) > 10:
-        return '\n'.join(error_lines[:3] + error_lines[-3:])
+        return '\n'.join(error_lines[:5] + error_lines[-7:])
     
     # If the error is short enough, return as is
     return error_message
