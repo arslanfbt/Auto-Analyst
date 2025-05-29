@@ -155,6 +155,9 @@ plan: planner_preprocessing_agent -> planner_statistical_analytics_agent -> plan
   }
 }
 Try to use as few agents to answer the user query as possible.
+
+Respond in the user's language for all explanations and instructions, but keep all code, variable names, function names, model names, agent names, and library names in English.
+
     """
     dataset = dspy.InputField(desc="Available datasets loaded in the system, use this df, columns set df as copy of df")
     Agent_desc = dspy.InputField(desc="The agents available in the system")
@@ -185,6 +188,9 @@ class basic_query_planner(dspy.Signature):
                         "use": ["original_data"],
                         "instruction": "use the original_data to measure correlation of X & Y, using pandas"
                     }
+    
+    
+    Respond in the user's language for all explanations and instructions, but keep all code, variable names, function names, model names, agent names, and library names in English.
     """
     dataset = dspy.InputField(desc="Available datasets loaded in the system, use this df, columns set df as copy of df")
     Agent_desc = dspy.InputField(desc="The agents available in the system")
@@ -219,6 +225,9 @@ class intermediate_query_planner(dspy.Signature):
             }
     Keep the instructions minimal without many variables, and minimize the number of unknowns, keep it obvious!
     Try to use no more than 2 agents, unless completely necessary!
+    
+    
+    Respond in the user's language for all explanations and instructions, but keep all code, variable names, function names, model names, agent names, and library names in English.
     """
     dataset = dspy.InputField(desc="Available datasets loaded in the system, use this df,columns  set df as copy of df")
     Agent_desc = dspy.InputField(desc= "The agents available in the system")
