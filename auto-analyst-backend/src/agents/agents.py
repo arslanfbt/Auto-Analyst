@@ -1057,7 +1057,11 @@ class auto_analyst(dspy.Module):
         
         module_return = self.planner(goal=dict_['goal'], dataset=dict_['dataset'], Agent_desc=dict_['Agent_desc'])
         plan_dict = dict(module_return['plan'])
-        # plan_dict['complexity'] = module_return['complexity']
+        if 'complexity' in module_return:
+            complexity = module_return['complexity']
+        else:
+            complexity = 'basic'
+        plan_dict['complexity'] = complexity
 
 
         return plan_dict

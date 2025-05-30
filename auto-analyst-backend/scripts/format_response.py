@@ -135,7 +135,7 @@ def clean_code_for_security(code_str, security_concerns):
         modified_code = f"print('{security_message}')\n\n" + modified_code
     
     return modified_code
-
+    
 def format_correlation_output(text):
     """Format correlation matrix output for better readability"""
     lines = text.split('\n')
@@ -838,6 +838,49 @@ def format_plan_instructions(plan_instructions):
 
     return "\n".join(markdown_lines).strip()
     
+
+def format_complexity(instructions):
+    markdown_lines = []
+    # Extract complexity from various possible locations in the structure
+    if isinstance(instructions, dict):
+        # Case 1: Direct complexity field
+        if 'complexity' in instructions:
+            complexity = instructions['complexity']
+        # Case 2: Complexity in 'plan' object
+        elif 'plan' in instructions and isinstance(instructions['plan'], dict):
+            if 'complexity' in instructions['plan']:
+                complexity = instructions['plan']['complexity']
+        else:
+            complexity = "unrelated"
+    
+    if 'plan' in instructions and isinstance(instructions['plan'], str) and "basic_qa_agent" in instructions['plan']:
+        complexity = "unrelated"
+    
+    if complexity:
+        # Pink color scheme variations
+        color_map = {
+            "unrelated": "#FFB6B6",  # Light pink
+            "basic": "#FF9E9E",      # Medium pink
+            "intermediate": "#FF7F7F", # Main pink
+            "advanced": "#FF5F5F"    # Dark pink
+        }
+        
+        indicator_map = {
+            "unrelated": "○",
+            "basic": "●",
+            "intermediate": "●●",
+            "advanced": "●●●"
+        }
+        
+        color = color_map.get(complexity.lower(), "#FFB6B6")  # Default to light pink
+        indicator = indicator_map.get(complexity.lower(), "○")
+        
+        # Slightly larger display with pink styling
+        markdown_lines.append(f"<div style='color: {color}; border: 2px solid {color}; padding: 2px 8px; border-radius: 12px; display: inline-block; font-size: 14.4px;'>{indicator} {complexity}</div>\n")
+
+        return "\n".join(markdown_lines).strip()    
+
+
 def format_response_to_markdown(api_response, agent_name = None, dataframe=None):
     try:
         markdown = []
@@ -863,14 +906,17 @@ def format_response_to_markdown(api_response, agent_name = None, dataframe=None)
             if "memory" in agent or not content:
                 continue
                 
+            if "complexity" in content:
+                markdown.append(f"{format_complexity(content)}\n")
+                
             markdown.append(f"\n## {agent.replace('_', ' ').title()}\n")
             
             if agent == "analytical_planner":
-                # logger.log_message(f"Analytical planner content: {content}", level=logging.INFO)
+                logger.log_message(f"Analytical planner content: {content}", level=logging.INFO)
                 if 'plan_desc' in content:
                     markdown.append(f"### Reasoning\n{content['plan_desc']}\n")
                 if 'plan_instructions' in content:
-                    markdown.append(f"### Plan Instructions\n{format_plan_instructions(content['plan_instructions'])}\n")
+                    markdown.append(f"{format_plan_instructions(content['plan_instructions'])}\n")
                 else:
                     markdown.append(f"### Reasoning\n{content['rationale']}\n")
             else:  
@@ -881,34 +927,35 @@ def format_response_to_markdown(api_response, agent_name = None, dataframe=None)
                 markdown.append(f"### Code Implementation\n{format_code_backticked_block(content['code'])}\n")
             if 'answer' in content:
                 markdown.append(f"### Answer\n{content['answer']}\n Please ask a query about the data")
-                # if agent_name is not None:
-                #     # execute the code
-                #     clean_code = format_code_block(content['code'])
-                #     output, json_outputs = execute_code_from_markdown(clean_code, dataframe)
-                #     if output:
-                #         markdown.append("### Execution Output\n")
-                #         markdown.append(f"```output\n{output}\n```\n")
-
-                #     if json_outputs:
-                #         markdown.append("### Plotly JSON Outputs\n")
-                #         for idx, json_output in enumerate(json_outputs):
-                #             if len(json_output) > 1000000:  # If JSON is larger than 1MB
-                #                 logger.log_message(f"Large JSON output detected: {len(json_output)} bytes", level=logging.WARNING)
-                #             markdown.append(f"```plotly\n{json_output}\n```\n")
-
             if 'summary' in content:
-                # make the summary a bullet-point list
-                summary_lines = remove_code_block_from_summary(content['summary'])
-                summary_lines = content['summary'].split('\n')
-                # remove code block from summary
+                import re
+                summary_text = content['summary']
+                summary_text = re.sub(r'```python\n(.*?)\n```', '', summary_text, flags=re.DOTALL)
+
                 markdown.append("### Summary\n")
-                for line in summary_lines:
-                    if line != "":
-                        if line.strip().startswith('•') or line.strip().startswith('-') or line.strip().startswith('*'):
-                            line = line.strip().replace('•', '').replace('-', '').replace('*', '')
-                            markdown.append(f"* {line.strip()}\n")
-                        else:
-                            markdown.append(f"{line.strip()}\n")
+
+                # Extract pre-list intro, bullet points, and post-list text
+                intro_match = re.split(r'\(\d+\)', summary_text, maxsplit=1)
+                if len(intro_match) > 1:
+                    intro_text = intro_match[0].strip()
+                    rest_text = "(1)" + intro_match[1]  # reattach for bullet parsing
+                else:
+                    intro_text = summary_text.strip()
+                    rest_text = ""
+
+                if intro_text:
+                    markdown.append(f"{intro_text}\n")
+
+                # Split bullets at numbered items like (1)...(8)
+                bullets = re.split(r'\(\d+\)', rest_text)
+                bullets = [b.strip(" ,.\n") for b in bullets if b.strip()]
+
+                # Check for post-list content (anything after the last number)
+                for i, bullet in enumerate(bullets):
+                    markdown.append(f"* {bullet}\n")
+
+
+
 
             if 'refined_complete_code' in content and 'summary' in content:
                 try:
