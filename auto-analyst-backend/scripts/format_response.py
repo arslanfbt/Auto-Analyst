@@ -930,29 +930,31 @@ def format_response_to_markdown(api_response, agent_name = None, dataframe=None)
             if 'summary' in content:
                 import re
                 summary_text = content['summary']
-                # Remove code blocks if any
                 summary_text = re.sub(r'```python\n(.*?)\n```', '', summary_text, flags=re.DOTALL)
-                
+
                 markdown.append("### Summary\n")
-                
-                # Match patterns like (1) ..., 1. ..., or even (1).
-                bullet_pattern = re.compile(
-                    r'(?:\(\d+\)|\d+\.)\s*([^\(\d\)]+(?:\([^\)]*\)[^\(\d\)]*)*)'
-                )
-                bullets = bullet_pattern.findall(summary_text)
-                
-                if bullets:
-                    for bullet in bullets:
-                        bullet = bullet.strip()
-                        if bullet:
-                            markdown.append(f"* {bullet}\n")
+
+                # Extract pre-list intro, bullet points, and post-list text
+                intro_match = re.split(r'\(\d+\)', summary_text, maxsplit=1)
+                if len(intro_match) > 1:
+                    intro_text = intro_match[0].strip()
+                    rest_text = "(1)" + intro_match[1]  # reattach for bullet parsing
                 else:
-                    # Try splitting using sentence boundaries if bullets not found
-                    sentences = re.split(r'(?<=[.!?]) +', summary_text)
-                    for sentence in sentences:
-                        clean_sentence = sentence.strip()
-                        if clean_sentence:
-                            markdown.append(f"* {clean_sentence}\n")
+                    intro_text = summary_text.strip()
+                    rest_text = ""
+
+                if intro_text:
+                    markdown.append(f"{intro_text}\n")
+
+                # Split bullets at numbered items like (1)...(8)
+                bullets = re.split(r'\(\d+\)', rest_text)
+                bullets = [b.strip(" ,.\n") for b in bullets if b.strip()]
+
+                # Check for post-list content (anything after the last number)
+                for i, bullet in enumerate(bullets):
+                    markdown.append(f"* {bullet}\n")
+
+
 
 
             if 'refined_complete_code' in content and 'summary' in content:
