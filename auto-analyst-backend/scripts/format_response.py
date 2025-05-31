@@ -307,7 +307,6 @@ def format_code_backticked_block(code_str):
     return f'```python\n{code_clean}\n```'
 
     
-# In format_response.py, modify the execute_code function:
 def execute_code_from_markdown(code_str, dataframe=None):
     import pandas as pd
     import plotly.express as px

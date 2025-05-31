@@ -7,6 +7,10 @@ import time
 import uuid
 from io import StringIO
 from typing import List, Optional
+import ast
+import markdown
+from bs4 import BeautifulSoup
+import pandas as pd
 
 # Third-party imports
 import uvicorn
@@ -40,9 +44,26 @@ from src.routes.session_routes import router as session_router, get_session_id_d
 from src.schemas.query_schemas import QueryRequest
 from src.utils.logger import Logger
 
+# Import deep analysis components directly
+from src.agents.deep_agents import deep_analysis_module, generate_html_report
 
 logger = Logger("app", see_time=True, console_log=False)
 load_dotenv()
+
+# Request models
+class DeepAnalysisRequest(BaseModel):
+    goal: str
+    
+class DeepAnalysisResponse(BaseModel):
+    goal: str
+    deep_questions: str
+    deep_plan: str
+    summaries: List[str]
+    code: str
+    plotly_figs: List
+    synthesis: List[str]
+    final_conclusion: str
+    html_report: Optional[str] = None
 
 styling_instructions = [
     """
@@ -243,6 +264,8 @@ class AppState:
         self._session_manager._app_model_config = self.model_config
         self.ai_manager = AI_Manager()
         self.chat_name_agent = chat_history_name_agent
+        # Initialize deep analysis module
+        self.deep_analyzer = None
     
     def get_session_state(self, session_id: str):
         """Get or create session-specific state using the SessionManager"""
@@ -282,6 +305,23 @@ class AppState:
     
     def get_chat_history_name_agent(self):
         return dspy.Predict(self.chat_name_agent)
+
+    def get_deep_analyzer(self, session_id: str):
+        """Get or create deep analysis module for a session"""
+        session_state = self.get_session_state(session_id)
+        if not hasattr(session_state, 'deep_analyzer') or session_state.get('deep_analyzer') is None:
+            # Create agents dictionary for deep analysis
+            deep_agents = {
+                "planner_data_viz_agent": dspy.asyncify(dspy.ChainOfThought(planner_data_viz_agent)),
+                "planner_statistical_analytics_agent": dspy.asyncify(dspy.ChainOfThought(planner_statistical_analytics_agent)), 
+                "planner_sk_learn_agent": dspy.asyncify(dspy.ChainOfThought(planner_sk_learn_agent)),
+                "planner_preprocessing_agent": dspy.asyncify(dspy.ChainOfThought(planner_preprocessing_agent))
+            }
+            
+            deep_agents_desc = PLANNER_AGENTS_WITH_DESCRIPTION
+            session_state['deep_analyzer'] = deep_analysis_module(agents=deep_agents, agents_desc=deep_agents_desc)
+        
+        return session_state['deep_analyzer']
 
 # Initialize FastAPI app with state
 app = FastAPI(title="AI Analytics API", version="1.0")
@@ -810,6 +850,11 @@ async def _execute_plan_with_timeout(ai_system, enhanced_query, plan_response):
 async def list_agents():
     return {
         "available_agents": list(AVAILABLE_AGENTS.keys()),
+        "planner_agents": list(PLANNER_AGENTS.keys()),
+        "deep_analysis": {
+            "available": True,
+            "description": "Comprehensive multi-step analysis with automated planning"
+        },
         "description": "List of available specialized agents that can be called using @agent_name"
     }
 
@@ -849,6 +894,271 @@ async def chat_history_name(request: dict, session_id: str = Depends(get_session
         name = app.state.get_chat_history_name_agent()(query=str(query))
         
     return {"name": name.name if name else "New Chat"}
+
+@app.post("/deep_analysis", response_model=dict)
+async def deep_analysis(
+    request: DeepAnalysisRequest,
+    request_obj: Request,
+    session_id: str = Depends(get_session_id_dependency)
+):
+    """Perform comprehensive deep analysis on the dataset"""
+    session_state = app.state.get_session_state(session_id)
+    
+    try:
+        # Extract and validate query parameters
+        _update_session_from_query_params(request_obj, session_state)
+        
+        # Validate dataset
+        if session_state["current_df"] is None:
+            raise HTTPException(status_code=400, detail=RESPONSE_ERROR_NO_DATASET)
+        
+        # Get dataset info
+        df = session_state["current_df"]
+        dtypes_info = pd.DataFrame({
+            'Column': df.columns,
+            'Data Type': df.dtypes.astype(str)
+        }).to_markdown()
+        dataset_info = f"Sample Data:\n{df.head(2).to_markdown()}\n\nData Types:\n{dtypes_info}"
+        
+        # Get session-specific model
+        session_lm = get_session_lm(session_state)
+        
+        # Use session model for deep analysis
+        with dspy.context(lm=session_lm):
+            # Get deep analyzer
+            deep_analyzer = app.state.get_deep_analyzer(session_id)
+            
+            # Make the dataset available globally for code execution
+            globals()['df'] = df
+            
+            # Execute deep analysis
+            start_time = time.time()
+            logger.log_message(f"Starting deep analysis for goal: {request.goal}", level=logging.INFO)
+            
+            return_dict = await deep_analyzer.execute_deep_analysis(
+                goal=request.goal, 
+                dataset_info=dataset_info
+            )
+            
+            processing_time = time.time() - start_time
+            logger.log_message(f"Deep analysis completed in {processing_time:.2f} seconds", level=logging.INFO)
+            
+            # Generate HTML report
+            html_report = generate_html_report(return_dict)
+            return_dict['html_report'] = html_report
+            
+            # Track usage if user is logged in
+            if session_state.get("user_id"):
+                _track_model_usage(
+                    session_state=session_state,
+                    enhanced_query=request.goal,
+                    response=return_dict,
+                    processing_time_ms=int(processing_time * 1000)
+                )
+            
+            return {
+                "status": "success",
+                "analysis": return_dict,
+                "processing_time_seconds": round(processing_time, 2),
+                "session_id": session_id
+            }
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.log_message(f"Deep analysis failed: {str(e)}", level=logging.ERROR)
+        raise HTTPException(status_code=500, detail=f"Deep analysis failed: {str(e)}")
+
+@app.post("/deep_analysis_streaming")
+async def deep_analysis_streaming(
+    request: DeepAnalysisRequest,
+    request_obj: Request,
+    session_id: str = Depends(get_session_id_dependency)
+):
+    """Perform streaming deep analysis with real-time updates"""
+    session_state = app.state.get_session_state(session_id)
+    
+    try:
+        # Extract and validate query parameters
+        _update_session_from_query_params(request_obj, session_state)
+        
+        # Validate dataset
+        if session_state["current_df"] is None:
+            raise HTTPException(status_code=400, detail=RESPONSE_ERROR_NO_DATASET)
+        
+        # Get session-specific model
+        # session_lm = get_session_lm(session_state)
+        session_lm = dspy.LM(model="anthropic/claude-4-sonnet-20250514", max_tokens=7000, temperature=0.5)
+        
+        return StreamingResponse(
+            _generate_deep_analysis_stream(session_state, request.goal, session_lm),
+            media_type='text/event-stream',
+            headers={
+                'Cache-Control': 'no-cache',
+                'Connection': 'keep-alive',
+                'Content-Type': 'text/event-stream',
+                'Access-Control-Allow-Origin': '*',
+                'X-Accel-Buffering': 'no'
+            }
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.log_message(f"Streaming deep analysis failed: {str(e)}", level=logging.ERROR)
+        raise HTTPException(status_code=500, detail=f"Streaming deep analysis failed: {str(e)}")
+
+async def _generate_deep_analysis_stream(session_state: dict, goal: str, session_lm):
+    """Generate streaming responses for deep analysis"""
+    try:
+        # Get dataset info
+        df = session_state["current_df"]
+        dtypes_info = pd.DataFrame({
+            'Column': df.columns,
+            'Data Type': df.dtypes.astype(str)
+        }).to_markdown()
+        dataset_info = f"Sample Data:\n{df.head(2).to_markdown()}\n\nData Types:\n{dtypes_info}"
+        
+        # Use session model for this request
+        with dspy.context(lm=session_lm):
+            # Send initial status
+            yield json.dumps({
+                "step": "initialization",
+                "status": "starting",
+                "message": "Initializing deep analysis...",
+                "progress": 10
+            }) + "\n"
+            
+            # Get deep analyzer
+            deep_analyzer = app.state.get_deep_analyzer(session_state.get("session_id", "default"))
+            
+            # Make the dataset available globally for code execution
+            globals()['df'] = df
+            
+            # Step 1: Generate deep questions
+            yield json.dumps({
+                "step": "questions",
+                "status": "processing", 
+                "message": "Generating analytical questions...",
+                "progress": 20
+            }) + "\n"
+            
+            questions = deep_analyzer.deep_questions(goal=goal, dataset_info=dataset_info)
+            
+            yield json.dumps({
+                "step": "questions",
+                "status": "completed",
+                "content": questions.deep_questions,
+                "progress": 30
+            }) + "\n"
+            
+            # Step 2: Create plan
+            yield json.dumps({
+                "step": "planning",
+                "status": "processing",
+                "message": "Creating analysis plan...",
+                "progress": 40
+            }) + "\n"
+            
+            # Continue with full deep analysis execution
+            return_dict = await deep_analyzer.execute_deep_analysis(
+                goal=goal,
+                dataset_info=dataset_info
+            )
+            
+            # Step 3: Send analysis results
+            yield json.dumps({
+                "step": "analysis",
+                "status": "completed",
+                "content": return_dict,
+                "progress": 90
+            }) + "\n"
+            
+            # Step 4: Generate HTML report
+            yield json.dumps({
+                "step": "report",
+                "status": "processing",
+                "message": "Generating final report...",
+                "progress": 95
+            }) + "\n"
+            
+            html_report = generate_html_report(return_dict)
+            
+            yield json.dumps({
+                "step": "completed",
+                "status": "success",
+                "analysis": return_dict,
+                "html_report": html_report,
+                "progress": 100
+            }) + "\n"
+            
+    except Exception as e:
+        logger.log_message(f"Error in deep analysis stream: {str(e)}", level=logging.ERROR)
+        yield json.dumps({
+            "step": "error",
+            "status": "failed",
+            "message": f"Deep analysis failed: {str(e)}",
+            "progress": 0
+        }) + "\n"
+
+@app.get("/deep_analysis/features", response_model=dict)
+async def list_deep_analysis_features():
+    """List available deep analysis features and capabilities"""
+    return {
+        "features": {
+            "deep_questions": "Generate targeted analytical questions based on your goal",
+            "automated_planning": "Create optimized analysis plans using multiple agents",
+            "code_synthesis": "Combine and optimize code from multiple analytical agents",
+            "comprehensive_reporting": "Generate detailed HTML reports with visualizations",
+            "streaming_analysis": "Real-time progress updates during analysis execution"
+        },
+        "supported_analysis_types": [
+            "Statistical Analysis",
+            "Machine Learning",
+            "Data Visualization", 
+            "Data Preprocessing",
+            "Trend Analysis",
+            "Correlation Analysis",
+            "Predictive Modeling"
+        ],
+        "endpoints": {
+            "/deep_analysis": "Full comprehensive analysis",
+            "/deep_analysis_streaming": "Streaming analysis with progress updates"
+        }
+    }
+
+@app.post("/deep_analysis/download_report")
+async def download_html_report(
+    request: dict,
+    session_id: str = Depends(get_session_id_dependency)
+):
+    """Download HTML report from previous deep analysis"""
+    try:
+        analysis_data = request.get("analysis_data")
+        if not analysis_data:
+            raise HTTPException(status_code=400, detail="No analysis data provided")
+        
+        # Generate HTML report
+        html_report = generate_html_report(analysis_data)
+        
+        # Create a filename with timestamp
+        from datetime import datetime
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"deep_analysis_report_{timestamp}.html"
+        
+        # Return as downloadable file
+        return StreamingResponse(
+            iter([html_report.encode('utf-8')]),
+            media_type='text/html',
+            headers={
+                'Content-Disposition': f'attachment; filename="{filename}"',
+                'Content-Type': 'text/html; charset=utf-8'
+            }
+        )
+        
+    except Exception as e:
+        logger.log_message(f"Failed to generate HTML report: {str(e)}", level=logging.ERROR)
+        raise HTTPException(status_code=500, detail=f"Failed to generate report: {str(e)}")
 
 # In the section where routers are included, add the session_router
 app.include_router(chat_router)
