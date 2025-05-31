@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react'
 import { Button } from '@/components/ui/button'
-import { WrenchIcon, CreditCard } from 'lucide-react'
+import { WrenchIcon, CreditCard, Lock } from 'lucide-react'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { useToast } from "@/components/ui/use-toast"
 import axios from "axios"
@@ -10,6 +10,8 @@ import API_URL from '@/config/api'
 import { useSession } from "next-auth/react"
 import { useCredits } from '@/lib/contexts/credit-context'
 import { motion } from "framer-motion"
+import { useFeatureAccess } from '@/lib/hooks/useFeatureAccess'
+import { useUserSubscriptionStore } from '@/lib/store/userSubscriptionStore'
 
 interface CodeFixButtonProps {
   codeId: string
@@ -42,12 +44,25 @@ const CodeFixButton: React.FC<CodeFixButtonProps> = ({
   const { data: session } = useSession()
   const { hasEnoughCredits, checkCredits } = useCredits()
   const [hovered, setHovered] = useState(false)
+  const { subscription } = useUserSubscriptionStore()
+  const featureAccess = useFeatureAccess('AI_CODE_FIX', subscription)
   
   // Get the number of fixes for this code entry
   const fixCount = codeFixes[codeId] || 0
   const isFreeFix = fixCount < 3
 
   const handleFixCode = async () => {
+    // Check if user has access to the feature
+    if (!featureAccess.hasAccess) {
+      toast({
+        title: "Premium Feature",
+        description: `AI Code Fix requires a ${featureAccess.requiredTier} subscription.`,
+        variant: "destructive",
+        duration: 5000,
+      })
+      return
+    }
+    
     // Check if the error output exists
     if (!errorOutput) return
     
@@ -143,11 +158,17 @@ const CodeFixButton: React.FC<CodeFixButtonProps> = ({
             }
           } catch (creditError) {
             console.error("Failed to deduct credits for code fix:", creditError);
+            // Don't stop the process if credit deduction fails
           }
         }
         
         // Notify parent component that fix is complete
-        onFixComplete(codeId, fixedCode)
+        try {
+          onFixComplete(codeId, fixedCode)
+        } catch (completionError) {
+          console.error("Error in onFixComplete callback:", completionError);
+          // Don't show an error toast for this, as the fix itself was successful
+        }
         
         toast({
           title: "Code fixed",
@@ -155,6 +176,10 @@ const CodeFixButton: React.FC<CodeFixButtonProps> = ({
           variant: "default",
           duration: 3000,
         })
+        
+        // Exit successfully
+        return
+        
       } else if (response.data && response.data.error) {
         toast({
           title: "Error fixing code",
@@ -162,16 +187,108 @@ const CodeFixButton: React.FC<CodeFixButtonProps> = ({
           variant: "destructive",
           duration: 5000,
         })
+        return
+      } else {
+        // No fixed code or error in response
+        toast({
+          title: "Error fixing code", 
+          description: "No fixed code received from the server.",
+          variant: "destructive",
+          duration: 5000,
+        })
+        return
       }
     } catch (error) {
       console.error("Error fixing code with AI:", error)
       toast({
-        title: "Error",
-        description: "Failed to fix code. Please try again.",
+        title: "Network error",
+        description: "Failed to connect to the server. Please try again.",
         variant: "destructive",
         duration: 5000,
       })
     }
+  }
+
+  // If user doesn't have access to the feature, show lock icon instead of wrench
+  if (!featureAccess.hasAccess) {
+    // Default 'button' variant with lock icon
+    if (variant === 'button') {
+      return (
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div className={`flex items-center ${className}`}>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    toast({
+                      title: "Premium Feature",
+                      description: `AI Code Fix requires a ${featureAccess.requiredTier} subscription.`,
+                      duration: 5000,
+                    });
+                  }}
+                  className="text-gray-500 hover:bg-gray-100 relative"
+                >
+                  <Lock className="h-4 w-4" />
+                </Button>
+              </div>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" className="px-3 py-1.5">
+              <div className="space-y-1">
+                <p className="text-sm font-medium">AI Code Fix</p>
+                <p className="text-xs text-gray-500">
+                  Requires {featureAccess.requiredTier} subscription
+                </p>
+              </div>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      );
+    }
+    
+    // Inline variant with lock icon for error outputs
+    return (
+      <div className={`inline-flex items-center absolute top-3 right-3 ${className}`}
+           onMouseEnter={() => setHovered(true)}
+           onMouseLeave={() => setHovered(false)}>
+        <motion.div
+          initial={{ width: "auto" }}
+          animate={{ 
+            width: hovered ? "auto" : "auto",
+            backgroundColor: hovered ? "rgba(243, 244, 246, 0.5)" : "transparent"
+          }}
+          transition={{ duration: 0.2 }}
+          className="rounded-md overflow-hidden flex items-center justify-end px-1 cursor-pointer"
+          onClick={() => {
+            toast({
+              title: "Premium Feature",
+              description: `AI Code Fix requires a ${featureAccess.requiredTier} subscription.`,
+              duration: 5000,
+            });
+          }}
+        >
+          <motion.span 
+            initial={{ opacity: 0, width: 0 }}
+            animate={{ 
+              opacity: hovered ? 1 : 0,
+              width: hovered ? "auto" : 0,
+              marginRight: hovered ? "4px" : 0
+            }}
+            transition={{ duration: 0.2 }}
+            className="text-xs font-medium whitespace-nowrap text-gray-600 overflow-hidden"
+          >
+            Premium Feature
+          </motion.span>
+          
+          <div className="flex items-center">
+            <div className="h-6 w-6 p-0 flex items-center justify-center rounded-full bg-gray-100 border border-gray-200">
+              <Lock className="h-3 w-3 text-gray-500" />
+            </div>
+          </div>
+        </motion.div>
+      </div>
+    );
   }
 
   // Render different button styles based on variant
@@ -230,7 +347,6 @@ const CodeFixButton: React.FC<CodeFixButtonProps> = ({
               variant="ghost"
               size="sm"
               onClick={handleFixCode}
-              disabled={isFixing}
               className="text-[#FF7F7F] hover:bg-[#FF7F7F]/20 relative"
             >
               {isFixing ? (

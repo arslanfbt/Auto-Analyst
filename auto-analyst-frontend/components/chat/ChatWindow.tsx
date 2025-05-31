@@ -11,13 +11,16 @@ import CodeCanvas from "./CodeCanvas"
 import CodeIndicator from "./CodeIndicator"
 import CodeFixButton from "./CodeFixButton"
 import { v4 as uuidv4 } from 'uuid'
-import { Code, AlertTriangle } from "lucide-react"
+import { Code, AlertTriangle, Lock } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import axios from "axios"
 import { useSessionStore } from '@/lib/store/sessionStore'
 import logger from '@/lib/utils/logger'
 import { useToast } from "@/components/ui/use-toast"
 import API_URL from '@/config/api'
+import { useUserSubscription, useUserSubscriptionStore } from '@/lib/store/userSubscriptionStore'
+import { useFeatureAccess } from '@/lib/hooks/useFeatureAccess'
+import { PremiumFeatureButton } from '@/components/features/FeatureGate'
 
 interface PlotlyMessage {
   type: "plotly"
@@ -80,6 +83,9 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
   const [codeFixState, setCodeFixState] = useState<CodeFixState>({ isFixing: false, codeBeingFixed: null })
   const { sessionId: storeSessionId } = useSessionStore()
   const { toast } = useToast()
+  const { subscription } = useUserSubscriptionStore()
+  const codeEditAccess = useFeatureAccess('AI_CODE_EDIT', subscription)
+  const codeFixAccess = useFeatureAccess('AI_CODE_FIX', subscription)
   
   // Set chatCompleted when chat name is generated
   useEffect(() => {
@@ -690,14 +696,17 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
   // Handle fix complete
   const handleFixComplete = useCallback((codeId: string, fixedCode: string) => {
     // Increment the fix count
-    setCodeFixes(prev => ({
-      ...prev,
-      [codeId]: (prev[codeId] || 0) + 1
-    }))
+    setCodeFixes(prev => {
+      const updatedFixes = { ...prev };
+      updatedFixes[codeId] = (prev[codeId] || 0) + 1;
+      console.log("ChatWindow: Updated fix counts:", updatedFixes);
+      return updatedFixes;
+    });
 
     // Update the code in the appropriate entry
     const codeEntry = codeEntries.find(entry => entry.id === codeId)
     if (codeEntry) {
+      // Create a new array to ensure React detects the change
       setCodeEntries(prev =>
         prev.map(entry =>
           entry.id === codeId
@@ -741,10 +750,21 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
       description: "The code has been fixed and is ready to run in the code canvas.",
       duration: 5000,
     })
-  }, [codeEntries, handleCodeCanvasExecute, codeCanvasOpen, setCodeCanvasOpen, setHiddenCanvas, toast]);
+  }, [codeEntries, handleCodeCanvasExecute, codeCanvasOpen, toast]);
 
   // Add a handleOpenCanvasForFix function to ChatWindow which passes the error message to CodeCanvas
   const handleOpenCanvasForFix = useCallback((errorMessage: string, codeId: string) => {
+    // Check if user has access to the code fix feature
+    if (!codeFixAccess.hasAccess) {
+      toast({
+        title: "Feature not available",
+        description: `AI Code Fix requires a ${codeFixAccess.requiredTier} subscription.`,
+        variant: "destructive",
+        duration: 5000,
+      })
+      return
+    }
+    
     // Set current message index if we've passed a valid codeId
     const codeEntry = codeEntries.find(entry => entry.id === codeId);
     
@@ -807,7 +827,48 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
         }
       }
     }
-  }, [codeEntries, messages, clearCodeEntriesKeepOutput, extractCodeFromMessages]);
+  }, [codeEntries, messages, clearCodeEntriesKeepOutput, extractCodeFromMessages, codeFixAccess]);
+
+  // Modified CodeIndicator render function with feature access
+  const renderCodeIndicator = (language: string, index: number, partIndex: number) => {
+    const message = messages[index];
+    return (
+      <CodeIndicator
+        key={`${index}-${partIndex}-code`}
+        language={language}
+        onClick={async () => {
+          // When clicking on a code indicator, process the message and make the canvas visible
+          setCurrentMessageIndex(index);
+          clearCodeEntriesKeepOutput();
+          
+          // Make sure we're using the correct message_id
+          const actualMessageId = message.message_id || index;
+          logger.log(`Code indicator clicked for message at index ${index} with message_id: ${actualMessageId}`);
+          
+          // Extract code with the correct message ID - this will fetch the latest code if available
+          await extractCodeFromMessages([message], actualMessageId);
+          
+          // Make the canvas visible
+          setCodeCanvasOpen(true);
+          setHiddenCanvas(false); // Make the canvas visible when clicked
+          
+          // Close sidebar if it's open
+          if (setSidebarOpen) {
+            setSidebarOpen(false);
+          }
+          
+          // Show premium upgrade toast if needed
+          if (!codeEditAccess.hasAccess) {
+            toast({
+              title: "Premium Feature",
+              description: "AI Code Edit requires a paid subscription.",
+              duration: 5000,
+            });
+          }
+        }}
+      />
+    );
+  };
 
   const renderMessage = (message: ChatMessage, index: number) => {
     if (typeof message.text === "object" && message.text.type === "plotly") {
@@ -890,33 +951,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
                   />;
                 } else if (part.type === 'code') {
                   // Code indicator
-                  return (
-                    <CodeIndicator
-                      key={`${index}-${partIndex}-code`}
-                      language={part.language}
-                      onClick={async () => {
-                        // When clicking on a code indicator, process the message and make the canvas visible
-                        setCurrentMessageIndex(index);
-                        clearCodeEntriesKeepOutput();
-                        
-                        // Make sure we're using the correct message_id
-                        const actualMessageId = message.message_id || index;
-                        logger.log(`Code indicator clicked for message at index ${index} with message_id: ${actualMessageId}`);
-                        
-                        // Extract code with the correct message ID - this will fetch the latest code if available
-                        await extractCodeFromMessages([message], actualMessageId);
-                        
-                        // Make the canvas visible
-                        setCodeCanvasOpen(true);
-                        setHiddenCanvas(false); // Make the canvas visible when clicked
-                        
-                        // Close sidebar if it's open
-                        if (setSidebarOpen) {
-                          setSidebarOpen(false);
-                        }
-                      }}
-                    />
-                  );
+                  return renderCodeIndicator(part.language, index, partIndex);
                 }
                 return null;
               })
@@ -966,6 +1001,375 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
     return null;
   };
 
+  // Helper function to process table markers in error content (similar to processTableMarkersInOutput but with red styling)
+  const processTableMarkersInErrorOutput = useCallback((content: string) => {
+    const tableRegex = /<TABLE_START>\n?([\s\S]*?)\n?<TABLE_END>/g;
+    const parts: React.ReactNode[] = [];
+    let lastIndex = 0;
+    let match;
+    let partIndex = 0;
+    
+    // Process all table markers
+    while ((match = tableRegex.exec(content)) !== null) {
+      // Add content before the table if any
+      if (match.index > lastIndex) {
+        const beforeContent = content.substring(lastIndex, match.index);
+        if (beforeContent.trim()) {
+          parts.push(
+            <pre key={`before-${partIndex}`} className="text-xs text-red-700 font-mono whitespace-pre-wrap">
+              {beforeContent}
+            </pre>
+          );
+        }
+      }
+      
+      // Process the table content
+      const tableContent = match[1];
+      
+      // Simple table parser for errors - use better formatting
+      const parseErrorTableContent = (content: string) => {
+        return (
+          <div className="overflow-x-auto max-w-full">
+            <pre className="text-xs font-mono text-red-700 whitespace-pre leading-relaxed bg-red-25 p-2 rounded">
+              {content}
+            </pre>
+          </div>
+        );
+      };
+      
+      // Add the formatted table with error styling
+      parts.push(
+        <div key={`table-${partIndex}`} className="bg-red-50 border border-red-200 rounded-md p-3 my-2">
+          {parseErrorTableContent(tableContent)}
+        </div>
+      );
+      
+      lastIndex = match.index + match[0].length;
+      partIndex++;
+    }
+    
+    // Add remaining content after the last table
+    if (lastIndex < content.length) {
+      const remainingContent = content.substring(lastIndex);
+      if (remainingContent.trim()) {
+        parts.push(
+          <pre key={`after-${partIndex}`} className="text-xs text-red-700 font-mono whitespace-pre-wrap">
+            {remainingContent}
+          </pre>
+        );
+      }
+    }
+    
+    // If no tables were found, return the original content as pre
+    if (parts.length === 0) {
+      return (
+        <pre className="text-xs text-red-700 font-mono whitespace-pre-wrap">
+          {content}
+        </pre>
+      );
+    }
+    
+    return <div>{parts}</div>;
+  }, []);
+
+  // Helper function to process table markers in output content
+  const processTableMarkersInOutput = useCallback((content: string) => {
+    const tableRegex = /<TABLE_START>\n?([\s\S]*?)\n?<TABLE_END>/g;
+    const parts: React.ReactNode[] = [];
+    let lastIndex = 0;
+    let match;
+    let partIndex = 0;
+    
+    // Process all table markers
+    while ((match = tableRegex.exec(content)) !== null) {
+      // Add content before the table if any
+      if (match.index > lastIndex) {
+        const beforeContent = content.substring(lastIndex, match.index);
+        if (beforeContent.trim()) {
+          parts.push(
+            <pre key={`before-${partIndex}`} className="text-xs text-gray-800 font-mono whitespace-pre-wrap">
+              {beforeContent}
+            </pre>
+          );
+        }
+      }
+      
+      // Process the table content
+      const tableContent = match[1];
+      
+      // Simple table parser for common pandas output formats
+      const parseTableContent = (content: string) => {
+        const lines = content.split('\n').filter(line => line.trim());
+        if (lines.length === 0) return null;
+        
+        // Generic table parser that works for any table type
+        const parseGenericTable = (tableLines: string[]) => {
+          const rows: string[][] = [];
+          
+          // Parse all lines into potential columns
+          tableLines.forEach(line => {
+            if (line.trim()) {
+              // Check if line contains pipe delimiters (new format)
+              if (line.includes('|')) {
+                // Split by pipe delimiter and trim each part
+                const columns = line.split('|').map(col => col.trim()).filter(Boolean);
+                if (columns.length > 0) {
+                  rows.push(columns);
+                }
+              } else {
+                // Fallback to old format - split on multiple spaces
+                const columns = line.trim().split(/\s{2,}/).filter(col => col.trim());
+                if (columns.length > 0) {
+                  rows.push(columns);
+                }
+              }
+            }
+          });
+          
+          if (rows.length === 0) return null;
+          
+          // Find the maximum number of columns across all rows
+          const maxCols = Math.max(...rows.map(row => row.length));
+          
+          // Step 1: Analyze the content and structure of the table
+          // - Identify potential header rows (first row or rows with all text)
+          // - Identify potential row labels (first column with text values)
+          // - Determine if index column is used (first column with sequential numbers 0,1,2...)
+          
+          let hasHeaderRow = false;
+          let headerRowIndex = -1;
+          let hasRowLabels = false;
+          let hasIndexColumn = false;
+          let indexColumnIndex = -1;
+          let rowLabelColumnIndex = 0; // Default to first column
+          
+          // Check first row - if it has mostly text, likely a header
+          if (rows.length > 0 && rows[0].length > 0) {
+            const firstRow = rows[0];
+            const textCellCount = firstRow.filter(cell => isNaN(Number(cell))).length;
+            hasHeaderRow = textCellCount / firstRow.length > 0.5; // If more than half are text
+            if (hasHeaderRow) headerRowIndex = 0;
+          }
+          
+          // Check first column - look for patterns
+          if (rows.length > 2) {
+            // If first column contains sequential numbers starting from 0 or 1, it's likely an index
+            const firstColValues = rows.slice(hasHeaderRow ? 1 : 0).map(row => row[0]);
+            
+            // Check if first column is numeric and sequential
+            if (firstColValues.every(val => !isNaN(Number(val)))) {
+              const nums = firstColValues.map(Number);
+              // Check if sequential (0,1,2... or 1,2,3...)
+              const isSequential = nums.every((num, i) => 
+                i === 0 || num === nums[i-1] + 1 || num === nums[i-1]);
+                
+              hasIndexColumn = isSequential;
+              if (hasIndexColumn) indexColumnIndex = 0;
+            }
+            
+            // If not index but has text values, likely row labels
+            if (!hasIndexColumn) {
+              // Check for row labels in first column
+              const firstColLabels = firstColValues.some(val => 
+                isNaN(Number(val)) && val.match(/^[a-zA-Z_][a-zA-Z0-9_]*$/));
+                
+              hasRowLabels = firstColLabels;
+              rowLabelColumnIndex = 0;
+              
+              // Special case: Sometimes row labels are last column in pandas dataframes
+              if (!hasRowLabels && rows[0].length > 1) {
+                const lastColValues = rows.slice(hasHeaderRow ? 1 : 0).map(row => 
+                  row.length > 0 ? row[row.length-1] : '');
+                const lastColLabels = lastColValues.some(val => 
+                  isNaN(Number(val)) && val.match(/^[a-zA-Z_][a-zA-Z0-9_]*$/));
+                
+                if (lastColLabels) {
+                  hasRowLabels = true;
+                  rowLabelColumnIndex = rows[0].length - 1;
+                }
+              }
+              
+              // Special case for "stories" or similar categorical columns that should be row labels
+              // Check each column for keywords that suggest it should be a row label
+              if (!hasRowLabels) {
+                // Check header row for column names that suggest categorical values
+                const rowLabelKeywords = ['stories', 'category', 'type', 'group', 'class', 'label', 'year'];
+                
+                if (hasHeaderRow && rows[0].length > 0) {
+                  // Check each column in the header
+                  for (let i = 0; i < rows[0].length; i++) {
+                    const colName = rows[0][i].toLowerCase();
+                    if (rowLabelKeywords.some(keyword => colName.includes(keyword))) {
+                      // Found a likely row label column
+                      hasRowLabels = true;
+                      rowLabelColumnIndex = i;
+                      break;
+                    }
+                  }
+                }
+                
+                // If we still don't have row labels, check data rows for string values in any column
+                if (!hasRowLabels) {
+                  for (let colIdx = 0; colIdx < maxCols; colIdx++) {
+                    // Skip the first column which was already checked
+                    if (colIdx === 0) continue;
+                    
+                    const colValues = rows.slice(hasHeaderRow ? 1 : 0).map(row => 
+                      colIdx < row.length ? row[colIdx] : '');
+                    
+                    // Check if this column has mostly text values
+                    const textValues = colValues.filter(val => 
+                      isNaN(Number(val)) && val.match(/^[a-zA-Z_][a-zA-Z0-9_]*$/));
+                    
+                    if (textValues.length > colValues.length / 2) {
+                      hasRowLabels = true;
+                      rowLabelColumnIndex = colIdx;
+                      break;
+                    }
+                  }
+                }
+              }
+            }
+          }
+          
+          // Step 2: Normalize the table based on detected structure
+          const normalizedRows = rows.map((row, rowIndex) => {
+            let normalizedRow = [...row];
+            
+            // Identify row type
+            const isHeader = rowIndex === headerRowIndex;
+            
+            // Fix header row - ensure it aligns with data columns
+            if (isHeader && normalizedRow.length < maxCols) {
+              // Check if we need to add empty cells at beginning for alignment
+              if (hasIndexColumn || hasRowLabels) {
+                normalizedRow = ['', ...normalizedRow];
+              }
+              
+              // Ensure row has maxCols columns
+              while (normalizedRow.length < maxCols) {
+                normalizedRow.push('');
+              }
+            }
+            
+            // For all rows, ensure consistent length
+            while (normalizedRow.length < maxCols) {
+              normalizedRow.push('');
+            }
+            
+            // For data rows, check if row label needs to be moved to front
+            if (!isHeader && hasRowLabels && rowLabelColumnIndex > 0) {
+              // Move row label to front for consistent display
+              const label = normalizedRow[rowLabelColumnIndex];
+              normalizedRow.splice(rowLabelColumnIndex, 1); // Remove from original position
+              normalizedRow.unshift(label); // Add to front
+            }
+            
+            return {
+              row: normalizedRow,
+              isHeader,
+              isDataRow: !isHeader && rowIndex > 0,
+              hasRowLabel: hasRowLabels && !isHeader,
+              hasIndexColumn: hasIndexColumn && !isHeader
+            };
+          });
+          
+          return {
+            rows: normalizedRows,
+            hasHeaderRow,
+            hasRowLabels,
+            hasIndexColumn,
+            headerRowIndex,
+            rowLabelColumnIndex,
+            indexColumnIndex
+          };
+        };
+        
+        const tableInfo = parseGenericTable(lines);
+        if (!tableInfo) return null;
+        
+        const { rows, hasHeaderRow, hasRowLabels } = tableInfo;
+        
+        return (
+          <div className="overflow-x-auto max-w-full">
+            <table className="min-w-full text-sm">
+              <tbody>
+                {rows.map((rowInfo, rowIndex) => {
+                  const { row, isHeader, isDataRow, hasRowLabel, hasIndexColumn } = rowInfo;
+                  
+                  return (
+                    <tr key={rowIndex} className={isHeader ? "bg-gray-100" : "hover:bg-gray-25"}>
+                      {row.map((cell, cellIndex) => {
+                        const isNumber = !isNaN(Number(cell.replace(/,/g, ''))) && cell !== '' && !isHeader;
+                        const isFirstCol = cellIndex === 0;
+                        const isRowLabel = hasRowLabel && isFirstCol;
+                        const isIndex = hasIndexColumn && isFirstCol;
+                        const isColumnHeader = isHeader && cell !== '';
+                        const isEmpty = cell === '';
+                        
+                        return (
+                          <td 
+                            key={cellIndex} 
+                            className={`px-2 py-1.5 font-mono text-xs border-r border-gray-150 last:border-r-0 ${
+                              isColumnHeader ? 'font-semibold text-gray-900 bg-gray-100' : 
+                              isRowLabel ? 'font-semibold text-gray-900 bg-gray-50' : ''
+                            } ${
+                              isEmpty ? 'bg-gray-100' :
+                              isColumnHeader ? 'text-center bg-gray-100' :
+                              isRowLabel ? 'text-left min-w-16 bg-gray-50' :
+                              isIndex ? 'text-center min-w-10 bg-gray-50' :
+                              isNumber ? 'text-right text-gray-700 min-w-16' : 
+                              'text-center text-gray-700'
+                            }`}
+                          >
+                            {isNumber ? Number(cell.replace(/,/g, '')).toLocaleString() : cell}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        );
+      };
+      
+      // Add the formatted table with simpler styling
+      parts.push(
+        <div key={`table-${partIndex}`} className="bg-white border border-gray-200 rounded-lg p-3 my-2 shadow-sm">
+          {parseTableContent(tableContent)}
+        </div>
+      );
+      
+      lastIndex = match.index + match[0].length;
+      partIndex++;
+    }
+    
+    // Add remaining content after the last table
+    if (lastIndex < content.length) {
+      const remainingContent = content.substring(lastIndex);
+      if (remainingContent.trim()) {
+        parts.push(
+          <pre key={`after-${partIndex}`} className="text-xs text-gray-800 font-mono whitespace-pre-wrap">
+            {remainingContent}
+          </pre>
+        );
+      }
+    }
+    
+    // If no tables were found, return the original content as pre
+    if (parts.length === 0) {
+      return (
+        <pre className="text-xs text-gray-800 font-mono whitespace-pre-wrap overflow-auto max-h-[400px]">
+          {content}
+        </pre>
+      );
+    }
+    
+    return <div>{parts}</div>;
+  }, []);
+
   // Replace the entire renderCodeOutputs function with a fixed implementation
   const renderCodeOutputs = (messageIndex: number) => {
     // Detect if we have an actual message ID or just an array index
@@ -995,23 +1399,35 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
             </div>
             
             {errorOutputs[0].codeId && (
-              <CodeFixButton
-                codeId={errorOutputs[0].codeId}
-                errorOutput={errorOutputs[0].content as string}
-                code={codeEntries.find(entry => entry.id === errorOutputs[0].codeId)?.code || ''}
-                isFixing={codeFixState.isFixing && codeFixState.codeBeingFixed === errorOutputs[0].codeId}
-                codeFixes={codeFixes}
-                sessionId={sessionId || storeSessionId || ''}
-                onFixStart={handleFixStart}
-                onFixComplete={handleFixComplete}
-                onCreditCheck={handleCreditCheck}
-                variant="inline"
-              />
+              codeFixAccess.hasAccess ? (
+                <CodeFixButton
+                  codeId={errorOutputs[0].codeId}
+                  errorOutput={errorOutputs[0].content as string}
+                  code={codeEntries.find(entry => entry.id === errorOutputs[0].codeId)?.code || ''}
+                  isFixing={codeFixState.isFixing && codeFixState.codeBeingFixed === errorOutputs[0].codeId}
+                  codeFixes={codeFixes}
+                  sessionId={sessionId || storeSessionId || ''}
+                  onFixStart={handleFixStart}
+                  onFixComplete={handleFixComplete}
+                  onCreditCheck={handleCreditCheck}
+                  variant="inline"
+                />
+              ) : (
+                <div className="absolute top-3 right-3">
+                  <PremiumFeatureButton
+                    featureId="AI_CODE_FIX"
+                    variant="icon"
+                  />
+                </div>
+              )
             )}
             
-            <pre className="text-xs text-red-700 font-mono whitespace-pre-wrap">
-              {errorOutputs[0].content}
-            </pre>
+            {(() => {
+              const content = errorOutputs[0].content;
+              
+              // Process table markers in the content
+              return processTableMarkersInErrorOutput(content as string);
+            })()}
           </div>
         )}
         
@@ -1027,35 +1443,34 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
              (textOutputs[0].content.toString().toLowerCase().includes("error") || 
               textOutputs[0].content.toString().toLowerCase().includes("traceback") || 
               textOutputs[0].content.toString().toLowerCase().includes("exception")) && (
-              <CodeFixButton
-                codeId={textOutputs[0].codeId}
-                errorOutput={textOutputs[0].content as string}
-                code={codeEntries.find(entry => entry.id === textOutputs[0].codeId)?.code || ''}
-                isFixing={codeFixState.isFixing && codeFixState.codeBeingFixed === textOutputs[0].codeId}
-                codeFixes={codeFixes}
-                sessionId={sessionId || storeSessionId || ''}
-                onFixStart={handleFixStart}
-                onFixComplete={handleFixComplete}
-                onCreditCheck={handleCreditCheck}
-                variant="inline"
-              />
+              codeFixAccess.hasAccess ? (
+                <CodeFixButton
+                  codeId={textOutputs[0].codeId}
+                  errorOutput={textOutputs[0].content as string}
+                  code={codeEntries.find(entry => entry.id === textOutputs[0].codeId)?.code || ''}
+                  isFixing={codeFixState.isFixing && codeFixState.codeBeingFixed === textOutputs[0].codeId}
+                  codeFixes={codeFixes}
+                  sessionId={sessionId || storeSessionId || ''}
+                  onFixStart={handleFixStart}
+                  onFixComplete={handleFixComplete}
+                  onCreditCheck={handleCreditCheck}
+                  variant="inline"
+                />
+              ) : (
+                <div className="absolute top-3 right-3">
+                  <PremiumFeatureButton
+                    featureId="AI_CODE_FIX"
+                    variant="icon"
+                  />
+                </div>
+              )
             )}
             
             {(() => {
               const content = textOutputs[0].content;
-              // Check if the output looks like a DataFrame or tabular data
-              const isTabularData = content.includes('|') && 
-                                 (content.includes('DataFrame') || 
-                                  content.includes('Column Types') ||
-                                  (content.match(/\|\s*\w+\s*\|/g)?.length > 1));
               
-              return isTabularData ? (
-                <div className="overflow-x-auto max-w-full">
-                  <pre className="text-xs text-gray-800 font-mono whitespace-pre min-w-max">{content}</pre>
-                </div>
-              ) : (
-                <pre className="text-xs text-gray-800 font-mono whitespace-pre-wrap overflow-auto max-h-[400px]">{content}</pre>
-              );
+              // Process table markers in the content
+              return processTableMarkersInOutput(content as string);
             })()}
           </div>
         )}

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getToken } from 'next-auth/jwt'
 import redis, { KEYS } from '@/lib/redis'
 import Stripe from 'stripe'
+import { CreditConfig } from '@/lib/credits-config'
 
 // Initialize Stripe
 const stripe = process.env.STRIPE_SECRET_KEY 
@@ -57,11 +58,11 @@ export async function POST(request: NextRequest) {
       // Get current credit data
       const creditData = await redis.hgetall(KEYS.USER_CREDITS(userId))
       if (creditData && creditData.resetDate) {
-        // Mark that the next credit reset should only give 100 credits
+        // Mark the credits to be downgraded on next reset - using centralized config
         await redis.hset(KEYS.USER_CREDITS(userId), {
-          nextTotalCredits: '100', // This will be used at the next reset
+          nextTotalCredits: CreditConfig.getCreditsForPlan('Free').total.toString(), // This will be used at the next reset
           pendingDowngrade: 'true',
-          lastUpdate: now.toISOString()
+          lastUpdate: new Date().toISOString()
         })
       }
       

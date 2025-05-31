@@ -1,5 +1,6 @@
 import { Redis } from '@upstash/redis'
 import logger from '@/lib/utils/logger'
+import { CreditConfig, CREDIT_THRESHOLDS } from './credits-config'
 
 // Initialize Redis client with Upstash credentials
 const redis = new Redis({
@@ -37,43 +38,42 @@ export const KEYS = {
 
 // Credits management utilities with consolidated hash-based storage
 export const creditUtils = {
-  // Get user's remaining credits
+  // Get remaining credits for a user
   async getRemainingCredits(userId: string): Promise<number> {
     try {
-      // Only use hash-based storage
-      const creditsHash = await redis.hgetall<{
-        total?: string;
-        used?: string;
-      }>(KEYS.USER_CREDITS(userId));
-      
-      if (creditsHash && creditsHash.total) {
-        const total = parseInt(creditsHash.total);
-        const used = creditsHash.used ? parseInt(creditsHash.used) : 0;
-        return total - used;
+      const creditsHash = await redis.hgetall(KEYS.USER_CREDITS(userId))
+      if (!creditsHash || !creditsHash.total || !creditsHash.used) {
+        return CreditConfig.getDefaultInitialCredits()
       }
       
-      // Default for new users
-      return 100;
+      const total = parseInt(creditsHash.total as string)
+      const used = creditsHash.used ? parseInt(creditsHash.used as string) : 0
+      
+      // Use centralized config to check if unlimited
+      if (CreditConfig.isUnlimitedTotal(total)) {
+        return Number.MAX_SAFE_INTEGER
+      }
+      
+      return Math.max(0, total - used)
     } catch (error) {
-      console.error('Error fetching credits:', error);
-      return 100; // Failsafe
+      console.error('Error getting remaining credits:', error)
+      return 0
     }
   },
 
-  // Set initial credits for a user
-  async initializeCredits(userId: string, credits: number = parseInt(process.env.NEXT_PUBLIC_CREDITS_INITIAL_AMOUNT || '100')): Promise<void> {
+  // Initialize credits for a new user
+  async initializeCredits(userId: string, credits: number = CreditConfig.getDefaultInitialCredits()): Promise<void> {
     try {
-      // Only use hash-based approach
+      const resetDate = this.getOneMonthFromToday()
+      
       await redis.hset(KEYS.USER_CREDITS(userId), {
         total: credits.toString(),
         used: '0',
-        lastUpdate: new Date().toISOString(),
-        resetDate: this.getNextMonthFirstDay()
-      });
-      
-      logger.log(`Credits initialized successfully for ${userId}: ${credits}`);
+        resetDate: resetDate,
+        lastUpdate: new Date().toISOString()
+      })
     } catch (error) {
-      console.error('Error initializing credits:', error);
+      console.error('Error initializing credits:', error)
     }
   },
 
@@ -109,8 +109,8 @@ export const creditUtils = {
       // Initialize credits if not found
       await this.initializeCredits(userId);
       
-      // Check if we have enough of the initial credits
-      return amount <= 100;
+      // Check if we have enough of the initial credits using credit config
+      return amount <= CreditConfig.getDefaultInitialCredits();
     } catch (error) {
       console.error('Error deducting credits:', error);
       return true; // Failsafe
@@ -123,18 +123,30 @@ export const creditUtils = {
     return remainingCredits >= amount;
   },
   
-  // Helper to get the first day of next month
-  getNextMonthFirstDay(): string {
+  // Helper to get one month from today (same day next month)
+  getOneMonthFromToday(): string {
     const today = new Date();
-    const nextMonth = new Date(today.getFullYear(), today.getMonth() + 1, 1);
+    const nextMonth = new Date(today);
+    nextMonth.setMonth(today.getMonth() + 1);
     return nextMonth.toISOString().split('T')[0];
   },
   
-  // Helper to get the first day of next year
-  getNextYearFirstDay(): string {
+  // Helper to get one year from today (same day next year)
+  getOneYearFromToday(): string {
     const today = new Date();
-    const nextYear = new Date(today.getFullYear() + 1, 0, 1);
+    const nextYear = new Date(today);
+    nextYear.setFullYear(today.getFullYear() + 1);
     return nextYear.toISOString().split('T')[0];
+  },
+  
+  // Legacy function for backwards compatibility - now delegates to new function
+  getNextMonthFirstDay(): string {
+    return this.getOneMonthFromToday();
+  },
+  
+  // Legacy function for backwards compatibility - now delegates to new function
+  getNextYearFirstDay(): string {
+    return this.getOneYearFromToday();
   },
   
   // Reset user credits based on their plan
@@ -148,22 +160,16 @@ export const creditUtils = {
         return false;
       }
       
-      // Determine credit amount based on plan
-      let creditAmount = 100; // Default
-      if ((sub.plan as string).includes('Pro')) {
-        creditAmount = 999999;
-      } else if ((sub.plan as string).includes('Standard')) {
-        creditAmount = 500;
-      } else if ((sub.plan as string).includes('Basic')) {
-        creditAmount = 100;
-      }
+      // Determine credit amount based on plan using centralized config
+      const planCredits = CreditConfig.getCreditsForPlan(sub.plan as string);
+      const creditAmount = planCredits.total;
       
-      // Update credits hash
+      // Update credits hash - use one month/year from today instead of first day of next period
       await redis.hset(KEYS.USER_CREDITS(userId), {
         total: creditAmount.toString(),
         used: '0',
         lastUpdate: new Date().toISOString(),
-        resetDate: sub.interval === 'year' ? this.getNextYearFirstDay() : this.getNextMonthFirstDay()
+        resetDate: sub.interval === 'year' ? this.getOneYearFromToday() : this.getOneMonthFromToday()
       });
       
       return true;
@@ -176,7 +182,7 @@ export const creditUtils = {
 
 // Subscription utilities for efficiently accessing user plan data
 export const subscriptionUtils = {
-  // Get complete user subscription data efficiently
+  // Get user subscription data with formatted credits
   async getUserSubscriptionData(userId: string): Promise<{
     plan: string;
     credits: {
@@ -191,26 +197,28 @@ export const subscriptionUtils = {
       const subData = await redis.hgetall(KEYS.USER_SUBSCRIPTION(userId));
       const creditsData = await redis.hgetall(KEYS.USER_CREDITS(userId));
       
-      // Default values if no data found
-      let plan = 'Free';
+      // Default values using centralized config
+      const defaultCredits = CreditConfig.getCreditsForPlan('Free')
+      let plan = defaultCredits.displayName;
       let isPro = false;
-      let creditsTotal = 100;
+      let creditsTotal = defaultCredits.total;
       let creditsUsed = 0;
       
       // Parse subscription data if found
       if (subData && subData.plan) {
         plan = subData.plan as string;
-        isPro = plan.toUpperCase().includes('PRO');
+        const planCredits = CreditConfig.getCreditsForPlan(plan);
+        isPro = planCredits.type === 'PRO';
       }
       
-      // Parse credits data if found
+      // Parse credits data if found with centralized config fallback
       if (creditsData) {
-        creditsTotal = parseInt(creditsData.total as string || '100');
+        creditsTotal = parseInt(creditsData.total as string || defaultCredits.total.toString());
         creditsUsed = parseInt(creditsData.used as string || '0');
       } 
       
-      // Format the response with the right types for unlimited credits
-      const isUnlimited = isPro || creditsTotal >= 999999;
+      // Use centralized config for unlimited check and formatting
+      const isUnlimited = CreditConfig.isUnlimitedTotal(creditsTotal);
       const formattedTotal = isUnlimited ? 'Unlimited' : creditsTotal;
       const remaining = isUnlimited ? 'Unlimited' : Math.max(0, creditsTotal - creditsUsed);
       
@@ -225,13 +233,14 @@ export const subscriptionUtils = {
       };
     } catch (error) {
       console.error('Error getting user subscription data:', error);
-      // Return fallback defaults if there's an error
+      // Return fallback defaults using centralized config
+      const defaultCredits = CreditConfig.getCreditsForPlan('Free')
       return {
-        plan: 'Free',
+        plan: defaultCredits.displayName,
         credits: {
           used: 0,
-          total: 100, 
-          remaining: 100
+          total: defaultCredits.total, 
+          remaining: defaultCredits.total
         },
         isPro: false
       };
@@ -353,34 +362,30 @@ export const subscriptionUtils = {
           }
         }
         
-        // Determine credit amount based on plan type or pending downgrade
-        let creditAmount = 100; // Default free plan
+        // Determine credit amount using centralized config
+        let creditAmount = CreditConfig.getCreditsForPlan('Free').total; // Default free plan
         
         if (isPendingDowngrade || (subscriptionData && subscriptionData.status === 'inactive')) {
-          // If inactive or pending downgrade, use 100 credits (Free plan)
-          creditAmount = 100;
+          // If inactive or pending downgrade, use Free plan credits
+          creditAmount = CreditConfig.getCreditsForPlan('Free').total;
         } else if (!isFree) {
-          // Use regular plan type logic for non-free, non-downgrading plans
+          // Use centralized config for plan type lookup
           const planType = subscriptionData.planType as string;
-          if (planType === 'STANDARD') {
-            creditAmount = 500;
-          } else if (planType === 'PRO') {
-            creditAmount = 999999; // Effectively unlimited
-          }
+          const planCredits = CreditConfig.getCreditsByType(planType as any);
+          creditAmount = planCredits.total;
         }
         
         // If we've passed the reset date, refresh credits
         // This applies to both free and paid plans
         if (!resetDate || now >= resetDate) {
-          // Calculate next reset date - one month from current reset date or now
-          const nextResetDate = new Date(resetDate || now);
-          nextResetDate.setMonth(nextResetDate.getMonth() + 1);
+          // Calculate next reset date using centralized function
+          const nextResetDate = CreditConfig.getNextResetDate();
           
           // Prepare credit data - remove pendingDowngrade and nextTotalCredits if present
           const newCreditData: any = {
             total: creditAmount.toString(),
             used: '0',
-            resetDate: nextResetDate.toISOString().split('T')[0],
+            resetDate: nextResetDate,
             lastUpdate: now.toISOString()
           };
           
@@ -437,49 +442,43 @@ export const subscriptionUtils = {
     return false;
   },
   
-  // Downgrade a user to the free plan
+  // Downgrade user to free plan
   async downgradeToFreePlan(userId: string): Promise<boolean> {
     try {
       const now = new Date();
+      const resetDate = CreditConfig.getNextResetDate();
       
-      // Calculate the reset date for one month from now
-      const resetDate = new Date(now);
-      resetDate.setMonth(resetDate.getMonth() + 1);
-      
-      // Update subscription data
-      // Note: Free plan status should always be 'active' regardless of payment history
-      const subscriptionData = {
-        plan: 'Free Plan',
-        planType: 'FREE',
-        status: 'active', // Free plans are always active
-        amount: '0',
-        interval: 'month',
-        purchaseDate: now.toISOString(),
-        renewalDate: '',
-        lastUpdated: now.toISOString(),
-        stripeCustomerId: '',
-        stripeSubscriptionId: ''
-      };
-      
-      // Get current used credits to preserve them
+      // Get current credits used to preserve them
       const currentCredits = await redis.hgetall(KEYS.USER_CREDITS(userId));
       const usedCredits = currentCredits && currentCredits.used 
         ? parseInt(currentCredits.used as string) 
         : 0;
       
-      // Set free credits (100) but preserve used credits
-      const creditData = {
-        total: '100',
-        used: Math.min(usedCredits, 100).toString(), // Used credits shouldn't exceed new total
-        resetDate: resetDate.toISOString().split('T')[0],
+      // Get Free plan configuration
+      const freeCredits = CreditConfig.getCreditsForPlan('Free');
+      
+      // Update subscription to Free plan
+      await redis.hset(KEYS.USER_SUBSCRIPTION(userId), {
+        plan: freeCredits.displayName,
+        planType: freeCredits.type,
+        status: 'active',
+        amount: '0',
+        interval: 'month',
+        renewalDate: '',
+        lastUpdated: now.toISOString(),
+        stripeCustomerId: '',
+        stripeSubscriptionId: ''
+      });
+      
+      // Update credits to Free plan level, but preserve used credits
+      await redis.hset(KEYS.USER_CREDITS(userId), {
+        total: freeCredits.total.toString(),
+        used: Math.min(usedCredits, freeCredits.total).toString(), // Used credits shouldn't exceed new total
+        resetDate: resetDate,
         lastUpdate: now.toISOString()
-      };
+      });
       
-      // Save to Redis
-      await redis.hset(KEYS.USER_SUBSCRIPTION(userId), subscriptionData);
-      await redis.hset(KEYS.USER_CREDITS(userId), creditData);
-      
-      logger.log(`Successfully downgraded user ${userId} to the Free plan`);
+      logger.log(`User ${userId} downgraded to Free plan with ${freeCredits.total} credits`);
       return true;
     } catch (error) {
       console.error('Error downgrading to free plan:', error);

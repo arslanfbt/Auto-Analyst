@@ -46,7 +46,7 @@ export default function Footer() {
                 Pricing
               </a>
               <a
-                href="https://www.firebird-technologies.com/"
+                href="https://medium.com/firebird-technologies"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex items-center gap-1 text-gray-400 hover:text-[#FF7F7F] transition-colors text-sm"

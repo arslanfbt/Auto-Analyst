@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef, useCallback, Dispatch, SetStateActi
 import { motion, AnimatePresence } from "framer-motion"
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter"
 import { vscDarkPlus } from "react-syntax-highlighter/dist/esm/styles/prism"
-import { ChevronRight, Copy, Check, Play, Edit2, Save, X, Maximize2, Minimize2, Wand2, AlertTriangle, WrenchIcon, Send, Scissors, CreditCard } from "lucide-react"
+import { ChevronRight, Copy, Check, Play, Edit2, Save, X, Maximize2, Minimize2, Wand2, AlertTriangle, WrenchIcon, Send, Scissors, CreditCard, Lock } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import MonacoEditor, { useMonaco } from '@monaco-editor/react'
@@ -21,6 +21,10 @@ import { useCredits } from '@/lib/contexts/credit-context'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
 import logger from '@/lib/utils/logger'
 import CodeFixButton from './CodeFixButton'
+import { useFeatureAccess } from '@/lib/hooks/useFeatureAccess'
+import { useUserSubscriptionStore } from '@/lib/store/userSubscriptionStore'
+import FeatureGate from '@/components/features/FeatureGate'
+import { PremiumFeatureButton } from '@/components/features/FeatureGate'
 
 interface CodeEntry {
   id: string;
@@ -90,6 +94,8 @@ const CodeCanvas: React.FC<CodeCanvasProps> = ({
   const [showFeedbackPopup, setShowFeedbackPopup] = useState(false)
   const [showFixLimitNotification, setShowFixLimitNotification] = useState(false)
   const [canvasJustOpened, setCanvasJustOpened] = useState(false)
+  const { subscription } = useUserSubscriptionStore()
+  const aiCodeEditAccess = useFeatureAccess('AI_CODE_EDIT', subscription)
 
   // Define executeCode with useCallback at the top
   const executeCode = useCallback(async (entryId: string, code: string, language: string) => {
@@ -541,6 +547,17 @@ const CodeCanvas: React.FC<CodeCanvasProps> = ({
 
   // Direct code edit without animations
   const handleAIEditRequest = async (entryId: string) => {
+    // Check if user has feature access
+    if (!aiCodeEditAccess.hasAccess) {
+      toast({
+        title: "Feature not available",
+        description: `AI Code Edit requires a ${aiCodeEditAccess.requiredTier} subscription.`,
+        variant: "destructive",
+        duration: 5000,
+      })
+      return;
+    }
+    
     if (!aiEditPrompt.trim()) return;
     
     const activeEntry = codeEntries.find(entry => entry.id === entryId);
@@ -760,57 +777,73 @@ const CodeCanvas: React.FC<CodeCanvasProps> = ({
 
   // Handle fix complete from CodeFixButton
   const handleFixComplete = (codeId: string, fixedCode: string) => {
+    // Increment the fix count
+    setCodeFixes(prev => {
+      const newCodeFixes = { ...prev };
+      newCodeFixes[codeId] = (prev[codeId] || 0) + 1;
+      console.log("CodeCanvas: Updated code fixes count:", newCodeFixes);
+      return newCodeFixes;
+    });
+    
     // Find the entry and update the code
     const entryIndex = codeEntries.findIndex(entry => entry.id === codeId);
     if (entryIndex === -1) {
       setIsFixingCode(false);
-          return;
+      return;
     }
-        
-        // If fixing code, ensure we're in edit mode
+    
+    // Create a new array to ensure React detects the change
+    const updatedEntries = [...codeEntries];
+    updatedEntries[entryIndex] = {
+      ...updatedEntries[entryIndex],
+      code: fixedCode
+    };
+    setCodeEntries(updatedEntries);
+    
+    // If fixing code, ensure we're in edit mode
     if (!editingMap[codeId]) {
-      startEditing(codeId, codeEntries[entryIndex].code);
+      startEditing(codeId, fixedCode);
+    } else {
+      // Already in edit mode, update the edited code
+      setEditedCodeMap(prev => ({
+        ...prev,
+        [codeId]: fixedCode
+      }));
     }
 
     // Update the code in editor if it's open
     if (editorRef.current && activeEntryId === codeId) {
-          editorRef.current.executeEdits('apply-fix', [{
-            range: {
-              startLineNumber: 1,
-              startColumn: 1,
-              endLineNumber: editorRef.current.getModel().getLineCount(),
-              endColumn: editorRef.current.getModel().getLineMaxColumn(editorRef.current.getModel().getLineCount())
-            },
-            text: fixedCode,
-            forceMoveMarkers: true
-          }]);
-        }
-        
-    // Update the edited code state
-        setEditedCodeMap(prev => ({
-          ...prev,
-      [codeId]: fixedCode
-    }));
-        
-        // Clear the error
-        setExecOutputMap(prev => {
-          const newMap = { ...prev };
+      editorRef.current.executeEdits('apply-fix', [{
+        range: {
+          startLineNumber: 1,
+          startColumn: 1,
+          endLineNumber: editorRef.current.getModel().getLineCount(),
+          endColumn: editorRef.current.getModel().getLineMaxColumn(editorRef.current.getModel().getLineCount())
+        },
+        text: fixedCode,
+        forceMoveMarkers: true
+      }]);
+    }
+    
+    // Clear the error
+    setExecOutputMap(prev => {
+      const newMap = { ...prev };
       delete newMap[codeId];
-          return newMap;
-        });
-        
+      return newMap;
+    });
+    
     // Notify parent component of the code change
     if (onCodeExecute) {
       onCodeExecute(codeId, { savedCode: fixedCode });
     }
     
     // Show success toast
-        toast({
-          title: "Code fixed",
-          description: "AI has fixed your code. Run it to see if the fix works.",
-          variant: "default",
-          duration: 3000,
-        });
+    toast({
+      title: "Code fixed",
+      description: "AI has fixed your code. Run it to see if the fix works.",
+      variant: "default",
+      duration: 3000,
+    });
     
     setIsFixingCode(false);
   };
@@ -1071,28 +1104,38 @@ const CodeCanvas: React.FC<CodeCanvasProps> = ({
                   
                   <div className="flex items-center space-x-1">
                     {activeEntry.language === "python" && !editingMap[activeEntry.id] && !selectedText && (
-                      <TooltipProvider>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button 
-                              variant="ghost" 
-                              size="sm" 
-                              onClick={() => {
-                                setShowAIEditField(prev => ({ 
-                                  ...prev, 
-                                  [activeEntry.id]: !prev[activeEntry.id] 
-                                }))
-                              }} 
-                              className="text-[#FF7F7F] hover:bg-[#FF7F7F]/20"
-                            >
-                              <Wand2 className="h-4 w-4" />
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent side="bottom">
-                            <p className="text-sm">Edit with AI</p>
-                          </TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
+                      <FeatureGate 
+                        featureId="AI_CODE_EDIT" 
+                        fallback={
+                          <PremiumFeatureButton
+                            featureId="AI_CODE_EDIT"
+                            variant="icon"
+                          />
+                        }
+                      >
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button 
+                                variant="ghost" 
+                                size="sm" 
+                                onClick={() => {
+                                  setShowAIEditField(prev => ({ 
+                                    ...prev, 
+                                    [activeEntry.id]: !prev[activeEntry.id] 
+                                  }))
+                                }} 
+                                className="text-[#FF7F7F] hover:bg-[#FF7F7F]/20"
+                              >
+                                <Wand2 className="h-4 w-4" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent side="bottom">
+                              <p className="text-sm">Edit with AI</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      </FeatureGate>
                     )}
                     
                     {/* Add clean code button for Python */}
@@ -1282,27 +1325,38 @@ const CodeCanvas: React.FC<CodeCanvasProps> = ({
                         <X className="h-4 w-4 mr-1" />
                         Cancel
                       </Button>
-                      <Button
-                        size="sm"
-                        onClick={() => handleAIEditRequest(activeEntry.id)}
-                        disabled={isAIEditing || !aiEditPrompt.trim()}
-                        className="bg-[#FF7F7F] text-white hover:bg-[#FF7F7F]/80 shadow-md h-8"
+                      <FeatureGate
+                        featureId="AI_CODE_EDIT"
+                        fallback={
+                          <PremiumFeatureButton
+                            featureId="AI_CODE_EDIT"
+                            buttonText="Upgrade Required"
+                            icon={<Lock className="h-4 w-4 mr-1" />}
+                          />
+                        }
                       >
-                        {isAIEditing ? (
-                          <span className="flex items-center">
-                            <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                            </svg>
-                            Processing...
-                          </span>
-                        ) : (
-                          <>
-                            <Send className="h-4 w-4 mr-1"/>
-                            Apply
-                          </>
-                        )}
-                      </Button>
+                        <Button
+                          size="sm"
+                          onClick={() => handleAIEditRequest(activeEntry.id)}
+                          disabled={isAIEditing || !aiEditPrompt.trim()}
+                          className="bg-[#FF7F7F] text-white hover:bg-[#FF7F7F]/80 shadow-md h-8"
+                        >
+                          {isAIEditing ? (
+                            <span className="flex items-center">
+                              <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                              </svg>
+                              Processing...
+                            </span>
+                          ) : (
+                            <>
+                              <Send className="h-4 w-4 mr-1"/>
+                              Apply
+                            </>
+                          )}
+                        </Button>
+                      </FeatureGate>
                     </div>
                   </div>
                 )}
@@ -1319,57 +1373,77 @@ const CodeCanvas: React.FC<CodeCanvasProps> = ({
                             left: `${selectionPosition.left}px`,
                           }}
                         >
-                          <Popover>
-                            <PopoverTrigger asChild>
+                          <FeatureGate 
+                            featureId="AI_CODE_EDIT" 
+                            fallback={
                               <Button 
                                 variant="ghost" 
                                 size="sm" 
-                                className="p-1 h-6 w-6 rounded-full bg-[#FF7F7F] text-white hover:bg-[#FF7F7F]/80 shadow-md"
+                                className="p-1 h-6 w-6 rounded-full bg-gray-200 text-gray-600"
+                                onClick={() => {
+                                  toast({
+                                    title: "Premium Feature",
+                                    description: "AI Code Edit requires a paid subscription.",
+                                    duration: 5000,
+                                  });
+                                }}
                               >
-                                <Wand2 className="h-5 w-5" />
+                                <Lock className="h-5 w-5" />
                               </Button>
-                            </PopoverTrigger>
-                            <PopoverContent className="w-96 p-3" sideOffset={5} align="start">
-                              <div className="space-y-2">
-                                <h4 className="font-medium text-xs mb-1">Edit Selection</h4>
-                                <Textarea
-                                  placeholder="Describe the change..."
-                                  value={aiEditPrompt}
-                                  onChange={(e) => setAIEditPrompt(e.target.value)}
-                                  className="bg-white border-gray-300 text-gray-800 h-16 w-full text-xs resize-none min-h-[64px]"
-                                  disabled={isAIEditing}
-                                />
-                                <div className="flex justify-end space-x-1 pt-1">
-                                  <Button 
-                                    variant="outline" 
-                                    size="sm" 
-                                    onClick={() => {
-                                      setSelectedText(null);
-                                      setSelectionPosition(null);
-                                      setAIEditPrompt("");
-                                    }}
-                                    className="h-6 text-xs px-2"
-                                  >
-                                    Cancel
-                                  </Button>
-                                  <Button
-                                    size="sm"
-                                    onClick={() => handleAIEditRequest(activeEntry.id)}
-                                    disabled={isAIEditing || !aiEditPrompt.trim()}
-                                    className="bg-[#FF7F7F] text-white hover:bg-[#FF7F7F]/80 h-6 text-xs px-2"
-                                  >
-                                    {isAIEditing ? 
-                                      <svg className="animate-spin h-3 w-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                                      </svg> 
-                                      : "Apply"
-                                    }
-                                  </Button>
+                            }
+                          >
+                            <Popover>
+                              <PopoverTrigger asChild>
+                                <Button 
+                                  variant="ghost" 
+                                  size="sm" 
+                                  className="p-1 h-6 w-6 rounded-full bg-[#FF7F7F] text-white hover:bg-[#FF7F7F]/80 shadow-md"
+                                >
+                                  <Wand2 className="h-5 w-5" />
+                                </Button>
+                              </PopoverTrigger>
+                              <PopoverContent className="w-96 p-3" sideOffset={5} align="start">
+                                <div className="space-y-2">
+                                  <h4 className="font-medium text-xs mb-1">Edit Selection</h4>
+                                  <Textarea
+                                    placeholder="Describe the change..."
+                                    value={aiEditPrompt}
+                                    onChange={(e) => setAIEditPrompt(e.target.value)}
+                                    className="bg-white border-gray-300 text-gray-800 h-16 w-full text-xs resize-none min-h-[64px]"
+                                    disabled={isAIEditing}
+                                  />
+                                  <div className="flex justify-end space-x-1 pt-1">
+                                    <Button 
+                                      variant="outline" 
+                                      size="sm" 
+                                      onClick={() => {
+                                        setSelectedText(null);
+                                        setSelectionPosition(null);
+                                        setAIEditPrompt("");
+                                      }}
+                                      className="h-6 text-xs px-2"
+                                    >
+                                      Cancel
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      onClick={() => handleAIEditRequest(activeEntry.id)}
+                                      disabled={isAIEditing || !aiEditPrompt.trim()}
+                                      className="bg-[#FF7F7F] text-white hover:bg-[#FF7F7F]/80 h-6 text-xs px-2"
+                                    >
+                                      {isAIEditing ? 
+                                        <svg className="animate-spin h-3 w-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                        </svg> 
+                                        : "Apply"
+                                      }
+                                    </Button>
+                                  </div>
                                 </div>
-                              </div>
-                            </PopoverContent>
-                          </Popover>
+                              </PopoverContent>
+                            </Popover>
+                          </FeatureGate>
                         </div>
                       )}
                     <MonacoEditor

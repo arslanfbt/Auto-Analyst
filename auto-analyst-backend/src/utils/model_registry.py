@@ -28,12 +28,12 @@ MODEL_COSTS = {
         "gpt-3.5-turbo": {"input": 0.0005, "output": 0.0015},  
     },
     "anthropic": {
-        "claude-3-opus-latest": {"input": 0.015, "output": 0.075},  
+        "claude-3-5-haiku-latest": {"input": 0.00025, "output": 0.000125},
         "claude-3-7-sonnet-latest": {"input": 0.003, "output": 0.015},   
         "claude-3-5-sonnet-latest": {"input": 0.003, "output": 0.015}, 
         "claude-sonnet-4-20250514": {"input": 0.003, "output": 0.015},
+        "claude-3-opus-latest": {"input": 0.015, "output": 0.075},  
         "claude-opus-4-20250514": {"input": 0.015, "output": 0.075},
-        "claude-3-5-haiku-latest": {"input": 0.0008, "output": 0.0004},
     },
     "groq": {
         "deepseek-r1-distill-llama-70b": {"input": 0.00075, "output": 0.00099},
@@ -59,15 +59,10 @@ MODEL_TIERS = {
         "name": "Basic",
         "credits": 1,
         "models": [
+            "claude-3-5-haiku-latest",
             "llama3-8b-8192",
-            "llama-3.1-8b-instant",
             "gemma2-9b-it",
-            "meta-llama/llama-4-scout-17b-16e-instruct",
-            "llama-3.2-1b-preview",
-            "llama-3.2-3b-preview",
-            "llama-3.2-11b-text-preview",
-            "llama-3.2-11b-vision-preview",
-            "llama3-groq-8b-8192-tool-use-preview"
+            "meta-llama/llama-4-scout-17b-16e-instruct"
         ]
     },
     "tier2": {
@@ -88,41 +83,33 @@ MODEL_TIERS = {
         "models": [
             "gpt-4.1",
             "gpt-4.1-mini",
-            "gpt-4.5-preview",
             "gpt-4o",
-            "o1",
-            "o1-pro",
             "o3",
             "gpt-3.5-turbo",
-            "claude-3-opus-latest",
             "claude-3-7-sonnet-latest",
             "claude-3-5-sonnet-latest",
-            "claude-3-5-haiku-latest",
             "claude-sonnet-4-20250514",
             "deepseek-r1-distill-llama-70b",
             "llama-3.3-70b-versatile",
             "llama3-70b-8192",
             "mistral-saba-24b",
             "deepseek-r1-distill-qwen-32b",
-            "llama-3.2-90b-text-preview",
-            "llama-3.2-90b-vision-preview",
-            "llama-3.3-70b-specdec",
-            "llama2-70b-4096",
             "llama-3.1-70b-versatile",
-            "llama-3.1-405b-reasoning",
-            "llama3-groq-70b-8192-tool-use-preview",
             "gemini-2.5-pro-preview-03-25"
         ]
     },
     "tier4": {
-        "name": "Enterprise",
+        "name": "Premium Plus",
         "credits": 10,
         "models": [
+            "gpt-4.5-preview",
+            "o1",
+            "o1-pro",
+            "claude-3-opus-latest",
             "claude-opus-4-20250514"
         ]
     }
 }
-
 
 # Model metadata (display name, context window, etc.)
 MODEL_METADATA = {
@@ -144,8 +131,6 @@ MODEL_METADATA = {
     "claude-3-7-sonnet-latest": {"display_name": "Claude 3.7 Sonnet", "context_window": 200000},
     "claude-3-5-sonnet-latest": {"display_name": "Claude 3.5 Sonnet", "context_window": 200000},
     "claude-3-5-haiku-latest": {"display_name": "Claude 3.5 Haiku", "context_window": 200000},
-    "claude-sonnet-4-20250514": {"display_name": "Claude Sonnet 4", "context_window": 200000},
-    "claude-opus-4-20250514": {"display_name": "Claude Opus 4", "context_window": 200000},
     
     # GROQ
     "deepseek-r1-distill-llama-70b": {"display_name": "DeepSeek R1 Distill Llama 70b", "context_window": 32768},

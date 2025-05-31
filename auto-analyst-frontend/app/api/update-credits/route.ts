@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getToken } from 'next-auth/jwt'
 import redis, { creditUtils, KEYS } from '@/lib/redis'
 import Stripe from 'stripe'
+import { CreditConfig } from '@/lib/credits-config'
 
 export const dynamic = 'force-dynamic'
 
@@ -11,13 +12,6 @@ const stripe = process.env.STRIPE_SECRET_KEY
       apiVersion: '2025-02-24.acacia',
     })
   : null
-
-// Credit amounts based on plan level
-const PLAN_CREDITS = {
-  'Free Plan': 100,
-  'Standard Plan': 500,
-  'Pro Plan': 999999, // Effectively unlimited
-}
 
 export async function POST(request: NextRequest) {
   try {
@@ -86,26 +80,18 @@ export async function POST(request: NextRequest) {
       ? creditUtils.getNextMonthFirstDay()
       : creditUtils.getNextYearFirstDay();
 
-    // Determine credits to add based on plan with better matching
-    let creditsToAdd = 100; // Default for Free plan
-    let planType = 'FREE';
-
-    // Check for Pro plan first to prevent issues with name substrings
-    if (planName.toLowerCase().includes('pro')) {
-      creditsToAdd = 999999; // Unlimited
-      planType = 'PRO';
-    } else if (planName.toLowerCase().includes('standard')) {
-      creditsToAdd = 500;
-      planType = 'STANDARD';
-    }
+    // Get plan configuration using centralized config
+    const planCredits = CreditConfig.getCreditsForPlan(planName)
+    const creditsToAdd = planCredits.total
+    const planType = planCredits.type
 
     // logger.log(`Setting ${creditsToAdd} credits for user ${userId} based on plan ${planName}`);
     
     try {
       // Update user subscription using the new hash-based approach
       await redis.hset(KEYS.USER_SUBSCRIPTION(userId), {
-        plan: planName,
-        planType: planType, // Add explicit planType
+        plan: planCredits.displayName,
+        planType: planType,
         status: 'active',
         amount: amount.toString(),
         interval: interval,
@@ -131,7 +117,7 @@ export async function POST(request: NextRequest) {
       success: true,
       credits: creditsToAdd,
       used: 0,
-      plan: planName,
+      plan: planCredits.displayName,
       renewalDate: renewalDate.toISOString().split('T')[0],
       resetDate: resetDate
     })

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getToken } from 'next-auth/jwt'
 import redis, { KEYS } from '@/lib/redis'
+import { CreditConfig } from '@/lib/credits-config'
 
 export async function POST(request: NextRequest) {
   try {
@@ -18,17 +19,18 @@ export async function POST(request: NextRequest) {
     const creditsHash = await redis.hgetall(KEYS.USER_CREDITS(userId))
     
     if (!creditsHash || !creditsHash.total) {
-      // Initialize new user with default credits
+      // Initialize new user with default credits using centralized config
+      const defaultCredits = CreditConfig.getDefaultInitialCredits()
       await redis.hset(KEYS.USER_CREDITS(userId), {
-        total: '100',
+        total: defaultCredits.toString(),
         used: credits.toString(),
-        resetDate: new Date(new Date().getFullYear(), new Date().getMonth() + 1, 1).toISOString().split('T')[0],
+        resetDate: CreditConfig.getNextResetDate(),
         lastUpdate: new Date().toISOString()
       })
       
       return NextResponse.json({
         success: true,
-        remaining: 100 - credits,
+        remaining: defaultCredits - credits,
         deducted: credits
       })
     }

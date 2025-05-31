@@ -1,32 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getToken } from 'next-auth/jwt'
 import redis, { KEYS, subscriptionUtils, profileUtils } from '@/lib/redis'
-
-// Define subscription plan options to match pricing.tsx tiers
-const SUBSCRIPTION_PLANS = {
-  FREE: {
-    name: 'Free',
-    totalCredits: 100,
-    amount: 0,
-    interval: 'month'
-  },
-  STANDARD: {
-    name: 'Standard',
-    totalCredits: 500,
-    amount: 15,
-    yearlyAmount: 126,
-    interval: 'month',
-    yearlyInterval: 'year'
-  },
-  PRO: {
-    name: 'Pro',
-    totalCredits: Number.MAX_SAFE_INTEGER, // Unlimited
-    amount: 29,
-    yearlyAmount: 243.60,
-    interval: 'month',
-    yearlyInterval: 'year'
-  }
-}
+import { CreditConfig, PLAN_CREDITS } from '@/lib/credits-config'
 
 export async function GET(request: NextRequest) {
   // Use getToken to authenticate
@@ -55,26 +30,23 @@ export async function GET(request: NextRequest) {
     // Check subscription data in Redis (hash-based storage)
     const subscriptionData = await redis.hgetall(KEYS.USER_SUBSCRIPTION(userId)) || {}
     
-    // Determine plan key mapping
-    let planKey = 'FREE'
-    let planDetails = SUBSCRIPTION_PLANS.FREE
+    // Determine plan using centralized config
+    let planType = subscriptionData.planType || 'FREE'
+    let planCredits = CreditConfig.getCreditsByType(planType as any)
     
-    if (subscriptionData.planType === 'PRO') {
-      planKey = 'PRO'
-      planDetails = SUBSCRIPTION_PLANS.PRO
-    } else if (subscriptionData.planType === 'STANDARD') {
-      planKey = 'STANDARD'
-      planDetails = SUBSCRIPTION_PLANS.STANDARD
+    // Fallback to plan name if planType not found
+    if (!planCredits || planCredits.type === 'FREE' && subscriptionData.plan) {
+      planCredits = CreditConfig.getCreditsForPlan(subscriptionData.plan as string)
     }
     
-    // Get subscription values from Redis with defaults
-    const amount = subscriptionData.amount ? parseFloat(subscriptionData.amount as string) : planDetails.amount
+    // Get subscription values from Redis with defaults from centralized config
+    const amount = subscriptionData.amount ? parseFloat(subscriptionData.amount as string) : 0
     const purchaseDate = subscriptionData.purchaseDate || new Date().toISOString()
-    const interval = subscriptionData.interval || planDetails.interval
+    const interval = subscriptionData.interval || 'month'
     let status = subscriptionData.status || 'inactive'
     
     // Override status for Free plans - Free plans should always be active
-    if (planKey === 'FREE' || planDetails.name === 'Free') {
+    if (planCredits.type === 'FREE') {
       status = 'active'
     }
     
@@ -87,14 +59,14 @@ export async function GET(request: NextRequest) {
     // Get credit data from Redis
     const creditsData = await redis.hgetall(KEYS.USER_CREDITS(userId)) || {}
     
-    // Set default credit values if not found
-    const creditsUsed = creditsData.used ? parseInt(creditsData.used as string) : 0
-    const creditsTotal = creditsData.total ? parseInt(creditsData.total as string) : planDetails.totalCredits
-    const resetDate = creditsData.resetDate as string || new Date(new Date().getFullYear(), new Date().getMonth() + 1, 1).toISOString().split('T')[0]
+    // Parse credits with fallback using centralized config
+    const creditsTotal = parseInt(creditsData.total as string || CreditConfig.getDefaultInitialCredits().toString())
+    const creditsUsed = parseInt(creditsData.used as string || '0')
+    const resetDate = creditsData.resetDate as string || CreditConfig.getNextResetDate()
     const lastUpdate = creditsData.lastUpdate as string || new Date().toISOString()
 
-    // Format total credits for UI display
-    const formattedTotal = creditsTotal === 999999 ? Infinity : creditsTotal
+    // Format total credits for UI display using centralized config
+    const formattedTotal = CreditConfig.isUnlimitedTotal(creditsTotal) ? Infinity : creditsTotal
     
     // Handle yearly subscription special case
     const isYearly = interval === 'year'
@@ -137,11 +109,11 @@ export async function GET(request: NextRequest) {
         joinedDate: subscriptionData.purchaseDate ? 
           (subscriptionData.purchaseDate as string).split('T')[0] : 
           new Date().toISOString().split('T')[0],
-        role: planDetails.name
+        role: planCredits.displayName
       },
       subscription: {
-        plan: planDetails.name,
-        planType: subscriptionData.planType,
+        plan: planCredits.displayName,
+        planType: planCredits.type,
         status: status,
         amount: parseFloat(subscriptionData.amount as string) || amount,
         interval: subscriptionData.interval || interval,
@@ -163,7 +135,7 @@ export async function GET(request: NextRequest) {
         timestamp,
         rawSubscriptionData: subscriptionData,
         rawCreditsData: creditsData,
-        planKey
+        planType: planCredits.type
       }
     }
     
@@ -173,7 +145,7 @@ export async function GET(request: NextRequest) {
       name: token.name || 'User',
       image: token.picture as string || '',
       joinedDate: userData.profile.joinedDate,
-      role: planDetails.name
+      role: planCredits.displayName
     });
     
     return NextResponse.json(userData)

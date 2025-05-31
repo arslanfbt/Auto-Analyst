@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth/next'
 import { creditUtils } from '@/lib/redis'
+import { CreditConfig } from '@/lib/credits-config'
 
 export async function GET(request: Request) {
   try {
@@ -38,9 +39,10 @@ export async function POST(request: Request) {
     const userIdentifier = userId || session?.user?.email
     
     if (action === 'reset') {
-      // Reset credits to the monthly allowance
-      await creditUtils.initializeCredits(userIdentifier, 100)
-      return NextResponse.json({ success: true, credits: 100 })
+      // Reset credits to the monthly allowance using centralized config
+      const defaultCredits = CreditConfig.getDefaultInitialCredits()
+      await creditUtils.initializeCredits(userIdentifier, defaultCredits)
+      return NextResponse.json({ success: true, credits: defaultCredits })
     } else if (action === 'deduct') {
       // Deduct credits
       const success = await creditUtils.deductCredits(userIdentifier, amount)

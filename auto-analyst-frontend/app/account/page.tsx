@@ -27,6 +27,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
+import { CreditConfig } from '@/lib/credits-config'
 
 interface UserProfile {
   name: string;
@@ -100,18 +101,12 @@ export default function AccountPage() {
       setProfile(data.profile)
       setSubscription(data.subscription)
       
-      // Enhanced credits handling with special attention to plan changes
+      // Enhanced credits handling using centralized config
       // logger.log('Credits data:', data.credits)
       
       if (data.credits) {
-        // Determine plan-specific default total
-        let planDefaultTotal = 100; // Free plan default
-        if (data.subscription?.plan) {
-          const planName = data.subscription.plan.toLowerCase();
-          if (planName.includes('standard')) {
-            planDefaultTotal = 500;
-          }
-        }
+        // Use centralized config to get plan-specific defaults
+        const planCredits = CreditConfig.getCreditsForPlan(data.subscription?.plan || 'Free')
         
         // First ensure all values are properly parsed with plan-aware defaults
         const formattedCredits = {
@@ -121,10 +116,10 @@ export default function AccountPage() {
                  parseInt(String(data.credits.used || '0')),
           total: typeof data.credits.total === 'number' ? 
                   data.credits.total : 
-                  parseInt(String(data.credits.total || planDefaultTotal))
+                  parseInt(String(data.credits.total || planCredits.total))
         };
         
-        // logger.log('Formatted credits with plan-specific defaults:', formattedCredits);
+        // logger.log('Formatted credits with centralized config:', formattedCredits);
         setCredits(formattedCredits);
       }
       
@@ -239,26 +234,23 @@ export default function AccountPage() {
       );
     }
     
-    // Ensure all values are numbers with proper fallbacks
+    // Ensure all values are numbers with proper fallbacks using centralized config
     const used = typeof credits.used === 'number' ? 
                   credits.used : 
                   parseInt(String(credits.used || '0'));
     const total_remaining = typeof credits.total === 'number' ? 
                    credits.total : 
-                   parseInt(String(credits.total || '100'));
+                   parseInt(String(credits.total || CreditConfig.getDefaultInitialCredits()));
     
-    // Check if this is an "unlimited" plan (remove PRO plan check)
-    const isUnlimited = total_remaining > 99999; // Remove check for PRO plan
+    // Use centralized config to check if unlimited
+    const isUnlimited = CreditConfig.isUnlimitedTotal(total_remaining);
     
-    // Display text for total credits
-    const totalDisplay = isUnlimited ? "No Limit" : total_remaining.toString();
+    // Use centralized config for display formatting
+    const totalDisplay = CreditConfig.formatCreditTotal(total_remaining);
+    const remaining = CreditConfig.formatRemainingCredits(used, total_remaining);
     
-    // Calculate remaining - only relevant for limited plans
-    const remaining = isUnlimited ? "Unlimited" : Math.max(0, total_remaining - used).toString();
-    
-    // For unlimited plans, show a small percentage just to have some progress
-    const usagePercentage = isUnlimited ? 5 : 
-                           (total_remaining > 0 ? Math.min(100, (used / total_remaining) * 100) : 0);
+    // Use centralized config for usage percentage calculation
+    const usagePercentage = CreditConfig.calculateUsagePercentage(used, total_remaining);
     
     return (
       <div className="space-y-4">
@@ -409,13 +401,20 @@ export default function AccountPage() {
     return planName.includes('standard')
   }
   
-  // Helper to get the next lower plan
+  // Helper to get the next lower plan using centralized config
   const getDowngradePlanName = () => {
     if (!subscription) return 'Free Plan'
-    const planName = subscription.plan.toLowerCase()
+    const currentPlan = CreditConfig.getCreditsForPlan(subscription.plan)
     
-    if (planName.includes('standard')) return 'Free Plan'
-    return 'Standard Plan'
+    // Get available plans and find the next lower one
+    const allPlans = CreditConfig.getAllPlans().sort((a, b) => a.total - b.total)
+    const currentIndex = allPlans.findIndex(p => p.type === currentPlan.type)
+    
+    if (currentIndex > 0) {
+      return allPlans[currentIndex - 1].displayName
+    }
+    
+    return 'Free Plan'
   }
 
   // Add function to handle subscription cancellation
@@ -1025,11 +1024,11 @@ export default function AccountPage() {
                 You are about to downgrade from {subscription?.plan || 'your current plan'} to {targetPlan === 'standard' ? 'Standard Plan' : 'Free Plan'}.
                 {targetPlan === 'free' ? (
                   <p className="mt-2 text-red-600 font-medium">
-                    This will cancel your paid subscription and reduce your available credits to 100.
+                    This will cancel your paid subscription and reduce your available credits to {CreditConfig.getCreditsForPlan('Free').total}.
                   </p>
                 ) : (
                   <p className="mt-2">
-                    Your credits will be adjusted to 500 and your monthly payment will be reduced.
+                    Your credits will be adjusted to {CreditConfig.getCreditsForPlan('Standard').total} and your monthly payment will be reduced.
                   </p>
                 )}
                 <p className="mt-2">

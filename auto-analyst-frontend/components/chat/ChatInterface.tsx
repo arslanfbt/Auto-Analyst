@@ -38,6 +38,9 @@ import { useModelSettings } from '@/lib/hooks/useModelSettings'
 import logger from '@/lib/utils/logger'
 import { OnboardingTooltip } from '../onboarding/OnboardingTooltips'
 import { getDisplayName } from '@/lib/model-registry'
+import { useUserSubscriptionStore } from '@/lib/store/userSubscriptionStore'
+import { hasFeatureAccess } from '@/lib/features/feature-access'
+import { toast } from "@/components/ui/use-toast"
 
 interface PlotlyMessage {
   type: "plotly"
@@ -108,10 +111,27 @@ const ChatInterface: React.FC = () => {
   const [isNewLoginSession, setIsNewLoginSession] = useState(false);
   const [chatNameGenerated, setChatNameGenerated] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
+  const { subscription, fetchSubscription, setSubscription } = useUserSubscriptionStore();
 
   useEffect(() => {
     setMounted(true)
   }, [])
+
+  // Fetch user subscription when session changes
+  useEffect(() => {
+    if (session) {
+      fetchSubscription();
+    } else {
+      // Set a free tier subscription for non-logged in users
+      setSubscription({
+        plan: 'free',
+        status: 'active',
+        amount: 0,
+        interval: 'month',
+        planType: 'free',
+      });
+    }
+  }, [session, fetchSubscription, setSubscription]);
 
   // Check if it's the user's first time and show onboarding tooltip
   useEffect(() => {
@@ -1129,6 +1149,17 @@ const ChatInterface: React.FC = () => {
   }, [addMessage, clearMessages, incrementQueries, session, isAdmin, activeChatId, userId, sessionId, modelSettings, hasEnoughCredits, processRegularMessage, processAgentMessage, fetchChatHistories, checkCredits, recentlyUploadedDataset, chatHistories, syncSettingsToBackend, queriesUsed]);
 
   const handleFileUpload = async (file: File) => {
+    // Feature check for file upload (enterprise feature)
+    if (subscription && !hasFeatureAccess('CUSTOM_INTEGRATIONS', subscription).hasAccess) {
+      toast({
+        title: "Enterprise feature",
+        description: "Custom file uploads require an enterprise subscription.",
+        variant: "destructive",
+        duration: 5000,
+      });
+      return;
+    }
+
     // File validation
     const isCSVByExtension = file.name.toLowerCase().endsWith('.csv');
     const isCSVByType = file.type === 'text/csv' || file.type === 'application/csv';

@@ -8,8 +8,7 @@ export default function PrivacyPolicy() {
           <h2>Cookie Policy</h2>
           <p>
             We use cookies and similar technologies to help personalize content, 
-            improve your experience, and analyze our traffic. We may share this 
-            information with our social media, advertising, and analytics partners.
+            improve your experience, and analyze our traffic.
           </p>
 
           <h3>Types of Cookies We Use</h3>
