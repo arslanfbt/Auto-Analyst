@@ -136,6 +136,104 @@ def clean_code_for_security(code_str, security_concerns):
     
     return modified_code
     
+def format_correlation_output(text):
+    """Format correlation matrix output for better readability"""
+    lines = text.split('\n')
+    formatted_lines = []
+    
+    for line in lines:
+        # Skip empty lines at the beginning
+        if not line.strip() and not formatted_lines:
+            continue
+        
+        if not line.strip():
+            formatted_lines.append(line)
+            continue
+        
+        # Check if this line contains correlation values or variable names
+        stripped_line = line.strip()
+        parts = stripped_line.split()
+        
+        if len(parts) > 1:
+            # Check if this is a header line with variable names
+            if all(part.replace('_', '').replace('-', '').isalpha() for part in parts):
+                # This is a header row with variable names
+                formatted_header = f"{'':12}"  # Empty first column for row labels
+                for part in parts:
+                    formatted_header += f"{part:>12}"
+                formatted_lines.append(formatted_header)
+            elif any(char.isdigit() for char in stripped_line) and ('.' in stripped_line or '-' in stripped_line):
+                # This looks like a correlation line with numbers
+                row_name = parts[0] if parts else ""
+                values = parts[1:] if len(parts) > 1 else []
+                
+                formatted_row = f"{row_name:<12}"
+                for value in values:
+                    try:
+                        val = float(value)
+                        formatted_row += f"{val:>12.3f}"
+                    except ValueError:
+                        formatted_row += f"{value:>12}"
+                
+                formatted_lines.append(formatted_row)
+            else:
+                # Other lines (like titles)
+                formatted_lines.append(line)
+        else:
+            formatted_lines.append(line)
+    
+    return '\n'.join(formatted_lines)
+
+def format_summary_stats(text):
+    """Format summary statistics for better readability"""
+    lines = text.split('\n')
+    formatted_lines = []
+    
+    for line in lines:
+        if not line.strip():
+            formatted_lines.append(line)
+            continue
+        
+        # Check if this is a header line with statistical terms only (missing first column)
+        stripped_line = line.strip()
+        if any(stat in stripped_line.lower() for stat in ['count', 'mean', 'median', 'std', 'min', 'max', '25%', '50%', '75%']):
+            parts = stripped_line.split()
+            # Check if this is a header row (starts with statistical terms)
+            if parts and parts[0].lower() in ['count', 'mean', 'median', 'std', 'min', 'max', '25%', '50%', '75%']:
+                # This is a header row - add proper spacing
+                formatted_header = f"{'':12}"  # Empty first column for row labels
+                for part in parts:
+                    formatted_header += f"{part:>15}"
+                formatted_lines.append(formatted_header)
+            else:
+                # This is a data row - format normally
+                row_name = parts[0] if parts else ""
+                values = parts[1:] if len(parts) > 1 else []
+                
+                formatted_row = f"{row_name:<12}"
+                for value in values:
+                    try:
+                        if '.' in value or 'e' in value.lower():
+                            val = float(value)
+                            if abs(val) >= 1000000:
+                                formatted_row += f"{val:>15.2e}"
+                            elif abs(val) >= 1:
+                                formatted_row += f"{val:>15.2f}"
+                            else:
+                                formatted_row += f"{val:>15.6f}"
+                        else:
+                            val = int(value)
+                            formatted_row += f"{val:>15}"
+                    except ValueError:
+                        formatted_row += f"{value:>15}"
+                
+                formatted_lines.append(formatted_row)
+        else:
+            # Other lines (titles, etc.) - keep as is
+            formatted_lines.append(line)
+    
+    return '\n'.join(formatted_lines)
+    
 def clean_print_statements(code_block):
     """
     This function cleans up any `print()` statements that might contain unwanted `\n` characters.
@@ -229,6 +327,132 @@ def execute_code_from_markdown(code_str, dataframe=None):
     # Apply security modifications to the code
     modified_code = clean_code_for_security(code_str, security_concerns)
     
+    # Enhanced print function that detects and formats tabular data
+    captured_outputs = []
+    original_print = print
+    
+    # Set pandas display options for full table display
+    pd.set_option('display.max_columns', None)
+    pd.set_option('display.max_rows', 20)  # Limit to 20 rows instead of unlimited
+    pd.set_option('display.width', None)
+    pd.set_option('display.max_colwidth', 50)
+    pd.set_option('display.expand_frame_repr', False)
+    
+
+    
+    def enhanced_print(*args, **kwargs):
+        # Convert all args to strings
+        str_args = [str(arg) for arg in args]
+        output_text = kwargs.get('sep', ' ').join(str_args)
+        
+        # Special case for DataFrames - use pipe delimiter and clean format
+        if isinstance(args[0], pd.DataFrame) and len(args) == 1:
+            # Format DataFrame with pipe delimiter using to_csv for reliable column separation
+            df = args[0]
+            
+            # Use StringIO to capture CSV output with pipe delimiter
+            from io import StringIO
+            csv_buffer = StringIO()
+            
+            # Export to CSV with pipe delimiter, preserving index
+            df.to_csv(csv_buffer, sep='|', index=True, float_format='%.6g')
+            csv_output = csv_buffer.getvalue()
+            
+            # Clean up the CSV output - remove quotes and extra formatting
+            lines = csv_output.strip().split('\n')
+            cleaned_lines = []
+            
+            for line in lines:
+                # Remove any quotes that might have been added by to_csv
+                clean_line = line.replace('"', '')
+                # Split by pipe, strip whitespace from each part, then rejoin
+                parts = [part.strip() for part in clean_line.split('|')]
+                cleaned_lines.append(' | '.join(parts))
+            
+            output_text = '\n'.join(cleaned_lines)
+            captured_outputs.append(f"<TABLE_START>\n{output_text}\n<TABLE_END>")
+            original_print(output_text)
+            return
+        
+        # Detect if this looks like tabular data (generic approach)
+        is_table = False
+        
+        # Check for table patterns:
+        # 1. Multiple lines with consistent spacing
+        lines = output_text.split('\n')
+        if len(lines) > 2:
+            # Count lines that look like they have multiple columns (2+ spaces between words)
+            multi_column_lines = sum(1 for line in lines if len(line.split()) > 1 and '  ' in line)
+            if multi_column_lines >= 2:  # At least 2 lines with multiple columns
+                is_table = True
+            
+            # Check for pandas DataFrame patterns like index with column names
+            if any(re.search(r'^\s*\d+\s+', line) for line in lines):
+                # Look for lines starting with an index number followed by spaces
+                is_table = True
+                
+            # Look for table-like structured output with multiple rows of similar format
+            if len(lines) >= 3:
+                # Sample a few lines to check for consistent structure
+                sample_lines = [lines[i] for i in range(min(len(lines), 5)) if i < len(lines) and lines[i].strip()]
+                
+                # Check for consistent whitespace patterns
+                if len(sample_lines) >= 2:
+                    # Get positions of whitespace groups in first line
+                    whitespace_positions = []
+                    for i, line in enumerate(sample_lines):
+                        if not line.strip():
+                            continue
+                        positions = [m.start() for m in re.finditer(r'\s{2,}', line)]
+                        if i == 0:
+                            whitespace_positions = positions
+                        elif len(positions) == len(whitespace_positions):
+                            # Check if whitespace positions are roughly the same
+                            is_similar = all(abs(pos - whitespace_positions[j]) <= 3 
+                                            for j, pos in enumerate(positions) 
+                                            if j < len(whitespace_positions))
+                            if is_similar:
+                                is_table = True
+        
+        # 2. Contains common table indicators
+        if any(indicator in output_text.lower() for indicator in [
+            'count', 'mean', 'std', 'min', 'max', '25%', '50%', '75%',  # Summary stats
+            'correlation', 'corr',  # Correlation tables
+            'coefficient', 'r-squared', 'p-value',  # Regression tables
+        ]):
+            is_table = True
+        
+        # 3. Has many decimal numbers (likely a data table)
+        if output_text.count('.') > 5 and len(lines) > 2:
+            is_table = True
+            
+        # If we have detected a table, convert space-delimited to pipe-delimited format
+        if is_table:
+            # Convert the table to pipe-delimited format for better parsing in frontend
+            formatted_lines = []
+            for line in lines:
+                if not line.strip():
+                    formatted_lines.append(line)  # Keep empty lines
+                    continue
+                
+                # Split by multiple spaces and join with pipe delimiter
+                parts = re.split(r'\s{2,}', line.strip())
+                if parts:
+                    formatted_lines.append(" | ".join(parts))
+                else:
+                    formatted_lines.append(line)
+            
+            # Use the pipe-delimited format
+            output_text = "\n".join(formatted_lines)
+            
+            # Format and mark the output for table processing in UI
+            captured_outputs.append(f"<TABLE_START>\n{output_text}\n<TABLE_END>")
+        else:
+            captured_outputs.append(output_text)
+        
+        # Also use original print for stdout capture
+        original_print(*args, **kwargs)
+    
     context = {
         'pd': pd,
         'px': px,
@@ -239,8 +463,11 @@ def execute_code_from_markdown(code_str, dataframe=None):
         '__import__': __import__,
         'sns': sns,
         'np': np,
-        'json_outputs': []  # List to store multiple Plotly JSON outputs
+        'json_outputs': [],  # List to store multiple Plotly JSON outputs
+        'print': enhanced_print  # Replace print with our enhanced version
     }
+    
+    
 
     # Modify code to store multiple JSON outputs
     modified_code = re.sub(
@@ -266,6 +493,30 @@ def execute_code_from_markdown(code_str, dataframe=None):
         modified_code,
         flags=re.MULTILINE
     )
+    
+
+    # Custom display function for DataFrames to show head + tail for large datasets
+    original_repr = pd.DataFrame.__repr__
+    
+    def custom_df_repr(self):
+        if len(self) > 15:
+            # For large DataFrames, show first 10 and last 5 rows
+            head_part = self.head(10)
+            tail_part = self.tail(5)
+            
+            head_str = head_part.__repr__()
+            tail_str = tail_part.__repr__()
+            
+            # Extract just the data rows (skip the header from tail)
+            tail_lines = tail_str.split('\n')
+            tail_data = '\n'.join(tail_lines[1:])  # Skip header line
+            
+            return f"{head_str}\n...\n{tail_data}"
+        else:
+            return original_repr(self)
+    
+    # Apply custom representation temporarily
+    pd.DataFrame.__repr__ = custom_df_repr
 
     # If a dataframe is provided, add it to the context
     if dataframe is not None:
@@ -314,11 +565,33 @@ def execute_code_from_markdown(code_str, dataframe=None):
     all_outputs = []
     for block_name, block_code in code_blocks:
         try:
+            # Clear captured outputs for each block
+            captured_outputs.clear()
+            
             with stdoutIO() as s:
                 exec(block_code, context)  # Execute the block
-            output = s.getvalue()
-            all_outputs.append((block_name, output, None))  # None means no error
+            
+            # Get both stdout and our enhanced captured outputs
+            stdout_output = s.getvalue()
+            
+            # Combine outputs, preferring our enhanced format when available
+            if captured_outputs:
+                combined_output = '\n'.join(captured_outputs)
+            else:
+                combined_output = stdout_output
+            
+            all_outputs.append((block_name, combined_output, None))  # None means no error
         except Exception as e:
+            # Reset pandas options in case of error
+            pd.reset_option('display.max_columns')
+            pd.reset_option('display.max_rows')
+            pd.reset_option('display.width')
+            pd.reset_option('display.max_colwidth')
+            pd.reset_option('display.expand_frame_repr')
+            
+            # Restore original DataFrame representation in case of error
+            pd.DataFrame.__repr__ = original_repr
+            
             error_traceback = traceback.format_exc()
             
             # Extract error message and error type
@@ -465,6 +738,16 @@ def execute_code_from_markdown(code_str, dataframe=None):
             
             all_outputs.append((block_name, None, formatted_error))
     
+    # Reset pandas options after execution
+    pd.reset_option('display.max_columns')
+    pd.reset_option('display.max_rows')
+    pd.reset_option('display.width')
+    pd.reset_option('display.max_colwidth')
+    pd.reset_option('display.expand_frame_repr')
+    
+    # Restore original DataFrame representation
+    pd.DataFrame.__repr__ = original_repr
+    
     # Compile all outputs and errors
     output_text = ""
     json_outputs = context.get('json_outputs', [])
@@ -492,6 +775,7 @@ def format_plan_instructions(plan_instructions):
     if "basic_qa_agent" in str(plan_instructions):
         return "**Non-Data Request**: Please ask a data related query, don't waste credits!"
 
+
     try:
         if isinstance(plan_instructions, str):
             try:
@@ -504,8 +788,7 @@ def format_plan_instructions(plan_instructions):
                 try:
                     instructions = json.loads(cleaned_str)
                 except json.JSONDecodeError:
-                    # raise ValueError(f"Invalid JSON format in plan instructions: {str(e)}")
-                    instructions = plan_instructions
+                    raise ValueError(f"Invalid JSON format in plan instructions: {str(e)}")
         elif isinstance(plan_instructions, dict):
             instructions = plan_instructions
         else:
@@ -554,6 +837,7 @@ def format_plan_instructions(plan_instructions):
             markdown_lines.append(f"**Non-Data Request**: {content.get('instruction')}")
 
     return "\n".join(markdown_lines).strip()
+    
 
 def format_complexity(instructions):
     markdown_lines = []
@@ -596,6 +880,7 @@ def format_complexity(instructions):
 
         return "\n".join(markdown_lines).strip()    
 
+
 def format_response_to_markdown(api_response, agent_name = None, dataframe=None):
     try:
         markdown = []
@@ -620,7 +905,7 @@ def format_response_to_markdown(api_response, agent_name = None, dataframe=None)
             agent = agent.split("__")[0] if "__" in agent else agent
             if "memory" in agent or not content:
                 continue
-            
+                
             if "complexity" in content:
                 markdown.append(f"{format_complexity(content)}\n")
                 
@@ -642,34 +927,35 @@ def format_response_to_markdown(api_response, agent_name = None, dataframe=None)
                 markdown.append(f"### Code Implementation\n{format_code_backticked_block(content['code'])}\n")
             if 'answer' in content:
                 markdown.append(f"### Answer\n{content['answer']}\n Please ask a query about the data")
-                # if agent_name is not None:
-                #     # execute the code
-                #     clean_code = format_code_block(content['code'])
-                #     output, json_outputs = execute_code_from_markdown(clean_code, dataframe)
-                #     if output:
-                #         markdown.append("### Execution Output\n")
-                #         markdown.append(f"```output\n{output}\n```\n")
-
-                #     if json_outputs:
-                #         markdown.append("### Plotly JSON Outputs\n")
-                #         for idx, json_output in enumerate(json_outputs):
-                #             if len(json_output) > 1000000:  # If JSON is larger than 1MB
-                #                 logger.log_message(f"Large JSON output detected: {len(json_output)} bytes", level=logging.WARNING)
-                #             markdown.append(f"```plotly\n{json_output}\n```\n")
-
             if 'summary' in content:
-                # make the summary a bullet-point list
-                summary_lines = remove_code_block_from_summary(content['summary'])
-                summary_lines = content['summary'].split('\n')
-                # remove code block from summary
+                import re
+                summary_text = content['summary']
+                summary_text = re.sub(r'```python\n(.*?)\n```', '', summary_text, flags=re.DOTALL)
+
                 markdown.append("### Summary\n")
-                for line in summary_lines:
-                    if line != "":
-                        if line.strip().startswith('•') or line.strip().startswith('-') or line.strip().startswith('*'):
-                            line = line.strip().replace('•', '').replace('-', '').replace('*', '')
-                            markdown.append(f"* {line.strip()}\n")
-                        else:
-                            markdown.append(f"{line.strip()}\n")
+
+                # Extract pre-list intro, bullet points, and post-list text
+                intro_match = re.split(r'\(\d+\)', summary_text, maxsplit=1)
+                if len(intro_match) > 1:
+                    intro_text = intro_match[0].strip()
+                    rest_text = "(1)" + intro_match[1]  # reattach for bullet parsing
+                else:
+                    intro_text = summary_text.strip()
+                    rest_text = ""
+
+                if intro_text:
+                    markdown.append(f"{intro_text}\n")
+
+                # Split bullets at numbered items like (1)...(8)
+                bullets = re.split(r'\(\d+\)', rest_text)
+                bullets = [b.strip(" ,.\n") for b in bullets if b.strip()]
+
+                # Check for post-list content (anything after the last number)
+                for i, bullet in enumerate(bullets):
+                    markdown.append(f"* {bullet}\n")
+
+
+
 
             if 'refined_complete_code' in content and 'summary' in content:
                 try:
@@ -717,6 +1003,7 @@ def format_response_to_markdown(api_response, agent_name = None, dataframe=None)
         return " "
         
     return '\n'.join(markdown)
+
 
 # Example usage with dummy data
 if __name__ == "__main__":

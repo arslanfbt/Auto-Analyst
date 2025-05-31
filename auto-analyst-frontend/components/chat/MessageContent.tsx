@@ -197,22 +197,126 @@ const MessageContent: React.FC<MessageContentProps> = ({
     );
   }, [codeFixes, hovered, isFixingCode, handleOpenCanvasForFixing]);
 
-  const renderContent = useCallback(
-    (content: string) => {
-      // Remove plotly blocks as they'll be handled separately
-      const parts = content.split(/(```plotly[\s\S]*?```)/)
-
-      return parts.map((part, index) => {
-        if (part.startsWith("```plotly") && part.endsWith("```")) {
-          return null
+  // Helper function to render table content with better formatting
+  const renderTableContent = useCallback((content: string) => {
+    const lines = content.split('\n');
+    
+    // Check if this is a pipe-delimited table (new format)
+    const isPipeDelimited = lines.some(line => line.includes('|'));
+    
+    if (isPipeDelimited) {
+      // Check if this looks like a correlation matrix
+      const isCorrelationMatrix = content.toLowerCase().includes('corr') || 
+                                 (lines[0].includes('price') && lines.some(line => line.includes('0.')));
+      
+      // Create a proper HTML table from pipe-delimited content
+      return (
+        <table className="min-w-full divide-y divide-gray-200">
+          <thead className="bg-gray-100">
+            {lines.length > 0 && (
+              <tr>
+                {lines[0].split('|').map((header, i) => (
+                  <th 
+                    key={i}
+                    scope="col" 
+                    className="px-3 py-2 text-left text-xs font-medium text-gray-800 uppercase tracking-wider"
+                  >
+                    {header.trim()}
+                  </th>
+                ))}
+              </tr>
+            )}
+          </thead>
+          <tbody className="bg-white divide-y divide-gray-200">
+            {lines.slice(1).map((line, rowIdx) => (
+              line.trim() ? (
+                <tr key={rowIdx} className={rowIdx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                  {line.split('|').map((cell, cellIdx) => {
+                    const cellContent = cell.trim();
+                    
+                    // Special handling for negative numbers
+                    // Match both standard negative numbers (-0.123) and truncated values with a hyphen at the end (0.123 -)
+                    const isNegative = cellContent.startsWith('-') || cellContent.endsWith('-');
+                    
+                    let displayValue = cellContent;
+                    if (isNegative && cellContent.endsWith('-')) {
+                      // Convert "0.123 -" to "-0.123"
+                      displayValue = `-${cellContent.slice(0, -1).trim()}`;
+                    }
+                    
+                    // Check if it's a numeric value (including negative numbers)
+                    const numericValue = displayValue.replace(/^-/, ''); // Remove leading minus for number check
+                    const isNumeric = !isNaN(Number(numericValue)) && numericValue !== '';
+                    
+                    // Special formatting for correlation values (between -1 and 1)
+                    let formattedValue = displayValue;
+                    if (isNumeric) {
+                      const numValue = parseFloat(displayValue);
+                      
+                      // If this is a correlation matrix, format the numbers nicely
+                      if (isCorrelationMatrix && Math.abs(numValue) <= 1) {
+                        // Format with 3 decimal places for correlation values
+                        formattedValue = numValue.toFixed(3);
+                      } else if (Math.abs(numValue) < 0.01) {
+                        // Scientific notation for very small numbers
+                        formattedValue = numValue.toExponential(2);
+                      } else if (Math.abs(numValue) < 1) {
+                        // 3 decimal places for small numbers
+                        formattedValue = numValue.toFixed(3);
+                      } else if (Math.abs(numValue) < 10) {
+                        // 2 decimal places for medium numbers
+                        formattedValue = numValue.toFixed(2);
         } else {
+                        // No decimal places for large numbers
+                        formattedValue = Math.round(numValue).toLocaleString();
+                      }
+                    }
+                    
+                    return (
+                      <td 
+                        key={cellIdx} 
+                        className={`px-3 py-2 whitespace-nowrap text-xs font-mono ${
+                          isNumeric ? 'text-right' : 'text-left'
+                        }`}
+                      >
+                        {isNumeric && isNegative 
+                          ? <span className="text-red-600">{formattedValue}</span>
+                          : formattedValue
+                        }
+                      </td>
+                    );
+                  })}
+                </tr>
+              ) : null
+            ))}
+          </tbody>
+        </table>
+      );
+    }
+    
+    // Fallback to old rendering for non-pipe-delimited tables
+    return (
+      <div className="font-mono text-sm leading-relaxed">
+        {lines.map((line, idx) => {
+          // Detect header lines (first meaningful line or lines with column names)
+          const isHeader = idx < 3 && line.trim() && 
+            (line.includes('price') || line.includes('area') || 
+             line.includes('count') || line.includes('mean') ||
+             /^[a-zA-Z\s_]+(\s+[a-zA-Z\s_]+)*$/.test(line.trim()));
+          
           return (
-            <ReactMarkdown
-              key={index}
-              remarkPlugins={[remarkGfm]}
-              rehypePlugins={[rehypeRaw]}
-              components={{
-                code({ node, className, children, ...props }) {
+            <div key={idx} className={isHeader ? "font-bold text-gray-800" : "text-gray-700"}>
+              {line || '\u00A0'} {/* Use non-breaking space for empty lines */}
+            </div>
+          );
+        })}
+      </div>
+    );
+  }, []);
+
+  // Create stable markdownComponents reference with useCallback
+  const markdownComponents = useCallback(() => ({
+    code({ node, className, children, ...props }: any) {
                   const match = /language-(\w+)/.exec(className || "")
                   const isInline = (props as { inline?: boolean })?.inline ?? false
                   
@@ -227,17 +331,28 @@ const MessageContent: React.FC<MessageContentProps> = ({
                                       codeContent.toLowerCase().includes("traceback") ||
                                       codeContent.toLowerCase().includes("exception")
                   
-                  // Check if this is likely tabular data
+      // Check if this is likely tabular data (fallback for non-enhanced tables)
                   const matches = codeContent.match(/\|\s*\w+\s*\|/g);
-                  const isTabularData = !isInline && codeContent.includes('|') && 
+      const isTabularData = !isInline && (
+        // Original table detection
+        (codeContent.includes('|') && 
                                        (codeContent.includes('DataFrame') || 
                                         codeContent.includes('Column Types') ||
-                                        (matches !== null && matches.length > 1));
+          (matches !== null && matches.length > 1))) ||
+        // Enhanced detection for statistical outputs (fallback)
+        (codeContent.includes('count') && codeContent.includes('mean') && codeContent.includes('std')) ||
+        // Detection for correlation matrices (fallback)
+        (codeContent.includes('price') && codeContent.includes('area') && (codeContent.match(/\d+\.\d+/g)?.length || 0) > 5) ||
+        // Detection for general tabular structure
+        (codeContent.split('\n').length > 3 && 
+         codeContent.split('\n').some(line => 
+           line.match(/^\s*\w+\s+[\d\.\-\+e]+(\s+[\d\.\-\+e]+)*\s*$/)))
+      );
 
                   if (!isInline && match) {
                     // Special handling for explicit error blocks
                     if (isErrorBlock) {
-                      const codeId = generateCodeId(codeContent, index)
+          const codeId = generateCodeId(codeContent, Math.random())
                       return (
                         <div className="bg-red-50 border border-red-200 rounded-md p-3 my-3 overflow-auto relative">
                           <div className="flex items-center text-red-600 font-medium mb-2">
@@ -256,7 +371,7 @@ const MessageContent: React.FC<MessageContentProps> = ({
                     
                     // Handle code blocks that contain errors but aren't explicitly marked as errors
                     if (containsError && onOpenCanvas) {
-                      const codeId = generateCodeId(codeContent, index)
+          const codeId = generateCodeId(codeContent, Math.random())
                       return (
                         <div className="bg-gray-50 border border-gray-200 rounded-md p-3 my-2 overflow-auto relative">
                           <div className="flex items-center text-gray-700 font-medium mb-2">
@@ -270,13 +385,46 @@ const MessageContent: React.FC<MessageContentProps> = ({
                       )
                     }
                     
-                    // Special handling for tabular data
+        // Special handling for tabular data (fallback for non-enhanced tables)
                     if (isTabularData) {
+          // Detect the type of table for better styling
+          let tableType = "Data Table"
+          let bgColor = "bg-gray-50"
+          let borderColor = "border-gray-200"
+          let titleColor = "text-gray-700"
+          let icon = "📋"
+          
+          if (codeContent.includes('Summary Statistics') || 
+              (codeContent.includes('count') && codeContent.includes('mean'))) {
+            tableType = "Summary Statistics"
+            bgColor = "bg-green-50"
+            borderColor = "border-green-200"
+            titleColor = "text-green-700"
+            icon = "📈"
+          } else if (codeContent.includes('Correlations') || 
+                    (codeContent.includes('price') && (codeContent.match(/\d+\.\d+/g)?.length || 0) > 5)) {
+            tableType = "Correlation Matrix"
+            bgColor = "bg-purple-50"
+            borderColor = "border-purple-200"
+            titleColor = "text-purple-700"
+            icon = "🔗"
+          } else if (codeContent.includes('[') && codeContent.includes('rows x') && codeContent.includes('columns]')) {
+            tableType = "DataFrame Info"
+            bgColor = "bg-blue-50"
+            borderColor = "border-blue-200"
+            titleColor = "text-blue-700"
+            icon = "🗂️"
+          }
+          
                       return (
-                        <div className="overflow-x-auto max-w-full my-2">
-                          <pre className="text-sm p-2 bg-gray-100 rounded font-mono whitespace-pre min-w-max">
-                            {codeContent}
-                          </pre>
+            <div className={`${bgColor} border ${borderColor} rounded-md p-4 my-4`}>
+              <div className={`flex items-center ${titleColor} font-semibold mb-3`}>
+                <span className="mr-2">{icon}</span>
+                {tableType}
+              </div>
+              <div className="overflow-x-auto max-w-full bg-white p-3 rounded border">
+                {renderTableContent(codeContent)}
+              </div>
                         </div>
                       )
                     }
@@ -297,43 +445,176 @@ const MessageContent: React.FC<MessageContentProps> = ({
                     </code>
                   )
                 },
-                pre({ children }) {
+    pre({ children }: any) {
                   return (
                     <div className="overflow-x-auto max-w-full">
                       {children}
                     </div>
                   )
                 },
-                h1: ({ node, ...props }) => <h1 className="text-2xl font-bold mt-6 mb-4" {...props} />,
-                h2: ({ node, ...props }) => <h2 className="text-xl font-semibold mt-5 mb-3" {...props} />,
-                h3: ({ node, ...props }) => <h3 className="text-lg font-medium mt-4 mb-2" {...props} />,
-                h4: ({ node, ...props }) => <h4 className="text-base font-medium mt-3 mb-2" {...props} />,
-                h5: ({ node, ...props }) => <h5 className="text-sm font-medium mt-3 mb-1" {...props} />,
-                h6: ({ node, ...props }) => <h6 className="text-sm font-medium mt-3 mb-1" {...props} />,
-                p: ({ node, ...props }) => <p className="mb-4 last:mb-0 leading-relaxed" {...props} />,
-                ul: ({ node, ...props }) => <ul className="list-disc pl-6 mb-4" {...props} />,
-                ol: ({ node, ...props }) => <ol className="list-decimal pl-6 mb-4" {...props} />,
-                li: ({ node, ...props }) => <li className="mb-1" {...props} />,
-                a: ({ node, ...props }) => (
+    h1: ({ node, ...props }: any) => <h1 className="text-2xl font-bold mt-6 mb-4" {...props} />,
+    h2: ({ node, ...props }: any) => <h2 className="text-xl font-semibold mt-5 mb-3" {...props} />,
+    h3: ({ node, ...props }: any) => <h3 className="text-lg font-medium mt-4 mb-2" {...props} />,
+    h4: ({ node, ...props }: any) => <h4 className="text-base font-medium mt-3 mb-2" {...props} />,
+    h5: ({ node, ...props }: any) => <h5 className="text-sm font-medium mt-3 mb-1" {...props} />,
+    h6: ({ node, ...props }: any) => <h6 className="text-sm font-medium mt-3 mb-1" {...props} />,
+    p: ({ node, ...props }: any) => <p className="mb-4 last:mb-0 leading-relaxed" {...props} />,
+    ul: ({ node, ...props }: any) => <ul className="list-disc pl-6 mb-4" {...props} />,
+    ol: ({ node, ...props }: any) => <ol className="list-decimal pl-6 mb-4" {...props} />,
+    li: ({ node, ...props }: any) => <li className="mb-1" {...props} />,
+    a: ({ node, ...props }: any) => (
                   <a className="text-blue-600 hover:underline" target="_blank" rel="noopener noreferrer" {...props} />
                 ),
-                blockquote: ({ node, ...props }) => (
+    blockquote: ({ node, ...props }: any) => (
                   <blockquote className="border-l-4 border-gray-300 pl-4 italic my-4" {...props} />
                 ),
-                table: ({ node, ...props }) => (
+    table: ({ node, ...props }: any) => (
                   <div className="overflow-x-auto max-w-full my-4">
                     <table className="min-w-max border-collapse" {...props} />
                   </div>
                 ),
-              }}
+  }), [onOpenCanvas, renderTableContent, InlineFixButton]);
+
+  const renderContent = useCallback(
+    (content: string) => {
+      // First, handle TABLE_START/TABLE_END markers before markdown processing
+      const tableRegex = /<TABLE_START>\n?([\s\S]*?)\n?<TABLE_END>/g;
+      const parts: React.ReactNode[] = [];
+      let lastIndex = 0;
+      let match;
+      let partIndex = 0;
+      
+      // Get the stable markdown components
+      const components = markdownComponents();
+      
+      // Process all table markers
+      while ((match = tableRegex.exec(content)) !== null) {
+        // Add content before the table if any
+        if (match.index > lastIndex) {
+          const beforeContent = content.substring(lastIndex, match.index);
+          if (beforeContent.trim()) {
+            // Remove plotly blocks from the before content as they'll be handled separately
+            const plotlyParts = beforeContent.split(/(```plotly[\s\S]*?```)/);
+            plotlyParts.forEach((plotlyPart, plotlyIndex) => {
+              if (plotlyPart.startsWith("```plotly") && plotlyPart.endsWith("```")) {
+                // Skip plotly blocks
+                return;
+              } else if (plotlyPart.trim()) {
+                parts.push(
+                  <ReactMarkdown
+                    key={`before-${partIndex}-${plotlyIndex}`}
+                    remarkPlugins={[remarkGfm]}
+                    rehypePlugins={[rehypeRaw]}
+                    components={components}
+                  >
+                    {plotlyPart}
+                  </ReactMarkdown>
+                );
+              }
+            });
+          }
+        }
+        
+        // Process the table content
+        const tableContent = match[1];
+        
+        // Detect table type for styling
+        let tableType = "Statistical Output";
+        let bgColor = "bg-blue-50";
+        let borderColor = "border-blue-200";
+        let titleColor = "text-blue-700";
+        let icon = "📊";
+        
+        if (tableContent.includes('count') && tableContent.includes('mean') && tableContent.includes('std')) {
+          tableType = "Summary Statistics";
+          bgColor = "bg-green-50";
+          borderColor = "border-green-200";
+          titleColor = "text-green-700";
+          icon = "📈";
+        } else if (tableContent.toLowerCase().includes('correlations') || 
+                  (tableContent.includes('price') && (tableContent.match(/\d+\.\d+/g)?.length || 0) > 5)) {
+          tableType = "Correlation Matrix";
+          bgColor = "bg-purple-50";
+          borderColor = "border-purple-200";
+          titleColor = "text-purple-700";
+          icon = "🔗";
+        } else if (tableContent.includes('[') && tableContent.includes('rows x') && tableContent.includes('columns]')) {
+          tableType = "DataFrame Info";
+          bgColor = "bg-blue-50";
+          borderColor = "border-blue-200";
+          titleColor = "text-blue-700";
+          icon = "🗂️";
+        }
+        
+        // Add the formatted table
+        parts.push(
+          <div key={`table-${partIndex}`} className={`${bgColor} border ${borderColor} rounded-md p-4 my-4`}>
+            <div className={`flex items-center ${titleColor} font-semibold mb-3`}>
+              <span className="mr-2">{icon}</span>
+              {tableType}
+            </div>
+            <div className="overflow-x-auto max-w-full bg-white p-3 rounded border">
+              {renderTableContent(tableContent)}
+            </div>
+          </div>
+        );
+        
+        lastIndex = match.index + match[0].length;
+        partIndex++;
+      }
+      
+      // Add remaining content after the last table
+      if (lastIndex < content.length) {
+        const remainingContent = content.substring(lastIndex);
+        if (remainingContent.trim()) {
+          // Remove plotly blocks as they'll be handled separately
+          const plotlyParts = remainingContent.split(/(```plotly[\s\S]*?```)/);
+          plotlyParts.forEach((plotlyPart, plotlyIndex) => {
+            if (plotlyPart.startsWith("```plotly") && plotlyPart.endsWith("```")) {
+              // Skip plotly blocks
+              return;
+            } else if (plotlyPart.trim()) {
+              parts.push(
+                <ReactMarkdown
+                  key={`after-${partIndex}-${plotlyIndex}`}
+                  remarkPlugins={[remarkGfm]}
+                  rehypePlugins={[rehypeRaw]}
+                  components={components}
+                >
+                  {plotlyPart}
+                </ReactMarkdown>
+              );
+            }
+          });
+        }
+      }
+      
+      // If no tables were found, process the entire content with ReactMarkdown
+      if (parts.length === 0) {
+        // Remove plotly blocks as they'll be handled separately
+        const plotlyParts = content.split(/(```plotly[\s\S]*?```)/);
+        return plotlyParts.map((part, index) => {
+          if (part.startsWith("```plotly") && part.endsWith("```")) {
+            return null;
+          } else if (part.trim()) {
+            return (
+              <ReactMarkdown
+                key={index}
+                remarkPlugins={[remarkGfm]}
+                rehypePlugins={[rehypeRaw]}
+                components={components}
             >
               {part}
             </ReactMarkdown>
-          )
+            );
+          }
+          return null;
+        });
         }
-      })
+      
+      return parts;
     },
-    [codeFixes, handleCreditCheck, handleFixComplete, handleFixStart, isFixingCode, sessionId, setCodeFixes, toast, onOpenCanvas, InlineFixButton],
+    [markdownComponents, renderTableContent],
   )
 
   // Render action buttons only if this is an AI message and it's the last part
@@ -434,4 +715,5 @@ const MessageContent: React.FC<MessageContentProps> = ({
 }
 
 export default React.memo(MessageContent)
+
 

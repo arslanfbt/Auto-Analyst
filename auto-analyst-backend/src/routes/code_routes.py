@@ -213,7 +213,7 @@ def extract_relevant_error_section(error_message: str) -> str:
     
     # If we couldn't find "Problem at this location", include first few and last few lines
     if len(error_lines) > 10:
-        return '\n'.join(error_lines[:3] + error_lines[-3:])
+        return '\n'.join(error_lines[:5] + error_lines[-7:])
     
     # If the error is short enough, return as is
     return error_message
@@ -230,12 +230,13 @@ def fix_code_with_dspy(code: str, error: str, dataset_context: str = ""):
     Returns:
         str: The fixed code
     """
-    claude = dspy.LM("claude-3-5-sonnet-latest", api_key = os.environ['ANTHROPIC_API_KEY'], max_tokens=5000)
+    gemini = dspy.LM("gemini/gemini-2.5-pro-preview-03-25", api_key = os.environ['GEMINI_API_KEY'], max_tokens=5000)
+    
     # Find the blocks with errors
     faulty_blocks = identify_error_blocks(code, error)
     if not faulty_blocks:
         # If no specific errors found, fix the entire code
-        with dspy.context(lm=claude):
+        with dspy.context(lm=gemini):
             code_fixer = dspy.ChainOfThought(code_fix)
             result = code_fixer(
                 dataset_context=str(dataset_context) or "",
@@ -248,7 +249,7 @@ def fix_code_with_dspy(code: str, error: str, dataset_context: str = ""):
     result_code = code.replace("```python", "").replace("```", "")
     
     # Fix each faulty block separatelyw
-    with dspy.context(lm=claude):
+    with dspy.context(lm=gemini):
         code_fixer = dspy.ChainOfThought(code_fix)
         
         for agent_name, block_code, specific_error in faulty_blocks:
@@ -358,8 +359,8 @@ def get_dataset_context(df):
         return "Could not generate dataset context information."
 
 def edit_code_with_dspy(original_code: str, user_prompt: str, dataset_context: str = ""):
-    claude = dspy.LM("claude-3-5-sonnet-latest", api_key = os.environ['ANTHROPIC_API_KEY'], max_tokens=3000)
-    with dspy.context(lm=claude):
+    gemini = dspy.LM("claude-3-5-sonnet-latest", api_key = os.environ['ANTHROPIC_API_KEY'], max_tokens=3000)
+    with dspy.context(lm=gemini):
         code_editor = dspy.ChainOfThought(code_edit)
         
         result = code_editor(
@@ -632,6 +633,7 @@ async def fix_code(
     try:
         # Check if code and error are provided
         if not request_data.code or not request_data.error:
+            logger.log_message(f"Error fixing code: Both code and error message are required {request_data.code} {request_data.error}", level=logging.ERROR)
             raise HTTPException(status_code=400, detail="Both code and error message are required")
             
         # Access app state via request

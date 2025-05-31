@@ -1,5 +1,6 @@
 import { Redis } from '@upstash/redis';
 import { KEYS } from '../redis';
+import { CreditConfig } from '../credits-config';
 
 // Initialize Redis client for server-side operations only
 const serverRedis = new Redis({
@@ -20,11 +21,11 @@ export const serverCreditUtils = {
         return total - used;
       }
       
-      // Default for new users
-      return 100;
+      // Default for new users using centralized config
+      return CreditConfig.getDefaultInitialCredits();
     } catch (error) {
       console.error('Server Redis error fetching credits:', error);
-      return 100; // Default fallback
+      return CreditConfig.getDefaultInitialCredits(); // Default fallback using centralized config
     }
   }
 };

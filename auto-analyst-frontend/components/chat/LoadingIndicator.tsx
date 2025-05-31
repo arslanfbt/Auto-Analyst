@@ -5,19 +5,27 @@ import { Loader2 } from "lucide-react"
 const loadingStates = [
   {
     message: "Analyzing request...",
-    progress: 20,
+    progress: 15,
   },
   {
     message: "Processing data...",
-    progress: 40,
+    progress: 30,
   },
   {
     message: "Generating insights...",
+    progress: 45,
+  },
+  {
+    message: "Refining analysis...",
     progress: 60,
   },
   {
     message: "Creating visualization...",
-    progress: 80,
+    progress: 75,
+  },
+  {
+    message: "Finalizing results...",
+    progress: 85,
   },
   {
     message: "Almost there...",
@@ -30,9 +38,11 @@ const LoadingIndicator: React.FC = () => {
 
   useEffect(() => {
     if (loadingStep < loadingStates.length - 1) {
+      // Longer delay for "Generating insights" state
+      const delay = loadingStep === 2 ? 5000 : 3000
       const timer = setTimeout(() => {
         setLoadingStep((prev) => prev + 1)
-      }, 3000)
+      }, delay)
       return () => clearTimeout(timer)
     }
   }, [loadingStep])

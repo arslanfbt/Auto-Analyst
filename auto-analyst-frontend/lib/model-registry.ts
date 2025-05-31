@@ -55,77 +55,67 @@ export const MODEL_COSTS = {
 
 // Models by tier
 export const MODEL_TIERS = {
-  tier1: {
-    name: "Basic",
-    credits: 1,
-    models: [
-      "llama3-8b-8192",
-      "llama-3.1-8b-instant",
-      "gemma2-9b-it",
-      "meta-llama/llama-4-scout-17b-16e-instruct",
-      "llama-3.2-1b-preview",
-      "llama-3.2-3b-preview",
-      "llama-3.2-11b-text-preview",
-      "llama-3.2-11b-vision-preview",
-      "llama3-groq-8b-8192-tool-use-preview"
-    ]
+  "tier1": {
+      "name": "Basic",
+      "credits": 1,
+      "models": [
+          "claude-3-5-haiku-latest",
+          "llama3-8b-8192",
+          "gemma2-9b-it",
+          "meta-llama/llama-4-scout-17b-16e-instruct"
+      ]
   },
-  tier2: {
-    name: "Standard",
-    credits: 3,
-    models: [
-      "gpt-4.1-nano",
-      "gpt-4o-mini",
-      "o1-mini",
-      "o3-mini",
-      "qwen-qwq-32b",
-      "meta-llama/llama-4-maverick-17b-128e-instruct"
-    ]
+  "tier2": {
+      "name": "Standard",
+      "credits": 3,
+      "models": [
+          "gpt-4.1-nano",
+          "gpt-4o-mini",
+          "o1-mini",
+          "o3-mini",
+          "qwen-qwq-32b",
+          "meta-llama/llama-4-maverick-17b-128e-instruct"
+      ]
   },
-  tier3: {
-    name: "Premium",
-    credits: 5,
-    models: [
-      "gpt-4.1",
-      "gpt-4.1-mini",
-      "gpt-4.5-preview",
-      "gpt-4o",
-      "o1",
-      "o1-pro",
-      "o3",
-      "gpt-3.5-turbo",
-      "claude-3-opus-latest",
-      "claude-3-7-sonnet-latest",
-      "claude-3-5-sonnet-latest",
-      "claude-3-5-haiku-latest",
-      "claude-sonnet-4-20250514",
-      "deepseek-r1-distill-llama-70b",
-      "llama-3.3-70b-versatile",
-      "llama3-70b-8192",
-      "mistral-saba-24b",
-      "deepseek-r1-distill-qwen-32b",
-      "llama-3.2-90b-text-preview",
-      "llama-3.2-90b-vision-preview",
-      "llama-3.3-70b-specdec",
-      "llama2-70b-4096",
-      "llama-3.1-70b-versatile",
-      "llama-3.1-405b-reasoning",
-      "llama3-groq-70b-8192-tool-use-preview",
-      "gemini-2.5-pro-preview-03-25"
-    ]
+  "tier3": {
+      "name": "Premium",
+      "credits": 5,
+      "models": [
+          "gpt-4.1",
+          "gpt-4.1-mini",
+          "gpt-4o",
+          "o3",
+          "gpt-3.5-turbo",
+          "claude-3-7-sonnet-latest",
+          "claude-3-5-sonnet-latest",
+          "claude-sonnet-4-20250514",
+          "deepseek-r1-distill-llama-70b",
+          "llama-3.3-70b-versatile",
+          "llama3-70b-8192",
+          "mistral-saba-24b",
+          "deepseek-r1-distill-qwen-32b",
+          "llama-3.1-70b-versatile",
+          "gemini-2.5-pro-preview-03-25"
+      ]
   },
-  tier4: {
-    name: "Enterprise",
-    credits: 10,
-    models: ["claude-opus-4-20250514"]
+  "tier4": {
+      "name": "Premium Plus",
+      "credits": 10,
+      "models": [
+          "gpt-4.5-preview",
+          "o1",
+          "o1-pro",
+          "claude-3-opus-latest",
+          "claude-opus-4-20250514"
+      ]
   }
 };
-
-// Tier colors for UI components
+        // Tier colors for UI components
 export const TIER_COLORS = {
   tier1: "#10B981", // Green for Basic tier
   tier2: "#3B82F6", // Blue for Standard tier
-  tier3: "#8B5CF6"  // Purple for Premium tier
+  tier3: "#8B5CF6", // Purple for Premium tier
+  tier4: "#F59E0B" // Orange for Premium Plus tier
 };
 
 // Model metadata (display name, context window, etc.)
