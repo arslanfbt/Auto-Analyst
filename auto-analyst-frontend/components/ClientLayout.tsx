@@ -22,7 +22,7 @@ export default function ClientLayout({
           <AuthProvider>
             <CreditProvider>
               <DeepAnalysisProvider>
-                <Providers>{children}</Providers>
+              <Providers>{children}</Providers>
               </DeepAnalysisProvider>
             </CreditProvider>
           </AuthProvider>

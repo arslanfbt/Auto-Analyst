@@ -702,7 +702,6 @@ class deep_analysis_module(dspy.Module):
             raise e
 
         code = deep_code.combined_code
-        print(code)
         
         # Execute the code with error handling
         try:
@@ -842,9 +841,3 @@ def generate_html_report(return_dict):
     </body>
     </html>"""
     return html
-
-# Add this to the return_dict section:
-
-        # return results
-
-# Remove all the standalone execution code below this point

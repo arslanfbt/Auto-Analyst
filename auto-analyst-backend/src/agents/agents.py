@@ -188,8 +188,7 @@ class basic_query_planner(dspy.Signature):
                         "use": ["original_data"],
                         "instruction": "use the original_data to measure correlation of X & Y, using pandas"
                     }
-    
-    
+                    
     Respond in the user's language for all explanations and instructions, but keep all code, variable names, function names, model names, agent names, and library names in English.
     """
     dataset = dspy.InputField(desc="Available datasets loaded in the system, use this df, columns set df as copy of df")
@@ -1057,12 +1056,12 @@ class auto_analyst(dspy.Module):
         
         module_return = self.planner(goal=dict_['goal'], dataset=dict_['dataset'], Agent_desc=dict_['Agent_desc'])
         plan_dict = dict(module_return['plan'])
+        logger.log_message(f"Plan: {plan_dict}", level=logging.INFO)
         if 'complexity' in module_return:
             complexity = module_return['complexity']
         else:
             complexity = 'basic'
         plan_dict['complexity'] = complexity
-
 
         return plan_dict
 
@@ -1101,8 +1100,6 @@ class auto_analyst(dspy.Module):
             plan_instructions = str(raw_instr)
         else:
             plan_instructions = {}
-
-
 
         # If no plan was produced, short-circuit
         if not plan_list:

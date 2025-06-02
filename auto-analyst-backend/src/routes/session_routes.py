@@ -236,7 +236,7 @@ async def update_model_settings(
         if settings.provider.lower() == "groq":
             logger.log_message(f"Groq Model: {settings.model}", level=logging.INFO)
             lm = dspy.GROQ(
-                model=settings.model,
+                model=f"groq/{settings.model}",
                 api_key=settings.api_key,
                 temperature=settings.temperature,
                 max_tokens=settings.max_tokens
@@ -244,7 +244,7 @@ async def update_model_settings(
         elif settings.provider.lower() == "anthropic":
             logger.log_message(f"Anthropic Model: {settings.model}", level=logging.INFO)
             lm = dspy.LM(
-                model=settings.model,
+                model=f"anthropic/{settings.model}",
                 api_key=settings.api_key,
                 temperature=settings.temperature,
                 max_tokens=settings.max_tokens
@@ -260,7 +260,7 @@ async def update_model_settings(
         else:  # OpenAI is the default
             logger.log_message(f"OpenAI Model: {settings.model}", level=logging.INFO)
             lm = dspy.LM(
-                model=settings.model,
+                model=f"openai/{settings.model}",
                 api_key=settings.api_key,
                 temperature=settings.temperature,
                 max_tokens=settings.max_tokens

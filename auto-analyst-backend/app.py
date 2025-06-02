@@ -156,7 +156,7 @@ DEFAULT_MODEL_CONFIG = {
 # Create default LM config but don't set it globally
 if DEFAULT_MODEL_CONFIG["provider"].lower() == "groq":
     default_lm = dspy.GROQ(
-        model=DEFAULT_MODEL_CONFIG["model"],
+        model=f"groq/{DEFAULT_MODEL_CONFIG["model"]}",
         api_key=DEFAULT_MODEL_CONFIG["api_key"],
         temperature=DEFAULT_MODEL_CONFIG["temperature"],
         max_tokens=DEFAULT_MODEL_CONFIG["max_tokens"]
@@ -168,14 +168,21 @@ elif DEFAULT_MODEL_CONFIG["provider"].lower() == "gemini":
         temperature=DEFAULT_MODEL_CONFIG["temperature"],
         max_tokens=DEFAULT_MODEL_CONFIG["max_tokens"]
     )
-else:
+elif DEFAULT_MODEL_CONFIG["provider"].lower() == "anthropic":
     default_lm = dspy.LM(
-        model=DEFAULT_MODEL_CONFIG["model"],
+        model=f"anthropic/{DEFAULT_MODEL_CONFIG["model"]}",
         api_key=DEFAULT_MODEL_CONFIG["api_key"],
         temperature=DEFAULT_MODEL_CONFIG["temperature"],
         max_tokens=DEFAULT_MODEL_CONFIG["max_tokens"]
     )
-
+else:
+    default_lm = dspy.LM(
+        model=f"openai/{DEFAULT_MODEL_CONFIG["model"]}",
+        api_key=DEFAULT_MODEL_CONFIG["api_key"],
+        temperature=DEFAULT_MODEL_CONFIG["temperature"],
+        max_tokens=DEFAULT_MODEL_CONFIG["max_tokens"]
+    )
+    
 # Function to get model config from session or use default
 def get_session_lm(session_state):
     """Get the appropriate LM instance for a session, or default if not configured"""
@@ -187,14 +194,14 @@ def get_session_lm(session_state):
             provider = model_config.get("provider", "openai").lower()
             if provider == "groq":
                 return dspy.GROQ(
-                    model=model_config.get("model", DEFAULT_MODEL_CONFIG["model"]),
+                    model=f"groq/{model_config.get("model", DEFAULT_MODEL_CONFIG["model"])}",
                     api_key=model_config.get("api_key", DEFAULT_MODEL_CONFIG["api_key"]),
                     temperature=model_config.get("temperature", DEFAULT_MODEL_CONFIG["temperature"]),
                     max_tokens=model_config.get("max_tokens", DEFAULT_MODEL_CONFIG["max_tokens"])
                 )
             elif provider == "anthropic":
                 return dspy.LM(
-                    model=model_config.get("model", DEFAULT_MODEL_CONFIG["model"]),
+                    model=f"anthropic/{model_config.get("model", DEFAULT_MODEL_CONFIG["model"])}",
                     api_key=model_config.get("api_key", DEFAULT_MODEL_CONFIG["api_key"]),
                     temperature=model_config.get("temperature", DEFAULT_MODEL_CONFIG["temperature"]),
                     max_tokens=model_config.get("max_tokens", DEFAULT_MODEL_CONFIG["max_tokens"])
@@ -208,7 +215,7 @@ def get_session_lm(session_state):
                 )
             else:  # OpenAI is the default
                 return dspy.LM(
-                    model=model_config.get("model", DEFAULT_MODEL_CONFIG["model"]),
+                    model=f"openai/{model_config.get("model", DEFAULT_MODEL_CONFIG["model"])}",
                     api_key=model_config.get("api_key", DEFAULT_MODEL_CONFIG["api_key"]),
                     temperature=model_config.get("temperature", DEFAULT_MODEL_CONFIG["temperature"]),
                     max_tokens=model_config.get("max_tokens", DEFAULT_MODEL_CONFIG["max_tokens"])
