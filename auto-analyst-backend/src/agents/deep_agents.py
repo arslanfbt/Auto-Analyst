@@ -13,7 +13,7 @@ import pandas as pd
 from dotenv import load_dotenv
 from src.utils.logger import Logger
 import logging
-
+import datetime
 logger = Logger("deep_agents", see_time=True, console_log=False)
 load_dotenv()
 
@@ -721,7 +721,6 @@ class deep_analysis_module(dspy.Module):
         
         try:
             with dspy.context(lm = dspy.LM("anthropic/claude-4-sonnet-20250514", api_key = anthropic_key, max_tokens=17000)):
-                import datetime
                 print("Starting code generation...")
                 start_time = datetime.datetime.now()
                 print(f"Code generation started at: {start_time.strftime('%Y-%m-%d %H:%M:%S')}")

@@ -764,7 +764,7 @@ export default function DeepAnalysisSidebar({
               <div>
                 <h4 className="font-medium text-gray-900">Upgrade Required</h4>
                 <p className="text-sm text-gray-600">
-                  Deep Analysis is a premium feature that provides comprehensive multi-step analysis with automated planning and detailed insights.
+                  Deep Analysis is a premium feature that provides a comprehensive research report examining your data from every possible angle, uncovering hidden patterns and relationships.
                 </p>
               </div>
             </div>
@@ -772,14 +772,11 @@ export default function DeepAnalysisSidebar({
             <div className="space-y-2">
               <h5 className="font-medium text-gray-900">What you'll get:</h5>
               <ul className="text-sm text-gray-600 space-y-1 ml-4">
-                <li>• Automated question generation</li>
-                <li>• Intelligent analysis planning</li>
-                <li>• Step-by-step execution tracking</li>
-                <li>• Comprehensive reporting</li>
-                <li>• Download detailed reports</li>
+                <li>• Advanced statistical analysis</li>
+                <li>• Detailed visualizations and insights</li>
+                <li>• Comprehensive research report</li>
               </ul>
             </div>
-            
             <div className="flex gap-3 pt-4">
               <Link href="/pricing" className="flex-1">
                 <Button className="w-full bg-gradient-to-r from-[#FF7F7F] to-[#FF6666] hover:from-[#FF6666] hover:to-[#E55555] text-white">
