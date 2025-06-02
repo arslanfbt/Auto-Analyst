@@ -45,8 +45,8 @@ from src.schemas.query_schemas import QueryRequest
 from src.utils.logger import Logger
 
 # Import deep analysis components directly
-from src.agents.test_deep_agents import deep_analysis_module, generate_html_report
-# from src.agents.deep_agents import deep_analysis_module, generate_html_report
+# from src.agents.test_deep_agents import deep_analysis_module, generate_html_report
+from src.agents.deep_agents import deep_analysis_module, generate_html_report
 logger = Logger("app", see_time=True, console_log=False)
 load_dotenv()
 
@@ -155,7 +155,7 @@ DEFAULT_MODEL_CONFIG = {
 
 # Create default LM config but don't set it globally
 if DEFAULT_MODEL_CONFIG["provider"].lower() == "groq":
-    default_lm = dspy.GROQ(
+    default_lm = dspy.LM(
         model=f"groq/{DEFAULT_MODEL_CONFIG["model"]}",
         api_key=DEFAULT_MODEL_CONFIG["api_key"],
         temperature=DEFAULT_MODEL_CONFIG["temperature"],
@@ -193,7 +193,7 @@ def get_session_lm(session_state):
             # Found valid session-specific model config, use it
             provider = model_config.get("provider", "openai").lower()
             if provider == "groq":
-                return dspy.GROQ(
+                return dspy.LM(
                     model=f"groq/{model_config.get("model", DEFAULT_MODEL_CONFIG["model"])}",
                     api_key=model_config.get("api_key", DEFAULT_MODEL_CONFIG["api_key"]),
                     temperature=model_config.get("temperature", DEFAULT_MODEL_CONFIG["temperature"]),

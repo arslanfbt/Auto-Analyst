@@ -28,6 +28,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../ui/dialog'
 import { Button } from '../ui/button'
 import { Crown, Lock } from 'lucide-react'
 import Link from 'next/link'
+import { useToast } from '../ui/use-toast'
 
 interface DeepAnalysisSidebarProps {
   isOpen: boolean
@@ -56,6 +57,8 @@ export default function DeepAnalysisSidebar({
   const { subscription } = useUserSubscriptionStore()
   const deepAnalysisAccess = useFeatureAccess('DEEP_ANALYSIS', subscription)
   const [showPremiumUpgradeModal, setShowPremiumUpgradeModal] = useState(false)
+  const { toast } = useToast()
+  const [isDownloadingReport, setIsDownloadingReport] = useState(false)
   
   const activeSessionId = sessionId || storeSessionId
 
@@ -272,7 +275,7 @@ export default function DeepAnalysisSidebar({
               
               console.log(`Step update: ${step} - ${status} (${progress}%)`)
               
-              if (status === 'processing' || status === 'starting') {
+              if (status === 'processing' || status === 'starting' || status === 'completed' || status === 'success') {
                 markPreviousStepsCompleted(step)
                 
                 if (step === 'report') {
@@ -304,6 +307,13 @@ export default function DeepAnalysisSidebar({
                 console.log('Analysis completed successfully')
                 
                 markAllStepsCompleted()
+                
+                // Show completion notification
+                toast({
+                  title: "Deep Analysis Complete! 🎉",
+                  description: "Your analysis report is ready for download.",
+                  duration: 5000,
+                })
                 
                 setCurrentReport(prevReport => {
                   if (!prevReport) return prevReport
@@ -493,6 +503,14 @@ export default function DeepAnalysisSidebar({
               setStoredReports(prev => [storedReport, ...prev])
             } else if (data.type === 'error' || data.error) {
               console.error('Analysis error:', data.error || data.message)
+              
+              toast({
+                title: "Analysis Failed",
+                description: data.error || data.message || "An error occurred during analysis.",
+                variant: "destructive",
+                duration: 5000,
+              })
+              
               setCurrentReport(prev => prev ? {
                 ...prev,
                 status: 'failed',
@@ -537,6 +555,14 @@ export default function DeepAnalysisSidebar({
       
     } catch (error) {
       console.error('Analysis failed:', error)
+      
+      toast({
+        title: "Analysis Failed",
+        description: error instanceof Error ? error.message : "Network error occurred during analysis.",
+        variant: "destructive",
+        duration: 5000,
+      })
+      
       setCurrentReport(prev => prev ? {
         ...prev,
         status: 'failed',
@@ -566,6 +592,23 @@ export default function DeepAnalysisSidebar({
   }
 
   const handleDownloadReport = async (reportData?: any) => {
+    if (isDownloadingReport) {
+      toast({
+        title: "Download in progress",
+        description: "Please wait while your report is being prepared...",
+        duration: 3000,
+      })
+      return
+    }
+
+    setIsDownloadingReport(true)
+    
+    toast({
+      title: "Preparing your report...",
+      description: "This may take a few seconds. Please don't close this window.",
+      duration: 3000,
+    })
+
     try {
       let analysisData;
       
@@ -593,6 +636,12 @@ export default function DeepAnalysisSidebar({
         }
       } else {
         console.error('No analysis data available for download')
+        toast({
+          title: "Download failed",
+          description: "No analysis data available for download.",
+          variant: "destructive",
+          duration: 3000,
+        })
         return
       }
 
@@ -622,8 +671,22 @@ export default function DeepAnalysisSidebar({
       document.body.removeChild(a)
       URL.revokeObjectURL(url)
       
+      toast({
+        title: "Report downloaded successfully! 📄",
+        description: "Your deep analysis report has been saved to your downloads folder.",
+        duration: 4000,
+      })
+      
     } catch (error) {
       console.error('Failed to download report:', error)
+      
+      toast({
+        title: "Download failed",
+        description: "Failed to generate report. Trying fallback method...",
+        variant: "destructive",
+        duration: 3000,
+      })
+      
       const fallbackHtml = currentReport?.html_report || reportData?.html_report
       if (fallbackHtml) {
         const blob = new Blob([fallbackHtml], { type: 'text/html' })
@@ -635,7 +698,22 @@ export default function DeepAnalysisSidebar({
         a.click()
         document.body.removeChild(a)
         URL.revokeObjectURL(url)
+        
+        toast({
+          title: "Fallback download successful",
+          description: "Report downloaded using cached data.",
+          duration: 3000,
+        })
+      } else {
+        toast({
+          title: "Download completely failed",
+          description: "Unable to download the report. Please try again later.",
+          variant: "destructive",
+          duration: 5000,
+        })
       }
+    } finally {
+      setIsDownloadingReport(false)
     }
   }
 
@@ -718,6 +796,7 @@ export default function DeepAnalysisSidebar({
                 currentReport={currentReport}
                 refreshTrigger={refreshTrigger}
                 onDownloadReport={handleDownloadReport}
+                isDownloadingReport={isDownloadingReport}
               />
             </TabsContent>
 
@@ -728,6 +807,7 @@ export default function DeepAnalysisSidebar({
                 onSelectReport={setSelectedHistoryReport}
                 onDownloadReport={handleDownloadReport}
                 onDeleteReport={handleDeleteReport}
+                isDownloadingReport={isDownloadingReport}
               />
             </TabsContent>
           </Tabs>

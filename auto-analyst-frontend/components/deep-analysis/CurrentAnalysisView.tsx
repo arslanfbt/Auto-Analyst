@@ -12,12 +12,14 @@ interface CurrentAnalysisViewProps {
   currentReport: DeepAnalysisReport | null
   refreshTrigger: number
   onDownloadReport: (reportData?: any) => void
+  isDownloadingReport?: boolean
 }
 
 export default function CurrentAnalysisView({
   currentReport,
   refreshTrigger,
-  onDownloadReport
+  onDownloadReport,
+  isDownloadingReport = false
 }: CurrentAnalysisViewProps) {
   const formatTime = (timestamp: string) => {
     return new Date(timestamp).toLocaleString()
@@ -108,9 +110,19 @@ export default function CurrentAnalysisView({
             variant="outline" 
             className="w-full text-xs"
             size="sm"
+            disabled={isDownloadingReport}
           >
-            <Download className="w-3 h-3 mr-2" />
-            Download Report
+            {isDownloadingReport ? (
+              <>
+                <Loader2 className="w-3 h-3 mr-2 animate-spin" />
+                Preparing Report...
+              </>
+            ) : (
+              <>
+                <Download className="w-3 h-3 mr-2" />
+                Download Report
+              </>
+            )}
           </Button>
         )}
 

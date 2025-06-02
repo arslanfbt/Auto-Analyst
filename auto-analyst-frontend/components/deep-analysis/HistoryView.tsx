@@ -1,5 +1,5 @@
 import React from 'react'
-import { ChevronLeft, CheckCircle2, AlertCircle, Download, Trash2, Archive } from 'lucide-react'
+import { ChevronLeft, CheckCircle2, AlertCircle, Download, Trash2, Archive, Loader2 } from 'lucide-react'
 import { Button } from '../ui/button'
 import { ScrollArea } from '../ui/scroll-area'
 import { StoredReport } from './types'
@@ -10,6 +10,7 @@ interface HistoryViewProps {
   onSelectReport: (report: StoredReport | null) => void
   onDownloadReport: (reportData: any) => void
   onDeleteReport: (reportId: string) => void
+  isDownloadingReport?: boolean
 }
 
 export default function HistoryView({
@@ -17,7 +18,8 @@ export default function HistoryView({
   selectedHistoryReport,
   onSelectReport,
   onDownloadReport,
-  onDeleteReport
+  onDeleteReport,
+  isDownloadingReport = false
 }: HistoryViewProps) {
   const formatTime = (timestamp: string) => {
     return new Date(timestamp).toLocaleString()
@@ -65,9 +67,19 @@ export default function HistoryView({
                 variant="outline" 
                 className="flex-1 text-xs"
                 size="sm"
+                disabled={isDownloadingReport}
               >
-                <Download className="w-3 h-3 mr-2" />
-                Download
+                {isDownloadingReport ? (
+                  <>
+                    <Loader2 className="w-3 h-3 mr-2 animate-spin" />
+                    Preparing...
+                  </>
+                ) : (
+                  <>
+                    <Download className="w-3 h-3 mr-2" />
+                    Download
+                  </>
+                )}
               </Button>
               <Button 
                 onClick={() => onDeleteReport(selectedHistoryReport.id)}
