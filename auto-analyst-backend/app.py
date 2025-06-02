@@ -944,12 +944,13 @@ async def deep_analysis(
             
             return_dict = await deep_analyzer.execute_deep_analysis(
                 goal=request.goal, 
-                dataset_info=dataset_info
+                dataset_info=dataset_info,
+                session_df=df  # Pass the session DataFrame
             )
             
             processing_time = time.time() - start_time
             logger.log_message(f"Deep analysis completed in {processing_time:.2f} seconds", level=logging.INFO)
-            
+            logger.log_message(f"Retrun Dict of execute deep analysis: {return_dict}")
             # Generate HTML report
             html_report = generate_html_report(return_dict)
             return_dict['html_report'] = html_report
@@ -1070,14 +1071,39 @@ async def _generate_deep_analysis_stream(session_state: dict, goal: str, session
             # Continue with full deep analysis execution
             return_dict = await deep_analyzer.execute_deep_analysis(
                 goal=goal,
-                dataset_info=dataset_info
+                dataset_info=dataset_info,
+                session_df=df  # Pass the session DataFrame
             )
+            
+            # Convert Plotly figures to JSON format for network transmission
+            import plotly.io
+            serialized_return_dict = return_dict.copy()
+            
+            # Convert plotly_figs to JSON format
+            if 'plotly_figs' in serialized_return_dict and serialized_return_dict['plotly_figs']:
+                json_figs = []
+                for fig_list in serialized_return_dict['plotly_figs']:
+                    if isinstance(fig_list, list):
+                        json_fig_list = []
+                        for fig in fig_list:
+                            if hasattr(fig, 'to_json'):  # Check if it's a Plotly figure
+                                json_fig_list.append(plotly.io.to_json(fig))
+                            else:
+                                json_fig_list.append(fig)  # Already JSON or other format
+                        json_figs.append(json_fig_list)
+                    else:
+                        # Single figure case
+                        if hasattr(fig_list, 'to_json'):
+                            json_figs.append(plotly.io.to_json(fig_list))
+                        else:
+                            json_figs.append(fig_list)
+                serialized_return_dict['plotly_figs'] = json_figs
             
             # Step 3: Send analysis results
             yield json.dumps({
                 "step": "analysis",
                 "status": "completed",
-                "content": return_dict,
+                "content": serialized_return_dict,
                 "progress": 90
             }) + "\n"
             
@@ -1089,12 +1115,13 @@ async def _generate_deep_analysis_stream(session_state: dict, goal: str, session
                 "progress": 95
             }) + "\n"
             
+            # Generate HTML report using the original return_dict with Figure objects
             html_report = generate_html_report(return_dict)
             
             yield json.dumps({
                 "step": "completed",
                 "status": "success",
-                "analysis": return_dict,
+                "analysis": serialized_return_dict,
                 "html_report": html_report,
                 "progress": 100
             }) + "\n"
@@ -1145,8 +1172,46 @@ async def download_html_report(
         if not analysis_data:
             raise HTTPException(status_code=400, detail="No analysis data provided")
         
+        # Convert JSON-serialized Plotly figures back to Figure objects for HTML generation
+        processed_data = analysis_data.copy()
+        
+        if 'plotly_figs' in processed_data and processed_data['plotly_figs']:
+            import plotly.io
+            import plotly.graph_objects as go
+            
+            figure_objects = []
+            for fig_list in processed_data['plotly_figs']:
+                if isinstance(fig_list, list):
+                    fig_obj_list = []
+                    for fig_json in fig_list:
+                        if isinstance(fig_json, str):
+                            # Convert JSON string back to Figure object
+                            try:
+                                fig_obj = plotly.io.from_json(fig_json)
+                                fig_obj_list.append(fig_obj)
+                            except Exception as e:
+                                logger.log_message(f"Error parsing Plotly JSON: {str(e)}", level=logging.WARNING)
+                                continue
+                        elif hasattr(fig_json, 'to_html'):
+                            # Already a Figure object
+                            fig_obj_list.append(fig_json)
+                    figure_objects.append(fig_obj_list)
+                else:
+                    # Single figure case
+                    if isinstance(fig_list, str):
+                        try:
+                            fig_obj = plotly.io.from_json(fig_list)
+                            figure_objects.append(fig_obj)
+                        except Exception as e:
+                            logger.log_message(f"Error parsing Plotly JSON: {str(e)}", level=logging.WARNING)
+                            continue
+                    elif hasattr(fig_list, 'to_html'):
+                        figure_objects.append(fig_list)
+            
+            processed_data['plotly_figs'] = figure_objects
+        
         # Generate HTML report
-        html_report = generate_html_report(analysis_data)
+        html_report = generate_html_report(processed_data)
         
         # Create a filename with timestamp
         from datetime import datetime

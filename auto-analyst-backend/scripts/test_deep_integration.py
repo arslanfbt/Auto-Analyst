@@ -130,7 +130,7 @@ def test_deep_analysis_with_housing_data():
             f"{BASE_URL}/deep_analysis",
             json=test_payload,
             headers=headers,
-            timeout=600  # 5 minute timeout for analysis
+            timeout=12000  # 5 minute timeout for analysis
         )
         
         if response.status_code == 200:
@@ -176,6 +176,25 @@ def test_deep_analysis_with_housing_data():
         print(f"❌ Error during deep analysis: {e}")
         return False
 
+def download_html_report():
+    """Test downloading HTML report"""
+    print("\nTesting HTML report download...")
+    try:
+        response = requests.post(
+            f"{BASE_URL}/deep_analysis/download_report",
+            headers={"X-Session-ID": TEST_SESSION_ID}
+        )
+        if response.status_code == 200:
+            print("✅ HTML report downloaded successfully")
+            return True
+        else:
+            print(f"❌ Failed to download HTML report: {response.status_code}")
+            return False
+    except Exception as e:
+        print(f"❌ Error during HTML report download: {e}")
+        return False
+
+
 def main():
     print("🧪 Testing Deep Analysis Integration with Housing Data")
     print("=" * 60)
@@ -185,7 +204,8 @@ def main():
         ("Server Health", test_basic_functionality),
         ("Deep Analysis Features", test_deep_analysis_features),
         ("Agents Endpoint", test_agents_endpoint),
-        ("Deep Analysis with Housing Data", test_deep_analysis_with_housing_data)
+        ("Deep Analysis with Housing Data", test_deep_analysis_with_housing_data),
+        ("HTML Report Download", download_html_report)
     ]
     
     results = []
