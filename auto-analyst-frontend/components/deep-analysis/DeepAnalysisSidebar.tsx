@@ -22,6 +22,12 @@ import { useCredits } from '@/lib/contexts/credit-context'
 import { FEATURE_COSTS, CreditConfig } from '@/lib/credits-config'
 import InsufficientCreditsModal from '@/components/chat/InsufficientCreditsModal'
 import { useSession } from 'next-auth/react'
+import { useUserSubscriptionStore } from '@/lib/store/userSubscriptionStore'
+import { useFeatureAccess } from '@/lib/hooks/useFeatureAccess'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../ui/dialog'
+import { Button } from '../ui/button'
+import { Crown, Lock } from 'lucide-react'
+import Link from 'next/link'
 
 interface DeepAnalysisSidebarProps {
   isOpen: boolean
@@ -47,6 +53,9 @@ export default function DeepAnalysisSidebar({
   const { data: session } = useSession()
   const [insufficientCreditsModalOpen, setInsufficientCreditsModalOpen] = useState(false)
   const [requiredCredits, setRequiredCredits] = useState(0)
+  const { subscription } = useUserSubscriptionStore()
+  const deepAnalysisAccess = useFeatureAccess('DEEP_ANALYSIS', subscription)
+  const [showPremiumUpgradeModal, setShowPremiumUpgradeModal] = useState(false)
   
   const activeSessionId = sessionId || storeSessionId
 
@@ -147,6 +156,13 @@ export default function DeepAnalysisSidebar({
 
   const handleStartAnalysis = async () => {
     if (!goal.trim()) return
+    
+    // Check if user has access to Deep Analysis feature
+    if (!deepAnalysisAccess.hasAccess) {
+      console.log('[Deep Analysis] Feature access denied:', deepAnalysisAccess.reason)
+      setShowPremiumUpgradeModal(true)
+      return
+    }
     
     // Check credits for signed-in users (paid users) before starting analysis
     if (session) {
@@ -651,7 +667,7 @@ export default function DeepAnalysisSidebar({
       <div className="flex items-center justify-between p-3 border-b border-gray-200 bg-gray-50 flex-shrink-0">
         {!isCollapsed && (
           <div className="flex items-center gap-2">
-            <Brain className="w-4 h-4 text-purple-500" />
+            <Brain className="w-4 h-4 text-[#FF7F7F]" />
             <h2 className="font-semibold text-sm text-gray-800">Deep Analysis</h2>
             <Badge variant="secondary" className="text-xs">Premium</Badge>
           </div>
@@ -680,7 +696,7 @@ export default function DeepAnalysisSidebar({
               <TabsTrigger value="current" className="text-xs">
                 Current
                 {currentReport?.status === 'running' && (
-                  <span className="ml-1 w-2 h-2 bg-blue-500 rounded-full animate-pulse"></span>
+                  <span className="ml-1 w-2 h-2 bg-[#FF7F7F] rounded-full animate-pulse"></span>
                 )}
               </TabsTrigger>
               <TabsTrigger value="history" className="text-xs">History</TabsTrigger>
@@ -722,7 +738,7 @@ export default function DeepAnalysisSidebar({
       {isCollapsed && currentReport?.status === 'running' && (
         <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2">
           <div className="flex flex-col items-center gap-1">
-            <Loader2 className="w-5 h-5 animate-spin text-blue-500" />
+            <Loader2 className="w-5 h-5 animate-spin text-[#FF7F7F]" />
             <div className="text-xs text-gray-600 text-center font-medium">
               {Math.round(currentReport.progress)}%
             </div>
@@ -732,6 +748,56 @@ export default function DeepAnalysisSidebar({
           </div>
         </div>
       )}
+
+      {/* Premium Upgrade Modal */}
+      <Dialog open={showPremiumUpgradeModal} onOpenChange={setShowPremiumUpgradeModal}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Crown className="w-5 h-5 text-yellow-500" />
+              Deep Analysis - Premium Feature
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="flex items-center gap-3 p-4 bg-gradient-to-r from-red-50 to-orange-50 rounded-lg border border-[#FF7F7F]/20">
+              <Lock className="w-6 h-6 text-[#FF7F7F]" />
+              <div>
+                <h4 className="font-medium text-gray-900">Upgrade Required</h4>
+                <p className="text-sm text-gray-600">
+                  Deep Analysis is a premium feature that provides comprehensive multi-step analysis with automated planning and detailed insights.
+                </p>
+              </div>
+            </div>
+            
+            <div className="space-y-2">
+              <h5 className="font-medium text-gray-900">What you'll get:</h5>
+              <ul className="text-sm text-gray-600 space-y-1 ml-4">
+                <li>• Automated question generation</li>
+                <li>• Intelligent analysis planning</li>
+                <li>• Step-by-step execution tracking</li>
+                <li>• Comprehensive reporting</li>
+                <li>• Download detailed reports</li>
+              </ul>
+            </div>
+            
+            <div className="flex gap-3 pt-4">
+              <Link href="/pricing" className="flex-1">
+                <Button className="w-full bg-gradient-to-r from-[#FF7F7F] to-[#FF6666] hover:from-[#FF6666] hover:to-[#E55555] text-white">
+                  <Crown className="w-4 h-4 mr-2" />
+                  Upgrade Now
+                </Button>
+              </Link>
+              <Button 
+                variant="outline" 
+                onClick={() => setShowPremiumUpgradeModal(false)}
+                className="px-6"
+              >
+                Maybe Later
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Insufficient Credits Modal */}
       <InsufficientCreditsModal

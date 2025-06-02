@@ -12,7 +12,7 @@ export default function AnalysisStep({ step, refreshTrigger }: AnalysisStepProps
     switch (status) {
       case 'processing':
       case 'starting':
-        return <Loader2 className="w-4 h-4 animate-spin text-blue-500" />
+        return <Loader2 className="w-4 h-4 animate-spin text-[#FF7F7F]" />
       case 'completed':
       case 'success':
         return <CheckCircle2 className="w-4 h-4 text-green-500" />
@@ -27,7 +27,7 @@ export default function AnalysisStep({ step, refreshTrigger }: AnalysisStepProps
     switch (status) {
       case 'processing':
       case 'starting':
-        return 'bg-blue-50 border-blue-200 shadow-md'
+        return 'bg-red-50 border-red-200 shadow-md'
       case 'completed':
       case 'success':
         return 'bg-green-50 border-green-200'
@@ -61,7 +61,7 @@ export default function AnalysisStep({ step, refreshTrigger }: AnalysisStepProps
           <div className="mt-1">
             <div className="w-full bg-gray-200 rounded-full h-1">
               <div 
-                className="bg-blue-500 h-1 rounded-full transition-all duration-300" 
+                className="bg-[#FF7F7F] h-1 rounded-full transition-all duration-300" 
                 style={{ width: `${step.progress}%` }}
               ></div>
             </div>

@@ -800,6 +800,7 @@ class deep_analysis_module(dspy.Module):
 
         return return_dict
 
+
 def generate_html_report(return_dict):
     """Generate a clean HTML report focusing on visualizations and key insights"""
     
@@ -819,20 +820,17 @@ def generate_html_report(return_dict):
     synthesis = ''.join(f'<div class="synthesis-section">{convert_markdown_to_html(s)}</div>' 
                        for s in return_dict['synthesis'])
 
-    # Generate visualization sections with robust figure handling
-    viz_sections = []
-    for i, summary in enumerate(summaries):
-        viz_html = ''
-        if return_dict['plotly_figs'] and i < len(return_dict['plotly_figs']):
+    # Generate all visualizations for the synthesis section
+    all_visualizations = []
+    if return_dict['plotly_figs']:
+        for i, fig_list in enumerate(return_dict['plotly_figs']):
             try:
-                fig_list = return_dict['plotly_figs'][i]
                 if isinstance(fig_list, list):
                     # Handle list of figures
-                    figure_htmls = []
                     for fig in fig_list:
                         if hasattr(fig, 'to_html'):
                             # It's a Plotly Figure object
-                            figure_htmls.append(fig.to_html(
+                            all_visualizations.append(fig.to_html(
                                 full_html=False, 
                                 include_plotlyjs='cdn', 
                                 config={'displayModeBar': True}
@@ -842,7 +840,7 @@ def generate_html_report(return_dict):
                             try:
                                 import plotly.io
                                 fig_obj = plotly.io.from_json(fig)
-                                figure_htmls.append(fig_obj.to_html(
+                                all_visualizations.append(fig_obj.to_html(
                                     full_html=False, 
                                     include_plotlyjs='cdn', 
                                     config={'displayModeBar': True}
@@ -850,92 +848,312 @@ def generate_html_report(return_dict):
                             except Exception as e:
                                 print(f"Warning: Could not process figure JSON: {e}")
                                 continue
-                    viz_html = ''.join(figure_htmls)
                 else:
                     # Single figure
                     if hasattr(fig_list, 'to_html'):
                         # It's a Plotly Figure object
-                        viz_html = fig_list.to_html(
+                        all_visualizations.append(fig_list.to_html(
                             full_html=False, 
                             include_plotlyjs='cdn', 
                             config={'displayModeBar': True}
-                        )
+                        ))
                     elif isinstance(fig_list, str):
                         # It might be JSON format - try to convert
                         try:
                             import plotly.io
                             fig_obj = plotly.io.from_json(fig_list)
-                            viz_html = fig_obj.to_html(
+                            all_visualizations.append(fig_obj.to_html(
                                 full_html=False, 
                                 include_plotlyjs='cdn', 
                                 config={'displayModeBar': True}
-                            )
+                            ))
                         except Exception as e:
                             print(f"Warning: Could not process figure JSON: {e}")
-                            viz_html = '<p>Visualization data could not be processed</p>'
+                            all_visualizations.append('<p>Visualization data could not be processed</p>')
                             
             except Exception as e:
-                print(f"Warning: Error processing visualizations for step {i+1}: {e}")
-                viz_html = '<p>Error generating visualization</p>'
-        
-        viz_sections.append(f"""
-        <div class="analysis-step">
-            <div class="summary">
-                <h3>Step {i+1}</h3>
-                {summary}
-            </div>
-            <div class="visualization">
-                {viz_html if viz_html else '<p>No visualization available</p>'}
-            </div>
-        </div>""")
+                print(f"Warning: Error processing visualizations: {e}")
+                all_visualizations.append('<p>Error generating visualization</p>')
+
+    # Combine all code sections
+    code_content = return_dict.get('code', '')
+    if isinstance(code_content, list):
+        code_content = '\n\n'.join(str(code) for code in code_content)
+    
+    # Properly escape code for HTML display
+    if code_content:
+        # Escape HTML characters
+        code_content = code_content.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+        code_html = f'<pre><code class="language-python">{code_content}</code></pre>'
+    else:
+        code_html = '<p>No code generated</p>'
 
     html = f"""
     <!DOCTYPE html>
     <html>
     <head>
-        <title>Analysis Report</title>
+        <title>Deep Analysis Report</title>
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.24.1/components/prism-core.min.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.24.1/plugins/autoloader/prism-autoloader.min.js"></script>
+        <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.24.1/themes/prism.min.css" rel="stylesheet" />
         <style>
-            body {{ font-family: Arial, sans-serif; line-height: 1.6; margin: 0; padding: 20px; color: #333; }}
-            .section {{ margin-bottom: 30px; padding: 20px; background: #fff; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }}
-            h1, h2, h3 {{ color: #2c3e50; }}
-            .analysis-step {{ margin: 20px 0; padding: 15px; background: #f8f9fa; border-radius: 6px; }}
-            .summary {{ margin-bottom: 15px; }}
-            .visualization {{ margin: 15px 0; }}
-            .synthesis-section {{ margin: 15px 0; padding: 15px; background: #f1f8ff; border-radius: 6px; }}
-            .conclusion-content {{ padding: 15px; background: #e8f5e9; border-radius: 6px; }}
+            body {{ 
+                font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+                line-height: 1.6; 
+                margin: 0; 
+                padding: 20px; 
+                color: #333; 
+                background: #f8f9fa;
+            }}
+            
+            .container {{ 
+                max-width: 1200px; 
+                margin: 0 auto; 
+                background: white; 
+                border-radius: 12px; 
+                box-shadow: 0 4px 20px rgba(0,0,0,0.1); 
+                overflow: hidden;
+            }}
+            
+            .header {{ 
+                background: linear-gradient(135deg, #FF7F7F 0%, #FF6666 100%); 
+                color: white; 
+                padding: 40px; 
+                text-align: center;
+            }}
+            
+            .header h1 {{ 
+                margin: 0; 
+                font-size: 2.5em; 
+                font-weight: 300; 
+                letter-spacing: -1px;
+            }}
+            
+            .section {{ 
+                margin: 0; 
+                padding: 30px 40px; 
+                border-bottom: 1px solid #eee;
+            }}
+            
+            .section:last-child {{ 
+                border-bottom: none; 
+            }}
+            
+            .section h2 {{ 
+                color: #FF7F7F; 
+                margin-top: 0; 
+                margin-bottom: 20px; 
+                font-size: 1.8em; 
+                font-weight: 500; 
+                padding-bottom: 10px; 
+                border-bottom: 2px solid #FF7F7F;
+            }}
+            
+            .section h3 {{ 
+                color: #FF6666; 
+                margin-top: 25px; 
+                margin-bottom: 15px; 
+                font-size: 1.3em;
+            }}
+            
+            .original-question {{ 
+                background: linear-gradient(135deg, #FFF5F5 0%, #FEF2F2 100%); 
+                padding: 25px; 
+                border-radius: 8px; 
+                border-left: 4px solid #FF7F7F; 
+                font-size: 1.1em; 
+                font-weight: 500;
+            }}
+            
+            .questions-list {{ 
+                background: #FFF8F8; 
+                padding: 25px; 
+                border-radius: 8px; 
+                border: 1px solid #FFE5E5;
+            }}
+            
+            .questions-list ol {{ 
+                padding-left: 20px; 
+            }}
+            
+            .questions-list li {{ 
+                margin-bottom: 12px; 
+                padding: 8px 0;
+            }}
+            
+            .synthesis-container {{ 
+                background: #FFFAFA; 
+                padding: 25px; 
+                border-radius: 8px; 
+                border: 1px solid #FFE0E0;
+            }}
+            
+            .visualization {{ 
+                margin: 20px 0; 
+                padding: 15px; 
+                background: white; 
+                border-radius: 6px; 
+                box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+            }}
+            
+            .code-container {{ 
+                background: #f8f9fa; 
+                border-radius: 8px; 
+                overflow: hidden; 
+                border: 1px solid #e9ecef;
+            }}
+            
+            .code-header {{ 
+                background: #FF7F7F; 
+                color: white; 
+                padding: 15px 20px; 
+                font-weight: 500; 
+                cursor: pointer; 
+                user-select: none; 
+                display: flex; 
+                justify-content: space-between; 
+                align-items: center;
+            }}
+            
+            .code-header:hover {{ 
+                background: #FF6666;
+            }}
+            
+            .code-content {{ 
+                max-height: 0; 
+                overflow: hidden; 
+                transition: max-height 0.3s ease-out;
+            }}
+            
+            .code-content.expanded {{ 
+                max-height: none; 
+                overflow: visible;
+                padding: 20px;
+                transition: none;
+            }}
+            
+            .code-toggle {{ 
+                font-size: 1.2em; 
+                transition: transform 0.3s ease;
+            }}
+            
+            .code-toggle.rotated {{ 
+                transform: rotate(180deg);
+            }}
+            
+            .conclusion-content {{ 
+                background: linear-gradient(135deg, #F0FFF4 0%, #F5FFFA 100%); 
+                padding: 30px; 
+                border-radius: 8px; 
+                border-left: 4px solid #FF7F7F; 
+                font-size: 1.1em;
+            }}
+            
+            pre {{ 
+                background: #2d3748; 
+                color: #e2e8f0; 
+                padding: 20px; 
+                border-radius: 6px; 
+                overflow-x: auto; 
+                font-size: 0.9em; 
+                line-height: 1.5;
+            }}
+            
+            code {{ 
+                font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            }}
+            
+            .timestamp {{ 
+                text-align: center; 
+                color: #666; 
+                font-size: 0.9em; 
+                margin-top: 30px; 
+                padding-top: 20px; 
+                border-top: 1px solid #eee;
+            }}
         </style>
     </head>
     <body>
+        <div class="container">
+            <div class="header">
+                <h1>Deep Analysis Report</h1>
+                <p>Comprehensive AI-powered analysis with automated insights</p>
+            </div>
+
         <div class="section">
-            <h1>Analysis Report</h1>
-            <h2>Goal</h2>
-            <p>{goal}</p>
+                <h2>📋 Original Question</h2>
+                <div class="original-question">
+                    {goal}
+                </div>
         </div>
 
         <div class="section">
-            <h2>Analysis Questions</h2>
+                <h2>❓ Analysis Questions</h2>
+                <div class="questions-list">
             {questions}
+                </div>
         </div>
 
         <div class="section">
-            <h2>Analysis Steps</h2>
-            {''.join(viz_sections)}
+                <h2>🔬 Deep Synthesis & Visualizations</h2>
+                <div class="synthesis-container">
+                    {synthesis}
+                    {''.join(f'<div class="visualization">{viz}</div>' for viz in all_visualizations)}
+                </div>
         </div>
 
         <div class="section">
-            <h2>Synthesis</h2>
-            {synthesis}
+                <h2>💻 Generated Code</h2>
+                <div class="code-container">
+                    <div class="code-header" onclick="toggleCode()">
+                        <span>Click to view/hide generated code</span>
+                        <span class="code-toggle">▼</span>
+                    </div>
+                    <div class="code-content" id="codeContent">
+                        {code_html}
+                    </div>
+                </div>
         </div>
 
         <div class="section">
-            <h2>Conclusion</h2>
+                <h2>🎯 Final Conclusion</h2>
             <div class="conclusion-content">
                 {conclusion}
             </div>
         </div>
+            
+            <div class="timestamp">
+                Report generated on {datetime.datetime.now().strftime("%B %d, %Y at %I:%M %p")}
+            </div>
+        </div>
+
+        <script>
+            function toggleCode() {{
+                const content = document.getElementById('codeContent');
+                const toggle = document.querySelector('.code-toggle');
+                const header = document.querySelector('.code-header');
+                
+                if (content.classList.contains('expanded')) {{
+                    content.classList.remove('expanded');
+                    toggle.classList.remove('rotated');
+                    toggle.textContent = '▼';
+                }} else {{
+                    content.classList.add('expanded');
+                    toggle.classList.add('rotated');
+                    toggle.textContent = '▲';
+                }}
+            }}
+
+            // Auto-highlight code blocks
+            document.addEventListener('DOMContentLoaded', (event) => {{
+                if (typeof Prism !== 'undefined') {{
+                    Prism.highlightAll();
+                }}
+            }});
+        </script>
     </body>
     </html>"""
     return html

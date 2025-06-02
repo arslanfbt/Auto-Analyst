@@ -31,7 +31,7 @@ export default function DeepAnalysisButton({
 }: DeepAnalysisButtonProps) {
   const accessResult = useFeatureAccess('DEEP_ANALYSIS', userProfile)
   const hasAccess = accessResult.hasAccess
-  const isDisabled = disabled || !hasAccess
+  const isDisabled = disabled
 
   const handleClick = () => {
     if (!isDisabled) {
@@ -60,10 +60,10 @@ export default function DeepAnalysisButton({
             </span>
           )}
           {hasAccess && !isRunning && (
-            <Sparkles className="w-3 h-3 absolute -top-1 -right-1 text-purple-500" />
+            <Sparkles className="w-3 h-3 absolute -top-1 -right-1 text-[#FF7F7F]" />
           )}
           {isRunning && (
-            <span className="ml-1 w-2 h-2 bg-blue-500 rounded-full animate-pulse"></span>
+            <span className="ml-1 w-2 h-2 bg-[#FF7F7F] rounded-full animate-pulse"></span>
           )}
         </>
       ) : (
@@ -84,7 +84,7 @@ export default function DeepAnalysisButton({
             {!hasAccess && (
               <Badge 
                 variant="outline" 
-                className="absolute -top-2 -right-2 text-xs bg-white border-orange-300 text-orange-600"
+                className="absolute -top-2 -right-2 text-xs bg-white border-[#FF7F7F] text-[#FF7F7F]"
               >
                 Premium
               </Badge>
@@ -111,7 +111,7 @@ export default function DeepAnalysisButton({
                 <div className="text-xs text-gray-600">
                   {accessResult.reason || 'Requires Standard or Enterprise subscription'}
                 </div>
-                <div className="text-xs text-blue-600 mt-1">
+                <div className="text-xs text-[#FF7F7F] mt-1">
                   Upgrade to unlock
                 </div>
               </div>

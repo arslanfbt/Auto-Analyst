@@ -44,7 +44,7 @@ export default function NewAnalysisForm({
         <Button 
           onClick={onStartAnalysis}
           disabled={!goal.trim() || isAnalysisRunning}
-          className="w-full text-xs"
+          className="w-full text-xs bg-[#FF7F7F] hover:bg-[#FF6666] text-white"
           size="sm"
         >
           <Target className="w-3 h-3 mr-2" />

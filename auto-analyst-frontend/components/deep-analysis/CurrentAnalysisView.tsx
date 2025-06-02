@@ -131,11 +131,11 @@ export default function CurrentAnalysisView({
             )}
 
             {currentReport.plotly_figs && currentReport.plotly_figs.length > 0 && (
-              <div className="bg-blue-50 rounded-lg p-2">
-                <h5 className="text-xs font-medium text-blue-800 mb-1">
+              <div className="bg-red-50 rounded-lg p-2">
+                <h5 className="text-xs font-medium text-red-800 mb-1">
                   {currentReport.plotly_figs.flat().length} Visualization(s) Generated
                 </h5>
-                <p className="text-xs text-blue-700">View full report for interactive charts</p>
+                <p className="text-xs text-red-700">View full report for interactive charts</p>
               </div>
             )}
           </div>
