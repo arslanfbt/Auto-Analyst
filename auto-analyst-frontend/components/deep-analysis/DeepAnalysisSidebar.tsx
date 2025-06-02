@@ -18,6 +18,10 @@ import NewAnalysisForm from './NewAnalysisForm'
 import CurrentAnalysisView from './CurrentAnalysisView'
 import HistoryView from './HistoryView'
 import { AnalysisStep, DeepAnalysisReport, StoredReport } from './types'
+import { useCredits } from '@/lib/contexts/credit-context'
+import { FEATURE_COSTS, CreditConfig } from '@/lib/credits-config'
+import InsufficientCreditsModal from '@/components/chat/InsufficientCreditsModal'
+import { useSession } from 'next-auth/react'
 
 interface DeepAnalysisSidebarProps {
   isOpen: boolean
@@ -39,6 +43,10 @@ export default function DeepAnalysisSidebar({
   const [selectedHistoryReport, setSelectedHistoryReport] = useState<StoredReport | null>(null)
   const [refreshTrigger, setRefreshTrigger] = useState(0)
   const { sessionId: storeSessionId } = useSessionStore()
+  const { remainingCredits, isLoading: creditsLoading, checkCredits, hasEnoughCredits } = useCredits()
+  const { data: session } = useSession()
+  const [insufficientCreditsModalOpen, setInsufficientCreditsModalOpen] = useState(false)
+  const [requiredCredits, setRequiredCredits] = useState(0)
   
   const activeSessionId = sessionId || storeSessionId
 
@@ -139,6 +147,35 @@ export default function DeepAnalysisSidebar({
 
   const handleStartAnalysis = async () => {
     if (!goal.trim()) return
+    
+    // Check credits for signed-in users (paid users) before starting analysis
+    if (session) {
+      try {
+        const deepAnalysisCost = CreditConfig.getDeepAnalysisCost() // 29 credits
+        
+        // Check if user has enough credits
+        const hasEnough = await hasEnoughCredits(deepAnalysisCost)
+        
+        if (!hasEnough) {
+          console.log(`[Deep Analysis] Insufficient credits. Required: ${deepAnalysisCost}, Available: ${remainingCredits}`)
+          
+          // Store the required credits amount for the modal
+          setRequiredCredits(deepAnalysisCost)
+          
+          // Show the insufficient credits modal
+          setInsufficientCreditsModalOpen(true)
+          
+          // Ensure credits are refreshed
+          await checkCredits()
+          
+          // Stop processing here if not enough credits
+          return
+        }
+      } catch (error) {
+        console.error("Error checking credits for deep analysis:", error)
+        // Continue anyway to avoid blocking experience for credit check errors
+      }
+    }
     
     const reportId = `report_${Date.now()}`
     const newReport: DeepAnalysisReport = {
@@ -273,6 +310,57 @@ export default function DeepAnalysisSidebar({
                 
                 completeAnalysis()
                 
+                // Deduct credits for successful deep analysis (only for paid users)
+                if (session) {
+                  try {
+                    const deepAnalysisCost = CreditConfig.getDeepAnalysisCost()
+                    
+                    // Use more robust user ID extraction
+                    let userIdForCredits = ''
+                    
+                    if ((session.user as any).sub) {
+                      userIdForCredits = (session.user as any).sub
+                    } else if (session.user.id) {
+                      userIdForCredits = session.user.id
+                    } else if (session.user.email) {
+                      userIdForCredits = session.user.email
+                    }
+                    
+                    if (userIdForCredits) {
+                      console.log(`[Deep Analysis] Deducting ${deepAnalysisCost} credits for user ${userIdForCredits}`)
+                      
+                      // Deduct credits through API call
+                      const response = await fetch('/api/user/deduct-credits', {
+                        method: 'POST',
+                        headers: {
+                          'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                          userId: userIdForCredits,
+                          credits: deepAnalysisCost,
+                          description: `Deep Analysis: ${goal.trim().substring(0, 50)}...`
+                        })
+                      })
+                      
+                      if (response.ok) {
+                        console.log('[Deep Analysis] Credits deducted successfully')
+                        
+                        // Refresh the credits display in the UI
+                        if (checkCredits) {
+                          await checkCredits()
+                        }
+                      } else {
+                        console.error('[Deep Analysis] Failed to deduct credits:', await response.text())
+                      }
+                    } else {
+                      console.warn('[Deep Analysis] Cannot identify user for credit deduction')
+                    }
+                  } catch (creditError) {
+                    console.error('[Deep Analysis] Failed to deduct credits:', creditError)
+                    // Don't block the user experience if credit deduction fails
+                  }
+                }
+                
                 const storedReport: StoredReport = {
                   id: reportId,
                   goal: goal.trim(),
@@ -317,6 +405,57 @@ export default function DeepAnalysisSidebar({
               })
               
               completeAnalysis()
+              
+              // Deduct credits for successful deep analysis (only for paid users)
+              if (session) {
+                try {
+                  const deepAnalysisCost = CreditConfig.getDeepAnalysisCost()
+                  
+                  // Use more robust user ID extraction
+                  let userIdForCredits = ''
+                  
+                  if ((session.user as any).sub) {
+                    userIdForCredits = (session.user as any).sub
+                  } else if (session.user.id) {
+                    userIdForCredits = session.user.id
+                  } else if (session.user.email) {
+                    userIdForCredits = session.user.email
+                  }
+                  
+                  if (userIdForCredits) {
+                    console.log(`[Deep Analysis] Deducting ${deepAnalysisCost} credits for user ${userIdForCredits}`)
+                    
+                    // Deduct credits through API call
+                    const response = await fetch('/api/user/deduct-credits', {
+                      method: 'POST',
+                      headers: {
+                        'Content-Type': 'application/json',
+                      },
+                      body: JSON.stringify({
+                        userId: userIdForCredits,
+                        credits: deepAnalysisCost,
+                        description: `Deep Analysis: ${goal.trim().substring(0, 50)}...`
+                      })
+                    })
+                    
+                    if (response.ok) {
+                      console.log('[Deep Analysis] Credits deducted successfully')
+                      
+                      // Refresh the credits display in the UI
+                      if (checkCredits) {
+                        await checkCredits()
+                      }
+                    } else {
+                      console.error('[Deep Analysis] Failed to deduct credits:', await response.text())
+                    }
+                  } else {
+                    console.warn('[Deep Analysis] Cannot identify user for credit deduction')
+                  }
+                } catch (creditError) {
+                  console.error('[Deep Analysis] Failed to deduct credits:', creditError)
+                  // Don't block the user experience if credit deduction fails
+                }
+              }
               
               const storedReport: StoredReport = {
                 id: reportId,
@@ -593,6 +732,23 @@ export default function DeepAnalysisSidebar({
           </div>
         </div>
       )}
+
+      {/* Insufficient Credits Modal */}
+      <InsufficientCreditsModal
+        isOpen={insufficientCreditsModalOpen}
+        onClose={() => {
+          // When the modal is closed, hide the modal
+          setInsufficientCreditsModalOpen(false)
+          
+          // Force a credits check to ensure the current state is accurate
+          if (checkCredits) {
+            checkCredits().then(() => {
+              console.log("[Deep Analysis] Credits checked after modal closed")
+            })
+          }
+        }}
+        requiredCredits={requiredCredits}
+      />
     </motion.div>
   )
 } 
