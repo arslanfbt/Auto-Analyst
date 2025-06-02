@@ -11,7 +11,10 @@ import dspy
 import numpy as np
 import pandas as pd
 from dotenv import load_dotenv
+from src.utils.logger import Logger
+import logging
 
+logger = Logger("deep_agents", see_time=True, console_log=False)
 load_dotenv()
 
 class deep_questions(dspy.Signature):
@@ -154,6 +157,21 @@ def clean_and_store_code(code, session_df=None):
         cleaned_code = cleaned_code.replace(''', "'")
         cleaned_code = cleaned_code.replace('"', '"')
         cleaned_code = cleaned_code.replace('"', '"')
+        
+        
+        # Remove reading the csv file if it's already in the context
+        cleaned_code = re.sub(r"df\s*=\s*pd\.read_csv\([\"\'].*?[\"\']\).*?(\n|$)", '', cleaned_code)
+        
+        # Only match assignments at top level (not indented)
+        # 1. Remove 'df = pd.DataFrame()' if it's at the top level
+        cleaned_code = re.sub(
+            r"^df\s*=\s*pd\.DataFrame\(\s*\)\s*(#.*)?$",
+            '',
+            cleaned_code,
+            flags=re.MULTILINE
+        )
+        cleaned_code = re.sub(r"plt\.show\(\).*?(\n|$)", '', cleaned_code)
+    
         
         # Capture printed output
         old_stdout = sys.stdout
@@ -702,7 +720,7 @@ class deep_analysis_module(dspy.Module):
             raise ValueError("ANTHROPIC_API_KEY environment variable is not set")
         
         try:
-            with dspy.settings.context(lm = dspy.LM("anthropic/claude-4-sonnet-20250514", api_key = anthropic_key, max_tokens=17000)):
+            with dspy.context(lm = dspy.LM("anthropic/claude-4-sonnet-20250514", api_key = anthropic_key, max_tokens=17000)):
                 import datetime
                 print("Starting code generation...")
                 start_time = datetime.datetime.now()
@@ -719,10 +737,15 @@ class deep_analysis_module(dspy.Module):
             raise e
 
         code = deep_code.combined_code
+        with open("updated_code.py", "w") as f:
+            f.write(code)
+        # with open("sample_code.py", "r") as f:
+        #     code = f.read()
         
         # Execute the code with error handling and session DataFrame
         try:
             output = clean_and_store_code(code, session_df=session_df)
+            logger.log_message(f"Deep Code generated: {output}")
             print("Deep Code generated")
         
             # Check if execution failed
@@ -764,8 +787,16 @@ class deep_analysis_module(dspy.Module):
             final_conclusion = type('obj', (object,), {'final_conclusion': f"Final conclusion failed: {str(e)}"})()
 
         print("Conclusion Made")
-        return_dict = {'goal':goal, 'deep_questions':questions.deep_questions, 'deep_plan':deep_plan.plan_instructions, 'summaries':summaries, 'code':deep_code.combined_code, 'plotly_figs':plotly_figs,
-                  'synthesis':[s.synthesized_report for s in synthesis ], 'final_conclusion':final_conclusion.final_conclusion }
+        return_dict = {
+            'goal':goal, 
+            'deep_questions':questions.deep_questions, 
+            'deep_plan':deep_plan.plan_instructions, 
+            'summaries':summaries, 
+            'code':deep_code.combined_code,
+            'plotly_figs':plotly_figs,
+            'synthesis':[s.synthesized_report for s in synthesis ], 
+            'final_conclusion':final_conclusion.final_conclusion 
+        }
 
         return return_dict
 
