@@ -29,25 +29,28 @@ import { Button } from '../ui/button'
 import { Crown, Lock } from 'lucide-react'
 import Link from 'next/link'
 import { useToast } from '../ui/use-toast'
-import { DeepAnalysisService } from './DeepAnalysisService'
+import { backendReportToStoredReport, convertBackendReports } from '@/lib/utils/report-converters'
 
 interface DeepAnalysisSidebarProps {
   isOpen: boolean
   onClose: () => void
   sessionId?: string
+  userId?: number | null
 }
 
 export default function DeepAnalysisSidebar({ 
   isOpen, 
   onClose, 
-  sessionId 
+  sessionId,
+  userId 
 }: DeepAnalysisSidebarProps) {
   const { state: analysisState, startAnalysis, updateProgress, completeAnalysis, failAnalysis } = useDeepAnalysis()
   const [isCollapsed, setIsCollapsed] = useState(false)
   const [activeTab, setActiveTab] = useState<'new' | 'current' | 'history'>('new')
   const [goal, setGoal] = useState('')
   const [currentReport, setCurrentReport] = useState<DeepAnalysisReport | null>(null)
-  const [isAnalyzing, setIsAnalyzing] = useState(false)
+  const [storedReports, setStoredReports] = useState<StoredReport[]>([])
+  const [selectedHistoryReport, setSelectedHistoryReport] = useState<StoredReport | null>(null)
   const [refreshTrigger, setRefreshTrigger] = useState(0)
   const { sessionId: storeSessionId } = useSessionStore()
   const { remainingCredits, isLoading: creditsLoading, checkCredits, hasEnoughCredits } = useCredits()
@@ -72,6 +75,41 @@ export default function DeepAnalysisSidebar({
     { step: 'report', status: 'pending', message: 'Generating report...' },
     { step: 'completed', status: 'pending', message: 'Finalizing results...' }
   ]
+
+  // Fetch stored reports from backend when session is available
+  useEffect(() => {
+    const fetchReports = async () => {
+      if (userId) {
+        try {
+          const response = await fetch(`${API_URL}/deep_analysis/reports/user_historical?user_id=${userId}&limit=10`);
+          
+          if (!response.ok) {
+            throw new Error(`Failed to fetch reports: ${response.statusText}`);
+          }
+          
+          const data = await response.json();
+          
+          // Convert backend format to frontend StoredReport format using utility
+          const reports = convertBackendReports(data);
+          
+          setStoredReports(reports);
+        } catch (error) {
+          console.error('Failed to fetch reports:', error);
+          // If fetching fails, try to use localStorage as fallback
+          const stored = localStorage.getItem('deepAnalysisReports');
+          if (stored) {
+            try {
+              setStoredReports(JSON.parse(stored));
+            } catch (error) {
+              console.error('Failed to parse stored reports:', error);
+            }
+          }
+        }
+      }
+    };
+    
+    fetchReports();
+  }, [userId]);
 
   const markAllStepsCompleted = () => {
     setCurrentReport(prevReport => {
@@ -201,56 +239,19 @@ export default function DeepAnalysisSidebar({
     startAnalysis(goal.trim())
     
     try {
-      // Extract user ID for database operations
-      let userId: number | undefined = undefined
-      if (session?.user) {
-        // Try different ways to extract user ID
-        if ((session.user as any).sub) {
-          // Use sub as user ID (Auth0/OAuth style)
-          userId = parseInt((session.user as any).sub) || undefined
-        } else if ((session.user as any).id) {
-          userId = parseInt((session.user as any).id) || undefined
-        }
-        
-        // If we still don't have a numeric user ID, let's create/get user via email
-        if (!userId && session.user.email) {
-          try {
-            const userResponse = await fetch(`${API_URL}/chats/users`, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                ...(activeSessionId && { 'X-Session-ID': activeSessionId })
-              },
-              body: JSON.stringify({
-                username: session.user.name || 'Anonymous User',
-                email: session.user.email
-              })
-            })
-            
-            if (userResponse.ok) {
-              const userData = await userResponse.json()
-              userId = userData.user_id
-              console.log('[Deep Analysis] Created/found user with ID:', userId)
-            }
-          } catch (userError) {
-            console.warn('[Deep Analysis] Failed to create/get user:', userError)
-          }
-        }
+      // Build URL with query parameters
+      const url = new URL(`${API_URL}/deep_analysis_streaming`);
+      if (userId) {
+        url.searchParams.append('user_id', userId.toString());
       }
       
-      console.log('[Deep Analysis] Using user ID:', userId)
-      
-      // Use the new database-integrated streaming endpoint
-      const response = await fetch(`${API_URL}/deep_analysis/streaming`, {
+      const response = await fetch(url.toString(), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           ...(activeSessionId && { 'X-Session-ID': activeSessionId })
         },
-        body: JSON.stringify({ 
-          goal: goal.trim(),
-          user_id: userId
-        })
+        body: JSON.stringify({ goal: goal.trim() })
       })
 
       if (!response.ok) {
@@ -413,7 +414,74 @@ export default function DeepAnalysisSidebar({
                   }
                 }
                 
-                // Analysis is now saved automatically by the database streaming endpoint
+                const storedReport: StoredReport = {
+                  id: reportId,
+                  goal: goal.trim(),
+                  status: 'completed',
+                  startTime: newReport.startTime,
+                  endTime: new Date().toISOString(),
+                  html_report: data.html_report,
+                  summary: (data.analysis?.final_conclusion || data.final_conclusion || 'Analysis completed').substring(0, 200) + '...',
+                  deep_questions: data.analysis?.deep_questions || '',
+                  deep_plan: data.analysis?.deep_plan || '',
+                  summaries: data.analysis?.summaries || [],
+                  code: data.analysis?.code || '',
+                  plotly_figs: data.analysis?.plotly_figs || [],
+                  synthesis: data.analysis?.synthesis || [],
+                  final_conclusion: data.analysis?.final_conclusion || ''
+                }
+                
+                // Store in local state
+                setStoredReports(prev => [storedReport, ...prev])
+                
+                // Also save to backend if user is logged in
+                if (session?.user) {
+                  try {
+                    // Extract user ID from session
+                    let userId = '';
+                    if ((session.user as any).sub) {
+                      userId = (session.user as any).sub;
+                    } else if ((session.user as any).id) {
+                      userId = (session.user as any).id;
+                    }
+                    
+                    if (userId) {
+                      // Create the report in the backend
+                      const backendReport = {
+                        report_uuid: reportId,
+                        user_id: parseInt(userId),
+                        goal: storedReport.goal,
+                        status: storedReport.status,
+                        deep_questions: storedReport.deep_questions,
+                        deep_plan: storedReport.deep_plan,
+                        summaries: storedReport.summaries,
+                        analysis_code: storedReport.code,
+                        plotly_figures: storedReport.plotly_figs,
+                        synthesis: storedReport.synthesis,
+                        final_conclusion: storedReport.final_conclusion,
+                        html_report: storedReport.html_report,
+                        report_summary: storedReport.summary,
+                      };
+                      
+                      const response = await fetch(`${API_URL}/deep_analysis/reports`, {
+                        method: 'POST',
+                        headers: {
+                          'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify(backendReport),
+                      });
+                      
+                      if (!response.ok) {
+                        console.error('Failed to save report to backend:', await response.text());
+                      } else {
+                        console.log('Report saved to backend successfully');
+                      }
+                    }
+                  } catch (error) {
+                    console.error('Error saving report to backend:', error);
+                    // Continue even if saving to backend fails
+                  }
+                }
               }
             } else if (data.type === 'final_result') {
               console.log('Received final result')
@@ -492,7 +560,74 @@ export default function DeepAnalysisSidebar({
                 }
               }
               
-              // Analysis is now saved automatically by the database streaming endpoint
+              const storedReport: StoredReport = {
+                id: reportId,
+                goal: goal.trim(),
+                status: 'completed',
+                startTime: newReport.startTime,
+                endTime: new Date().toISOString(),
+                html_report: data.html_report,
+                summary: (data.final_conclusion || 'Analysis completed').substring(0, 200) + '...',
+                deep_questions: data.deep_questions || '',
+                deep_plan: data.deep_plan || '',
+                summaries: data.summaries || [],
+                code: data.code || '',
+                plotly_figs: data.plotly_figs || [],
+                synthesis: data.synthesis || [],
+                final_conclusion: data.final_conclusion || ''
+              }
+              
+              // Store in local state
+              setStoredReports(prev => [storedReport, ...prev])
+              
+              // Also save to backend if user is logged in
+              if (session?.user) {
+                try {
+                  // Extract user ID from session
+                  let userId = '';
+                  if ((session.user as any).sub) {
+                    userId = (session.user as any).sub;
+                  } else if ((session.user as any).id) {
+                    userId = (session.user as any).id;
+                  }
+                  
+                  if (userId) {
+                    // Create the report in the backend
+                    const backendReport = {
+                      report_uuid: reportId,
+                      user_id: parseInt(userId),
+                      goal: storedReport.goal,
+                      status: storedReport.status,
+                      deep_questions: storedReport.deep_questions,
+                      deep_plan: storedReport.deep_plan,
+                      summaries: storedReport.summaries,
+                      analysis_code: storedReport.code,
+                      plotly_figures: storedReport.plotly_figs,
+                      synthesis: storedReport.synthesis,
+                      final_conclusion: storedReport.final_conclusion,
+                      html_report: storedReport.html_report,
+                      report_summary: storedReport.summary,
+                    };
+                    
+                    const response = await fetch(`${API_URL}/deep_analysis/reports`, {
+                      method: 'POST',
+                      headers: {
+                        'Content-Type': 'application/json',
+                      },
+                      body: JSON.stringify(backendReport),
+                    });
+                    
+                    if (!response.ok) {
+                      console.error('Failed to save report to backend:', await response.text());
+                    } else {
+                      console.log('Report saved to backend successfully');
+                    }
+                  }
+                } catch (error) {
+                  console.error('Error saving report to backend:', error);
+                  // Continue even if saving to backend fails
+                }
+              }
             } else if (data.type === 'error' || data.error) {
               console.error('Analysis error:', data.error || data.message)
               
@@ -511,7 +646,23 @@ export default function DeepAnalysisSidebar({
               
               failAnalysis()
               
-              // Error handling - could optionally save to database here too
+              const failedReport: StoredReport = {
+                id: reportId,
+                goal: goal.trim(),
+                status: 'failed',
+                startTime: newReport.startTime,
+                endTime: new Date().toISOString(),
+                summary: data.error || data.message || 'Analysis failed',
+                deep_questions: '',
+                deep_plan: '',
+                summaries: [],
+                code: '',
+                plotly_figs: [],
+                synthesis: [],
+                final_conclusion: ''
+              }
+              
+              setStoredReports(prev => [failedReport, ...prev])
             }
             
           } catch (parseError) {
@@ -547,131 +698,248 @@ export default function DeepAnalysisSidebar({
       
       failAnalysis()
       
-      // Error handling - could optionally save to database here too
+      const failedReport: StoredReport = {
+        id: reportId,
+        goal: goal.trim(),
+        status: 'failed',
+        startTime: newReport.startTime,
+        endTime: new Date().toISOString(),
+        summary: error instanceof Error ? error.message : 'Analysis failed',
+        deep_questions: '',
+        deep_plan: '',
+        summaries: [],
+        code: '',
+        plotly_figs: [],
+        synthesis: [],
+        final_conclusion: ''
+      }
+      
+      setStoredReports(prev => [failedReport, ...prev])
     }
   }
 
-  const handleDownloadReport = async (chatId?: number, reportData?: any) => {
-    console.log('[DeepAnalysisSidebar] handleDownloadReport called with:', { chatId, reportData, chatIdType: typeof chatId })
-    
+  const handleDownloadReport = async (reportData?: any) => {
     if (isDownloadingReport) {
       toast({
         title: "Download in progress",
         description: "Please wait while your report is being prepared...",
         duration: 3000,
-      })
-      return
+      });
+      return;
     }
 
-    setIsDownloadingReport(true)
+    setIsDownloadingReport(true);
     
     toast({
       title: "Preparing your report...",
       description: "This may take a few seconds. Please don't close this window.",
       duration: 3000,
-    })
+    });
 
     try {
-      if (chatId && typeof chatId === 'number') {
-        console.log('[DeepAnalysisSidebar] Using database download for chatId:', chatId)
-        // Use database download
-        const userId = DeepAnalysisService.getUserId(session)
-        await DeepAnalysisService.downloadReport(chatId, activeSessionId || undefined, userId)
-      } else {
-        console.log('[DeepAnalysisSidebar] Using legacy download, chatId:', chatId, 'reportData:', !!reportData)
-        // Fallback to legacy download for current report
-        let analysisData;
+      let report_uuid;
+      
+      if (reportData && reportData.id) {
+        report_uuid = reportData.id;
         
-        if (reportData && reportData.goal) {
-          analysisData = {
-            goal: reportData.goal,
-            deep_questions: reportData.deep_questions || '',
-            deep_plan: reportData.deep_plan || '',
-            summaries: reportData.summaries || [],
-            code: reportData.code || '',
-            plotly_figs: reportData.plotly_figs || [],
-            synthesis: reportData.synthesis || [],
-            final_conclusion: reportData.final_conclusion || ''
+        // Try to get the report directly from the backend
+        try {
+          const response = await fetch(`${API_URL}/deep_analysis/download_from_db/${report_uuid}${userId ? `?user_id=${userId}` : ''}`, {
+            method: 'POST'
+          });
+          
+          if (response.ok) {
+            // Get the blob directly
+            const blob = await response.blob();
+            const url = URL.createObjectURL(blob);
+            
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `deep-analysis-report-${Date.now()}.html`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            
+            toast({
+              title: "Report downloaded successfully! 📄",
+              description: "Your deep analysis report has been saved to your downloads folder.",
+              duration: 4000,
+            });
+            
+            setIsDownloadingReport(false);
+            return;
+          } else if (response.status !== 404) {
+            // If error other than 404, log it but continue with the fallback below
+            console.warn(`Failed to download report from backend: ${response.statusText}`);
           }
-        } else if (currentReport) {
-          analysisData = {
-            goal: currentReport.goal,
-            deep_questions: currentReport.deep_questions || '',
-            deep_plan: currentReport.deep_plan || '',
-            summaries: currentReport.summaries || [],
-            code: currentReport.code || '',
-            plotly_figs: currentReport.plotly_figs || [],
-            synthesis: currentReport.synthesis || [],
-            final_conclusion: currentReport.final_conclusion || ''
-          }
-        } else {
-          throw new Error('No analysis data available for download')
+        } catch (error) {
+          console.warn('Error downloading report from backend:', error);
+          // Continue with fallback below
         }
-
-        const response = await fetch(`${API_URL}/deep_analysis/download_report`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(activeSessionId && { 'X-Session-ID': activeSessionId })
-          },
-          body: JSON.stringify({ analysis_data: analysisData })
-        })
-
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`)
-        }
-
-        const blob = await response.blob()
-        const url = URL.createObjectURL(blob)
-        
-        const a = document.createElement('a')
-        a.href = url
-        a.download = `deep-analysis-report-${Date.now()}.html`
-        document.body.appendChild(a)
-        a.click()
-        document.body.removeChild(a)
-        URL.revokeObjectURL(url)
       }
+      
+      // Fallback to the previous approach if backend download fails or we don't have a report_uuid
+      let analysisData;
+      
+      if (reportData && reportData.goal) {
+        analysisData = {
+          goal: reportData.goal,
+          deep_questions: reportData.deep_questions || '',
+          deep_plan: reportData.deep_plan || '',
+          summaries: reportData.summaries || [],
+          code: reportData.code || '',
+          plotly_figs: reportData.plotly_figs || [],
+          synthesis: reportData.synthesis || [],
+          final_conclusion: reportData.final_conclusion || ''
+        };
+      } else if (currentReport) {
+        analysisData = {
+          goal: currentReport.goal,
+          deep_questions: currentReport.deep_questions || '',
+          deep_plan: currentReport.deep_plan || '',
+          summaries: currentReport.summaries || [],
+          code: currentReport.code || '',
+          plotly_figs: currentReport.plotly_figs || [],
+          synthesis: currentReport.synthesis || [],
+          final_conclusion: currentReport.final_conclusion || ''
+        };
+      } else {
+        console.error('No analysis data available for download');
+        toast({
+          title: "Download failed",
+          description: "No analysis data available for download.",
+          variant: "destructive",
+          duration: 3000,
+        });
+        setIsDownloadingReport(false);
+        return;
+      }
+
+      // Add report_uuid for backend storage if available
+      interface RequestData {
+        analysis_data: {
+          goal: any;
+          deep_questions: any;
+          deep_plan: any;
+          summaries: any;
+          code: any;
+          plotly_figs: any;
+          synthesis: any;
+          final_conclusion: any;
+        };
+        report_uuid?: string;
+      }
+      
+      let requestData: RequestData = { analysis_data: analysisData };
+      if (report_uuid) {
+        requestData.report_uuid = report_uuid;
+      } else if (currentReport?.id) {
+        requestData.report_uuid = currentReport.id;
+      }
+
+      console.log('Sending analysis data to backend:', requestData);
+
+      const response = await fetch(`${API_URL}/deep_analysis/download_report`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(activeSessionId && { 'X-Session-ID': activeSessionId })
+        },
+        body: JSON.stringify(requestData)
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `deep-analysis-report-${Date.now()}.html`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
       
       toast({
         title: "Report downloaded successfully! 📄",
         description: "Your deep analysis report has been saved to your downloads folder.",
         duration: 4000,
-      })
+      });
       
     } catch (error) {
-      console.error('Failed to download report:', error)
+      console.error('Failed to download report:', error);
       
       toast({
         title: "Download failed",
-        description: "Failed to generate report. Please try again later.",
+        description: "Failed to generate report. Trying fallback method...",
         variant: "destructive",
-        duration: 5000,
-      })
+        duration: 3000,
+      });
+      
+      const fallbackHtml = currentReport?.html_report || reportData?.html_report;
+      if (fallbackHtml) {
+        const blob = new Blob([fallbackHtml], { type: 'text/html' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `deep-analysis-report-fallback-${Date.now()}.html`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        
+        toast({
+          title: "Fallback download successful",
+          description: "Report downloaded using cached data.",
+          duration: 3000,
+        });
+      } else {
+        toast({
+          title: "Download completely failed",
+          description: "Unable to download the report. Please try again later.",
+          variant: "destructive",
+          duration: 5000,
+        });
+      }
     } finally {
-      setIsDownloadingReport(false)
+      setIsDownloadingReport(false);
     }
   }
 
-  const handleDeleteReport = async (chatId: number) => {
+  const handleDeleteReport = async (reportId: string) => {
     try {
-      const userId = DeepAnalysisService.getUserId(session)
-      await DeepAnalysisService.deleteReport(chatId, activeSessionId || undefined, userId)
+      // Delete from backend
+      // Find the report to get its report_id (if we have it)
+      const reportToDelete = storedReports.find(report => report.id === reportId);
       
-      toast({
-        title: "Analysis deleted",
-        description: "The analysis has been removed from your history.",
-        duration: 3000,
-      })
+      if (reportToDelete) {
+        // Try to delete from backend first
+        const response = await fetch(`${API_URL}/deep_analysis/reports/${reportId}${userId ? `?user_id=${userId}` : ''}`, {
+          method: 'DELETE'
+        });
+        
+        if (!response.ok && response.status !== 404) {
+          console.warn(`Failed to delete report from backend: ${response.statusText}`);
+        }
+      }
     } catch (error) {
-      console.error('Failed to delete analysis:', error)
-      toast({
-        title: "Delete failed",
-        description: "Failed to delete the analysis. Please try again.",
-        variant: "destructive",
-        duration: 3000,
-      })
+      console.error('Error deleting report:', error);
+    } finally {
+      // Always update local state regardless of backend success
+      setStoredReports(prev => prev.filter(report => report.id !== reportId));
+      if (selectedHistoryReport?.id === reportId) {
+        setSelectedHistoryReport(null);
+      }
     }
+  }
+
+  const handleSelectHistoryReport = (report: StoredReport) => {
+    setSelectedHistoryReport(report)
+    setActiveTab('history')
   }
 
   if (!isOpen) return null
@@ -731,8 +999,8 @@ export default function DeepAnalysisSidebar({
                 setGoal={setGoal}
                 onStartAnalysis={handleStartAnalysis}
                 isAnalysisRunning={currentReport?.status === 'running'}
-                storedReports={[]}
-                onSelectReport={() => {}}
+                storedReports={storedReports}
+                onSelectReport={handleSelectHistoryReport}
               />
             </TabsContent>
 
@@ -747,7 +1015,9 @@ export default function DeepAnalysisSidebar({
 
             <TabsContent value="history" className="flex-1 min-h-0">
               <HistoryView
-                sessionId={activeSessionId || undefined}
+                storedReports={storedReports}
+                selectedHistoryReport={selectedHistoryReport}
+                onSelectReport={setSelectedHistoryReport}
                 onDownloadReport={handleDownloadReport}
                 onDeleteReport={handleDeleteReport}
                 isDownloadingReport={isDownloadingReport}

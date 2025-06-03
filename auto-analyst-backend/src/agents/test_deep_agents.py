@@ -13,8 +13,9 @@ import pandas as pd
 from dotenv import load_dotenv
 from src.utils.logger import Logger
 import logging
+from datetime import datetime, UTC
 
-logger = Logger("deep_agents", see_time=True, console_log=True)
+logger = Logger("deep_agents", see_time=True, console_log=False)
 load_dotenv()
 
 class deep_questions(dspy.Signature):
@@ -721,16 +722,15 @@ class deep_analysis_module(dspy.Module):
         
         try:
             with dspy.context(lm = dspy.LM("anthropic/claude-4-sonnet-20250514", api_key = anthropic_key, max_tokens=17000)):
-                import datetime
                 print("Starting code generation...")
-                start_time = datetime.datetime.now()
+                start_time = datetime.now()
                 print(f"Code generation started at: {start_time.strftime('%Y-%m-%d %H:%M:%S')}")
                 print(f"Processing {len(code)} code blocks...")
                 print(f"Plan instructions: {str(plan_instructions)[:200]}...")
                 
                 # examples = [dspy.Example(deep_questions=str(questions.deep_questions), dataset_info=dataset_info,planner_instructions=str(plan_instructions), code=str(code)).with_inputs('deep_questions','dataset_info','planner_instructions','code')]
                 # deep_code = deep_coder(deep_questions=str(questions.deep_questions), dataset_info=dataset_info,planner_instructions=str(plan_instructions), code=str(code))
-                print(f"Code generation completed at: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+                print(f"Code generation completed at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
         except Exception as e:
             print(f"Error during code generation: {str(e)}")
             print(f"Error type: {type(e).__name__}")
@@ -1271,4 +1271,3 @@ def generate_html_report(return_dict):
     </body>
     </html>"""
     return html
-

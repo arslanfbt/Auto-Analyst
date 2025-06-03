@@ -100,7 +100,7 @@ export const MODEL_TIERS = {
   },
   "tier4": {
       "name": "Premium Plus",
-      "credits": 10,
+      "credits": 20,
       "models": [
           "gpt-4.5-preview",
           "o1",

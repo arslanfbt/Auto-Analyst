@@ -178,26 +178,36 @@ def clean_and_store_code(code, session_df=None):
         if cleaned_code.endswith('```'):
             cleaned_code = cleaned_code[:-3]
     
-    # Fix try statement syntax
+        # Fix try statement syntax
         cleaned_code = cleaned_code.replace('try\n', 'try:\n')
     
-    # Remove code patterns that would make the code unrunnable
-    invalid_patterns = [
-        '```', # Code block markers
-        '"""', # Triple double quotes
-        "'''", # Triple single quotes
-        '\\n', # Raw newlines
-        '\\t', # Raw tabs
-        '\\r', # Raw carriage returns
-        '\\',  # Raw backslashes
-    ]
-    
-    for pattern in invalid_patterns:
-                if pattern in cleaned_code:
-                    cleaned_code = cleaned_code.replace(pattern, '')
+        # Remove code patterns that would make the code unrunnable
+        invalid_patterns = [
+            '```', # Code block markers
+            '"""', # Triple double quotes
+            "'''", # Triple single quotes
+            '\\n', # Raw newlines
+            '\\t', # Raw tabs
+            '\\r', # Raw carriage returns
+            '\\',  # Raw backslashes
+        ]
+        
+        for pattern in invalid_patterns:
+            if pattern in cleaned_code:
+                cleaned_code = cleaned_code.replace(pattern, '')
         
         
-        import re
+        # Remove reading the csv file if it's already in the context
+        cleaned_code = re.sub(r"df\s*=\s*pd\.read_csv\([\"\'].*?[\"\']\).*?(\n|$)", '', cleaned_code)
+        
+        # Only match assignments at top level (not indented)
+        # 1. Remove 'df = pd.DataFrame()' if it's at the top level
+        cleaned_code = re.sub(
+            r"^df\s*=\s*pd\.DataFrame\(\s*\)\s*(#.*)?$",
+            '',
+        cleaned_code,
+            flags=re.MULTILINE
+        )
         cleaned_code = re.sub(r"plt\.show\(\).*?(\n|$)", '', cleaned_code)
         # Remove all .show() method calls more comprehensively
         cleaned_code = re.sub(r'\b\w*\.show\(\)', '', cleaned_code)
@@ -205,8 +215,14 @@ def clean_and_store_code(code, session_df=None):
         
         # Additional patterns to catch more .show() variations
         cleaned_code = re.sub(r'\.show\(\s*\)', '', cleaned_code)  # .show() with optional spaces
+        cleaned_code = re.sub(r'\.show\(\s*renderer\s*=\s*[\'"][^\'\"]*[\'"]\s*\)', '', cleaned_code)  # .show(renderer='...')
         cleaned_code = re.sub(r'plotly_figs\[\d+\]\.show\(\)', '', cleaned_code)  # plotly_figs[0].show()
-                
+        
+        # More comprehensive patterns
+        cleaned_code = re.sub(r'\.show\([^)]*\)', '', cleaned_code)  # .show(any_args)
+        cleaned_code = re.sub(r'fig\w*\.show\(\s*[^)]*\s*\)', '', cleaned_code)  # fig*.show(any_args)
+        cleaned_code = re.sub(r'\w+_fig\w*\.show\(\s*[^)]*\s*\)', '', cleaned_code)  # *_fig*.show(any_args)
+        
         
         with open("sample_code.py", "w") as f: #! ONLY FOR DEBUGGING
             f.write(cleaned_code)
@@ -297,7 +313,6 @@ def score_code(args, code):
     """
 
     code_text = code.combined_code
-    
     try:
         # Check if code contains markdown code block markers
         if "```python" in code_text:
@@ -319,15 +334,21 @@ def score_code(args, code):
             if pattern in code_text:
                 code_text = code_text.replace(pattern, '')
 
-            import re
-            cleaned_code = re.sub(r"plt\.show\(\).*?(\n|$)", '', code_text)
-            # Remove all .show() method calls more comprehensively
-            cleaned_code = re.sub(r'\b\w*\.show\(\)', '', cleaned_code)
-            cleaned_code = re.sub(r'^\s*\w*fig\w*\.show\(\)\s*;?\s*$', '', cleaned_code, flags=re.MULTILINE)
-            
-            # Additional patterns to catch more .show() variations
-            cleaned_code = re.sub(r'\.show\(\s*\)', '', cleaned_code)  # .show() with optional spaces
-            cleaned_code = re.sub(r'plotly_figs\[\d+\]\.show\(\)', '', cleaned_code)  # plotly_figs[0].show()
+        import re
+        cleaned_code = re.sub(r"plt\.show\(\).*?(\n|$)", '', code_text)
+        # Remove all .show() method calls more comprehensively
+        cleaned_code = re.sub(r'\b\w*\.show\(\)', '', cleaned_code)
+        cleaned_code = re.sub(r'^\s*\w*fig\w*\.show\(\)\s*;?\s*$', '', cleaned_code, flags=re.MULTILINE)
+        
+        # Additional patterns to catch more .show() variations
+        cleaned_code = re.sub(r'\.show\(\s*\)', '', cleaned_code)  # .show() with optional spaces
+        cleaned_code = re.sub(r'\.show\(\s*renderer\s*=\s*[\'"][^\'\"]*[\'"]\s*\)', '', cleaned_code)  # .show(renderer='...')
+        cleaned_code = re.sub(r'plotly_figs\[\d+\]\.show\(\)', '', cleaned_code)  # plotly_figs[0].show()
+        
+        # More comprehensive patterns
+        cleaned_code = re.sub(r'\.show\([^)]*\)', '', cleaned_code)  # .show(any_args)
+        cleaned_code = re.sub(r'fig\w*\.show\(\s*[^)]*\s*\)', '', cleaned_code)  # fig*.show(any_args)
+        cleaned_code = re.sub(r'\w+_fig\w*\.show\(\s*[^)]*\s*\)', '', cleaned_code)  # *_fig*.show(any_args)
                 
         # Capture stdout using StringIO
         from io import StringIO
@@ -368,7 +389,7 @@ def score_code(args, code):
         score = 2 if plotly_figs else 1
         
         return score
-        
+    
     except Exception as e:
         # Restore stdout in case of error
         if 'stdout_capture' in locals():
@@ -376,6 +397,7 @@ def score_code(args, code):
             stdout_capture.close()
             
         return 0
+    
 
 class deep_planner(dspy.Signature):
     """
@@ -804,9 +826,9 @@ class deep_analysis_module(dspy.Module):
                 logger.log_message(f"Warning: Code execution had errors: {output['error']}", logging.ERROR)
                 # Continue with whatever output we have
         
-        print_outputs.append(output['printed_output'])
-        plotly_figs.append(output['plotly_figs'])
-                
+            print_outputs.append(output['printed_output'])
+            plotly_figs.append(output['plotly_figs'])
+            
         except Exception as e:
             logger.log_message(f"Error during code execution: {str(e)}", logging.ERROR)
             # Create fallback output structure
@@ -821,7 +843,7 @@ class deep_analysis_module(dspy.Module):
 
         # with dspy.settings.context(lm = dspy.LM("gemini/gemini-2.5-pro-preview-03-25", api_key = os.environ['GEMINI_API_KEY'], max_tokens=25000)):
         try:
-        synthesis.append(self.deep_synthesizer(query=goal, summaries = str(summaries), print_outputs = str(output['printed_output'])))
+            synthesis.append(self.deep_synthesizer(query=goal, summaries = str(summaries), print_outputs = str(output['printed_output'])))
         except Exception as e:
             logger.log_message(f"Error during synthesis: {str(e)}", logging.ERROR)
             # Create fallback synthesis
@@ -831,9 +853,9 @@ class deep_analysis_module(dspy.Module):
         logger.log_message("Synthesis done")
         
         try:
-        final_conclusion = self.final_conclusion(query=goal, synthesized_sections =str([s.synthesized_report for s in synthesis ]))
+            final_conclusion = self.final_conclusion(query=goal, synthesized_sections =str([s.synthesized_report for s in synthesis ]))
         except Exception as e:
-            logger.log_message(f"Error during finclal conclusion: {str(e)}", logging.ERROR)
+            logger.log_message(f"Error during final conclusion: {str(e)}", logging.ERROR)
             # Create fallback conclusion
             final_conclusion = type('obj', (object,), {'final_conclusion': f"Final conclusion failed: {str(e)}"})()
 
@@ -857,7 +879,17 @@ def generate_html_report(return_dict):
     """Generate a clean HTML report focusing on visualizations and key insights"""
     
     def convert_markdown_to_html(text):
-        """Convert markdown text to HTML safely with better formatting"""
+        """Convert markdown text to HTML safely"""
+        if not text:
+            return ""
+        # Don't escape HTML characters before markdown conversion
+        html = markdown.markdown(str(text), extensions=['tables', 'fenced_code', 'nl2br'])
+        # Use BeautifulSoup to clean up but preserve structure
+        soup = BeautifulSoup(html, 'html.parser')
+        return str(soup)
+
+    def convert_conclusion_to_html(text):
+        """Special conversion for conclusion with custom bullet point handling"""
         if not text:
             return ""
         
@@ -865,7 +897,6 @@ def generate_html_report(return_dict):
         text = str(text).strip()
         
         # Handle special cases for better formatting
-        # Convert **text** to <strong>text</strong>
         import re
         text = re.sub(r'\*\*(.*?)\*\*', r'<strong>\1</strong>', text)
         text = re.sub(r'\*(.*?)\*', r'<em>\1</em>', text)
@@ -908,7 +939,7 @@ def generate_html_report(return_dict):
         # Join and clean up
         html_content = '\n'.join(processed_lines)
         
-        # Clean up extra tags and escape HTML entities
+        # Clean up extra tags and escape HTML entities, but preserve our intentional HTML
         html_content = html_content.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
         
         # Restore our intentional HTML tags
@@ -918,24 +949,12 @@ def generate_html_report(return_dict):
         html_content = html_content.replace('&lt;li&gt;', '<li>').replace('&lt;/li&gt;', '</li>')
         html_content = html_content.replace('&lt;p&gt;', '<p>').replace('&lt;/p&gt;', '</p>')
         
-        # Try standard markdown conversion as fallback
-        try:
-            markdown_html = markdown.markdown(text, extensions=['tables', 'fenced_code'])
-            soup = BeautifulSoup(markdown_html, 'html.parser')
-            fallback_html = str(soup)
-            
-            # Use whichever has more structure (more tags)
-            if len(re.findall(r'<[^>]+>', fallback_html)) > len(re.findall(r'<[^>]+>', html_content)):
-                html_content = fallback_html
-        except:
-            pass
-        
         return html_content
 
     # Convert key text sections to HTML
     goal = convert_markdown_to_html(return_dict['goal'])
     questions = convert_markdown_to_html(return_dict['deep_questions'])
-    conclusion = convert_markdown_to_html(return_dict['final_conclusion'])
+    conclusion = convert_conclusion_to_html(return_dict['final_conclusion'])
     
     # Combine synthesis content
     synthesis_content = ''
@@ -1042,7 +1061,8 @@ def generate_html_report(return_dict):
                 border-bottom: 2px solid #FF7F7F;
                 padding-bottom: 8px;
             }}
-            h3 {{ color: #4b5563; font-size: 16px; margin-bottom: 12px; }}
+            h3 {{ color: #4b5563; font-size: 16px; margin-bottom: 12px; font-weight: 600; }}
+            h4 {{ color: #6b7280; font-size: 14px; margin-bottom: 10px; font-weight: 600; }}
             .question-content {{ 
                 background: #fef2f2; 
                 padding: 16px; 
@@ -1118,10 +1138,23 @@ def generate_html_report(return_dict):
             }}
             .conclusion-content {{ 
                 background: linear-gradient(135deg, #fef2f2 0%, #fdf2f8 100%); 
-                padding: 20px; 
+                padding: 24px; 
                 border-radius: 8px; 
                 border: 1px solid #FF7F7F;
+                font-size: 15px;
+                line-height: 1.7;
             }}
+            /* Enhanced conclusion formatting */
+            .conclusion-content h1, .conclusion-content h2, .conclusion-content h3, .conclusion-content h4 {{
+                color: #dc2626;
+                margin-top: 20px;
+                margin-bottom: 12px;
+                font-weight: 600;
+            }}
+            .conclusion-content h1 {{ font-size: 22px; }}
+            .conclusion-content h2 {{ font-size: 18px; }}
+            .conclusion-content h3 {{ font-size: 16px; }}
+            .conclusion-content h4 {{ font-size: 14px; }}
             .conclusion-content ul {{ 
                 margin: 16px 0; 
                 padding-left: 24px;
@@ -1170,19 +1203,32 @@ def generate_html_report(return_dict):
                 color: #dc2626; 
                 font-weight: 600; 
             }}
+            .conclusion-content em {{ 
+                font-style: italic; 
+                color: #6b7280;
+            }}
+            /* Nested lists */
+            .conclusion-content ul ul, .conclusion-content ol ol, .conclusion-content ul ol, .conclusion-content ol ul {{
+                margin: 8px 0;
+                padding-left: 20px;
+            }}
+            .conclusion-content ul ul li {{ list-style-type: circle; }}
+            .conclusion-content ul ul ul li {{ list-style-type: square; }}
             .synthesis-section {{ margin-bottom: 16px; }}
             .synthesis-section ul {{
                 margin: 12px 0;
                 padding-left: 20px;
+                list-style-type: disc;
             }}
             .synthesis-section ul li {{
                 margin-bottom: 6px;
                 line-height: 1.6;
                 list-style-type: disc;
+                display: list-item;
             }}
             p {{ margin-bottom: 12px; }}
-            /* General list styling improvements */
-            ul:not(.conclusion-content ul):not(.synthesis-section ul) {{ 
+            /* General list styling for other sections (not conclusion) */
+            ul:not(.conclusion-content ul) {{ 
                 margin-bottom: 16px; 
                 padding-left: 20px; 
                 list-style-type: disc;
@@ -1192,9 +1238,10 @@ def generate_html_report(return_dict):
                 padding-left: 20px; 
                 list-style-type: decimal;
             }}
-            li:not(.conclusion-content li):not(.synthesis-section li) {{ 
+            li:not(.conclusion-content li) {{ 
                 margin-bottom: 6px; 
                 line-height: 1.6;
+                display: list-item;
             }}
         </style>
         <script>
@@ -1324,5 +1371,4 @@ def generate_html_report(return_dict):
     </body>
     </html>"""
     return html
-
 

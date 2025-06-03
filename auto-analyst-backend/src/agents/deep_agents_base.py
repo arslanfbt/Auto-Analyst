@@ -9,6 +9,7 @@ import markdown
 from bs4 import BeautifulSoup
 import numpy as np
 import pandas as pd
+from datetime import datetime
 
 
 class deep_questions(dspy.Signature):
@@ -645,13 +646,12 @@ class deep_analysis_module(dspy.Module):
         code = [c.replace('"""',"'''").split("```python")[1].replace('try\n','try:\n').split("```")[0] for c in codes]
         deep_coder = dspy.Refine(module=self.deep_code_synthesizer, N=3, reward_fn=score_code, threshold=1.0, fail_count=2)
         with dspy.settings.context(lm = dspy.LM("anthropic/claude-4-opus-20250514", api_key = os.environ['ANTHROPIC_API_KEY'], max_tokens=17000)):
-            import datetime
             print("Starting code generation...")
-            start_time = datetime.datetime.now()
+            start_time = datetime.now()
             print(f"Code generation started at: {start_time.strftime('%Y-%m-%d %H:%M:%S')}")
             # examples = [dspy.Example(deep_questions=str(questions.deep_questions), dataset_info=dataset_info,planner_instructions=str(plan_instructions), code=str(code)).with_inputs('deep_questions','dataset_info','planner_instructions','code')]
             deep_code = deep_coder(deep_questions=str(questions.deep_questions), dataset_info=dataset_info,planner_instructions=str(plan_instructions), code=str(code))
-            print(f"Code generation completed at: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+            print(f"Code generation completed at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 
         code = deep_code.combined_code
         print(code)
@@ -827,7 +827,6 @@ print(return_dict['plotly_figs'])
 #     return_dict = None
 
 
-from datetime import datetime
 
 # Get current timestamp
 timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")

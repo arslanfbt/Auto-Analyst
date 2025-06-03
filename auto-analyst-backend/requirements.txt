@@ -45,4 +45,3 @@ wheel==0.45.1
 gunicorn
 psycopg2
 chardet
-markdown==3.7

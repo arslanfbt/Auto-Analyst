@@ -46,8 +46,8 @@ from src.schemas.query_schemas import QueryRequest
 from src.utils.logger import Logger
 
 # Import deep analysis components directly
-from src.agents.test_deep_agents import deep_analysis_module, generate_html_report
-# from src.agents.deep_agents import deep_analysis_module, generate_html_report
+# from src.agents.test_deep_agents import deep_analysis_module, generate_html_report
+from src.agents.deep_agents import deep_analysis_module, generate_html_report
 logger = Logger("app", see_time=True, console_log=False)
 load_dotenv()
 
@@ -899,6 +899,49 @@ async def deep_analysis_streaming(
         if session_state["current_df"] is None:
             raise HTTPException(status_code=400, detail=RESPONSE_ERROR_NO_DATASET)
         
+        # Get user_id from session state (if available)
+        user_id = session_state.get("user_id")
+        
+        # Generate a UUID for this report
+        import uuid
+        report_uuid = str(uuid.uuid4())
+        
+        # Create initial pending report in the database
+        try:
+            from src.db.init_db import session_factory
+            from src.db.schemas.models import DeepAnalysisReport
+            
+            db_session = session_factory()
+            
+            try:
+                # Create a pending report entry
+                new_report = DeepAnalysisReport(
+                    report_uuid=report_uuid,
+                    user_id=user_id,
+                    goal=request.goal,
+                    status="pending",
+                    start_time=datetime.utcnow(),
+                    progress_percentage=0
+                )
+                
+                db_session.add(new_report)
+                db_session.commit()
+                db_session.refresh(new_report)
+                
+                # Store the report ID in session state for later updates
+                session_state["current_deep_analysis_id"] = new_report.report_id
+                session_state["current_deep_analysis_uuid"] = report_uuid
+                
+            except Exception as e:
+                logger.log_message(f"Error creating initial deep analysis report: {str(e)}", level=logging.ERROR)
+                # Continue even if DB storage fails
+            finally:
+                db_session.close()
+                
+        except Exception as e:
+            logger.log_message(f"Database operation failed: {str(e)}", level=logging.ERROR)
+            # Continue even if DB operation fails
+        
         # Get session-specific model
         # session_lm = get_session_lm(session_state)
         session_lm = dspy.LM(model="anthropic/claude-4-sonnet-20250514", max_tokens=7000, temperature=0.5)
@@ -923,6 +966,9 @@ async def deep_analysis_streaming(
 
 async def _generate_deep_analysis_stream(session_state: dict, goal: str, session_lm):
     """Generate streaming responses for deep analysis"""
+    # Track the start time for duration calculation
+    start_time = datetime.utcnow()
+    
     try:
         # Get dataset info
         df = session_state["current_df"]
@@ -931,6 +977,75 @@ async def _generate_deep_analysis_stream(session_state: dict, goal: str, session
             'Data Type': df.dtypes.astype(str)
         }).to_markdown()
         dataset_info = f"Sample Data:\n{df.head(2).to_markdown()}\n\nData Types:\n{dtypes_info}"
+        
+        # Get report info from session state
+        report_id = session_state.get("current_deep_analysis_id")
+        report_uuid = session_state.get("current_deep_analysis_uuid")
+        user_id = session_state.get("user_id")
+        
+        # Helper function to update report in database
+        async def update_report_in_db(status, progress, step=None, content=None):
+            if not report_id:
+                return
+                
+            try:
+                from src.db.init_db import session_factory
+                from src.db.schemas.models import DeepAnalysisReport
+                
+                db_session = session_factory()
+                
+                try:
+                    report = db_session.query(DeepAnalysisReport).filter(DeepAnalysisReport.report_id == report_id).first()
+                    
+                    if report:
+                        report.status = status
+                        report.progress_percentage = progress
+                        
+                        # Update step-specific fields if provided
+                        if step == "questions" and content:
+                            report.deep_questions = content
+                        elif step == "planning" and content:
+                            report.deep_plan = content
+                        elif step == "analysis" and content:
+                            # For analysis step, we get the full object with multiple fields
+                            if isinstance(content, dict):
+                                # Update fields from content if they exist
+                                if "deep_questions" in content and content["deep_questions"]:
+                                    report.deep_questions = content["deep_questions"]
+                                if "deep_plan" in content and content["deep_plan"]:
+                                    report.deep_plan = content["deep_plan"]
+                                if "code" in content and content["code"]:
+                                    report.analysis_code = content["code"]
+                                if "final_conclusion" in content and content["final_conclusion"]:
+                                    report.final_conclusion = content["final_conclusion"]
+                                    # Also update summary from conclusion
+                                    conclusion = content["final_conclusion"]
+                                    report.report_summary = conclusion[:200] + "..." if len(conclusion) > 200 else conclusion
+                                
+                                # Handle JSON fields
+                                if "summaries" in content and content["summaries"]:
+                                    report.summaries = json.dumps(content["summaries"])
+                                if "plotly_figs" in content and content["plotly_figs"]:
+                                    report.plotly_figures = json.dumps(content["plotly_figs"])
+                                if "synthesis" in content and content["synthesis"]:
+                                    report.synthesis = json.dumps(content["synthesis"])
+                        
+                        # For the final step, update the HTML report
+                        if step == "completed" and content:
+                            report.html_report = content
+                            report.end_time = datetime.utcnow()
+                            report.duration_seconds = int((report.end_time - report.start_time).total_seconds())
+                            
+                        report.updated_at = datetime.utcnow()
+                        db_session.commit()
+                        
+                except Exception as e:
+                    db_session.rollback()
+                    logger.log_message(f"Error updating deep analysis report: {str(e)}", level=logging.ERROR)
+                finally:
+                    db_session.close()
+            except Exception as e:
+                logger.log_message(f"Database operation failed: {str(e)}", level=logging.ERROR)
         
         # Use session model for this request
         with dspy.context(lm=session_lm):
@@ -941,6 +1056,9 @@ async def _generate_deep_analysis_stream(session_state: dict, goal: str, session
                 "message": "Initializing deep analysis...",
                 "progress": 10
             }) + "\n"
+            
+            # Update DB status to running
+            await update_report_in_db("running", 10)
             
             # Get deep analyzer
             deep_analyzer = app.state.get_deep_analyzer(session_state.get("session_id", "default"))
@@ -964,6 +1082,9 @@ async def _generate_deep_analysis_stream(session_state: dict, goal: str, session
                 "content": questions.deep_questions,
                 "progress": 30
             }) + "\n"
+            
+            # Update DB with questions
+            await update_report_in_db("running", 30, "questions", questions.deep_questions)
             
             # Step 2: Create plan
             yield json.dumps({
@@ -1012,6 +1133,9 @@ async def _generate_deep_analysis_stream(session_state: dict, goal: str, session
                 "progress": 90
             }) + "\n"
             
+            # Update DB with analysis results
+            await update_report_in_db("running", 90, "analysis", serialized_return_dict)
+            
             # Step 4: Generate HTML report
             yield json.dumps({
                 "step": "report",
@@ -1031,6 +1155,9 @@ async def _generate_deep_analysis_stream(session_state: dict, goal: str, session
                 "progress": 100
             }) + "\n"
             
+            # Update DB with completed report
+            await update_report_in_db("completed", 100, "completed", html_report)
+            
     except Exception as e:
         logger.log_message(f"Error in deep analysis stream: {str(e)}", level=logging.ERROR)
         yield json.dumps({
@@ -1039,6 +1166,10 @@ async def _generate_deep_analysis_stream(session_state: dict, goal: str, session
             "message": f"Deep analysis failed: {str(e)}",
             "progress": 0
         }) + "\n"
+        
+        # Update DB with error status
+        if 'update_report_in_db' in locals() and session_state.get("current_deep_analysis_id"):
+            await update_report_in_db("failed", 0)
 
 @app.post("/deep_analysis/download_report")
 async def download_html_report(
@@ -1051,6 +1182,14 @@ async def download_html_report(
         if not analysis_data:
             raise HTTPException(status_code=400, detail="No analysis data provided")
         
+        # Get report UUID from request if available (for saving to DB)
+        report_uuid = request.get("report_uuid")
+        session_state = app.state.get_session_state(session_id)
+        
+        # If no report_uuid in request, try to get it from session state
+        if not report_uuid and session_state.get("current_deep_analysis_uuid"):
+            report_uuid = session_state.get("current_deep_analysis_uuid")
+            
         # Convert JSON-serialized Plotly figures back to Figure objects for HTML generation
         processed_data = analysis_data.copy()
         
@@ -1091,6 +1230,32 @@ async def download_html_report(
         
         # Generate HTML report
         html_report = generate_html_report(processed_data)
+        
+        # Save report to database if we have a UUID
+        if report_uuid:
+            try:
+                from src.db.init_db import session_factory
+                from src.db.schemas.models import DeepAnalysisReport
+                
+                db_session = session_factory()
+                try:
+                    # Try to find existing report by UUID
+                    report = db_session.query(DeepAnalysisReport).filter(DeepAnalysisReport.report_uuid == report_uuid).first()
+                    
+                    if report:
+                        # Update existing report with HTML content
+                        report.html_report = html_report
+                        report.updated_at = datetime.utcnow()
+                        db_session.commit()
+                        logger.log_message(f"Updated HTML report in database for UUID {report_uuid}", level=logging.INFO)
+                except Exception as e:
+                    db_session.rollback()
+                    logger.log_message(f"Error storing HTML report in database: {str(e)}", level=logging.ERROR)
+                finally:
+                    db_session.close()
+            except Exception as e:
+                logger.log_message(f"Database operation failed when storing HTML report: {str(e)}", level=logging.ERROR)
+                # Continue even if DB storage fails
         
         # Create a filename with timestamp
         from datetime import datetime

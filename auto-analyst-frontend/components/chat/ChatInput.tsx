@@ -79,6 +79,8 @@ interface ChatInputProps {
   disabled?: boolean
   isLoading?: boolean
   onStopGeneration?: () => void
+  chatId?: number | null
+  userId?: number | null
 }
 
 // Add these interface definitions after the other interfaces
@@ -182,7 +184,7 @@ const DatasetUploadInfo = ({ uploadId }: { uploadId: number }) => {
 const ChatInput = forwardRef<
   { handlePreviewDefaultDataset: () => void, handleSilentDefaultDataset: () => void },
   ChatInputProps
->(({ onSendMessage, onFileUpload, disabled, isLoading, onStopGeneration }, ref) => {
+>(({ onSendMessage, onFileUpload, disabled, isLoading, onStopGeneration, chatId, userId }, ref) => {
   const [message, setMessage] = useState("")
   const [fileUpload, setFileUpload] = useState<FileUpload | null>(null)
   const fileInputRef = React.useRef<HTMLInputElement>(null)
@@ -2476,6 +2478,7 @@ const ChatInput = forwardRef<
         isOpen={showDeepAnalysisSidebar}
         onClose={() => setShowDeepAnalysisSidebar(false)}
         sessionId={sessionId || undefined}
+        userId={userId}
       />
     </>
   )
