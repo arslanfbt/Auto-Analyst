@@ -1,1 +1,0 @@
-{'exec_result': None, 'printed_output': 'Error executing code: Pandas data cast to numpy dtype of object. Check input data with np.asarray(data).', 'plotly_figs': [], 'error': 'Pandas data cast to numpy dtype of object. Check input data with np.asarray(data).'}

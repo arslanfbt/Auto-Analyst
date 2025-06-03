@@ -177,37 +177,27 @@ def clean_and_store_code(code, session_df=None):
             cleaned_code = cleaned_code[9:]
         if cleaned_code.endswith('```'):
             cleaned_code = cleaned_code[:-3]
-            
-        # Fix try statement syntax
+    
+    # Fix try statement syntax
         cleaned_code = cleaned_code.replace('try\n', 'try:\n')
+    
+    # Remove code patterns that would make the code unrunnable
+    invalid_patterns = [
+        '```', # Code block markers
+        '"""', # Triple double quotes
+        "'''", # Triple single quotes
+        '\\n', # Raw newlines
+        '\\t', # Raw tabs
+        '\\r', # Raw carriage returns
+        '\\',  # Raw backslashes
+    ]
+    
+    for pattern in invalid_patterns:
+                if pattern in cleaned_code:
+                    cleaned_code = cleaned_code.replace(pattern, '')
         
-        # Remove code patterns that would make the code unrunnable
-        invalid_patterns = [
-            '```', # Code block markers
-            '"""', # Triple double quotes
-            "'''", # Triple single quotes
-            '\\n', # Raw newlines
-            '\\t', # Raw tabs
-            '\\r', # Raw carriage returns
-            '\\',  # Raw backslashes
-        ]
         
-        for pattern in invalid_patterns:
-            if pattern in cleaned_code:
-                cleaned_code = cleaned_code.replace(pattern, '')
-        
-        
-        # Remove reading the csv file if it's already in the context
-        cleaned_code = re.sub(r"df\s*=\s*pd\.read_csv\([\"\'].*?[\"\']\).*?(\n|$)", '', cleaned_code)
-        
-        # Only match assignments at top level (not indented)
-        # 1. Remove 'df = pd.DataFrame()' if it's at the top level
-        cleaned_code = re.sub(
-            r"^df\s*=\s*pd\.DataFrame\(\s*\)\s*(#.*)?$",
-            '',
-        cleaned_code,
-            flags=re.MULTILINE
-        )
+        import re
         cleaned_code = re.sub(r"plt\.show\(\).*?(\n|$)", '', cleaned_code)
         # Remove all .show() method calls more comprehensively
         cleaned_code = re.sub(r'\b\w*\.show\(\)', '', cleaned_code)
@@ -215,14 +205,8 @@ def clean_and_store_code(code, session_df=None):
         
         # Additional patterns to catch more .show() variations
         cleaned_code = re.sub(r'\.show\(\s*\)', '', cleaned_code)  # .show() with optional spaces
-        cleaned_code = re.sub(r'\.show\(\s*renderer\s*=\s*[\'"][^\'\"]*[\'"]\s*\)', '', cleaned_code)  # .show(renderer='...')
         cleaned_code = re.sub(r'plotly_figs\[\d+\]\.show\(\)', '', cleaned_code)  # plotly_figs[0].show()
-        
-        # More comprehensive patterns
-        cleaned_code = re.sub(r'\.show\([^)]*\)', '', cleaned_code)  # .show(any_args)
-        cleaned_code = re.sub(r'fig\w*\.show\(\s*[^)]*\s*\)', '', cleaned_code)  # fig*.show(any_args)
-        cleaned_code = re.sub(r'\w+_fig\w*\.show\(\s*[^)]*\s*\)', '', cleaned_code)  # *_fig*.show(any_args)
-        
+                
         
         with open("sample_code.py", "w") as f: #! ONLY FOR DEBUGGING
             f.write(cleaned_code)
@@ -311,31 +295,29 @@ def score_code(args, code):
     Returns:
         int: Score (0=error, 1=success, 2=success with plots)
     """
-    import plotly.io as pio
+
+    code_text = code.combined_code
     
     try:
+        # Check if code contains markdown code block markers
+        if "```python" in code_text:
+            code_text = code_text.replace('"""', "'''")
+            parts = code_text.split("```python")
+            code_text = parts[1].split("```")[0] if len(parts) > 1 else code_text
+        else:
+            code_text = code_text.replace('"""', "'''")
         
-        code_text = code.combined_code
-        try:
-            # Check if code contains markdown code block markers
-            if "```python" in code_text:
-                code_text = code_text.replace('"""', "'''")
-                parts = code_text.split("```python")
-                code_text = parts[1].split("```")[0] if len(parts) > 1 else code_text
-            else:
-                code_text = code_text.replace('"""', "'''")
-            
-            # Fix try statement syntax
-            code_text = code_text.replace('try\n', 'try:\n')
-            
-            # Remove code patterns that would make the code unrunnable
-            invalid_patterns = [
-                '```', '"""', "'''", '\\n', '\\t', '\\r', '\\'
-            ]
-            
-            for pattern in invalid_patterns:
-                if pattern in code_text:
-                    code_text = code_text.replace(pattern, '')
+        # Fix try statement syntax
+        code_text = code_text.replace('try\n', 'try:\n')
+        
+        # Remove code patterns that would make the code unrunnable
+        invalid_patterns = [
+            '```', '"""', "'''", '\\n', '\\t', '\\r', '\\'
+        ]
+        
+        for pattern in invalid_patterns:
+            if pattern in code_text:
+                code_text = code_text.replace(pattern, '')
 
             import re
             cleaned_code = re.sub(r"plt\.show\(\).*?(\n|$)", '', code_text)
@@ -345,65 +327,55 @@ def score_code(args, code):
             
             # Additional patterns to catch more .show() variations
             cleaned_code = re.sub(r'\.show\(\s*\)', '', cleaned_code)  # .show() with optional spaces
-            cleaned_code = re.sub(r'\.show\(\s*renderer\s*=\s*[\'"][^\'\"]*[\'"]\s*\)', '', cleaned_code)  # .show(renderer='...')
             cleaned_code = re.sub(r'plotly_figs\[\d+\]\.show\(\)', '', cleaned_code)  # plotly_figs[0].show()
-            
-            # More comprehensive patterns
-            cleaned_code = re.sub(r'\.show\([^)]*\)', '', cleaned_code)  # .show(any_args)
-            cleaned_code = re.sub(r'fig\w*\.show\(\s*[^)]*\s*\)', '', cleaned_code)  # fig*.show(any_args)
-            cleaned_code = re.sub(r'\w+_fig\w*\.show\(\s*[^)]*\s*\)', '', cleaned_code)  # *_fig*.show(any_args)
+                
+        # Capture stdout using StringIO
+        from io import StringIO
+        import sys
+        import plotly.graph_objects as go
+        stdout_capture = StringIO()
+        original_stdout = sys.stdout
+        sys.stdout = stdout_capture
         
-            # Capture stdout using StringIO
-            from io import StringIO
-            import sys
-            import plotly.graph_objects as go
-            stdout_capture = StringIO()
-            original_stdout = sys.stdout
-            sys.stdout = stdout_capture
-            
-            # Execute code in a new namespace to avoid polluting globals
-            local_vars = {}
-            exec(cleaned_code, globals(), local_vars)
-            
-            # Capture any plotly figures from local namespace
-            plotly_figs = []
-            for var_name, var in local_vars.items():
-                if isinstance(var, go.Figure):
-                    if not var.layout.title:
-                        var.update_layout(title=f"Figure {len(plotly_figs) + 1}")
-                    if not var.layout.template:
-                        var.update_layout(template="plotly_white")
-                    plotly_figs.append(var)
-                elif isinstance(var, (list, tuple)):
-                    for item in var:
-                        if isinstance(item, go.Figure):
-                            if not item.layout.title:
-                                item.update_layout(title=f"Figure {len(plotly_figs) + 1}")
-                            if not item.layout.template:
-                                item.update_layout(template="plotly_white")
-                            plotly_figs.append(item)
-            
-            # Restore stdout and get captured output
+        # Execute code in a new namespace to avoid polluting globals
+        local_vars = {}
+        exec(cleaned_code, globals(), local_vars)
+        
+        # Capture any plotly figures from local namespace
+        plotly_figs = []
+        for var_name, var in local_vars.items():
+            if isinstance(var, go.Figure):
+                if not var.layout.title:
+                    var.update_layout(title=f"Figure {len(plotly_figs) + 1}")
+                if not var.layout.template:
+                    var.update_layout(template="plotly_white")
+                plotly_figs.append(var)
+            elif isinstance(var, (list, tuple)):
+                for item in var:
+                    if isinstance(item, go.Figure):
+                        if not item.layout.title:
+                            item.update_layout(title=f"Figure {len(plotly_figs) + 1}")
+                        if not item.layout.template:
+                            item.update_layout(template="plotly_white")
+                        plotly_figs.append(item)
+        
+        # Restore stdout and get captured output
+        sys.stdout = original_stdout
+        captured_output = stdout_capture.getvalue()
+        stdout_capture.close()
+        
+        # Calculate score based on execution and plot generation
+        score = 2 if plotly_figs else 1
+        
+        return score
+        
+    except Exception as e:
+        # Restore stdout in case of error
+        if 'stdout_capture' in locals():
             sys.stdout = original_stdout
-            captured_output = stdout_capture.getvalue()
             stdout_capture.close()
             
-            # Calculate score based on execution and plot generation
-            score = 2 if plotly_figs else 1
-            
-            return score
-            
-        except Exception as e:
-            # Restore stdout in case of error
-            if 'stdout_capture' in locals():
-                sys.stdout = original_stdout
-                stdout_capture.close()
-                
-            return 0
-    
-    finally:
-        # Always restore original renderer
-        pio.renderers.default = original_renderer
+        return 0
 
 class deep_planner(dspy.Signature):
     """
@@ -831,10 +803,10 @@ class deep_analysis_module(dspy.Module):
             if output.get('error'):
                 logger.log_message(f"Warning: Code execution had errors: {output['error']}", logging.ERROR)
                 # Continue with whatever output we have
-            
-            print_outputs.append(output['printed_output'])
-            plotly_figs.append(output['plotly_figs'])
-            
+        
+        print_outputs.append(output['printed_output'])
+        plotly_figs.append(output['plotly_figs'])
+                
         except Exception as e:
             logger.log_message(f"Error during code execution: {str(e)}", logging.ERROR)
             # Create fallback output structure
@@ -849,7 +821,7 @@ class deep_analysis_module(dspy.Module):
 
         # with dspy.settings.context(lm = dspy.LM("gemini/gemini-2.5-pro-preview-03-25", api_key = os.environ['GEMINI_API_KEY'], max_tokens=25000)):
         try:
-            synthesis.append(self.deep_synthesizer(query=goal, summaries = str(summaries), print_outputs = str(output['printed_output'])))
+        synthesis.append(self.deep_synthesizer(query=goal, summaries = str(summaries), print_outputs = str(output['printed_output'])))
         except Exception as e:
             logger.log_message(f"Error during synthesis: {str(e)}", logging.ERROR)
             # Create fallback synthesis
@@ -859,9 +831,9 @@ class deep_analysis_module(dspy.Module):
         logger.log_message("Synthesis done")
         
         try:
-            final_conclusion = self.final_conclusion(query=goal, synthesized_sections =str([s.synthesized_report for s in synthesis ]))
+        final_conclusion = self.final_conclusion(query=goal, synthesized_sections =str([s.synthesized_report for s in synthesis ]))
         except Exception as e:
-            logger.log_message(f"Error during final conclusion: {str(e)}", logging.ERROR)
+            logger.log_message(f"Error during finclal conclusion: {str(e)}", logging.ERROR)
             # Create fallback conclusion
             final_conclusion = type('obj', (object,), {'final_conclusion': f"Final conclusion failed: {str(e)}"})()
 
@@ -885,12 +857,80 @@ def generate_html_report(return_dict):
     """Generate a clean HTML report focusing on visualizations and key insights"""
     
     def convert_markdown_to_html(text):
-        """Convert markdown text to HTML safely"""
+        """Convert markdown text to HTML safely with better formatting"""
         if not text:
             return ""
-        text = str(text).replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
-        html = markdown.markdown(text, extensions=['tables', 'fenced_code'])
-        return str(BeautifulSoup(html, 'html.parser'))
+        
+        # Clean and prepare text
+        text = str(text).strip()
+        
+        # Handle special cases for better formatting
+        # Convert **text** to <strong>text</strong>
+        import re
+        text = re.sub(r'\*\*(.*?)\*\*', r'<strong>\1</strong>', text)
+        text = re.sub(r'\*(.*?)\*', r'<em>\1</em>', text)
+        
+        # Handle bullet points that might not be properly formatted
+        lines = text.split('\n')
+        processed_lines = []
+        in_list = False
+        
+        for line in lines:
+            line = line.strip()
+            if not line:
+                if in_list:
+                    processed_lines.append('</ul>')
+                    in_list = False
+                processed_lines.append('')
+                continue
+                
+            # Check if line looks like a bullet point
+            if (line.startswith('- ') or line.startswith('• ') or 
+                line.startswith('* ') or re.match(r'^\d+\.\s', line)):
+                
+                if not in_list:
+                    processed_lines.append('<ul>')
+                    in_list = True
+                
+                # Clean the bullet point
+                clean_line = re.sub(r'^[-•*]\s*', '', line)
+                clean_line = re.sub(r'^\d+\.\s*', '', clean_line)
+                processed_lines.append(f'<li>{clean_line}</li>')
+            else:
+                if in_list:
+                    processed_lines.append('</ul>')
+                    in_list = False
+                processed_lines.append(f'<p>{line}</p>')
+        
+        if in_list:
+            processed_lines.append('</ul>')
+        
+        # Join and clean up
+        html_content = '\n'.join(processed_lines)
+        
+        # Clean up extra tags and escape HTML entities
+        html_content = html_content.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+        
+        # Restore our intentional HTML tags
+        html_content = html_content.replace('&lt;strong&gt;', '<strong>').replace('&lt;/strong&gt;', '</strong>')
+        html_content = html_content.replace('&lt;em&gt;', '<em>').replace('&lt;/em&gt;', '</em>')
+        html_content = html_content.replace('&lt;ul&gt;', '<ul>').replace('&lt;/ul&gt;', '</ul>')
+        html_content = html_content.replace('&lt;li&gt;', '<li>').replace('&lt;/li&gt;', '</li>')
+        html_content = html_content.replace('&lt;p&gt;', '<p>').replace('&lt;/p&gt;', '</p>')
+        
+        # Try standard markdown conversion as fallback
+        try:
+            markdown_html = markdown.markdown(text, extensions=['tables', 'fenced_code'])
+            soup = BeautifulSoup(markdown_html, 'html.parser')
+            fallback_html = str(soup)
+            
+            # Use whichever has more structure (more tags)
+            if len(re.findall(r'<[^>]+>', fallback_html)) > len(re.findall(r'<[^>]+>', html_content)):
+                html_content = fallback_html
+        except:
+            pass
+        
+        return html_content
 
     # Convert key text sections to HTML
     goal = convert_markdown_to_html(return_dict['goal'])
@@ -901,7 +941,7 @@ def generate_html_report(return_dict):
     synthesis_content = ''
     if return_dict.get('synthesis'):
         synthesis_content = ''.join(f'<div class="synthesis-section">{convert_markdown_to_html(s)}</div>' 
-                                   for s in return_dict['synthesis'])
+                       for s in return_dict['synthesis'])
 
     # Generate all visualizations for synthesis section
     all_visualizations = []
@@ -1084,11 +1124,43 @@ def generate_html_report(return_dict):
             }}
             .conclusion-content ul {{ 
                 margin: 16px 0; 
-                padding-left: 20px; 
+                padding-left: 24px;
+                list-style: none;
+                position: relative;
             }}
-            .conclusion-content li {{ 
-                margin-bottom: 8px; 
-                line-height: 1.6;
+            .conclusion-content ul li {{ 
+                margin-bottom: 10px; 
+                line-height: 1.7;
+                position: relative;
+                padding-left: 0;
+            }}
+            .conclusion-content ul li:before {{
+                content: "•";
+                color: #FF7F7F;
+                font-weight: bold;
+                position: absolute;
+                left: -20px;
+                font-size: 16px;
+            }}
+            .conclusion-content ol {{
+                margin: 16px 0; 
+                padding-left: 24px;
+                counter-reset: item;
+            }}
+            .conclusion-content ol li {{
+                margin-bottom: 10px; 
+                line-height: 1.7;
+                display: block;
+                position: relative;
+                padding-left: 0;
+            }}
+            .conclusion-content ol li:before {{
+                content: counter(item) ".";
+                counter-increment: item;
+                color: #FF7F7F;
+                font-weight: bold;
+                position: absolute;
+                left: -24px;
             }}
             .conclusion-content p {{ 
                 margin-bottom: 16px; 
@@ -1099,15 +1171,31 @@ def generate_html_report(return_dict):
                 font-weight: 600; 
             }}
             .synthesis-section {{ margin-bottom: 16px; }}
+            .synthesis-section ul {{
+                margin: 12px 0;
+                padding-left: 20px;
+            }}
+            .synthesis-section ul li {{
+                margin-bottom: 6px;
+                line-height: 1.6;
+                list-style-type: disc;
+            }}
             p {{ margin-bottom: 12px; }}
-            ul, ol {{ 
+            /* General list styling improvements */
+            ul:not(.conclusion-content ul):not(.synthesis-section ul) {{ 
                 margin-bottom: 16px; 
                 padding-left: 20px; 
+                list-style-type: disc;
             }}
-            li {{ margin-bottom: 6px; }}
-            /* Ensure proper bullet point display */
-            .conclusion-content ul li {{ list-style-type: disc; }}
-            .conclusion-content ol li {{ list-style-type: decimal; }}
+            ol:not(.conclusion-content ol) {{ 
+                margin-bottom: 16px; 
+                padding-left: 20px; 
+                list-style-type: decimal;
+            }}
+            li:not(.conclusion-content li):not(.synthesis-section li) {{ 
+                margin-bottom: 6px; 
+                line-height: 1.6;
+            }}
         </style>
         <script>
             function toggleCode() {{
@@ -1183,32 +1271,32 @@ def generate_html_report(return_dict):
     </head>
     <body>
         <div class="container">
-            <div class="section">
+        <div class="section">
                 <h1>🔍 Deep Analysis Report</h1>
                 <h2>Original Question</h2>
                 <div class="question-content">
                     {goal}
                 </div>
-            </div>
+        </div>
 
-            <div class="section">
+        <div class="section">
                 <h2>🎯 Detailed Research Questions</h2>
                 <div class="question-content">
-                    {questions}
+            {questions}
                 </div>
-            </div>
+        </div>
 
-            <div class="section">
+        <div class="section">
                 <h2>📊 Analysis & Insights</h2>
                 <div class="synthesis-content">
                     {synthesis_content}
-                </div>
-                
+        </div>
+
                 {''.join(f'<div class="visualization-container">{viz}</div>' for viz in all_visualizations) if all_visualizations else '<p><em>No visualizations generated</em></p>'}
             </div>
 
             {f'''
-            <div class="section">
+        <div class="section">
                 <h2>💻 Generated Code</h2>
                 <div class="code-section">
                     <div class="code-header">
@@ -1217,7 +1305,7 @@ def generate_html_report(return_dict):
                         </span>
                         <div class="code-controls">
                             <button id="copyButton" class="copy-button" onclick="copyCode()">📋 Copy</button>
-                        </div>
+        </div>
                     </div>
                     <div class="code-content" id="codeContent">
                         <pre id="rawCode">{return_dict.get('code', '').strip()}</pre>
@@ -1226,13 +1314,15 @@ def generate_html_report(return_dict):
             </div>
             ''' if combined_code else ''}
 
-            <div class="section">
+        <div class="section">
                 <h2>🎯 Conclusion</h2>
-                <div class="conclusion-content">
-                    {conclusion}
+            <div class="conclusion-content">
+                {conclusion}
                 </div>
             </div>
         </div>
     </body>
     </html>"""
     return html
+
+

@@ -14,7 +14,7 @@ from dotenv import load_dotenv
 from src.utils.logger import Logger
 import logging
 
-logger = Logger("deep_agents", see_time=True, console_log=False)
+logger = Logger("deep_agents", see_time=True, console_log=True)
 load_dotenv()
 
 class deep_questions(dspy.Signature):
@@ -791,24 +791,93 @@ class deep_analysis_module(dspy.Module):
             'summaries':summaries, 
             'code':code,
             'plotly_figs':plotly_figs,
-            "synthesis": ["help"],
-            "final_conclusion": "help",
+            "synthesis": summaries,
+            "final_conclusion": str(summaries),
             # 'synthesis':[s.synthesized_report for s in synthesis ], 
             # 'final_conclusion':final_conclusion.final_conclusion 
         }
 
         return return_dict
 
+
 def generate_html_report(return_dict):
     """Generate a clean HTML report focusing on visualizations and key insights"""
-    
+    logger.log_message(f"Generating HTML report for: {return_dict}")
     def convert_markdown_to_html(text):
-        """Convert markdown text to HTML safely"""
+        """Convert markdown text to HTML safely with better formatting"""
         if not text:
             return ""
-        text = str(text).replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
-        html = markdown.markdown(text, extensions=['tables', 'fenced_code'])
-        return str(BeautifulSoup(html, 'html.parser'))
+        
+        # Clean and prepare text
+        text = str(text).strip()
+        
+        # Handle special cases for better formatting
+        # Convert **text** to <strong>text</strong>
+        import re
+        text = re.sub(r'\*\*(.*?)\*\*', r'<strong>\1</strong>', text)
+        text = re.sub(r'\*(.*?)\*', r'<em>\1</em>', text)
+        
+        # Handle bullet points that might not be properly formatted
+        lines = text.split('\n')
+        processed_lines = []
+        in_list = False
+        
+        for line in lines:
+            line = line.strip()
+            if not line:
+                if in_list:
+                    processed_lines.append('</ul>')
+                    in_list = False
+                processed_lines.append('')
+                continue
+                
+            # Check if line looks like a bullet point
+            if (line.startswith('- ') or line.startswith('• ') or 
+                line.startswith('* ') or re.match(r'^\d+\.\s', line)):
+                
+                if not in_list:
+                    processed_lines.append('<ul>')
+                    in_list = True
+                
+                # Clean the bullet point
+                clean_line = re.sub(r'^[-•*]\s*', '', line)
+                clean_line = re.sub(r'^\d+\.\s*', '', clean_line)
+                processed_lines.append(f'<li>{clean_line}</li>')
+            else:
+                if in_list:
+                    processed_lines.append('</ul>')
+                    in_list = False
+                processed_lines.append(f'<p>{line}</p>')
+        
+        if in_list:
+            processed_lines.append('</ul>')
+        
+        # Join and clean up
+        html_content = '\n'.join(processed_lines)
+        
+        # Clean up extra tags and escape HTML entities
+        html_content = html_content.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+        
+        # Restore our intentional HTML tags
+        html_content = html_content.replace('&lt;strong&gt;', '<strong>').replace('&lt;/strong&gt;', '</strong>')
+        html_content = html_content.replace('&lt;em&gt;', '<em>').replace('&lt;/em&gt;', '</em>')
+        html_content = html_content.replace('&lt;ul&gt;', '<ul>').replace('&lt;/ul&gt;', '</ul>')
+        html_content = html_content.replace('&lt;li&gt;', '<li>').replace('&lt;/li&gt;', '</li>')
+        html_content = html_content.replace('&lt;p&gt;', '<p>').replace('&lt;/p&gt;', '</p>')
+        
+        # Try standard markdown conversion as fallback
+        try:
+            markdown_html = markdown.markdown(text, extensions=['tables', 'fenced_code'])
+            soup = BeautifulSoup(markdown_html, 'html.parser')
+            fallback_html = str(soup)
+            
+            # Use whichever has more structure (more tags)
+            if len(re.findall(r'<[^>]+>', fallback_html)) > len(re.findall(r'<[^>]+>', html_content)):
+                html_content = fallback_html
+        except:
+            pass
+        
+        return html_content
 
     # Convert key text sections to HTML
     goal = convert_markdown_to_html(return_dict['goal'])
@@ -819,7 +888,7 @@ def generate_html_report(return_dict):
     synthesis_content = ''
     if return_dict.get('synthesis'):
         synthesis_content = ''.join(f'<div class="synthesis-section">{convert_markdown_to_html(s)}</div>' 
-                                   for s in return_dict['synthesis'])
+                       for s in return_dict['synthesis'])
 
     # Generate all visualizations for synthesis section
     all_visualizations = []
@@ -944,8 +1013,10 @@ def generate_html_report(return_dict):
                 background: #1f2937; 
                 color: #e5e7eb; 
                 border-radius: 8px; 
+                
                 overflow: hidden;
                 margin: 16px 0;
+                position: relative;
             }}
             .code-header {{ 
                 background: #FF7F7F; 
@@ -954,30 +1025,129 @@ def generate_html_report(return_dict):
                 cursor: pointer; 
                 font-weight: 500;
                 user-select: none;
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
             }}
             .code-header:hover {{ background: #FF6666; }}
+            .code-controls {{ 
+                display: flex; 
+                gap: 10px; 
+                align-items: center; 
+            }}
+            .copy-button {{ 
+                background: rgba(255, 255, 255, 0.2); 
+                border: none; 
+                color: white; 
+                padding: 6px 12px; 
+                border-radius: 4px; 
+                cursor: pointer; 
+                font-size: 12px;
+                transition: background 0.2s;
+            }}
+            .copy-button:hover {{ background: rgba(255, 255, 255, 0.3); }}
+            .copy-button.copied {{ background: #10b981; }}
             .code-content {{ 
                 padding: 16px; 
                 max-height: 0; 
                 overflow: hidden; 
                 transition: max-height 0.3s ease;
+                position: relative;
             }}
             .code-content.expanded {{ max-height: 1000px; overflow-y: auto; }}
-            .code-content pre {{ margin: 0; white-space: pre-wrap; word-wrap: break-word; }}
+            .code-content pre {{ 
+                margin: 0; 
+                white-space: pre-wrap; 
+                word-wrap: break-word; 
+                font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+                font-size: 13px;
+                line-height: 1.4;
+            }}
             .conclusion-content {{ 
                 background: linear-gradient(135deg, #fef2f2 0%, #fdf2f8 100%); 
                 padding: 20px; 
                 border-radius: 8px; 
                 border: 1px solid #FF7F7F;
             }}
+            .conclusion-content ul {{ 
+                margin: 16px 0; 
+                padding-left: 24px;
+                list-style: none;
+                position: relative;
+            }}
+            .conclusion-content ul li {{ 
+                margin-bottom: 10px; 
+                line-height: 1.7;
+                position: relative;
+                padding-left: 0;
+            }}
+            .conclusion-content ul li:before {{
+                content: "•";
+                color: #FF7F7F;
+                font-weight: bold;
+                position: absolute;
+                left: -20px;
+                font-size: 16px;
+            }}
+            .conclusion-content ol {{
+                margin: 16px 0; 
+                padding-left: 24px;
+                counter-reset: item;
+            }}
+            .conclusion-content ol li {{
+                margin-bottom: 10px; 
+                line-height: 1.7;
+                display: block;
+                position: relative;
+                padding-left: 0;
+            }}
+            .conclusion-content ol li:before {{
+                content: counter(item) ".";
+                counter-increment: item;
+                color: #FF7F7F;
+                font-weight: bold;
+                position: absolute;
+                left: -24px;
+            }}
+            .conclusion-content p {{ 
+                margin-bottom: 16px; 
+                line-height: 1.7;
+            }}
+            .conclusion-content strong {{ 
+                color: #dc2626; 
+                font-weight: 600; 
+            }}
             .synthesis-section {{ margin-bottom: 16px; }}
+            .synthesis-section ul {{
+                margin: 12px 0;
+                padding-left: 20px;
+            }}
+            .synthesis-section ul li {{
+                margin-bottom: 6px;
+                line-height: 1.6;
+                list-style-type: disc;
+            }}
             p {{ margin-bottom: 12px; }}
-            ul, ol {{ margin-bottom: 16px; }}
+            /* General list styling improvements */
+            ul:not(.conclusion-content ul):not(.synthesis-section ul) {{ 
+                margin-bottom: 16px; 
+                padding-left: 20px; 
+                list-style-type: disc;
+            }}
+            ol:not(.conclusion-content ol) {{ 
+                margin-bottom: 16px; 
+                padding-left: 20px; 
+                list-style-type: decimal;
+            }}
+            li:not(.conclusion-content li):not(.synthesis-section li) {{ 
+                margin-bottom: 6px; 
+                line-height: 1.6;
+            }}
         </style>
         <script>
             function toggleCode() {{
                 const content = document.getElementById('codeContent');
-                const header = document.getElementById('codeHeader');
+                const header = document.getElementById('codeToggle');
                 if (content.classList.contains('expanded')) {{
                     content.classList.remove('expanded');
                     header.textContent = '📝 View Generated Code (Click to expand)';
@@ -986,55 +1156,119 @@ def generate_html_report(return_dict):
                     header.textContent = '📝 Generated Code (Click to collapse)';
                 }}
             }}
+
+            function copyCode() {{
+                const codeElement = document.getElementById('rawCode');
+                const copyButton = document.getElementById('copyButton');
+                
+                if (codeElement) {{
+                    const textToCopy = codeElement.textContent || codeElement.innerText;
+                    
+                    if (navigator.clipboard && window.isSecureContext) {{
+                        navigator.clipboard.writeText(textToCopy).then(function() {{
+                            copyButton.textContent = '✓ Copied!';
+                            copyButton.classList.add('copied');
+                            setTimeout(function() {{
+                                copyButton.textContent = '📋 Copy';
+                                copyButton.classList.remove('copied');
+                            }}, 2000);
+                        }}).catch(function(err) {{
+                            console.error('Failed to copy: ', err);
+                            fallbackCopyTextToClipboard(textToCopy, copyButton);
+                        }});
+                    }} else {{
+                        fallbackCopyTextToClipboard(textToCopy, copyButton);
+                    }}
+                }}
+            }}
+
+            function fallbackCopyTextToClipboard(text, button) {{
+                const textArea = document.createElement('textarea');
+                textArea.value = text;
+                textArea.style.top = '0';
+                textArea.style.left = '0';
+                textArea.style.position = 'fixed';
+                document.body.appendChild(textArea);
+                textArea.focus();
+                textArea.select();
+                try {{
+                    const successful = document.execCommand('copy');
+                    if (successful) {{
+                        button.textContent = '✓ Copied!';
+                        button.classList.add('copied');
+                        setTimeout(function() {{
+                            button.textContent = '📋 Copy';
+                            button.classList.remove('copied');
+                        }}, 2000);
+                    }} else {{
+                        button.textContent = '❌ Failed';
+                        setTimeout(function() {{
+                            button.textContent = '📋 Copy';
+                        }}, 2000);
+                    }}
+                }} catch (err) {{
+                    button.textContent = '❌ Failed';
+                    setTimeout(function() {{
+                        button.textContent = '📋 Copy';
+                    }}, 2000);
+                }}
+                document.body.removeChild(textArea);
+            }}
         </script>
     </head>
     <body>
         <div class="container">
-            <div class="section">
+        <div class="section">
                 <h1>🔍 Deep Analysis Report</h1>
                 <h2>Original Question</h2>
                 <div class="question-content">
                     {goal}
                 </div>
-            </div>
+        </div>
 
-            <div class="section">
+        <div class="section">
                 <h2>🎯 Detailed Research Questions</h2>
                 <div class="question-content">
-                    {questions}
+            {questions}
                 </div>
-            </div>
+        </div>
 
-            <div class="section">
+        <div class="section">
                 <h2>📊 Analysis & Insights</h2>
                 <div class="synthesis-content">
                     {synthesis_content}
-                </div>
-                
+        </div>
+
                 {''.join(f'<div class="visualization-container">{viz}</div>' for viz in all_visualizations) if all_visualizations else '<p><em>No visualizations generated</em></p>'}
             </div>
 
             {f'''
-            <div class="section">
+        <div class="section">
                 <h2>💻 Generated Code</h2>
                 <div class="code-section">
-                    <div class="code-header" id="codeHeader" onclick="toggleCode()">
-                        📝 View Generated Code (Click to expand)
+                    <div class="code-header">
+                        <span id="codeToggle" onclick="toggleCode()" style="cursor: pointer;">
+                            📝 View Generated Code (Click to expand)
+                        </span>
+                        <div class="code-controls">
+                            <button id="copyButton" class="copy-button" onclick="copyCode()">📋 Copy</button>
+        </div>
                     </div>
                     <div class="code-content" id="codeContent">
-                        {combined_code}
+                        <pre id="rawCode">{return_dict.get('code', '').strip()}</pre>
                     </div>
                 </div>
             </div>
             ''' if combined_code else ''}
 
-            <div class="section">
-                <h2>🎯 Final Conclusion</h2>
-                <div class="conclusion-content">
-                    {conclusion}
+        <div class="section">
+                <h2>🎯 Conclusion</h2>
+            <div class="conclusion-content">
+                {conclusion}
                 </div>
             </div>
         </div>
     </body>
     </html>"""
     return html
+

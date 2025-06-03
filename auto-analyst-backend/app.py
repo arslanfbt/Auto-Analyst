@@ -41,12 +41,13 @@ from src.routes.chat_routes import router as chat_router
 from src.routes.code_routes import router as code_router
 from src.routes.feedback_routes import router as feedback_router
 from src.routes.session_routes import router as session_router, get_session_id_dependency
+from src.routes.deep_analysis_routes import router as deep_analysis_router
 from src.schemas.query_schemas import QueryRequest
 from src.utils.logger import Logger
 
 # Import deep analysis components directly
-# from src.agents.test_deep_agents import deep_analysis_module, generate_html_report
-from src.agents.deep_agents import deep_analysis_module, generate_html_report
+from src.agents.test_deep_agents import deep_analysis_module, generate_html_report
+# from src.agents.deep_agents import deep_analysis_module, generate_html_report
 logger = Logger("app", see_time=True, console_log=False)
 load_dotenv()
 
@@ -1116,6 +1117,7 @@ app.include_router(analytics_router)
 app.include_router(code_router)
 app.include_router(session_router)
 app.include_router(feedback_router)
+app.include_router(deep_analysis_router)
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)

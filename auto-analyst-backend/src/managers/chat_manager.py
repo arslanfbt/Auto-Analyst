@@ -976,4 +976,506 @@ class ChatManager:
             logger.log_message(f"Error getting feedback statistics: {str(e)}", level=logging.ERROR)
             raise
         finally:
+            session.close()
+
+    # Deep Analysis specific methods
+    def create_deep_analysis_chat(self, user_id: Optional[int] = None, goal: str = "") -> Dict[str, Any]:
+        """
+        Create a new chat session specifically for Deep Analysis.
+        
+        Args:
+            user_id: Optional user ID if authentication is enabled
+            goal: The analysis goal to include in the title
+            
+        Returns:
+            Dictionary containing chat information with deep analysis identifier
+        """
+        session = self.Session()
+        try:
+            # Create a title that identifies this as a deep analysis chat
+            title_goal = goal[:50] + "..." if len(goal) > 50 else goal
+            chat_title = f"[DEEP_ANALYSIS] {title_goal}" if goal else "[DEEP_ANALYSIS] New Deep Analysis"
+            
+            # Create a new chat
+            chat = Chat(
+                user_id=user_id,
+                title=chat_title,
+                created_at=datetime.utcnow()
+            )
+            session.add(chat)
+            session.flush()  # Flush to get the ID before commit
+            
+            chat_id = chat.chat_id  # Get the ID now
+            session.commit()
+            
+            logger.log_message(f"Created new Deep Analysis chat {chat_id} for user {user_id} with goal: {goal[:50]}...", level=logging.INFO)
+            
+            return {
+                "chat_id": chat_id,
+                "user_id": chat.user_id,
+                "title": chat.title,
+                "created_at": chat.created_at.isoformat(),
+                "analysis_type": "deep_analysis"
+            }
+        except SQLAlchemyError as e:
+            session.rollback()
+            logger.log_message(f"Error creating deep analysis chat: {str(e)}", level=logging.ERROR)
+            raise
+        finally:
+            session.close()
+
+    def save_complete_deep_analysis(self, chat_id: int, user_id: Optional[int], analysis_data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Save a complete deep analysis as a single comprehensive message.
+        
+        Args:
+            chat_id: ID of the chat to add the analysis to
+            user_id: Optional user ID to verify ownership
+            analysis_data: Complete analysis results dictionary
+            
+        Returns:
+            Dictionary containing message information
+        """
+        session = self.Session()
+        try:
+            # Check if chat exists and belongs to the user if user_id is provided
+            query = session.query(Chat).filter(Chat.chat_id == chat_id)
+            if user_id is not None:
+                query = query.filter((Chat.user_id == user_id) | (Chat.user_id.is_(None)))
+            
+            chat = query.first()
+            if not chat:
+                raise ValueError(f"Chat with ID {chat_id} not found or access denied")
+            
+            # Verify this is a deep analysis chat
+            if not (chat.title and "[DEEP_ANALYSIS]" in chat.title):
+                raise ValueError(f"Chat with ID {chat_id} is not a deep analysis chat")
+            
+            # Format the complete analysis as a structured markdown report
+            formatted_content = self._format_deep_analysis_report(analysis_data)
+            
+            # Create a new comprehensive message
+            message = Message(
+                chat_id=chat_id,
+                content=formatted_content,
+                sender="deep_analysis",
+                timestamp=datetime.utcnow()
+            )
+            session.add(message)
+            session.flush()  # Flush to get the ID before commit
+            
+            message_id = message.message_id  # Get ID now
+            session.commit()
+            
+            logger.log_message(f"Saved complete Deep Analysis to chat {chat_id}", level=logging.INFO)
+            
+            return {
+                "message_id": message_id,
+                "chat_id": message.chat_id,
+                "content": message.content,
+                "sender": message.sender,
+                "timestamp": message.timestamp.isoformat(),
+                "analysis_type": "complete_deep_analysis"
+            }
+        except SQLAlchemyError as e:
+            session.rollback()
+            logger.log_message(f"Error saving complete deep analysis: {str(e)}", level=logging.ERROR)
+            raise
+        finally:
+            session.close()
+
+    def _format_deep_analysis_report(self, analysis_data: Dict[str, Any]) -> str:
+        """
+        Format the deep analysis data into a comprehensive, readable markdown report.
+        
+        Args:
+            analysis_data: Complete analysis results dictionary
+            
+        Returns:
+            Formatted markdown string for the complete analysis
+        """
+        try:
+            # Extract analysis components
+            goal = analysis_data.get('goal', 'Deep Analysis')
+            deep_questions = analysis_data.get('deep_questions', '')
+            deep_plan = analysis_data.get('deep_plan', '')
+            code = analysis_data.get('code', '')
+            synthesis = analysis_data.get('synthesis', [])
+            final_conclusion = analysis_data.get('final_conclusion', '')
+            start_time = analysis_data.get('start_time', '')
+            end_time = analysis_data.get('end_time', '')
+            
+            # Calculate duration if times are available
+            duration_text = ""
+            if start_time and end_time:
+                try:
+                    start_dt = datetime.fromisoformat(start_time.replace('Z', '+00:00'))
+                    end_dt = datetime.fromisoformat(end_time.replace('Z', '+00:00'))
+                    duration = end_dt - start_dt
+                    duration_minutes = duration.total_seconds() / 60
+                    duration_text = f"**Analysis Duration:** {duration_minutes:.1f} minutes\n\n"
+                except Exception:
+                    pass
+            
+            # Process synthesis
+            synthesis_text = ""
+            if isinstance(synthesis, list):
+                synthesis_text = "\n".join(synthesis)
+            else:
+                synthesis_text = str(synthesis)
+            
+            # Build comprehensive markdown report
+            report = f"""# 🧠 Deep Analysis Report
+
+**Analysis Goal:** {goal}
+
+{duration_text}---
+
+## 📋 Executive Summary
+
+{final_conclusion}
+
+---
+
+## 🔍 Deep Questions Explored
+
+{deep_questions}
+
+---
+
+## 📊 Analysis Plan
+
+{deep_plan}
+
+---
+
+## 💻 Analysis Code
+
+```python
+{code}
+```
+
+---
+
+## 🔬 Key Insights & Synthesis
+
+{synthesis_text}
+
+---
+
+## ✅ Final Conclusion
+
+{final_conclusion}
+
+---
+
+*This comprehensive analysis was generated using advanced AI techniques to explore your data from multiple perspectives and uncover hidden patterns.*
+"""
+
+            return report
+        
+        except Exception as e:
+            logger.log_message(f"Error formatting deep analysis report: {str(e)}", level=logging.ERROR)
+            # Return a basic fallback format
+            return f"""# Deep Analysis Report
+
+**Goal:** {analysis_data.get('goal', 'Deep Analysis')}
+
+**Status:** Analysis completed
+
+**Conclusion:** {analysis_data.get('final_conclusion', 'Analysis completed successfully')}
+
+*Report formatting encountered an issue, but the analysis was completed.*
+"""
+
+    def add_deep_analysis_message(self, chat_id: int, content: str, sender: str, 
+                                 step: str = None, user_id: Optional[int] = None) -> Dict[str, Any]:
+        """
+        Add a message to a deep analysis chat with step tracking.
+        
+        Args:
+            chat_id: ID of the chat to add the message to
+            content: Message content
+            sender: Message sender ('user', 'deep_analysis', or specific step identifier)
+            step: Optional step identifier for tracking progress
+            user_id: Optional user ID to verify ownership
+            
+        Returns:
+            Dictionary containing message information
+        """
+        session = self.Session()
+        try:
+            # Check if chat exists and belongs to the user if user_id is provided
+            query = session.query(Chat).filter(Chat.chat_id == chat_id)
+            if user_id is not None:
+                query = query.filter((Chat.user_id == user_id) | (Chat.user_id.is_(None)))
+            
+            chat = query.first()
+            if not chat:
+                raise ValueError(f"Chat with ID {chat_id} not found or access denied")
+            
+            # Verify this is a deep analysis chat
+            if not (chat.title and "[DEEP_ANALYSIS]" in chat.title):
+                raise ValueError(f"Chat with ID {chat_id} is not a deep analysis chat")
+            
+            # Add step information to content if provided
+            if step and sender == 'deep_analysis':
+                formatted_content = f"**[{step.upper()}]** {content}"
+            else:
+                formatted_content = content
+            
+            # Create a new message
+            message = Message(
+                chat_id=chat_id,
+                content=formatted_content,
+                sender=sender,
+                timestamp=datetime.utcnow()
+            )
+            session.add(message)
+            session.flush()  # Flush to get the ID before commit
+            
+            message_id = message.message_id  # Get ID now
+            session.commit()
+            
+            logger.log_message(f"Added Deep Analysis message to chat {chat_id}: {step or 'general'}", level=logging.INFO)
+            
+            return {
+                "message_id": message_id,
+                "chat_id": message.chat_id,
+                "content": message.content,
+                "sender": message.sender,
+                "timestamp": message.timestamp.isoformat(),
+                "step": step
+            }
+        except SQLAlchemyError as e:
+            session.rollback()
+            logger.log_message(f"Error adding deep analysis message: {str(e)}", level=logging.ERROR)
+            raise
+        finally:
+            session.close()
+
+    def get_deep_analysis_chats(self, user_id: Optional[int] = None, limit: int = 10, offset: int = 0) -> List[Dict[str, Any]]:
+        """
+        Get recent deep analysis chats for a user.
+        
+        Args:
+            user_id: Optional user ID to filter chats
+            limit: Maximum number of chats to return
+            offset: Number of chats to skip (for pagination)
+            
+        Returns:
+            List of dictionaries containing deep analysis chat information
+        """
+        session = self.Session()
+        try:
+            query = session.query(Chat).filter(
+                Chat.title.like('%[DEEP_ANALYSIS]%')
+            )
+            
+            # Filter by user_id if provided
+            if user_id is not None:
+                query = query.filter(Chat.user_id == user_id)
+            
+            # Apply safe limits for both SQLite and PostgreSQL
+            safe_limit = min(max(1, limit), 100)  # Between 1 and 100
+            safe_offset = max(0, offset)          # At least 0
+            
+            chats = query.order_by(Chat.created_at.desc()).limit(safe_limit).offset(safe_offset).all()
+            
+            return [
+                {
+                    "chat_id": chat.chat_id,
+                    "user_id": chat.user_id,
+                    "title": chat.title,
+                    "created_at": chat.created_at.isoformat() if chat.created_at else None,
+                    "analysis_type": "deep_analysis"
+                } for chat in chats
+            ]
+        except SQLAlchemyError as e:
+            logger.log_message(f"Error retrieving deep analysis chats: {str(e)}", level=logging.ERROR)
+            return []
+        finally:
+            session.close()
+
+    def get_deep_analysis_chat_with_summary(self, chat_id: int, user_id: Optional[int] = None) -> Dict[str, Any]:
+        """
+        Get a specific deep analysis chat with formatted summary for history display.
+        
+        Args:
+            chat_id: ID of the chat to retrieve
+            user_id: Optional user ID to verify ownership
+            
+        Returns:
+            Dictionary containing chat information with analysis summary
+        """
+        session = self.Session()
+        try:
+            # Get the basic chat info
+            chat_data = self.get_chat(chat_id, user_id)
+            
+            # Verify this is a deep analysis chat
+            if not (chat_data['title'] and "[DEEP_ANALYSIS]" in chat_data['title']):
+                raise ValueError(f"Chat with ID {chat_id} is not a deep analysis chat")
+            
+            # Find the main deep analysis message (the comprehensive one)
+            deep_analysis_message = None
+            for message in chat_data['messages']:
+                if message['sender'] == 'deep_analysis' and message['content'].startswith('# 🧠 Deep Analysis Report'):
+                    deep_analysis_message = message
+                    break
+            
+            if deep_analysis_message:
+                # Extract key information for summary display
+                content = deep_analysis_message['content']
+                
+                # Extract goal from the report
+                goal_match = content.find('**Analysis Goal:**')
+                goal = "Deep Analysis"
+                if goal_match != -1:
+                    goal_line = content[goal_match:content.find('\n', goal_match)]
+                    goal = goal_line.replace('**Analysis Goal:**', '').strip()
+                
+                # Extract executive summary/conclusion
+                summary_start = content.find('## 📋 Executive Summary')
+                summary_end = content.find('---', summary_start + 1) if summary_start != -1 else -1
+                summary = "Analysis completed"
+                
+                if summary_start != -1 and summary_end != -1:
+                    summary_section = content[summary_start:summary_end].strip()
+                    summary_lines = summary_section.split('\n')[2:]  # Skip the header
+                    summary = '\n'.join(summary_lines).strip()
+                    # Limit summary length for display
+                    if len(summary) > 200:
+                        summary = summary[:197] + "..."
+                
+                # Extract duration if available
+                duration_match = content.find('**Analysis Duration:**')
+                duration = None
+                if duration_match != -1:
+                    duration_line = content[duration_match:content.find('\n', duration_match)]
+                    duration = duration_line.replace('**Analysis Duration:**', '').strip()
+                
+                # Add analysis summary to chat data
+                chat_data['analysis_summary'] = {
+                    "goal": goal,
+                    "summary": summary,
+                    "duration": duration,
+                    "timestamp": deep_analysis_message['timestamp'],
+                    "status": "completed"
+                }
+            else:
+                # Fallback if no comprehensive message found
+                chat_data['analysis_summary'] = {
+                    "goal": chat_data['title'].replace('[DEEP_ANALYSIS]', '').strip(),
+                    "summary": "Deep analysis chat",
+                    "duration": None,
+                    "timestamp": chat_data['created_at'],
+                    "status": "unknown"
+                }
+            
+            return chat_data
+            
+        except SQLAlchemyError as e:
+            logger.log_message(f"Error retrieving deep analysis chat summary: {str(e)}", level=logging.ERROR)
+            raise
+        finally:
+            session.close()
+
+    def get_deep_analysis_history_list(self, user_id: Optional[int] = None, limit: int = 10, offset: int = 0) -> List[Dict[str, Any]]:
+        """
+        Get a list of deep analysis chats with summary information for history display.
+        
+        Args:
+            user_id: Optional user ID to filter chats
+            limit: Maximum number of chats to return
+            offset: Number of chats to skip (for pagination)
+            
+        Returns:
+            List of dictionaries containing deep analysis chat summaries
+        """
+        session = self.Session()
+        try:
+            # Get deep analysis chats with their messages
+            query = session.query(Chat).filter(
+                Chat.title.like('%[DEEP_ANALYSIS]%')
+            )
+            
+            # Filter by user_id if provided
+            if user_id is not None:
+                query = query.filter(Chat.user_id == user_id)
+            
+            # Apply safe limits
+            safe_limit = min(max(1, limit), 100)
+            safe_offset = max(0, offset)
+            
+            chats = query.order_by(Chat.created_at.desc()).limit(safe_limit).offset(safe_offset).all()
+            
+            history_list = []
+            for chat in chats:
+                # Get the comprehensive analysis message
+                deep_analysis_msg = session.query(Message).filter(
+                    Message.chat_id == chat.chat_id,
+                    Message.sender == 'deep_analysis',
+                    Message.content.like('# 🧠 Deep Analysis Report%')
+                ).first()
+                
+                if deep_analysis_msg:
+                    # Extract summary info from the comprehensive message
+                    content = deep_analysis_msg.content
+                    
+                    # Extract goal
+                    goal_match = content.find('**Analysis Goal:**')
+                    goal = chat.title.replace('[DEEP_ANALYSIS]', '').strip()
+                    if goal_match != -1:
+                        goal_line = content[goal_match:content.find('\n', goal_match)]
+                        goal = goal_line.replace('**Analysis Goal:**', '').strip()
+                    
+                    # Extract brief summary
+                    summary_start = content.find('## 📋 Executive Summary')
+                    summary = "Analysis completed"
+                    if summary_start != -1:
+                        summary_section = content[summary_start:content.find('---', summary_start + 1)]
+                        summary_lines = summary_section.split('\n')[2:]  # Skip header
+                        summary = ' '.join(summary_lines).strip()
+                        if len(summary) > 150:
+                            summary = summary[:147] + "..."
+                    
+                    # Extract duration
+                    duration_match = content.find('**Analysis Duration:**')
+                    duration = None
+                    if duration_match != -1:
+                        duration_line = content[duration_match:content.find('\n', duration_match)]
+                        duration = duration_line.replace('**Analysis Duration:**', '').strip()
+                    
+                    history_list.append({
+                        "chat_id": chat.chat_id,
+                        "title": chat.title,
+                        "goal": goal,
+                        "summary": summary,
+                        "duration": duration,
+                        "created_at": chat.created_at.isoformat() if chat.created_at else None,
+                        "updated_at": deep_analysis_msg.timestamp.isoformat() if deep_analysis_msg.timestamp else None,
+                        "status": "completed",
+                        "analysis_type": "deep_analysis"
+                    })
+                else:
+                    # Fallback for chats without comprehensive message
+                    history_list.append({
+                        "chat_id": chat.chat_id,
+                        "title": chat.title,
+                        "goal": chat.title.replace('[DEEP_ANALYSIS]', '').strip(),
+                        "summary": "Deep analysis chat",
+                        "duration": None,
+                        "created_at": chat.created_at.isoformat() if chat.created_at else None,
+                        "updated_at": chat.created_at.isoformat() if chat.created_at else None,
+                        "status": "unknown",
+                        "analysis_type": "deep_analysis"
+                    })
+            
+            return history_list
+            
+        except SQLAlchemyError as e:
+            logger.log_message(f"Error retrieving deep analysis history: {str(e)}", level=logging.ERROR)
+            return []
+        finally:
             session.close()  
