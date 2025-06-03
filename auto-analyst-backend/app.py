@@ -183,6 +183,9 @@ else:
         max_tokens=DEFAULT_MODEL_CONFIG["max_tokens"]
     )
     
+# lm = dspy.LM('openai/gpt-4o-mini', api_key=os.getenv("OPENAI_API_KEY"))
+# dspy.configure(lm=lm)
+
 # Function to get model config from session or use default
 def get_session_lm(session_state):
     """Get the appropriate LM instance for a session, or default if not configured"""
@@ -193,6 +196,7 @@ def get_session_lm(session_state):
             # Found valid session-specific model config, use it
             provider = model_config.get("provider", "openai").lower()
             if provider == "groq":
+                logger.log_message(f"Using groq model: {model_config.get('model', DEFAULT_MODEL_CONFIG['model'])}", level=logging.INFO)
                 return dspy.LM(
                     model=f"groq/{model_config.get("model", DEFAULT_MODEL_CONFIG["model"])}",
                     api_key=model_config.get("api_key", DEFAULT_MODEL_CONFIG["api_key"]),
@@ -200,6 +204,7 @@ def get_session_lm(session_state):
                     max_tokens=model_config.get("max_tokens", DEFAULT_MODEL_CONFIG["max_tokens"])
                 )
             elif provider == "anthropic":
+                logger.log_message(f"Using anthropic model: {model_config.get('model', DEFAULT_MODEL_CONFIG['model'])}", level=logging.INFO)
                 return dspy.LM(
                     model=f"anthropic/{model_config.get("model", DEFAULT_MODEL_CONFIG["model"])}",
                     api_key=model_config.get("api_key", DEFAULT_MODEL_CONFIG["api_key"]),
@@ -207,6 +212,7 @@ def get_session_lm(session_state):
                     max_tokens=model_config.get("max_tokens", DEFAULT_MODEL_CONFIG["max_tokens"])
                 )
             elif provider == "gemini":
+                logger.log_message(f"Using gemini model: {model_config.get('model', DEFAULT_MODEL_CONFIG['model'])}", level=logging.INFO)
                 return dspy.LM(
                     model=f"gemini/{model_config.get('model', DEFAULT_MODEL_CONFIG['model'])}",
                     api_key=model_config.get("api_key", DEFAULT_MODEL_CONFIG["api_key"]),
@@ -214,6 +220,7 @@ def get_session_lm(session_state):
                     max_tokens=model_config.get("max_tokens", DEFAULT_MODEL_CONFIG["max_tokens"])
                 )
             else:  # OpenAI is the default
+                logger.log_message(f"Using default model: {model_config.get('model', DEFAULT_MODEL_CONFIG['model'])}", level=logging.INFO)
                 return dspy.LM(
                     model=f"openai/{model_config.get("model", DEFAULT_MODEL_CONFIG["model"])}",
                     api_key=model_config.get("api_key", DEFAULT_MODEL_CONFIG["api_key"]),
@@ -435,7 +442,7 @@ async def chat_with_agent(
             # Use session-specific model for this request
             with dspy.context(lm=session_lm):
                 response = await asyncio.wait_for(
-                    asyncio.to_thread(agent, enhanced_query, agent_name),
+                    agent.forward(enhanced_query, agent_name),
                     timeout=REQUEST_TIMEOUT_SECONDS
                 )
         except asyncio.TimeoutError:
@@ -638,152 +645,124 @@ async def _generate_streaming_responses(session_state: dict, query: str, session
     total_inputs = ""
     usage_records = []
 
-    try:
-        # Add chat context from previous messages
-        enhanced_query = _prepare_query_with_context(query, session_state)
-        
-        # Use the session model for this specific request
-        with dspy.context(lm=session_lm):
-            try:
-                # Get the plan
-                plan_response = await asyncio.wait_for(
-                    asyncio.to_thread(session_state["ai_system"].get_plan, enhanced_query),
-                    timeout=REQUEST_TIMEOUT_SECONDS
-                )
+    # Add chat context from previous messages
+    enhanced_query = _prepare_query_with_context(query, session_state)
+    
+    # Use the session model for this specific request
+    with dspy.context(lm=session_lm):
+        try:
+            # Get the plan - planner is now async, so we need to await it
+            plan_response = await session_state["ai_system"].get_plan(enhanced_query)
+            
+            plan_description = format_response_to_markdown(
+                {"analytical_planner": plan_response}, 
+                dataframe=session_state["current_df"]
+            )
+            
+            # Check if plan is valid
+            if plan_description == RESPONSE_ERROR_INVALID_QUERY:
+                yield json.dumps({
+                    "agent": "Analytical Planner",
+                    "content": plan_description,
+                    "status": "error"
+                }) + "\n"
+                return
+            
+            yield json.dumps({
+                "agent": "Analytical Planner",
+                "content": plan_description,
+                "status": "success" if plan_description else "error"
+            }) + "\n"
+            
+            # Track planner usage
+            if session_state.get("user_id"):
+                planner_tokens = _estimate_tokens(ai_manager=app.state.ai_manager, 
+                                                input_text=enhanced_query, 
+                                                output_text=plan_description)
                 
-                plan_description = format_response_to_markdown(
-                    {"analytical_planner": plan_response}, 
-                    dataframe=session_state["current_df"]
-                )
+                usage_records.append(_create_usage_record(
+                    session_state=session_state,
+                    model_name=session_state.get("model_config", DEFAULT_MODEL_CONFIG)["model"],
+                    prompt_tokens=planner_tokens["prompt"],
+                    completion_tokens=planner_tokens["completion"],
+                    query_size=len(enhanced_query),
+                    response_size=len(plan_description),
+                    processing_time_ms=int((time.time() - overall_start_time) * 1000),
+                    is_streaming=False
+                ))
+            
+            # Execute the plan with well-managed concurrency
+            async for agent_name, inputs, response in _execute_plan_with_timeout(
+                session_state["ai_system"], enhanced_query, plan_response):
                 
-                # Check if plan is valid
-                if plan_description == RESPONSE_ERROR_INVALID_QUERY:
+                if agent_name == "plan_not_found":
                     yield json.dumps({
                         "agent": "Analytical Planner",
-                        "content": plan_description,
+                        "content": "**No plan found**\n\nPlease try again with a different query or try using a different model.",
                         "status": "error"
                     }) + "\n"
                     return
                 
+                formatted_response = format_response_to_markdown(
+                    {agent_name: response}, 
+                    dataframe=session_state["current_df"]
+                ) or "No response generated"
+
+                if formatted_response == RESPONSE_ERROR_INVALID_QUERY:
+                    yield json.dumps({
+                        "agent": agent_name,
+                        "content": formatted_response,
+                        "status": "error"
+                    }) + "\n"
+                    return
+
+                # Send response chunk
                 yield json.dumps({
-                    "agent": "Analytical Planner",
-                    "content": plan_description,
-                    "status": "success" if plan_description else "error"
+                    "agent": agent_name.split("__")[0] if "__" in agent_name else agent_name,
+                    "content": formatted_response,
+                    "status": "success" if response else "error"
                 }) + "\n"
                 
-                # Track planner usage
+                # Track agent usage for future batch DB write
                 if session_state.get("user_id"):
-                    planner_tokens = _estimate_tokens(ai_manager=app.state.ai_manager, 
-                                                    input_text=enhanced_query, 
-                                                    output_text=plan_description)
+                    agent_tokens = _estimate_tokens(
+                        ai_manager=app.state.ai_manager,
+                        input_text=str(inputs),
+                        output_text=str(response)
+                    )
                     
+                    # Get appropriate model name for code combiner
+                    if "code_combiner_agent" in agent_name and "__" in agent_name:
+                        provider = agent_name.split("__")[1]
+                        model_name = _get_model_name_for_provider(provider)
+                    else:
+                        model_name = session_state.get("model_config", DEFAULT_MODEL_CONFIG)["model"]
+
                     usage_records.append(_create_usage_record(
                         session_state=session_state,
-                        model_name=session_state.get("model_config", DEFAULT_MODEL_CONFIG)["model"],
-                        prompt_tokens=planner_tokens["prompt"],
-                        completion_tokens=planner_tokens["completion"],
-                        query_size=len(enhanced_query),
-                        response_size=len(plan_description),
+                        model_name=model_name,
+                        prompt_tokens=agent_tokens["prompt"],
+                        completion_tokens=agent_tokens["completion"],
+                        query_size=len(str(inputs)),
+                        response_size=len(str(response)),
                         processing_time_ms=int((time.time() - overall_start_time) * 1000),
-                        is_streaming=False
+                        is_streaming=True
                     ))
-                
-                # Execute the plan with well-managed concurrency
-                async for agent_name, inputs, response in _execute_plan_with_timeout(
-                    session_state["ai_system"], enhanced_query, plan_response):
-                    
-                    if agent_name == "plan_not_found":
-                        yield json.dumps({
-                            "agent": "Analytical Planner",
-                            "content": "**No plan found**\n\nPlease try again with a different query or try using a different model.",
-                            "status": "error"
-                        }) + "\n"
-                        return
-                    
-                    formatted_response = format_response_to_markdown(
-                        {agent_name: response}, 
-                        dataframe=session_state["current_df"]
-                    ) or "No response generated"
-
-                    if formatted_response == RESPONSE_ERROR_INVALID_QUERY:
-                        yield json.dumps({
-                            "agent": agent_name,
-                            "content": formatted_response,
-                            "status": "error"
-                        }) + "\n"
-                        return
                         
-                    # if "code_combiner_agent" in agent_name:
-                    #     # logger.log_message(f"[>] Code combiner response: {response}", level=logging.INFO)
-                    #     total_response += str(response) if response else ""
-                    #     total_inputs += str(inputs) if inputs else ""
-
-                    # Send response chunk
-                    yield json.dumps({
-                        "agent": agent_name.split("__")[0] if "__" in agent_name else agent_name,
-                        "content": formatted_response,
-                        "status": "success" if response else "error"
-                    }) + "\n"
-                    
-                    # Track agent usage for future batch DB write
-                    if session_state.get("user_id"):
-                        agent_tokens = _estimate_tokens(
-                            ai_manager=app.state.ai_manager,
-                            input_text=str(inputs),
-                            output_text=str(response)
-                        )
-                        
-                        # Get appropriate model name for code combiner
-                        if "code_combiner_agent" in agent_name and "__" in agent_name:
-                            provider = agent_name.split("__")[1]
-                            model_name = _get_model_name_for_provider(provider)
-                        else:
-                            model_name = session_state.get("model_config", DEFAULT_MODEL_CONFIG)["model"]
-
-                        usage_records.append(_create_usage_record(
-                            session_state=session_state,
-                            model_name=model_name,
-                            prompt_tokens=agent_tokens["prompt"],
-                            completion_tokens=agent_tokens["completion"],
-                            query_size=len(str(inputs)),
-                            response_size=len(str(response)),
-                            processing_time_ms=int((time.time() - overall_start_time) * 1000),
-                            is_streaming=True
-                        ))
-                        
-            except asyncio.TimeoutError:
-                yield json.dumps({
-                    "agent": "planner",
-                    "content": "The request timed out. Please try a simpler query.",
-                    "status": "error"
-                }) + "\n"
-                return
-            except Exception as e:
-                logger.log_message(f"Error in streaming response: {str(e)}", level=logging.ERROR)
-                yield json.dumps({
-                    "agent": "planner",
-                    "content": "An error occurred while generating responses. Please try again!",
-                    "status": "error"
-                }) + "\n"
-                
-            # Batch write usage records to DB
-            if usage_records and session_state.get("user_id"):
-                try:
-                    # In a real implementation, you would batch these writes
-                    # For now, we're writing them one by one but could be optimized
-                    ai_manager = app.state.get_ai_manager()
-                    for record in usage_records:
-                        ai_manager.save_usage_to_db(**record)
-                except Exception as db_error:
-                    logger.log_message(f"Failed to save usage records: {str(db_error)}", level=logging.ERROR)
-           
-    except Exception as e:
-        logger.log_message(f"Streaming response generation failed: {str(e)}", level=logging.ERROR)
-        yield json.dumps({
-            "agent": "planner",
-            "content": "An error occurred while generating responses. Please try again!",
-            "status": "error"
-        }) + "\n"
+        except asyncio.TimeoutError:
+            yield json.dumps({
+                "agent": "planner",
+                "content": "The request timed out. Please try a simpler query.",
+                "status": "error"
+            }) + "\n"
+            return
+        except Exception as e:
+            logger.log_message(f"Error in streaming response: {str(e)}", level=logging.ERROR)
+            yield json.dumps({
+                "agent": "planner",
+                "content": "An error occurred while generating responses. Please try again!",
+                "status": "error"
+            }) + "\n"
 
 
 def _estimate_tokens(ai_manager, input_text: str, output_text: str) -> dict:
@@ -843,7 +822,7 @@ def _get_model_name_for_provider(provider: str) -> str:
 async def _execute_plan_with_timeout(ai_system, enhanced_query, plan_response):
     """Execute the plan with timeout handling for each step"""
     try:
-        # Use asyncio.create_task to run the execute_plan coroutine
+        # Use the async generator from execute_plan directly
         async for agent_name, inputs, response in ai_system.execute_plan(enhanced_query, plan_response):
             # Yield results as they come
             yield agent_name, inputs, response
@@ -901,81 +880,6 @@ async def chat_history_name(request: dict, session_id: str = Depends(get_session
         name = app.state.get_chat_history_name_agent()(query=str(query))
         
     return {"name": name.name if name else "New Chat"}
-
-@app.post("/deep_analysis", response_model=dict)
-async def deep_analysis(
-    request: DeepAnalysisRequest,
-    request_obj: Request,
-    session_id: str = Depends(get_session_id_dependency)
-):
-    """Perform comprehensive deep analysis on the dataset"""
-    session_state = app.state.get_session_state(session_id)
-    
-    try:
-        # Extract and validate query parameters
-        _update_session_from_query_params(request_obj, session_state)
-        
-        # Validate dataset
-        if session_state["current_df"] is None:
-            raise HTTPException(status_code=400, detail=RESPONSE_ERROR_NO_DATASET)
-        
-        # Get dataset info
-        df = session_state["current_df"]
-        dtypes_info = pd.DataFrame({
-            'Column': df.columns,
-            'Data Type': df.dtypes.astype(str)
-        }).to_markdown()
-        dataset_info = f"Sample Data:\n{df.head(2).to_markdown()}\n\nData Types:\n{dtypes_info}"
-        
-        # Get session-specific model
-        session_lm = get_session_lm(session_state)
-        
-        # Use session model for deep analysis
-        with dspy.context(lm=session_lm):
-            # Get deep analyzer
-            deep_analyzer = app.state.get_deep_analyzer(session_id)
-            
-            # Make the dataset available globally for code execution
-            globals()['df'] = df
-            
-            # Execute deep analysis
-            start_time = time.time()
-            logger.log_message(f"Starting deep analysis for goal: {request.goal}", level=logging.INFO)
-            
-            return_dict = await deep_analyzer.execute_deep_analysis(
-                goal=request.goal, 
-                dataset_info=dataset_info,
-                session_df=df  # Pass the session DataFrame
-            )
-            
-            processing_time = time.time() - start_time
-            logger.log_message(f"Deep analysis completed in {processing_time:.2f} seconds", level=logging.INFO)
-            logger.log_message(f"Retrun Dict of execute deep analysis: {return_dict}")
-            # Generate HTML report
-            html_report = generate_html_report(return_dict)
-            return_dict['html_report'] = html_report
-            
-            # Track usage if user is logged in
-            if session_state.get("user_id"):
-                _track_model_usage(
-                    session_state=session_state,
-                    enhanced_query=request.goal,
-                    response=return_dict,
-                    processing_time_ms=int(processing_time * 1000)
-                )
-            
-            return {
-                "status": "success",
-                "analysis": return_dict,
-                "processing_time_seconds": round(processing_time, 2),
-                "session_id": session_id
-            }
-            
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.log_message(f"Deep analysis failed: {str(e)}", level=logging.ERROR)
-        raise HTTPException(status_code=500, detail=f"Deep analysis failed: {str(e)}")
 
 @app.post("/deep_analysis_streaming")
 async def deep_analysis_streaming(
@@ -1134,32 +1038,6 @@ async def _generate_deep_analysis_stream(session_state: dict, goal: str, session
             "message": f"Deep analysis failed: {str(e)}",
             "progress": 0
         }) + "\n"
-
-@app.get("/deep_analysis/features", response_model=dict)
-async def list_deep_analysis_features():
-    """List available deep analysis features and capabilities"""
-    return {
-        "features": {
-            "deep_questions": "Generate targeted analytical questions based on your goal",
-            "automated_planning": "Create optimized analysis plans using multiple agents",
-            "code_synthesis": "Combine and optimize code from multiple analytical agents",
-            "comprehensive_reporting": "Generate detailed HTML reports with visualizations",
-            "streaming_analysis": "Real-time progress updates during analysis execution"
-        },
-        "supported_analysis_types": [
-            "Statistical Analysis",
-            "Machine Learning",
-            "Data Visualization", 
-            "Data Preprocessing",
-            "Trend Analysis",
-            "Correlation Analysis",
-            "Predictive Modeling"
-        ],
-        "endpoints": {
-            "/deep_analysis": "Full comprehensive analysis",
-            "/deep_analysis_streaming": "Streaming analysis with progress updates"
-        }
-    }
 
 @app.post("/deep_analysis/download_report")
 async def download_html_report(

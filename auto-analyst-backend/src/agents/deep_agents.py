@@ -14,6 +14,35 @@ from dotenv import load_dotenv
 from src.utils.logger import Logger
 import logging
 import datetime
+
+# Configure Plotly to prevent auto-display
+def configure_plotly_no_display():
+    """Configure Plotly to prevent automatic browser display"""
+    try:
+        import plotly.io as pio
+        
+        # Set environment variables to prevent browser opening
+        os.environ['BROWSER'] = ''
+        os.environ['PLOTLY_RENDERER'] = 'json'
+        
+        # Configure Plotly renderers
+        pio.renderers.default = 'json'
+        pio.templates.default = 'plotly_white'
+        
+        # Disable Kaleido auto-display if available
+        try:
+            import plotly.graph_objects as go
+            # Configure figure defaults to not auto-display
+            go.Figure.show = lambda self, *args, **kwargs: None
+        except ImportError:
+            pass
+            
+    except ImportError:
+        print("Warning: Plotly not available for configuration")
+
+# Call the configuration function immediately
+configure_plotly_no_display()
+
 logger = Logger("deep_agents", see_time=True, console_log=False)
 load_dotenv()
 
@@ -171,14 +200,21 @@ def clean_and_store_code(code, session_df=None):
             flags=re.MULTILINE
         )
         cleaned_code = re.sub(r"plt\.show\(\).*?(\n|$)", '', cleaned_code)
-        # cleaned_code = re.sub(
-        #     r'(\w*_?)fig(\w*)\.show\(\)',
-        #     '',
-        #     cleaned_code
-        # )
+        # Remove all .show() method calls more comprehensively
         cleaned_code = re.sub(r'\b\w*\.show\(\)', '', cleaned_code)
-
         cleaned_code = re.sub(r'^\s*\w*fig\w*\.show\(\)\s*;?\s*$', '', cleaned_code, flags=re.MULTILINE)
+        
+        # Additional patterns to catch more .show() variations
+        cleaned_code = re.sub(r'\.show\(\s*\)', '', cleaned_code)  # .show() with optional spaces
+        cleaned_code = re.sub(r'\.show\(\s*renderer\s*=\s*[\'"][^\'\"]*[\'"]\s*\)', '', cleaned_code)  # .show(renderer='...')
+        cleaned_code = re.sub(r'plotly_figs\[\d+\]\.show\(\)', '', cleaned_code)  # plotly_figs[0].show()
+        
+        # More comprehensive patterns
+        cleaned_code = re.sub(r'\.show\([^)]*\)', '', cleaned_code)  # .show(any_args)
+        cleaned_code = re.sub(r'fig\w*\.show\(\s*[^)]*\s*\)', '', cleaned_code)  # fig*.show(any_args)
+        cleaned_code = re.sub(r'\w+_fig\w*\.show\(\s*[^)]*\s*\)', '', cleaned_code)  # *_fig*.show(any_args)
+        
+        
         with open("sample_code.py", "w") as f:
             f.write(cleaned_code)
         
@@ -217,6 +253,8 @@ def clean_and_store_code(code, session_df=None):
         except ImportError as e:
             print(f"Warning: Could not import some optional libraries: {e}")
         
+        # exec_code = cleaned_code
+        
         # Execute the code
         exec(cleaned_code, exec_globals)
         
@@ -249,6 +287,10 @@ def clean_and_store_code(code, session_df=None):
         output_dict['printed_output'] = f"Error executing code: {error_msg}"
         print(f"Code execution error: {error_msg}")
     
+    finally:
+        # Reset Plotly renderer to default after execution
+        pio.renderers.default = 'browser'
+    
     return output_dict
 
 def score_code(args, code):
@@ -264,75 +306,102 @@ def score_code(args, code):
     Returns:
         int: Score (0=error, 1=success, 2=success with plots)
     """
-    code_text = code.combined_code
+    import plotly.io as pio
+    
+    # Save original renderer
+    original_renderer = pio.renderers.default
+    
     try:
-        # Check if code contains markdown code block markers
-        if "```python" in code_text:
-            code_text = code_text.replace('"""', "'''")
-            parts = code_text.split("```python")
-            code_text = parts[1].split("```")[0] if len(parts) > 1 else code_text
-        else:
-            code_text = code_text.replace('"""', "'''")
         
-        # Fix try statement syntax
-        code_text = code_text.replace('try\n', 'try:\n')
+        code_text = code.combined_code
+        try:
+            # Check if code contains markdown code block markers
+            if "```python" in code_text:
+                code_text = code_text.replace('"""', "'''")
+                parts = code_text.split("```python")
+                code_text = parts[1].split("```")[0] if len(parts) > 1 else code_text
+            else:
+                code_text = code_text.replace('"""', "'''")
+            
+            # Fix try statement syntax
+            code_text = code_text.replace('try\n', 'try:\n')
+            
+            # Remove code patterns that would make the code unrunnable
+            invalid_patterns = [
+                '```', '"""', "'''", '\\n', '\\t', '\\r', '\\'
+            ]
+            
+            for pattern in invalid_patterns:
+                if pattern in code_text:
+                    code_text = code_text.replace(pattern, '')
+
+            import re
+            cleaned_code = re.sub(r"plt\.show\(\).*?(\n|$)", '', code_text)
+            # Remove all .show() method calls more comprehensively
+            cleaned_code = re.sub(r'\b\w*\.show\(\)', '', cleaned_code)
+            cleaned_code = re.sub(r'^\s*\w*fig\w*\.show\(\)\s*;?\s*$', '', cleaned_code, flags=re.MULTILINE)
+            
+            # Additional patterns to catch more .show() variations
+            cleaned_code = re.sub(r'\.show\(\s*\)', '', cleaned_code)  # .show() with optional spaces
+            cleaned_code = re.sub(r'\.show\(\s*renderer\s*=\s*[\'"][^\'\"]*[\'"]\s*\)', '', cleaned_code)  # .show(renderer='...')
+            cleaned_code = re.sub(r'plotly_figs\[\d+\]\.show\(\)', '', cleaned_code)  # plotly_figs[0].show()
+            
+            # More comprehensive patterns
+            cleaned_code = re.sub(r'\.show\([^)]*\)', '', cleaned_code)  # .show(any_args)
+            cleaned_code = re.sub(r'fig\w*\.show\(\s*[^)]*\s*\)', '', cleaned_code)  # fig*.show(any_args)
+            cleaned_code = re.sub(r'\w+_fig\w*\.show\(\s*[^)]*\s*\)', '', cleaned_code)  # *_fig*.show(any_args)
         
-        # Remove code patterns that would make the code unrunnable
-        invalid_patterns = [
-            '```', '"""', "'''", '\\n', '\\t', '\\r', '\\'
-        ]
-        
-        for pattern in invalid_patterns:
-            if pattern in code_text:
-                code_text = code_text.replace(pattern, '')
-                
-        # Capture stdout using StringIO
-        from io import StringIO
-        import sys
-        import plotly.graph_objects as go
-        stdout_capture = StringIO()
-        original_stdout = sys.stdout
-        sys.stdout = stdout_capture
-        
-        # Execute code in a new namespace to avoid polluting globals
-        local_vars = {}
-        exec(code_text, globals(), local_vars)
-        
-        # Capture any plotly figures from local namespace
-        plotly_figs = []
-        for var_name, var in local_vars.items():
-            if isinstance(var, go.Figure):
-                if not var.layout.title:
-                    var.update_layout(title=f"Figure {len(plotly_figs) + 1}")
-                if not var.layout.template:
-                    var.update_layout(template="plotly_white")
-                plotly_figs.append(var)
-            elif isinstance(var, (list, tuple)):
-                for item in var:
-                    if isinstance(item, go.Figure):
-                        if not item.layout.title:
-                            item.update_layout(title=f"Figure {len(plotly_figs) + 1}")
-                        if not item.layout.template:
-                            item.update_layout(template="plotly_white")
-                        plotly_figs.append(item)
-        
-        # Restore stdout and get captured output
-        sys.stdout = original_stdout
-        captured_output = stdout_capture.getvalue()
-        stdout_capture.close()
-        
-        # Calculate score based on execution and plot generation
-        score = 2 if plotly_figs else 1
-        
-        return score
-        
-    except Exception as e:
-        # Restore stdout in case of error
-        if 'stdout_capture' in locals():
+            # Capture stdout using StringIO
+            from io import StringIO
+            import sys
+            import plotly.graph_objects as go
+            stdout_capture = StringIO()
+            original_stdout = sys.stdout
+            sys.stdout = stdout_capture
+            
+            # Execute code in a new namespace to avoid polluting globals
+            local_vars = {}
+            exec(cleaned_code, globals(), local_vars)
+            
+            # Capture any plotly figures from local namespace
+            plotly_figs = []
+            for var_name, var in local_vars.items():
+                if isinstance(var, go.Figure):
+                    if not var.layout.title:
+                        var.update_layout(title=f"Figure {len(plotly_figs) + 1}")
+                    if not var.layout.template:
+                        var.update_layout(template="plotly_white")
+                    plotly_figs.append(var)
+                elif isinstance(var, (list, tuple)):
+                    for item in var:
+                        if isinstance(item, go.Figure):
+                            if not item.layout.title:
+                                item.update_layout(title=f"Figure {len(plotly_figs) + 1}")
+                            if not item.layout.template:
+                                item.update_layout(template="plotly_white")
+                            plotly_figs.append(item)
+            
+            # Restore stdout and get captured output
             sys.stdout = original_stdout
+            captured_output = stdout_capture.getvalue()
             stdout_capture.close()
             
-        return 0
+            # Calculate score based on execution and plot generation
+            score = 2 if plotly_figs else 1
+            
+            return score
+            
+        except Exception as e:
+            # Restore stdout in case of error
+            if 'stdout_capture' in locals():
+                sys.stdout = original_stdout
+                stdout_capture.close()
+                
+            return 0
+    
+    finally:
+        # Always restore original renderer
+        pio.renderers.default = original_renderer
 
 class deep_planner(dspy.Signature):
     """

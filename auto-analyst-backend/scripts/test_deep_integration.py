@@ -29,23 +29,7 @@ def test_basic_functionality():
         print("Make sure the FastAPI server is running on localhost:8000")
         return False
 
-def test_deep_analysis_features():
-    """Test deep analysis feature listing"""
-    print("\nTesting deep analysis features endpoint...")
-    try:
-        response = requests.get(f"{BASE_URL}/deep_analysis/features")
-        if response.status_code == 200:
-            features = response.json()
-            print("✅ Deep analysis features available:")
-            for feature, description in features["features"].items():
-                print(f"   - {feature}: {description}")
-            return True
-        else:
-            print(f"❌ Failed to get features: {response.status_code}")
-            return False
-    except Exception as e:
-        print(f"❌ Error testing features endpoint: {e}")
-        return False
+
 
 def test_agents_endpoint():
     """Test that agents endpoint includes deep analysis"""
@@ -202,7 +186,6 @@ def main():
     # Run tests in sequence
     tests = [
         ("Server Health", test_basic_functionality),
-        ("Deep Analysis Features", test_deep_analysis_features),
         ("Agents Endpoint", test_agents_endpoint),
         ("Deep Analysis with Housing Data", test_deep_analysis_with_housing_data),
         ("HTML Report Download", download_html_report)
