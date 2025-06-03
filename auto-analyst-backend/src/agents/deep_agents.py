@@ -177,15 +177,24 @@ def clean_and_store_code(code, session_df=None):
             cleaned_code = cleaned_code[9:]
         if cleaned_code.endswith('```'):
             cleaned_code = cleaned_code[:-3]
+            
+        # Fix try statement syntax
+        cleaned_code = cleaned_code.replace('try\n', 'try:\n')
         
-        # Remove or replace problematic Unicode characters
-        # Replace bullet points and similar characters
-        cleaned_code = cleaned_code.replace('•', '-')
-        cleaned_code = cleaned_code.replace('–', '-')
-        cleaned_code = cleaned_code.replace(''', "'")
-        cleaned_code = cleaned_code.replace(''', "'")
-        cleaned_code = cleaned_code.replace('"', '"')
-        cleaned_code = cleaned_code.replace('"', '"')
+        # Remove code patterns that would make the code unrunnable
+        invalid_patterns = [
+            '```', # Code block markers
+            '"""', # Triple double quotes
+            "'''", # Triple single quotes
+            '\\n', # Raw newlines
+            '\\t', # Raw tabs
+            '\\r', # Raw carriage returns
+            '\\',  # Raw backslashes
+        ]
+        
+        for pattern in invalid_patterns:
+            if pattern in cleaned_code:
+                cleaned_code = cleaned_code.replace(pattern, '')
         
         
         # Remove reading the csv file if it's already in the context
@@ -215,7 +224,7 @@ def clean_and_store_code(code, session_df=None):
         cleaned_code = re.sub(r'\w+_fig\w*\.show\(\s*[^)]*\s*\)', '', cleaned_code)  # *_fig*.show(any_args)
         
         
-        with open("sample_code.py", "w") as f:
+        with open("sample_code.py", "w") as f: #! ONLY FOR DEBUGGING
             f.write(cleaned_code)
         
         # Capture printed output
@@ -286,11 +295,7 @@ def clean_and_store_code(code, session_df=None):
         output_dict['error'] = error_msg
         output_dict['printed_output'] = f"Error executing code: {error_msg}"
         print(f"Code execution error: {error_msg}")
-    
-    finally:
-        # Reset Plotly renderer to default after execution
-        pio.renderers.default = 'browser'
-    
+        
     return output_dict
 
 def score_code(args, code):
@@ -307,9 +312,6 @@ def score_code(args, code):
         int: Score (0=error, 1=success, 2=success with plots)
     """
     import plotly.io as pio
-    
-    # Save original renderer
-    original_renderer = pio.renderers.default
     
     try:
         
@@ -701,10 +703,10 @@ class deep_analysis_module(dspy.Module):
         
         questions = self.deep_questions(goal = goal, dataset_info=dataset_info)
         # Convert the deep questions into a dictionary with numbered keys
-        print("Questions generated")
+        logger.log_message("Questions generated")
         question_list = [q.strip() for q in questions.deep_questions.split('\n') if q.strip()]
         deep_plan = self.deep_planner(deep_questions = questions.deep_questions, dataset=dataset_info, agents_desc=str(self.agents_desc))
-        print("Plan created")
+        logger.log_message("Plan created")
         try:
             # First try to safely evaluate the string representation of the dictionary
             plan_instructions = ast.literal_eval(deep_plan.plan_instructions)
@@ -732,7 +734,7 @@ class deep_analysis_module(dspy.Module):
                 print("Error parsing plan instructions:", e)
                 print("Raw plan instructions:", dict(deep_plan))
         # print(plan)
-        print("Instructions parsed")
+        logger.log_message("Instructions parsed")
 
         queries = [
                 dspy.Example(
@@ -759,13 +761,13 @@ class deep_analysis_module(dspy.Module):
         plotly_figs = []
         print_outputs = []
         synthesis = []
-        print("Tasks started")
+        logger.log_message("Tasks started")
         i = 0
         for task in asyncio.as_completed(tasks):
             result = await task
             summaries.append(result.summary)
             codes.append(result.code)
-            print("Done with this :"+keys[i])
+            logger.log_message("Done with this :"+keys[i])
             i+=1
 
         # Safely extract code from agent outputs
@@ -799,44 +801,42 @@ class deep_analysis_module(dspy.Module):
         
         try:
             with dspy.context(lm = dspy.LM("anthropic/claude-4-sonnet-20250514", api_key = anthropic_key, max_tokens=17000)):
-                print("Starting code generation...")
+                logger.log_message("Starting code generation...")
                 start_time = datetime.datetime.now()
-                print(f"Code generation started at: {start_time.strftime('%Y-%m-%d %H:%M:%S')}")
-                print(f"Processing {len(code)} code blocks...")
-                print(f"Plan instructions: {str(plan_instructions)[:200]}...")
+                logger.log_message(f"Code generation started at: {start_time.strftime('%Y-%m-%d %H:%M:%S')}")
+                logger.log_message(f"Processing {len(code)} code blocks...")
+                logger.log_message(f"Plan instructions: {str(plan_instructions)[:200]}...")
                 
                 # examples = [dspy.Example(deep_questions=str(questions.deep_questions), dataset_info=dataset_info,planner_instructions=str(plan_instructions), code=str(code)).with_inputs('deep_questions','dataset_info','planner_instructions','code')]
                 deep_code = deep_coder(deep_questions=str(questions.deep_questions), dataset_info=dataset_info,planner_instructions=str(plan_instructions), code=str(code))
-                print(f"Code generation completed at: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+                logger.log_message(f"Code generation completed at: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
         except Exception as e:
-            print(f"Error during code generation: {str(e)}")
-            print(f"Error type: {type(e).__name__}")
+            logger.log_message(f"Error during code generation: {str(e)}", logging.ERROR)
+            logger.log_message(f"Error type: {type(e).__name__}", logging.ERROR)
             raise e
 
         code = deep_code.combined_code
         # remove ```python ``` 
         code = code.replace('```python', '').replace('```', '')
-        with open("updated_code.py", "w") as f:
+        with open("updated_code.py", "w") as f: #! ONLY FOR DEBUGGING
             f.write(code)
-        # with open("sample_code.py", "r") as f:
-        #     code = f.read()
         
         # Execute the code with error handling and session DataFrame
         try:
             output = clean_and_store_code(code, session_df=session_df)
             logger.log_message(f"Deep Code generated: {output}")
-            print("Deep Code generated")
+            logger.log_message("Deep Code generated")
         
             # Check if execution failed
             if output.get('error'):
-                print(f"Warning: Code execution had errors: {output['error']}")
+                logger.log_message(f"Warning: Code execution had errors: {output['error']}", logging.ERROR)
                 # Continue with whatever output we have
             
             print_outputs.append(output['printed_output'])
             plotly_figs.append(output['plotly_figs'])
             
         except Exception as e:
-            print(f"Error during code execution: {str(e)}")
+            logger.log_message(f"Error during code execution: {str(e)}", logging.ERROR)
             # Create fallback output structure
             output = {
                 'exec_result': None,
@@ -851,21 +851,21 @@ class deep_analysis_module(dspy.Module):
         try:
             synthesis.append(self.deep_synthesizer(query=goal, summaries = str(summaries), print_outputs = str(output['printed_output'])))
         except Exception as e:
-            print(f"Error during synthesis: {str(e)}")
+            logger.log_message(f"Error during synthesis: {str(e)}", logging.ERROR)
             # Create fallback synthesis
             synthesis.append(type('obj', (object,), {'synthesized_report': f"Synthesis failed: {str(e)}"})())
             
         # with dspy.settings.context(lm = dspy.LM("gemini/gemini-2.5-pro-preview-03-25", api_key = os.environ['GEMINI_API_KEY'], max_tokens=35000)):
-        print("Synthesis done")
+        logger.log_message("Synthesis done")
         
         try:
             final_conclusion = self.final_conclusion(query=goal, synthesized_sections =str([s.synthesized_report for s in synthesis ]))
         except Exception as e:
-            print(f"Error during final conclusion: {str(e)}")
+            logger.log_message(f"Error during final conclusion: {str(e)}", logging.ERROR)
             # Create fallback conclusion
             final_conclusion = type('obj', (object,), {'final_conclusion': f"Final conclusion failed: {str(e)}"})()
 
-        print("Conclusion Made")
+        logger.log_message("Conclusion Made")
         return_dict = {
             'goal':goal, 
             'deep_questions':questions.deep_questions, 
@@ -876,7 +876,7 @@ class deep_analysis_module(dspy.Module):
             'synthesis':[s.synthesized_report for s in synthesis], 
             'final_conclusion':final_conclusion.final_conclusion 
         }
-
+        logger.log_message("Return dict created")
         return return_dict
 
 
