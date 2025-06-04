@@ -11,7 +11,7 @@ import ast
 import markdown
 from bs4 import BeautifulSoup
 import pandas as pd
-
+from datetime import datetime, UTC
 # Third-party imports
 import uvicorn
 from dotenv import load_dotenv
@@ -921,7 +921,7 @@ async def deep_analysis_streaming(
                     user_id=user_id,
                     goal=request.goal,
                     status="pending",
-                    start_time=datetime.utcnow(),
+                    start_time=datetime.now(UTC),
                     progress_percentage=0
                 )
                 
@@ -968,7 +968,7 @@ async def deep_analysis_streaming(
 async def _generate_deep_analysis_stream(session_state: dict, goal: str, session_lm):
     """Generate streaming responses for deep analysis"""
     # Track the start time for duration calculation
-    start_time = datetime.utcnow()
+    start_time = datetime.now(UTC)
     
     # try:
         # Get dataset info
@@ -1034,10 +1034,10 @@ async def _generate_deep_analysis_stream(session_state: dict, goal: str, session
                     # For the final step, update the HTML report
                     if step == "completed" and content:
                         report.html_report = content
-                        report.end_time = datetime.utcnow()
+                        report.end_time = datetime.now(UTC)
                         report.duration_seconds = int((report.end_time - report.start_time).total_seconds())
                         
-                    report.updated_at = datetime.utcnow()
+                    report.updated_at = datetime.now(UTC)
                     db_session.commit()
                     
             except Exception as e:
@@ -1249,7 +1249,7 @@ async def download_html_report(
                     if report:
                         # Update existing report with HTML content
                         report.html_report = html_report
-                        report.updated_at = datetime.utcnow()
+                        report.updated_at = datetime.now(UTC)
                         db_session.commit()
                         logger.log_message(f"Updated HTML report in database for UUID {report_uuid}", level=logging.INFO)
                 except Exception as e:
@@ -1262,8 +1262,7 @@ async def download_html_report(
                 # Continue even if DB storage fails
         
         # Create a filename with timestamp
-        from datetime import datetime
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        timestamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
         filename = f"deep_analysis_report_{timestamp}.html"
         
         # Return as downloadable file

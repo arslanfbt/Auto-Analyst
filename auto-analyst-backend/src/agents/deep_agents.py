@@ -10,6 +10,48 @@ from src.utils.logger import Logger
 import logging
 import datetime
 import re
+import textwrap
+
+def clean_print_statements(code_block):
+    """
+    This function cleans up any `print()` statements that might contain unwanted `\n` characters.
+    It ensures print statements are properly formatted without unnecessary newlines.
+    """
+    # This regex targets print statements, even if they have newlines inside
+    return re.sub(r'print\((.*?)(\\n.*?)(.*?)\)', r'print(\1\3)', code_block, flags=re.DOTALL)
+
+
+def clean_unicode_chars(text):
+    """
+    Clean Unicode characters that might cause encoding issues.
+    Replaces common Unicode characters with ASCII equivalents.
+    """
+    if not isinstance(text, str):
+        return text
+    
+    # Replace common Unicode characters with ASCII equivalents
+    replacements = {
+        '\u2192': ' -> ',  # Right arrow
+        '\u2190': ' <- ',  # Left arrow
+        '\u2194': ' <-> ', # Left-right arrow
+        '\u2500': '-',     # Box drawing horizontal
+        '\u2502': '|',     # Box drawing vertical
+        '\u2026': '...',   # Ellipsis
+        '\u2013': '-',     # En dash
+        '\u2014': '-',     # Em dash
+        '\u201c': '"',     # Left double quotation mark
+        '\u201d': '"',     # Right double quotation mark
+        '\u2018': "'",     # Left single quotation mark
+        '\u2019': "'",     # Right single quotation mark
+    }
+    
+    for unicode_char, ascii_replacement in replacements.items():
+        text = text.replace(unicode_char, ascii_replacement)
+    
+    # Remove any remaining non-ASCII characters
+    text = text.encode('ascii', 'ignore').decode('ascii')
+    
+    return text
 
 
 def remove_main_block(code):
@@ -239,7 +281,10 @@ def clean_and_store_code(code, session_df=None):
         
         cleaned_code = remove_main_block(cleaned_code)
         
-        with open("sample_code.py", "w") as f: #! ONLY FOR DEBUGGING
+        # Clean Unicode characters that might cause encoding issues
+        cleaned_code = clean_unicode_chars(cleaned_code)
+        
+        with open("sample_code.py", "w", encoding="utf-8") as f: #! ONLY FOR DEBUGGING
             f.write(cleaned_code)
         
         # Capture printed output
@@ -842,7 +887,7 @@ class deep_analysis_module(dspy.Module):
             code = []
             for c in codes:
                 try:
-                    cleaned_code = remove_main_block(cleaned_code)
+                    cleaned_code = remove_main_block(c)
                     if "```python" in cleaned_code:
                         parts = cleaned_code.split("```python")
                         if len(parts) > 1:
@@ -857,7 +902,7 @@ class deep_analysis_module(dspy.Module):
                     code.append(c.replace('try\n','try:\n'))
             
             # Create deep coder without asyncify to avoid source inspection issues
-            deep_coder = dspy.Refine(module=self.deep_code_synthesizer_sync, N=3, reward_fn=score_code, threshold=1.0, fail_count=2)
+            deep_coder = dspy.Refine(module=self.deep_code_synthesizer_sync, N=5, reward_fn=score_code, threshold=1.0, fail_count=10)
             
             # Check if we have valid API key
             anthropic_key = os.environ.get('ANTHROPIC_API_KEY')
@@ -893,7 +938,10 @@ class deep_analysis_module(dspy.Module):
             code = deep_code.combined_code
             code = code.replace('```python', '').replace('```', '')
             
-            with open("updated_code.py", "w") as f:  #! ONLY FOR DEBUGGING
+            # Clean Unicode characters that might cause encoding issues
+            code = clean_unicode_chars(code)
+            
+            with open("updated_code.py", "w", encoding="utf-8") as f:  #! ONLY FOR DEBUGGING
                 f.write(code)
             
             yield {

@@ -2,13 +2,12 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, Query, Body
 from pydantic import BaseModel
 from typing import List, Optional, Dict, Any, Union
-from datetime import datetime
+from datetime import datetime, UTC
 from sqlalchemy import desc
 import json
 
 from src.db.init_db import session_factory
 from src.db.schemas.models import DeepAnalysisReport, User
-from src.managers.user_manager import get_current_user
 from src.utils.logger import Logger
 
 # Initialize logger with console logging disabled
@@ -94,7 +93,7 @@ async def create_report(report: DeepAnalysisReportCreate):
                 # Create a summary from the conclusion (first 200 chars)
                 report_summary = report.final_conclusion[:200] + "..." if len(report.final_conclusion) > 200 else report.final_conclusion
                 
-            now = datetime.utcnow()
+            now = datetime.now(UTC)
             
             new_report = DeepAnalysisReport(
                 report_uuid=report.report_uuid,
@@ -436,12 +435,12 @@ async def update_report_status(report_id: int, status: str = Body(..., embed=Tru
             # Update status and end_time if completed or failed
             report.status = status
             if status in ["completed", "failed"]:
-                report.end_time = datetime.utcnow()
+                report.end_time = datetime.now(UTC)
                 if report.start_time:
                     # Calculate duration in seconds
                     report.duration_seconds = int((report.end_time - report.start_time).total_seconds())
                     
-            report.updated_at = datetime.utcnow()
+            report.updated_at = datetime.now(UTC)
             session.commit()
             session.refresh(report)
             
@@ -521,8 +520,7 @@ async def get_html_report(report_uuid: str, user_id: Optional[int] = None):
                     raise HTTPException(status_code=500, detail=f"Failed to generate HTML report: {str(e)}")
             
             # Create a filename with timestamp
-            from datetime import datetime
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            timestamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
             filename = f"deep_analysis_report_{timestamp}.html"
             
             return {
