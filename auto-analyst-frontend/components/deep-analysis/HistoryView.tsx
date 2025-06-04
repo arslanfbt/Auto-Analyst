@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { ChevronLeft, CheckCircle2, AlertCircle, Download, Trash2, Archive, Loader2 } from 'lucide-react'
+import { ChevronLeft, CheckCircle2, AlertCircle, Download, Trash2, Archive, Loader2, FileText } from 'lucide-react'
 import { Button } from '../ui/button'
 import { ScrollArea } from '../ui/scroll-area'
 import { StoredReport } from './types'
@@ -11,7 +11,7 @@ interface HistoryViewProps {
   storedReports: StoredReport[]
   selectedHistoryReport: StoredReport | null
   onSelectReport: (report: StoredReport | null) => void
-  onDownloadReport: (reportData: any) => void
+  onDownloadReport: (reportData: any, format?: 'html' | 'pdf') => void
   onDeleteReport: (reportId: string) => void
   isDownloadingReport?: boolean
 }
@@ -120,7 +120,7 @@ export default function HistoryView({
 
             <div className="flex gap-2">
               <Button 
-                onClick={() => onDownloadReport(fullReportData || selectedHistoryReport)}
+                onClick={() => onDownloadReport(fullReportData || selectedHistoryReport, 'html')}
                 variant="outline" 
                 className="flex-1 text-xs"
                 size="sm"
@@ -134,7 +134,26 @@ export default function HistoryView({
                 ) : (
                   <>
                     <Download className="w-3 h-3 mr-2" />
-                    Download
+                    HTML
+                  </>
+                )}
+              </Button>
+              <Button 
+                onClick={() => onDownloadReport(fullReportData || selectedHistoryReport, 'pdf')}
+                variant="outline" 
+                className="flex-1 text-xs"
+                size="sm"
+                disabled={isDownloadingReport}
+              >
+                {isDownloadingReport ? (
+                  <>
+                    <Loader2 className="w-3 h-3 mr-2 animate-spin" />
+                    Preparing...
+                  </>
+                ) : (
+                  <>
+                    <FileText className="w-3 h-3 mr-2" />
+                    PDF
                   </>
                 )}
               </Button>

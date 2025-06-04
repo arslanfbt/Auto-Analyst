@@ -111,7 +111,7 @@ def test_deep_analysis_with_housing_data():
     try:
         print("  Starting deep analysis...")
         response = requests.post(
-            f"{BASE_URL}/deep_analysis",
+            f"{BASE_URL}/deep_analysis_streaming",
             json=test_payload,
             headers=headers,
             timeout=12000  # 5 minute timeout for analysis

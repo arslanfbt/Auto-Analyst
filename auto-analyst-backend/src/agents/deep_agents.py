@@ -14,6 +14,7 @@ from dotenv import load_dotenv
 from src.utils.logger import Logger
 import logging
 import datetime
+import re
 
 # Configure Plotly to prevent auto-display
 def configure_plotly_no_display():
@@ -334,7 +335,6 @@ def score_code(args, code):
             if pattern in code_text:
                 code_text = code_text.replace(pattern, '')
 
-        import re
         cleaned_code = re.sub(r"plt\.show\(\).*?(\n|$)", '', code_text)
         # Remove all .show() method calls more comprehensively
         cleaned_code = re.sub(r'\b\w*\.show\(\)', '', cleaned_code)
@@ -896,8 +896,6 @@ def generate_html_report(return_dict):
         # Clean and prepare text
         text = str(text).strip()
         
-        # Handle special cases for better formatting
-        import re
         text = re.sub(r'\*\*(.*?)\*\*', r'<strong>\1</strong>', text)
         text = re.sub(r'\*(.*?)\*', r'<em>\1</em>', text)
         
@@ -955,6 +953,11 @@ def generate_html_report(return_dict):
     goal = convert_markdown_to_html(return_dict['goal'])
     questions = convert_markdown_to_html(return_dict['deep_questions'])
     conclusion = convert_conclusion_to_html(return_dict['final_conclusion'])
+    # Remove duplicate conclusion headings and clean up
+    conclusion = re.sub(r'<p>\s*\*\*\s*Conclusion\s*\*\*\s*</p>', '', conclusion, flags=re.IGNORECASE)
+    conclusion = re.sub(r'<strong>\s*Conclusion\s*</strong>', '', conclusion, flags=re.IGNORECASE)
+    conclusion = re.sub(r'<h[1-6][^>]*>\s*Conclusion\s*</h[1-6]>', '', conclusion, flags=re.IGNORECASE)
+    conclusion = re.sub(r'^\s*Conclusion\s*$', '', conclusion, flags=re.MULTILINE)
     
     # Combine synthesis content
     synthesis_content = ''
@@ -1016,10 +1019,8 @@ def generate_html_report(return_dict):
             except Exception as e:
                 print(f"Warning: Error processing visualizations: {e}")
 
-    # Combine all code
-    combined_code = return_dict.get('code', '')
-    if combined_code:
-        combined_code = convert_markdown_to_html(f"```python\n{combined_code}\n```")
+    # Prepare code for syntax highlighting
+    code_content = return_dict.get('code', '').strip()
 
     html = f"""
     <!DOCTYPE html>
@@ -1029,6 +1030,9 @@ def generate_html_report(return_dict):
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css">
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/python.min.js"></script>
         <style>
             body {{ 
                 font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; 
@@ -1038,63 +1042,69 @@ def generate_html_report(return_dict):
                 color: #374151; 
                 background-color: #f9fafb;
             }}
-            .container {{ max-width: 900px; margin: 0 auto; }}
+            .container {{ max-width: 1400px; margin: 0 auto; }}
             .section {{ 
-                margin-bottom: 20px; 
-                padding: 24px; 
+                margin-bottom: 24px; 
+                padding: 32px; 
                 background: #ffffff; 
                 border-radius: 12px; 
                 box-shadow: 0 1px 3px rgba(0,0,0,0.1);
                 border-left: 4px solid #FF7F7F;
+                page-break-inside: avoid;
             }}
             h1 {{ 
                 color: #FF7F7F; 
-                font-size: 28px; 
-                margin-bottom: 8px; 
-                font-weight: 600;
+                font-size: 32px; 
+                margin-bottom: 12px; 
+                font-weight: 700;
+                page-break-after: avoid;
             }}
             h2 {{ 
-                color: #FF6666; 
-                font-size: 20px; 
-                margin-bottom: 16px; 
+                color: #FF7F7F; 
+                font-size: 24px; 
+                margin-bottom: 20px; 
                 font-weight: 600;
                 border-bottom: 2px solid #FF7F7F;
-                padding-bottom: 8px;
+                padding-bottom: 10px;
+                page-break-after: avoid;
             }}
-            h3 {{ color: #4b5563; font-size: 16px; margin-bottom: 12px; font-weight: 600; }}
-            h4 {{ color: #6b7280; font-size: 14px; margin-bottom: 10px; font-weight: 600; }}
+            h3 {{ color: #4b5563; font-size: 18px; margin-bottom: 14px; font-weight: 600; page-break-after: avoid; }}
+            h4 {{ color: #6b7280; font-size: 16px; margin-bottom: 12px; font-weight: 600; page-break-after: avoid; }}
             .question-content {{ 
-                background: #fef2f2; 
-                padding: 16px; 
+                background: #FFF0F0; 
+                padding: 20px; 
                 border-radius: 8px; 
                 border-left: 3px solid #FF7F7F;
+                page-break-inside: avoid;
             }}
             .synthesis-content {{ 
                 background: #f9fafb; 
-                padding: 20px; 
+                padding: 24px; 
                 border-radius: 8px;
-                margin-bottom: 20px;
+                margin-bottom: 24px;
+                page-break-inside: avoid;
             }}
             .visualization-container {{ 
-                margin: 20px 0; 
-                padding: 16px; 
+                margin: 24px 0; 
+                padding: 20px; 
                 background: #ffffff; 
                 border-radius: 8px; 
                 border: 1px solid #e5e7eb;
+                page-break-inside: avoid;
             }}
             .code-section {{ 
                 background: #1f2937; 
                 color: #e5e7eb; 
                 border-radius: 8px; 
-                
                 overflow: hidden;
-                margin: 16px 0;
+                margin: 20px 0;
                 position: relative;
+                page-break-inside: avoid;
             }}
             .code-header {{ 
                 background: #FF7F7F; 
                 color: white; 
-                padding: 12px 16px; 
+                padding: 16px 20px; 
                 cursor: pointer; 
                 font-weight: 500;
                 user-select: none;
@@ -1105,64 +1115,74 @@ def generate_html_report(return_dict):
             .code-header:hover {{ background: #FF6666; }}
             .code-controls {{ 
                 display: flex; 
-                gap: 10px; 
+                gap: 12px; 
                 align-items: center; 
             }}
             .copy-button {{ 
                 background: rgba(255, 255, 255, 0.2); 
                 border: none; 
                 color: white; 
-                padding: 6px 12px; 
-                border-radius: 4px; 
+                padding: 8px 16px; 
+                border-radius: 6px; 
                 cursor: pointer; 
-                font-size: 12px;
+                font-size: 14px;
                 transition: background 0.2s;
             }}
             .copy-button:hover {{ background: rgba(255, 255, 255, 0.3); }}
             .copy-button.copied {{ background: #10b981; }}
             .code-content {{ 
-                padding: 16px; 
+                padding: 0; 
                 max-height: 0; 
                 overflow: hidden; 
                 transition: max-height 0.3s ease;
                 position: relative;
             }}
-            .code-content.expanded {{ max-height: 1000px; overflow-y: auto; }}
+            .code-content.expanded {{ max-height: 1200px; overflow-y: auto; }}
             .code-content pre {{ 
                 margin: 0; 
+                padding: 20px;
                 white-space: pre-wrap; 
                 word-wrap: break-word; 
                 font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
-                font-size: 13px;
-                line-height: 1.4;
+                font-size: 14px;
+                line-height: 1.5;
+                background: #1f2937;
+            }}
+            .code-content code {{
+                font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+                font-size: 14px;
+                line-height: 1.5;
             }}
             .conclusion-content {{ 
-                background: linear-gradient(135deg, #fef2f2 0%, #fdf2f8 100%); 
-                padding: 24px; 
+                background: linear-gradient(135deg, #FFF0F0 0%, #fdf2f8 100%); 
+                padding: 28px; 
                 border-radius: 8px; 
                 border: 1px solid #FF7F7F;
-                font-size: 15px;
+                font-size: 16px;
                 line-height: 1.7;
+                page-break-inside: avoid;
             }}
             /* Enhanced conclusion formatting */
             .conclusion-content h1, .conclusion-content h2, .conclusion-content h3, .conclusion-content h4 {{
-                color: #dc2626;
+                color: #FF7F7F;
                 margin-top: 20px;
                 margin-bottom: 12px;
                 font-weight: 600;
+                page-break-after: avoid;
             }}
             .conclusion-content h1 {{ font-size: 22px; }}
             .conclusion-content h2 {{ font-size: 18px; }}
             .conclusion-content h3 {{ font-size: 16px; }}
             .conclusion-content h4 {{ font-size: 14px; }}
             .conclusion-content ul {{ 
-                margin: 16px 0; 
-                padding-left: 24px;
+                margin: 18px 0; 
+                padding-left: 28px;
                 list-style: none;
                 position: relative;
+                page-break-inside: avoid;
             }}
             .conclusion-content ul li {{ 
-                margin-bottom: 10px; 
+                margin-bottom: 12px; 
                 line-height: 1.7;
                 position: relative;
                 padding-left: 0;
@@ -1172,16 +1192,17 @@ def generate_html_report(return_dict):
                 color: #FF7F7F;
                 font-weight: bold;
                 position: absolute;
-                left: -20px;
-                font-size: 16px;
+                left: -24px;
+                font-size: 18px;
             }}
             .conclusion-content ol {{
-                margin: 16px 0; 
-                padding-left: 24px;
+                margin: 18px 0; 
+                padding-left: 28px;
                 counter-reset: item;
+                page-break-inside: avoid;
             }}
             .conclusion-content ol li {{
-                margin-bottom: 10px; 
+                margin-bottom: 12px; 
                 line-height: 1.7;
                 display: block;
                 position: relative;
@@ -1193,67 +1214,282 @@ def generate_html_report(return_dict):
                 color: #FF7F7F;
                 font-weight: bold;
                 position: absolute;
-                left: -24px;
+                left: -28px;
             }}
             .conclusion-content p {{ 
-                margin-bottom: 16px; 
+                margin-bottom: 18px; 
                 line-height: 1.7;
             }}
             .conclusion-content strong {{ 
-                color: #dc2626; 
+                color: #FF7F7F; 
                 font-weight: 600; 
             }}
             .conclusion-content em {{ 
                 font-style: italic; 
                 color: #6b7280;
             }}
-            /* Nested lists */
-            .conclusion-content ul ul, .conclusion-content ol ol, .conclusion-content ul ol, .conclusion-content ol ul {{
-                margin: 8px 0;
-                padding-left: 20px;
-            }}
-            .conclusion-content ul ul li {{ list-style-type: circle; }}
-            .conclusion-content ul ul ul li {{ list-style-type: square; }}
-            .synthesis-section {{ margin-bottom: 16px; }}
+            .synthesis-section {{ margin-bottom: 18px; page-break-inside: avoid; }}
             .synthesis-section ul {{
-                margin: 12px 0;
-                padding-left: 20px;
+                margin: 14px 0;
+                padding-left: 24px;
                 list-style-type: disc;
             }}
             .synthesis-section ul li {{
-                margin-bottom: 6px;
+                margin-bottom: 8px;
                 line-height: 1.6;
                 list-style-type: disc;
                 display: list-item;
             }}
-            p {{ margin-bottom: 12px; }}
+            p {{ margin-bottom: 14px; }}
             /* General list styling for other sections (not conclusion) */
             ul:not(.conclusion-content ul) {{ 
-                margin-bottom: 16px; 
-                padding-left: 20px; 
+                margin-bottom: 18px; 
+                padding-left: 24px; 
                 list-style-type: disc;
             }}
             ol:not(.conclusion-content ol) {{ 
-                margin-bottom: 16px; 
-                padding-left: 20px; 
+                margin-bottom: 18px; 
+                padding-left: 24px; 
                 list-style-type: decimal;
             }}
             li:not(.conclusion-content li) {{ 
-                margin-bottom: 6px; 
+                margin-bottom: 8px; 
                 line-height: 1.6;
                 display: list-item;
             }}
+            /* Syntax highlighting overrides - matching app's theme */
+            .hljs {{
+                background: #1f2937 !important;
+                color: #e5e7eb !important;
+                padding: 20px !important;
+                border-radius: 0 !important;
+            }}
+            .hljs-keyword {{ color: #f59e0b !important; }}
+            .hljs-string {{ color: #10b981 !important; }}
+            .hljs-number {{ color: #3b82f6 !important; }}
+            .hljs-comment {{ color: #6b7280 !important; }}
+            .hljs-function {{ color: #8b5cf6 !important; }}
+            .hljs-built_in {{ color: #FF7F7F !important; }}
+            
+            /* PDF/Print Specific Styles */
+            @media print {{
+                body {{
+                    background-color: white !important;
+                    padding: 10mm;
+                    font-size: 12pt;
+                    line-height: 1.4;
+                    color: #000 !important;
+                }}
+                .container {{
+                    max-width: none;
+                    margin: 0;
+                }}
+                .section {{
+                    background: white !important;
+                    box-shadow: none !important;
+                    border-radius: 0 !important;
+                    border-left: 3pt solid #FF7F7F !important;
+                    padding: 15pt;
+                    margin-bottom: 15pt;
+                    page-break-inside: avoid;
+                }}
+                h1 {{
+                    font-size: 20pt;
+                    color: #FF7F7F !important;
+                    page-break-after: avoid;
+                    margin-top: 0;
+                }}
+                h2 {{
+                    font-size: 16pt;
+                    color: #FF7F7F !important;
+                    page-break-after: avoid;
+                    border-bottom: 1pt solid #FF7F7F !important;
+                }}
+                h3 {{
+                    font-size: 14pt;
+                    color: #333 !important;
+                    page-break-after: avoid;
+                }}
+                h4 {{
+                    font-size: 12pt;
+                    color: #333 !important;
+                    page-break-after: avoid;
+                }}
+                .question-content {{
+                    background: #f9f9f9 !important;
+                    border-left: 2pt solid #FF7F7F !important;
+                    border-radius: 0 !important;
+                    padding: 10pt;
+                    page-break-inside: avoid;
+                }}
+                .synthesis-content {{
+                    background: #f9f9f9 !important;
+                    border: 1pt solid #ddd !important;
+                    border-radius: 0 !important;
+                    padding: 10pt;
+                    page-break-inside: avoid;
+                }}
+                .conclusion-content {{
+                    background: #f9f9f9 !important;
+                    border: 1pt solid #FF7F7F !important;
+                    border-radius: 0 !important;
+                    padding: 15pt;
+                    page-break-inside: avoid;
+                }}
+                .visualization-container {{
+                    background: white !important;
+                    border: 1pt solid #ddd !important;
+                    border-radius: 0 !important;
+                    padding: 10pt;
+                    page-break-inside: avoid;
+                    max-height: 400pt;
+                    overflow: hidden;
+                }}
+                .code-section {{
+                    background: #f5f5f5 !important;
+                    color: #333 !important;
+                    border: 1pt solid #ddd !important;
+                    border-radius: 0 !important;
+                    page-break-inside: avoid;
+                }}
+                .code-header {{
+                    background: #FF7F7F !important;
+                    color: white !important;
+                    padding: 8pt;
+                    border-radius: 0 !important;
+                }}
+                .code-content {{
+                    max-height: none !important;
+                    overflow: visible !important;
+                    display: block !important;
+                }}
+                .code-content pre {{
+                    background: #f8f8f8 !important;
+                    color: #333 !important;
+                    padding: 10pt;
+                    font-size: 9pt;
+                    line-height: 1.3;
+                    white-space: pre-wrap;
+                    word-break: break-word;
+                    page-break-inside: auto;
+                }}
+                .code-controls {{
+                    display: none !important;
+                }}
+                .copy-button {{
+                    display: none !important;
+                }}
+                /* Hide interactive elements in PDF */
+                .code-header {{
+                    cursor: default !important;
+                }}
+                /* Ensure good contrast for PDF */
+                .conclusion-content ul li:before {{
+                    color: #FF7F7F !important;
+                }}
+                .conclusion-content ol li:before {{
+                    color: #FF7F7F !important;
+                }}
+                .conclusion-content strong {{
+                    color: #FF7F7F !important;
+                }}
+                /* Plotly charts - ensure they print well */
+                .plotly-graph-div {{
+                    page-break-inside: avoid !important;
+                    max-height: 350pt !important;
+                }}
+                /* Syntax highlighting for print */
+                .hljs {{
+                    background: #f8f8f8 !important;
+                    color: #333 !important;
+                    padding: 10pt !important;
+                    border: 1pt solid #ddd !important;
+                }}
+                .hljs-keyword {{ color: #d73a49 !important; }}
+                .hljs-string {{ color: #032f62 !important; }}
+                .hljs-number {{ color: #005cc5 !important; }}
+                .hljs-comment {{ color: #6a737d !important; }}
+                .hljs-function {{ color: #6f42c1 !important; }}
+                .hljs-built_in {{ color: #FF7F7F !important; }}
+                /* Page breaks */
+                .section {{
+                    page-break-before: auto;
+                    page-break-after: auto;
+                    page-break-inside: avoid;
+                }}
+                /* Footer for PDF */
+                .footer {{
+                    position: fixed;
+                    bottom: 5mm;
+                    left: 0;
+                    right: 0;
+                    text-align: center;
+                    font-size: 9pt;
+                    color: #666;
+                }}
+            }}
+            
+            /* Additional PDF optimization */
+            @page {{
+                size: A4;
+                margin: 15mm;
+                @bottom-center {{
+                    content: "Auto-Analyst Deep Analysis Report - Page " counter(page);
+                    font-size: 9pt;
+                    color: #666;
+                }}
+            }}
         </style>
         <script>
+            document.addEventListener('DOMContentLoaded', function() {{
+                hljs.highlightAll();
+                
+                // Add print-specific functionality
+                window.addEventListener('beforeprint', function() {{
+                    // Ensure all Plotly graphs are visible and properly sized for printing
+                    const plotlyDivs = document.querySelectorAll('.plotly-graph-div');
+                    plotlyDivs.forEach(function(div) {{
+                        if (window.Plotly && window.Plotly.Plots) {{
+                            try {{
+                                // Resize plot for print
+                                window.Plotly.Plots.resize(div);
+                            }} catch (e) {{
+                                console.log('Note: Could not resize plot for print:', e);
+                            }}
+                        }}
+                    }});
+                    
+                    // Expand any collapsed code sections for PDF
+                    const codeContents = document.querySelectorAll('.code-content');
+                    codeContents.forEach(function(content) {{
+                        content.classList.add('expanded');
+                    }});
+                }});
+                
+                // Add a small delay for plots to render when window loads
+                setTimeout(function() {{
+                    const plotlyDivs = document.querySelectorAll('.plotly-graph-div');
+                    if (plotlyDivs.length > 0 && window.Plotly) {{
+                        plotlyDivs.forEach(function(div) {{
+                            try {{
+                                window.Plotly.Plots.resize(div);
+                            }} catch (e) {{
+                                // Silent fail - plot may not be fully initialized yet
+                            }}
+                        }});
+                    }}
+                }}, 2000);
+            }});
+
             function toggleCode() {{
                 const content = document.getElementById('codeContent');
                 const header = document.getElementById('codeToggle');
                 if (content.classList.contains('expanded')) {{
                     content.classList.remove('expanded');
-                    header.textContent = '📝 View Generated Code (Click to expand)';
+                    header.textContent = 'View Generated Code (Click to expand)';
                 }} else {{
                     content.classList.add('expanded');
-                    header.textContent = '📝 Generated Code (Click to collapse)';
+                    header.textContent = 'Generated Code (Click to collapse)';
                 }}
             }}
 
@@ -1266,10 +1502,10 @@ def generate_html_report(return_dict):
                     
                     if (navigator.clipboard && window.isSecureContext) {{
                         navigator.clipboard.writeText(textToCopy).then(function() {{
-                            copyButton.textContent = '✓ Copied!';
+                            copyButton.textContent = 'Copied!';
                             copyButton.classList.add('copied');
                             setTimeout(function() {{
-                                copyButton.textContent = '📋 Copy';
+                                copyButton.textContent = 'Copy';
                                 copyButton.classList.remove('copied');
                             }}, 2000);
                         }}).catch(function(err) {{
@@ -1294,22 +1530,22 @@ def generate_html_report(return_dict):
                 try {{
                     const successful = document.execCommand('copy');
                     if (successful) {{
-                        button.textContent = '✓ Copied!';
+                        button.textContent = 'Copied!';
                         button.classList.add('copied');
                         setTimeout(function() {{
-                            button.textContent = '📋 Copy';
+                            button.textContent = 'Copy';
                             button.classList.remove('copied');
                         }}, 2000);
                     }} else {{
-                        button.textContent = '❌ Failed';
+                        button.textContent = 'Failed';
                         setTimeout(function() {{
-                            button.textContent = '📋 Copy';
+                            button.textContent = 'Copy';
                         }}, 2000);
                     }}
                 }} catch (err) {{
-                    button.textContent = '❌ Failed';
+                    button.textContent = 'Failed';
                     setTimeout(function() {{
-                        button.textContent = '📋 Copy';
+                        button.textContent = 'Copy';
                     }}, 2000);
                 }}
                 document.body.removeChild(textArea);
@@ -1319,7 +1555,7 @@ def generate_html_report(return_dict):
     <body>
         <div class="container">
         <div class="section">
-                <h1>🔍 Deep Analysis Report</h1>
+                <h1>Deep Analysis Report</h1>
                 <h2>Original Question</h2>
                 <div class="question-content">
                     {goal}
@@ -1327,14 +1563,14 @@ def generate_html_report(return_dict):
         </div>
 
         <div class="section">
-                <h2>🎯 Detailed Research Questions</h2>
+                <h2>Detailed Research Questions</h2>
                 <div class="question-content">
             {questions}
                 </div>
         </div>
 
         <div class="section">
-                <h2>📊 Analysis & Insights</h2>
+                <h2>Analysis & Insights</h2>
                 <div class="synthesis-content">
                     {synthesis_content}
         </div>
@@ -1344,25 +1580,25 @@ def generate_html_report(return_dict):
 
             {f'''
         <div class="section">
-                <h2>💻 Generated Code</h2>
+                <h2>Generated Code</h2>
                 <div class="code-section">
                     <div class="code-header">
                         <span id="codeToggle" onclick="toggleCode()" style="cursor: pointer;">
-                            📝 View Generated Code (Click to expand)
+                            View Generated Code (Click to expand)
                         </span>
                         <div class="code-controls">
-                            <button id="copyButton" class="copy-button" onclick="copyCode()">📋 Copy</button>
+                            <button id="copyButton" class="copy-button" onclick="copyCode()">Copy</button>
         </div>
                     </div>
                     <div class="code-content" id="codeContent">
-                        <pre id="rawCode">{return_dict.get('code', '').strip()}</pre>
+                        <pre><code id="rawCode" class="language-python">{code_content}</code></pre>
                     </div>
                 </div>
             </div>
-            ''' if combined_code else ''}
+            ''' if code_content else ''}
 
         <div class="section">
-                <h2>🎯 Conclusion</h2>
+                <h2>Conclusion</h2>
             <div class="conclusion-content">
                 {conclusion}
                 </div>
