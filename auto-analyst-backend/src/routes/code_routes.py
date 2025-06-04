@@ -230,13 +230,13 @@ def fix_code_with_dspy(code: str, error: str, dataset_context: str = ""):
     Returns:
         str: The fixed code
     """
-    gemini = dspy.LM("gemini/gemini-2.5-pro-preview-03-25", api_key = os.environ['GEMINI_API_KEY'], max_tokens=5000)
-    
+    # gemini = dspy.LM("gemini/gemini-2.5-pro-preview-03-25", api_key = os.environ['GEMINI_API_KEY'], max_tokens=5000)
+    claude = dspy.LM("anthropic/claude-3-5-sonnet-latest", api_key = os.environ['ANTHROPIC_API_KEY'], max_tokens=5000)
     # Find the blocks with errors
     faulty_blocks = identify_error_blocks(code, error)
     if not faulty_blocks:
         # If no specific errors found, fix the entire code
-        with dspy.context(lm=gemini):
+        with dspy.context(lm=claude):
             code_fixer = dspy.ChainOfThought(code_fix)
             result = code_fixer(
                 dataset_context=str(dataset_context) or "",
@@ -249,7 +249,7 @@ def fix_code_with_dspy(code: str, error: str, dataset_context: str = ""):
     result_code = code.replace("```python", "").replace("```", "")
     
     # Fix each faulty block separatelyw
-    with dspy.context(lm=gemini):
+    with dspy.context(lm=claude):
         code_fixer = dspy.ChainOfThought(code_fix)
         
         for agent_name, block_code, specific_error in faulty_blocks:
@@ -359,8 +359,9 @@ def get_dataset_context(df):
         return "Could not generate dataset context information."
 
 def edit_code_with_dspy(original_code: str, user_prompt: str, dataset_context: str = ""):
-    gemini = dspy.LM("claude-3-5-sonnet-latest", api_key = os.environ['ANTHROPIC_API_KEY'], max_tokens=3000)
-    with dspy.context(lm=gemini):
+    # gemini = dspy.LM("claude-3-5-sonnet-latest", api_key = os.environ['ANTHROPIC_API_KEY'], max_tokens=3000)
+    claude = dspy.LM("anthropic/claude-3-5-sonnet-latest", api_key = os.environ['ANTHROPIC_API_KEY'], max_tokens=3000)
+    with dspy.context(lm=claude):
         code_editor = dspy.ChainOfThought(code_edit)
         
         result = code_editor(

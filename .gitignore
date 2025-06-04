@@ -8,3 +8,4 @@ terraform/.tfvars
 try*
 
 *.db
+*_code*.py

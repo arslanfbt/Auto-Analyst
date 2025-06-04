@@ -17,6 +17,7 @@ class User(Base):
     # Add relationship for cascade options
     chats = relationship("Chat", back_populates="user", cascade="all, delete-orphan")
     usage_records = relationship("ModelUsage", back_populates="user")
+    deep_analysis_reports = relationship("DeepAnalysisReport", back_populates="user", cascade="all, delete-orphan")
 
 # Define the Chats table
 class Chat(Base):
@@ -121,5 +122,54 @@ class MessageFeedback(Base):
     
     # Relationship
     message = relationship("Message", back_populates="feedback")
+
+class DeepAnalysisReport(Base):
+    """Stores deep analysis reports with comprehensive analysis data and metadata."""
+    __tablename__ = 'deep_analysis_reports'
+    
+    report_id = Column(Integer, primary_key=True, autoincrement=True)
+    report_uuid = Column(String(100), unique=True, nullable=False)  # Frontend generated ID
+    user_id = Column(Integer, ForeignKey('users.user_id', ondelete="CASCADE"), nullable=True)
+    
+    # Analysis objective and status
+    goal = Column(Text, nullable=False)  # The analysis objective/question
+    status = Column(String(20), nullable=False, default='pending')  # 'pending', 'running', 'completed', 'failed'
+    
+    # Timing information
+    start_time = Column(DateTime, default=datetime.utcnow)
+    end_time = Column(DateTime, nullable=True)
+    duration_seconds = Column(Integer, nullable=True)  # Calculated duration
+    
+    # Analysis components (stored as text/JSON)
+    deep_questions = Column(Text, nullable=True)  # Generated analytical questions
+    deep_plan = Column(Text, nullable=True)  # Analysis plan
+    summaries = Column(JSON, nullable=True)  # Array of analysis summaries
+    analysis_code = Column(Text, nullable=True)  # Generated Python code
+    plotly_figures = Column(JSON, nullable=True)  # Array of Plotly figure data
+    synthesis = Column(JSON, nullable=True)  # Array of synthesis insights
+    final_conclusion = Column(Text, nullable=True)  # Final analysis conclusion
+    
+    # Report output
+    html_report = Column(Text, nullable=True)  # Complete HTML report
+    report_summary = Column(Text, nullable=True)  # Brief summary for listing
+    
+    # Execution tracking
+    progress_percentage = Column(Integer, default=0)  # Progress 0-100
+    steps_completed = Column(JSON, nullable=True)  # Array of completed step names
+    error_message = Column(Text, nullable=True)  # Error details if failed
+    
+    # Model and cost tracking
+    model_provider = Column(String(50), nullable=True)
+    model_name = Column(String(100), nullable=True)
+    total_tokens_used = Column(Integer, default=0)
+    estimated_cost = Column(Float, default=0.0)  # Cost in USD
+    credits_consumed = Column(Integer, default=0)  # Credits deducted for this analysis
+    
+    # Metadata
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationships
+    user = relationship("User", back_populates="deep_analysis_reports")
     
     

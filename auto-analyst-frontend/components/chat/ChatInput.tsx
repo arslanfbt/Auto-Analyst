@@ -35,6 +35,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+// Deep Analysis imports
+import { DeepAnalysisSidebar, DeepAnalysisButton } from '../deep-analysis'
+import CommandSuggestions from './CommandSuggestions'
+import { useUserSubscriptionStore } from '@/lib/store/userSubscriptionStore'
+import { useFeatureAccess } from '@/lib/hooks/useFeatureAccess'
+import { UserSubscription } from '@/lib/features/feature-access'
+import { useDeepAnalysis } from '@/lib/contexts/deep-analysis-context'
 
 // const PREVIEW_API_URL = 'http://localhost:8000';
 const PREVIEW_API_URL = API_URL;
@@ -72,6 +79,8 @@ interface ChatInputProps {
   disabled?: boolean
   isLoading?: boolean
   onStopGeneration?: () => void
+  chatId?: number | null
+  userId?: number | null
 }
 
 // Add these interface definitions after the other interfaces
@@ -175,7 +184,7 @@ const DatasetUploadInfo = ({ uploadId }: { uploadId: number }) => {
 const ChatInput = forwardRef<
   { handlePreviewDefaultDataset: () => void, handleSilentDefaultDataset: () => void },
   ChatInputProps
->(({ onSendMessage, onFileUpload, disabled, isLoading, onStopGeneration }, ref) => {
+>(({ onSendMessage, onFileUpload, disabled, isLoading, onStopGeneration, chatId, userId }, ref) => {
   const [message, setMessage] = useState("")
   const [fileUpload, setFileUpload] = useState<FileUpload | null>(null)
   const fileInputRef = React.useRef<HTMLInputElement>(null)
@@ -211,6 +220,22 @@ const ChatInput = forwardRef<
   const [isGeneratingDescription, setIsGeneratingDescription] = useState(false);
   // Add state for sheet selection dialog
   const [showSheetSelector, setShowSheetSelector] = useState(false)
+  
+  // Deep Analysis states
+  const { state: deepAnalysisState } = useDeepAnalysis()
+  const [showDeepAnalysisSidebar, setShowDeepAnalysisSidebar] = useState(false)
+  const [showCommandSuggestions, setShowCommandSuggestions] = useState(false)
+  const [commandQuery, setCommandQuery] = useState('')
+  
+  // Get subscription from store instead of manual construction
+  const { subscription } = useUserSubscriptionStore()
+  const deepAnalysisAccess = useFeatureAccess('DEEP_ANALYSIS', subscription)
+  
+  // Debug logging to verify the subscription store and feature access
+  React.useEffect(() => {
+    console.log('Subscription from store:', subscription)
+    console.log('Deep analysis access result:', deepAnalysisAccess)
+  }, [subscription, deepAnalysisAccess])
 
   // Expose handlePreviewDefaultDataset to parent
   useImperativeHandle(ref, () => ({
@@ -858,6 +883,12 @@ const ChatInput = forwardRef<
   }
 
   useEffect(() => {
+    // Don't show agent suggestions when command suggestions are active
+    if (message.startsWith('/')) {
+      setShowSuggestions(false)
+      return
+    }
+    
     const agents: AgentSuggestion[] = [
       { name: "data_viz_agent", description: "Specializes in data visualization" },
       { name: "sk_learn_agent", description: "Handles machine learning tasks" },
@@ -909,8 +940,21 @@ const ChatInput = forwardRef<
   }, [message, cursorPosition])
 
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setMessage(e.target.value)
+    const value = e.target.value
+    setMessage(value)
     setCursorPosition(e.target.selectionStart || 0)
+    
+    // Check for command suggestions when user types "/" at the beginning
+    if (value.startsWith('/') && !value.includes('@')) {
+      setCommandQuery(value)
+      setShowCommandSuggestions(true)
+      // Hide agent suggestions when showing commands
+      setShowSuggestions(false)
+    } else {
+      setShowCommandSuggestions(false)
+      setCommandQuery('')
+    }
+    
     if (inputRef.current) {
       inputRef.current.style.height = "auto"
       inputRef.current.style.height = `${inputRef.current.scrollHeight}px`
@@ -941,6 +985,24 @@ const ChatInput = forwardRef<
       }, 0)
       
       setShowSuggestions(false)
+    }
+  }
+
+  const handleCommandSelect = (command: any) => {
+    setShowCommandSuggestions(false)
+    setCommandQuery('')
+    
+    if (command.id === 'deep-analysis') {
+      // Show deep analysis sidebar
+      setShowDeepAnalysisSidebar(true)
+      setMessage('')
+    } else {
+      // For other commands, replace the "/" with the command
+      setMessage(`${command.name} `)
+      // Focus back to input
+      setTimeout(() => {
+        inputRef.current?.focus()
+      }, 0)
     }
   }
 
@@ -1941,6 +2003,14 @@ const ChatInput = forwardRef<
                   <MessageSquare className="w-4 h-4" />
                   Send Feedback
                 </button>
+                
+                <DeepAnalysisButton
+                  onClick={() => setShowDeepAnalysisSidebar(true)}
+                  userProfile={subscription}
+                  showLabel={true}
+                  size="sm"
+                  isRunning={deepAnalysisState.isRunning}
+                />
               </div>
 
               {/* Credit exhaustion message with reset date */}
@@ -1999,6 +2069,15 @@ const ChatInput = forwardRef<
                       rows={1}
                     />
                     <AnimatePresence>
+                      {/* Command Suggestions */}
+                      <CommandSuggestions
+                        query={commandQuery}
+                        isVisible={showCommandSuggestions}
+                        onSelectCommand={handleCommandSelect}
+                        userProfile={subscription}
+                      />
+                      
+                      {/* Agent Suggestions */}
                       {showSuggestions && (
                         <motion.div
                           initial={{ opacity: 0, y: 10 }}
@@ -2393,6 +2472,14 @@ const ChatInput = forwardRef<
           </div>
         </DialogContent>
       </Dialog>
+      
+      {/* Deep Analysis Sidebar */}
+      <DeepAnalysisSidebar
+        isOpen={showDeepAnalysisSidebar}
+        onClose={() => setShowDeepAnalysisSidebar(false)}
+        sessionId={sessionId || undefined}
+        userId={userId}
+      />
     </>
   )
 })
