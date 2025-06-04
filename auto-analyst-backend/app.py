@@ -970,206 +970,206 @@ async def _generate_deep_analysis_stream(session_state: dict, goal: str, session
     # Track the start time for duration calculation
     start_time = datetime.now(UTC)
     
-    # try:
+    try:
         # Get dataset info
-    df = session_state["current_df"]
-    dtypes_info = pd.DataFrame({
-        'Column': df.columns,
-        'Data Type': df.dtypes.astype(str)
-    }).to_markdown()
-    dataset_info = f"Sample Data:\n{df.head(2).to_markdown()}\n\nData Types:\n{dtypes_info}"
-    
-    # Get report info from session state
-    report_id = session_state.get("current_deep_analysis_id")
-    report_uuid = session_state.get("current_deep_analysis_uuid")
-    user_id = session_state.get("user_id")
-    
-    # Helper function to update report in database
-    async def update_report_in_db(status, progress, step=None, content=None):
-        if not report_id:
-            return
-            
-        try:
-            from src.db.init_db import session_factory
-            from src.db.schemas.models import DeepAnalysisReport
-            
-            db_session = session_factory()
-            
-            try:
-                report = db_session.query(DeepAnalysisReport).filter(DeepAnalysisReport.report_id == report_id).first()
-                
-                if report:
-                    report.status = status
-                    report.progress_percentage = progress
-                    
-                    # Update step-specific fields if provided
-                    if step == "questions" and content:
-                        report.deep_questions = content
-                    elif step == "planning" and content:
-                        report.deep_plan = content
-                    elif step == "analysis" and content:
-                        # For analysis step, we get the full object with multiple fields
-                        if isinstance(content, dict):
-                            # Update fields from content if they exist
-                            if "deep_questions" in content and content["deep_questions"]:
-                                report.deep_questions = content["deep_questions"]
-                            if "deep_plan" in content and content["deep_plan"]:
-                                report.deep_plan = content["deep_plan"]
-                            if "code" in content and content["code"]:
-                                report.analysis_code = content["code"]
-                            if "final_conclusion" in content and content["final_conclusion"]:
-                                report.final_conclusion = content["final_conclusion"]
-                                # Also update summary from conclusion
-                                conclusion = content["final_conclusion"]
-                                report.report_summary = conclusion[:200] + "..." if len(conclusion) > 200 else conclusion
-                            
-                            # Handle JSON fields
-                            if "summaries" in content and content["summaries"]:
-                                report.summaries = json.dumps(content["summaries"])
-                            if "plotly_figs" in content and content["plotly_figs"]:
-                                report.plotly_figures = json.dumps(content["plotly_figs"])
-                            if "synthesis" in content and content["synthesis"]:
-                                report.synthesis = json.dumps(content["synthesis"])
-                    
-                    # For the final step, update the HTML report
-                    if step == "completed" and content:
-                        report.html_report = content
-                        report.end_time = datetime.now(UTC)
-                        report.duration_seconds = int((report.end_time - report.start_time).total_seconds())
-                        
-                    report.updated_at = datetime.now(UTC)
-                    db_session.commit()
-                    
-            except Exception as e:
-                db_session.rollback()
-                logger.log_message(f"Error updating deep analysis report: {str(e)}", level=logging.ERROR)
-            finally:
-                db_session.close()
-        except Exception as e:
-            logger.log_message(f"Database operation failed: {str(e)}", level=logging.ERROR)
-    
-    # Use session model for this request
-    with dspy.context(lm=session_lm):
-        # Send initial status
-        yield json.dumps({
-            "step": "initialization",
-            "status": "starting",
-            "message": "Initializing deep analysis...",
-            "progress": 5
-        }) + "\n"
+        df = session_state["current_df"]
+        dtypes_info = pd.DataFrame({
+            'Column': df.columns,
+            'Data Type': df.dtypes.astype(str)
+        }).to_markdown()
+        dataset_info = f"Sample Data:\n{df.head(2).to_markdown()}\n\nData Types:\n{dtypes_info}"
         
-        # Update DB status to running
-        await update_report_in_db("running", 5)
+        # Get report info from session state
+        report_id = session_state.get("current_deep_analysis_id")
+        report_uuid = session_state.get("current_deep_analysis_uuid")
+        user_id = session_state.get("user_id")
         
-        # Get deep analyzer
-        deep_analyzer = app.state.get_deep_analyzer(session_state.get("session_id", "default"))
-        
-        # Make the dataset available globally for code execution
-        globals()['df'] = df
-        
-        # Use the new streaming method and forward all progress updates
-        final_result = None
-        async for update in deep_analyzer.execute_deep_analysis_streaming(
-            goal=goal,
-            dataset_info=dataset_info,
-            session_df=df
-        ):
-            # Convert the update to the expected format and yield it
-            if update.get("step") == "questions" and update.get("status") == "completed":
-                # Update DB with questions
-                await update_report_in_db("running", update.get("progress", 0), "questions", update.get("content"))
-            elif update.get("step") == "planning" and update.get("status") == "completed":
-                # Update DB with planning
-                await update_report_in_db("running", update.get("progress", 0), "planning", update.get("content"))
-            elif update.get("step") == "conclusion" and update.get("status") == "completed":
-                # Store the final result for later processing
-                final_result = update.get("final_result")
-                
-                # Convert Plotly figures to JSON format for network transmission
-                if final_result:
-                    import plotly.io
-                    serialized_return_dict = final_result.copy()
-                    
-                    # Convert plotly_figs to JSON format
-                    if 'plotly_figs' in serialized_return_dict and serialized_return_dict['plotly_figs']:
-                        json_figs = []
-                        for fig_list in serialized_return_dict['plotly_figs']:
-                            if isinstance(fig_list, list):
-                                json_fig_list = []
-                                for fig in fig_list:
-                                    if hasattr(fig, 'to_json'):  # Check if it's a Plotly figure
-                                        json_fig_list.append(plotly.io.to_json(fig))
-                                    else:
-                                        json_fig_list.append(fig)  # Already JSON or other format
-                                json_figs.append(json_fig_list)
-                            else:
-                                # Single figure case
-                                if hasattr(fig_list, 'to_json'):
-                                    json_figs.append(plotly.io.to_json(fig_list))
-                                else:
-                                    json_figs.append(fig_list)
-                        serialized_return_dict['plotly_figs'] = json_figs
-                    
-                    # Update DB with analysis results
-                    await update_report_in_db("running", update.get("progress", 0), "analysis", serialized_return_dict)
-                    
-                    # Generate HTML report using the original final_result with Figure objects
-                    html_report = generate_html_report(final_result)
-                    
-                    # Send the analysis results
-                    yield json.dumps({
-                        "step": "analysis",
-                        "status": "completed",
-                        "content": serialized_return_dict,
-                        "progress": 90
-                    }) + "\n"
-                    
-                    # Send report generation status
-                    yield json.dumps({
-                        "step": "report",
-                        "status": "processing",
-                        "message": "Generating final report...",
-                        "progress": 95
-                    }) + "\n"
-                    
-                    # Send final completion
-                    yield json.dumps({
-                        "step": "completed",
-                        "status": "success",
-                        "analysis": serialized_return_dict,
-                        "html_report": html_report,
-                        "progress": 100
-                    }) + "\n"
-                    
-                    # Update DB with completed report
-                    await update_report_in_db("completed", 100, "completed", html_report)
-            elif update.get("step") == "error":
-                # Forward error directly
-                yield json.dumps(update) + "\n"
-                await update_report_in_db("failed", 0)
+        # Helper function to update report in database
+        async def update_report_in_db(status, progress, step=None, content=None):
+            if not report_id:
                 return
-            else:
-                # Forward all other progress updates
-                yield json.dumps(update) + "\n"
+                
+            try:
+                from src.db.init_db import session_factory
+                from src.db.schemas.models import DeepAnalysisReport
+                
+                db_session = session_factory()
+                
+                try:
+                    report = db_session.query(DeepAnalysisReport).filter(DeepAnalysisReport.report_id == report_id).first()
+                    
+                    if report:
+                        report.status = status
+                        report.progress_percentage = progress
+                        
+                        # Update step-specific fields if provided
+                        if step == "questions" and content:
+                            report.deep_questions = content
+                        elif step == "planning" and content:
+                            report.deep_plan = content
+                        elif step == "analysis" and content:
+                            # For analysis step, we get the full object with multiple fields
+                            if isinstance(content, dict):
+                                # Update fields from content if they exist
+                                if "deep_questions" in content and content["deep_questions"]:
+                                    report.deep_questions = content["deep_questions"]
+                                if "deep_plan" in content and content["deep_plan"]:
+                                    report.deep_plan = content["deep_plan"]
+                                if "code" in content and content["code"]:
+                                    report.analysis_code = content["code"]
+                                if "final_conclusion" in content and content["final_conclusion"]:
+                                    report.final_conclusion = content["final_conclusion"]
+                                    # Also update summary from conclusion
+                                    conclusion = content["final_conclusion"]
+                                    report.report_summary = conclusion[:200] + "..." if len(conclusion) > 200 else conclusion
+                                
+                                # Handle JSON fields
+                                if "summaries" in content and content["summaries"]:
+                                    report.summaries = json.dumps(content["summaries"])
+                                if "plotly_figs" in content and content["plotly_figs"]:
+                                    report.plotly_figures = json.dumps(content["plotly_figs"])
+                                if "synthesis" in content and content["synthesis"]:
+                                    report.synthesis = json.dumps(content["synthesis"])
+                        
+                        # For the final step, update the HTML report
+                        if step == "completed" and content:
+                            report.html_report = content
+                            report.end_time = datetime.now(UTC)
+                            report.duration_seconds = int((report.end_time - report.start_time).total_seconds())
+                            
+                        report.updated_at = datetime.now(UTC)
+                        db_session.commit()
+                        
+                except Exception as e:
+                    db_session.rollback()
+                    logger.log_message(f"Error updating deep analysis report: {str(e)}", level=logging.ERROR)
+                finally:
+                    db_session.close()
+            except Exception as e:
+                logger.log_message(f"Database operation failed: {str(e)}", level=logging.ERROR)
         
-        # If we somehow exit the loop without getting a final result, that's an error
-        if not final_result:
+        # Use session model for this request
+        with dspy.context(lm=session_lm):
+            # Send initial status
             yield json.dumps({
-                "step": "error",
-                "status": "failed",
-                "message": "Deep analysis completed without final result",
-                "progress": 0
+                "step": "initialization",
+                "status": "starting",
+                "message": "Initializing deep analysis...",
+                "progress": 5
             }) + "\n"
-            await update_report_in_db("failed", 0)
+            
+            # Update DB status to running
+            await update_report_in_db("running", 5)
+            
+            # Get deep analyzer
+            deep_analyzer = app.state.get_deep_analyzer(session_state.get("session_id", "default"))
+            
+            # Make the dataset available globally for code execution
+            globals()['df'] = df
+            
+            # Use the new streaming method and forward all progress updates
+            final_result = None
+            async for update in deep_analyzer.execute_deep_analysis_streaming(
+                goal=goal,
+                dataset_info=dataset_info,
+                session_df=df
+            ):
+                # Convert the update to the expected format and yield it
+                if update.get("step") == "questions" and update.get("status") == "completed":
+                    # Update DB with questions
+                    await update_report_in_db("running", update.get("progress", 0), "questions", update.get("content"))
+                elif update.get("step") == "planning" and update.get("status") == "completed":
+                    # Update DB with planning
+                    await update_report_in_db("running", update.get("progress", 0), "planning", update.get("content"))
+                elif update.get("step") == "conclusion" and update.get("status") == "completed":
+                    # Store the final result for later processing
+                    final_result = update.get("final_result")
+                    
+                    # Convert Plotly figures to JSON format for network transmission
+                    if final_result:
+                        import plotly.io
+                        serialized_return_dict = final_result.copy()
+                        
+                        # Convert plotly_figs to JSON format
+                        if 'plotly_figs' in serialized_return_dict and serialized_return_dict['plotly_figs']:
+                            json_figs = []
+                            for fig_list in serialized_return_dict['plotly_figs']:
+                                if isinstance(fig_list, list):
+                                    json_fig_list = []
+                                    for fig in fig_list:
+                                        if hasattr(fig, 'to_json'):  # Check if it's a Plotly figure
+                                            json_fig_list.append(plotly.io.to_json(fig))
+                                        else:
+                                            json_fig_list.append(fig)  # Already JSON or other format
+                                    json_figs.append(json_fig_list)
+                                else:
+                                    # Single figure case
+                                    if hasattr(fig_list, 'to_json'):
+                                        json_figs.append(plotly.io.to_json(fig_list))
+                                    else:
+                                        json_figs.append(fig_list)
+                            serialized_return_dict['plotly_figs'] = json_figs
+                        
+                        # Update DB with analysis results
+                        await update_report_in_db("running", update.get("progress", 0), "analysis", serialized_return_dict)
+                        
+                        # Generate HTML report using the original final_result with Figure objects
+                        html_report = generate_html_report(final_result)
+                        
+                        # Send the analysis results
+                        yield json.dumps({
+                            "step": "analysis",
+                            "status": "completed",
+                            "content": serialized_return_dict,
+                            "progress": 90
+                        }) + "\n"
+                        
+                        # Send report generation status
+                        yield json.dumps({
+                            "step": "report",
+                            "status": "processing",
+                            "message": "Generating final report...",
+                            "progress": 95
+                        }) + "\n"
+                        
+                        # Send final completion
+                        yield json.dumps({
+                            "step": "completed",
+                            "status": "success",
+                            "analysis": serialized_return_dict,
+                            "html_report": html_report,
+                            "progress": 100
+                        }) + "\n"
+                        
+                        # Update DB with completed report
+                        await update_report_in_db("completed", 100, "completed", html_report)
+                elif update.get("step") == "error":
+                    # Forward error directly
+                    yield json.dumps(update) + "\n"
+                    await update_report_in_db("failed", 0)
+                    return
+                else:
+                    # Forward all other progress updates
+                    yield json.dumps(update) + "\n"
+            
+            # If we somehow exit the loop without getting a final result, that's an error
+            if not final_result:
+                yield json.dumps({
+                    "step": "error",
+                    "status": "failed",
+                    "message": "Deep analysis completed without final result",
+                    "progress": 0
+                }) + "\n"
+                await update_report_in_db("failed", 0)
         
-    # except Exception as e:
-    #     logger.log_message(f"Error in deep analysis stream: {str(e)}", level=logging.ERROR)
-    #     yield json.dumps({
-    #         "step": "error",
-    #         "status": "failed",
-    #         "message": f"Deep analysis failed: {str(e)}",
-    #         "progress": 0
-    #     }) + "\n"
+    except Exception as e:
+        logger.log_message(f"Error in deep analysis stream: {str(e)}", level=logging.ERROR)
+        yield json.dumps({
+            "step": "error",
+            "status": "failed",
+            "message": f"Deep analysis failed: {str(e)}",
+            "progress": 0
+        }) + "\n"
         
         # Update DB with error status
         if 'update_report_in_db' in locals() and session_state.get("current_deep_analysis_id"):

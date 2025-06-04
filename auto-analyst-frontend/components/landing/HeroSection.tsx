@@ -31,7 +31,8 @@ const screenshots = [
     src: "/images/screenshots/autoanalyst-deepanalysis.png",
     alt: "Deep analysis screenshot",
     title: "Deep Analysis",
-    description: "Auto-Analyst provides deep analysis capabilities, including multi-step analysis, automated planning, and detailed insights."
+    description: "Multi-step analysis, automated planning, and detailed insights, with the ability to download and share reports in PDF or HTML formats."
+
   }
   // {
   //   src: "/images/screenshots/autoanalyst-code-edit.png",
