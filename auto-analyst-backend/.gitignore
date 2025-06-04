@@ -27,7 +27,7 @@ migrations/
 alembic.ini
 
 
-*-2.db
+*.db
 
 schema*.md
 
