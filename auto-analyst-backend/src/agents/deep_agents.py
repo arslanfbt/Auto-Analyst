@@ -1,11 +1,6 @@
 import asyncio
-from src.agents.agents import planner_data_viz_agent, planner_preprocessing_agent, planner_sk_learn_agent, planner_statistical_analytics_agent
-from src.agents.agents import data_viz_agent,preprocessing_agent,statistical_analytics_agent,sk_learn_agent
-from src.agents.agents import PLANNER_AGENTS_WITH_DESCRIPTION, AGENTS_WITH_DESCRIPTION
 import ast
 import json
-import markdown
-from bs4 import BeautifulSoup
 import os
 import dspy
 import numpy as np
@@ -15,6 +10,30 @@ from src.utils.logger import Logger
 import logging
 import datetime
 import re
+
+
+def remove_main_block(code):
+    # Match the __main__ block
+    pattern = r'(?m)^if\s+__name__\s*==\s*["\']__main__["\']\s*:\s*\n((?:\s+.*\n?)*)'
+    
+    match = re.search(pattern, code)
+    if match:
+        main_block = match.group(1)
+        
+        # Dedent the code block inside __main__
+        dedented_block = textwrap.dedent(main_block)
+        
+        # Remove \n from any print statements in the block (also handling multiline print cases)
+        dedented_block = clean_print_statements(dedented_block)
+        # Replace the block in the code
+        cleaned_code = re.sub(pattern, dedented_block, code)
+        
+        # Optional: Remove leading newlines if any
+        cleaned_code = cleaned_code.strip()
+        
+        return cleaned_code
+    return code
+
 
 # Configure Plotly to prevent auto-display
 def configure_plotly_no_display():
@@ -173,11 +192,8 @@ def clean_and_store_code(code, session_df=None):
         # Clean the code
         cleaned_code = code.strip()
         
-        # Remove any markdown code blocks
-        if cleaned_code.startswith('```python'):
-            cleaned_code = cleaned_code[9:]
-        if cleaned_code.endswith('```'):
-            cleaned_code = cleaned_code[:-3]
+        cleaned_code = cleaned_code.replace('```python', '').replace('```', '')
+
     
         # Fix try statement syntax
         cleaned_code = cleaned_code.replace('try\n', 'try:\n')
@@ -185,12 +201,9 @@ def clean_and_store_code(code, session_df=None):
         # Remove code patterns that would make the code unrunnable
         invalid_patterns = [
             '```', # Code block markers
-            '"""', # Triple double quotes
-            "'''", # Triple single quotes
             '\\n', # Raw newlines
             '\\t', # Raw tabs
             '\\r', # Raw carriage returns
-            '\\',  # Raw backslashes
         ]
         
         for pattern in invalid_patterns:
@@ -224,6 +237,7 @@ def clean_and_store_code(code, session_df=None):
         cleaned_code = re.sub(r'fig\w*\.show\(\s*[^)]*\s*\)', '', cleaned_code)  # fig*.show(any_args)
         cleaned_code = re.sub(r'\w+_fig\w*\.show\(\s*[^)]*\s*\)', '', cleaned_code)  # *_fig*.show(any_args)
         
+        cleaned_code = remove_main_block(cleaned_code)
         
         with open("sample_code.py", "w") as f: #! ONLY FOR DEBUGGING
             f.write(cleaned_code)
@@ -315,20 +329,14 @@ def score_code(args, code):
 
     code_text = code.combined_code
     try:
-        # Check if code contains markdown code block markers
-        if "```python" in code_text:
-            code_text = code_text.replace('"""', "'''")
-            parts = code_text.split("```python")
-            code_text = parts[1].split("```")[0] if len(parts) > 1 else code_text
-        else:
-            code_text = code_text.replace('"""', "'''")
-        
         # Fix try statement syntax
         code_text = code_text.replace('try\n', 'try:\n')
+        code_text = code_text.replace('```python', '').replace('```', '')
+        
         
         # Remove code patterns that would make the code unrunnable
         invalid_patterns = [
-            '```', '"""', "'''", '\\n', '\\t', '\\r', '\\'
+            '```', '\\n', '\\t', '\\r'
         ]
         
         for pattern in invalid_patterns:
@@ -349,7 +357,8 @@ def score_code(args, code):
         cleaned_code = re.sub(r'\.show\([^)]*\)', '', cleaned_code)  # .show(any_args)
         cleaned_code = re.sub(r'fig\w*\.show\(\s*[^)]*\s*\)', '', cleaned_code)  # fig*.show(any_args)
         cleaned_code = re.sub(r'\w+_fig\w*\.show\(\s*[^)]*\s*\)', '', cleaned_code)  # *_fig*.show(any_args)
-                
+            
+        cleaned_code = remove_main_block(cleaned_code)
         # Capture stdout using StringIO
         from io import StringIO
         import sys
@@ -680,57 +689,102 @@ Chart Styling Guidelines:
 class deep_analysis_module(dspy.Module):
     def __init__(self,agents, agents_desc):
         self.agents = agents
-        self.deep_questions = dspy.Predict(deep_questions)
-        self.deep_planner = dspy.ChainOfThought(deep_planner)
-        self.deep_synthesizer = dspy.ChainOfThought(deep_synthesizer)
-        self.deep_code_synthesizer = dspy.Predict(deep_code_synthesizer)
-        self.deep_plan_fixer = dspy.ChainOfThought(deep_plan_fixer)
-        self.deep_code_fixer = dspy.ChainOfThought(deep_code_fix)
+        # Make all dspy operations async using asyncify
+        self.deep_questions = dspy.asyncify(dspy.Predict(deep_questions))
+        self.deep_planner = dspy.asyncify(dspy.ChainOfThought(deep_planner))
+        self.deep_synthesizer = dspy.asyncify(dspy.ChainOfThought(deep_synthesizer))
+        # Keep both asyncified and non-asyncified versions for code synthesizer
+        self.deep_code_synthesizer_sync = dspy.Predict(deep_code_synthesizer)  # For dspy.Refine
+        self.deep_code_synthesizer = dspy.asyncify(dspy.Predict(deep_code_synthesizer))  # For async use
+        self.deep_plan_fixer = dspy.asyncify(dspy.ChainOfThought(deep_plan_fixer))
+        self.deep_code_fixer = dspy.asyncify(dspy.ChainOfThought(deep_code_fix))
         self.styling_instructions = chart_instructions
         self.agents_desc = agents_desc
-        self.final_conclusion = dspy.ChainOfThought(final_conclusion)
+        self.final_conclusion = dspy.asyncify(dspy.ChainOfThought(final_conclusion))
 
-    async def execute_deep_analysis(self, goal, dataset_info, session_df=None):
+    async def execute_deep_analysis_streaming(self, goal, dataset_info, session_df=None):
+        """
+        Execute deep analysis with streaming progress updates.
+        This is an async generator that yields progress updates incrementally.
+        """
         # Make the session DataFrame available globally for code execution
         if session_df is not None:
             globals()['df'] = session_df
         
-        questions = self.deep_questions(goal = goal, dataset_info=dataset_info)
-        # Convert the deep questions into a dictionary with numbered keys
-        logger.log_message("Questions generated")
-        question_list = [q.strip() for q in questions.deep_questions.split('\n') if q.strip()]
-        deep_plan = self.deep_planner(deep_questions = questions.deep_questions, dataset=dataset_info, agents_desc=str(self.agents_desc))
-        logger.log_message("Plan created")
         try:
-            # First try to safely evaluate the string representation of the dictionary
-            plan_instructions = ast.literal_eval(deep_plan.plan_instructions)
-            if not isinstance(plan_instructions, dict):
-                # If not a dict, try to parse it as JSON
-                plan_instructions = json.loads(deep_plan.plan_instructions)
-            keys = [key for key in plan_instructions.keys()]
+            # Step 1: Generate deep questions (20% progress)
+            yield {
+                "step": "questions",
+                "status": "processing",
+                "message": "Generating analytical questions...",
+                "progress": 10
+            }
+            
+            questions = await self.deep_questions(goal=goal, dataset_info=dataset_info)
+            logger.log_message("Questions generated")
+            
+            yield {
+                "step": "questions", 
+                "status": "completed",
+                "content": questions.deep_questions,
+                "progress": 20
+            }
+            
+            # Step 2: Create analysis plan (40% progress)
+            yield {
+                "step": "planning",
+                "status": "processing", 
+                "message": "Creating analysis plan...",
+                "progress": 25
+            }
+            
+            question_list = [q.strip() for q in questions.deep_questions.split('\n') if q.strip()]
+            deep_plan = await self.deep_planner(
+                deep_questions=questions.deep_questions, 
+                dataset=dataset_info, 
+                agents_desc=str(self.agents_desc)
+            )
+            logger.log_message("Plan created")
+            
+            # Parse plan instructions
             try:
+                plan_instructions = ast.literal_eval(deep_plan.plan_instructions)
+                if not isinstance(plan_instructions, dict):
+                    plan_instructions = json.loads(deep_plan.plan_instructions)
+                keys = [key for key in plan_instructions.keys()]
+                
                 if not all(key in self.agents for key in keys):
                     raise ValueError(f"Invalid agent key(s) in plan instructions. Available agents: {list(self.agents.keys())}")
-            except ValueError as e:
-                print("Error with agent keys:", e)
-                raise e
-
-        except (ValueError, SyntaxError, json.JSONDecodeError) as e:
-            try:
-                deep_plan = self.deep_plan_fixer(plan_instructions=deep_plan.plan_instructions)
-                plan_instructions = ast.literal_eval(deep_plan.fixed_plan)
-                if not isinstance(plan_instructions, dict):
-                    # If not a dict, try to parse it as JSON
-                    plan_instructions = json.loads(deep_plan.fixed_plan)
-                keys = [key for key in plan_instructions.keys()]
-
-            except (ValueError, SyntaxError, json.JSONDecodeError) as e: 
-                print("Error parsing plan instructions:", e)
-                print("Raw plan instructions:", dict(deep_plan))
-        # print(plan)
-        logger.log_message("Instructions parsed")
-
-        queries = [
+                    
+            except (ValueError, SyntaxError, json.JSONDecodeError) as e:
+                try:
+                    deep_plan = await self.deep_plan_fixer(plan_instructions=deep_plan.plan_instructions)
+                    plan_instructions = ast.literal_eval(deep_plan.fixed_plan)
+                    if not isinstance(plan_instructions, dict):
+                        plan_instructions = json.loads(deep_plan.fixed_plan)
+                    keys = [key for key in plan_instructions.keys()]
+                except (ValueError, SyntaxError, json.JSONDecodeError) as e:
+                    logger.log_message(f"Error parsing plan instructions: {e}", logging.ERROR)
+                    raise e
+            
+            logger.log_message("Instructions parsed")
+            
+            yield {
+                "step": "planning",
+                "status": "completed",
+                "content": deep_plan.plan_instructions,
+                "progress": 40
+            }
+            
+            # Step 3: Execute agent tasks (60% progress)
+            yield {
+                "step": "agent_execution",
+                "status": "processing",
+                "message": "Executing analysis agents...",
+                "progress": 45
+            }
+            
+            queries = [
                 dspy.Example(
                     goal=questions.deep_questions,
                     dataset=dataset_info,
@@ -745,924 +799,242 @@ class deep_analysis_module(dspy.Module):
                 for key in keys
             ]
 
-        tasks = [self.agents[key](**q) for q, key in zip(queries,keys)]
-        
+            tasks = [self.agents[key](**q) for q, key in zip(queries, keys)]
+            
+            # Await all tasks to complete
+            summaries = []
+            codes = []
+            logger.log_message("Tasks started")
+            
+            completed_tasks = 0
+            for task in asyncio.as_completed(tasks):
+                result = await task
+                summaries.append(result.summary)
+                codes.append(result.code)
+                completed_tasks += 1
+                
+                # Update progress for each completed agent
+                agent_progress = 45 + (completed_tasks / len(tasks)) * 15  # 45% to 60%
+                yield {
+                    "step": "agent_execution",
+                    "status": "processing",
+                    "message": f"Completed {completed_tasks}/{len(tasks)} analysis agents...",
+                    "progress": int(agent_progress)
+                }
+                logger.log_message(f"Done with agent {completed_tasks}/{len(tasks)}")
 
-        
-        # Await all tasks to complete
-        summaries = []
-        codes = []
-        plotly_figs = []
-        print_outputs = []
-        synthesis = []
-        logger.log_message("Tasks started")
-        i = 0
-        for task in asyncio.as_completed(tasks):
-            result = await task
-            summaries.append(result.summary)
-            codes.append(result.code)
-            logger.log_message("Done with this :"+keys[i])
-            i+=1
-
-        # Safely extract code from agent outputs
-        # code = ''.join(codes)
-        code = []
-        for c in codes:
-            try:
-                # Clean the code string first
-                cleaned_code = c.replace('"""',"'''")
-                if "```python" in cleaned_code:
-                    # Extract code between python markers
-                    parts = cleaned_code.split("```python")
-                    if len(parts) > 1:
-                        extracted = parts[1].split("```")[0] if "```" in parts[1] else parts[1]
-                        code.append(extracted.replace('try\n','try:\n'))
+            yield {
+                "step": "agent_execution",
+                "status": "completed", 
+                "message": "All analysis agents completed",
+                "progress": 60
+            }
+            
+            # Step 4: Code synthesis (80% progress)
+            yield {
+                "step": "code_synthesis",
+                "status": "processing",
+                "message": "Synthesizing analysis code...",
+                "progress": 65
+            }
+            
+            # Safely extract code from agent outputs
+            code = []
+            for c in codes:
+                try:
+                    cleaned_code = remove_main_block(cleaned_code)
+                    if "```python" in cleaned_code:
+                        parts = cleaned_code.split("```python")
+                        if len(parts) > 1:
+                            extracted = parts[1].split("```")[0] if "```" in parts[1] else parts[1]
+                            code.append(extracted.replace('try\n','try:\n'))
+                        else:
+                            code.append(cleaned_code.replace('try\n','try:\n'))
                     else:
                         code.append(cleaned_code.replace('try\n','try:\n'))
-                else:
-                    # No python markers, use the whole code
-                    code.append(cleaned_code.replace('try\n','try:\n'))
-            except Exception as e:
-                print(f"Warning: Error processing code block: {e}")
-                # Fall back to the original code if processing fails
-                code.append(c.replace('try\n','try:\n'))
-        deep_coder = dspy.Refine(module=self.deep_code_synthesizer, N=3, reward_fn=score_code, threshold=1.0, fail_count=2)
-        
-        # Check if we have valid API key
-        anthropic_key = os.environ.get('ANTHROPIC_API_KEY')
-        if not anthropic_key:
-            raise ValueError("ANTHROPIC_API_KEY environment variable is not set")
-        
-        try:
-            with dspy.context(lm = dspy.LM("anthropic/claude-4-sonnet-20250514", api_key = anthropic_key, max_tokens=17000)):
+                except Exception as e:
+                    logger.log_message(f"Warning: Error processing code block: {e}", logging.WARNING)
+                    code.append(c.replace('try\n','try:\n'))
+            
+            # Create deep coder without asyncify to avoid source inspection issues
+            deep_coder = dspy.Refine(module=self.deep_code_synthesizer_sync, N=3, reward_fn=score_code, threshold=1.0, fail_count=2)
+            
+            # Check if we have valid API key
+            anthropic_key = os.environ.get('ANTHROPIC_API_KEY')
+            if not anthropic_key:
+                raise ValueError("ANTHROPIC_API_KEY environment variable is not set")
+            
+            try:
+                # Create the LM instance that will be used
+                thread_lm = dspy.LM("anthropic/claude-4-sonnet-20250514", api_key=anthropic_key, max_tokens=17000)
+                
                 logger.log_message("Starting code generation...")
                 start_time = datetime.datetime.now()
                 logger.log_message(f"Code generation started at: {start_time.strftime('%Y-%m-%d %H:%M:%S')}")
-                logger.log_message(f"Processing {len(code)} code blocks...")
-                logger.log_message(f"Plan instructions: {str(plan_instructions)[:200]}...")
                 
-                # examples = [dspy.Example(deep_questions=str(questions.deep_questions), dataset_info=dataset_info,planner_instructions=str(plan_instructions), code=str(code)).with_inputs('deep_questions','dataset_info','planner_instructions','code')]
-                deep_code = deep_coder(deep_questions=str(questions.deep_questions), dataset_info=dataset_info,planner_instructions=str(plan_instructions), code=str(code))
+                # Define the blocking function to run in thread
+                def run_deep_coder():
+                    with dspy.context(lm=thread_lm):
+                        return deep_coder(
+                            deep_questions=str(questions.deep_questions), 
+                            dataset_info=dataset_info,
+                            planner_instructions=str(plan_instructions), 
+                            code=str(code)
+                        )
+                
+                # Use asyncio.to_thread for better async integration
+                deep_code = await asyncio.to_thread(run_deep_coder)
+                
                 logger.log_message(f"Code generation completed at: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-        except Exception as e:
-            logger.log_message(f"Error during code generation: {str(e)}", logging.ERROR)
-            logger.log_message(f"Error type: {type(e).__name__}", logging.ERROR)
-            raise e
-
-        code = deep_code.combined_code
-        # remove ```python ``` 
-        code = code.replace('```python', '').replace('```', '')
-        with open("updated_code.py", "w") as f: #! ONLY FOR DEBUGGING
-            f.write(code)
-        
-        # Execute the code with error handling and session DataFrame
-        try:
-            output = clean_and_store_code(code, session_df=session_df)
-            logger.log_message(f"Deep Code generated: {output}")
-            logger.log_message("Deep Code generated")
-        
-            # Check if execution failed
-            if output.get('error'):
-                logger.log_message(f"Warning: Code execution had errors: {output['error']}", logging.ERROR)
-                # Continue with whatever output we have
-        
-            print_outputs.append(output['printed_output'])
-            plotly_figs.append(output['plotly_figs'])
-            
-        except Exception as e:
-            logger.log_message(f"Error during code execution: {str(e)}", logging.ERROR)
-            # Create fallback output structure
-            output = {
-                'exec_result': None,
-                'printed_output': f"Code execution failed: {str(e)}",
-                'plotly_figs': [],
-                'error': str(e)
-            }
-            # print_outputs.append(output['printed_output'])
-            # plotly_figs.append(output['plotly_figs'])
-
-        # with dspy.settings.context(lm = dspy.LM("gemini/gemini-2.5-pro-preview-03-25", api_key = os.environ['GEMINI_API_KEY'], max_tokens=25000)):
-        try:
-            synthesis.append(self.deep_synthesizer(query=goal, summaries = str(summaries), print_outputs = str(output['printed_output'])))
-        except Exception as e:
-            logger.log_message(f"Error during synthesis: {str(e)}", logging.ERROR)
-            # Create fallback synthesis
-            synthesis.append(type('obj', (object,), {'synthesized_report': f"Synthesis failed: {str(e)}"})())
-            
-        # with dspy.settings.context(lm = dspy.LM("gemini/gemini-2.5-pro-preview-03-25", api_key = os.environ['GEMINI_API_KEY'], max_tokens=35000)):
-        logger.log_message("Synthesis done")
-        
-        try:
-            final_conclusion = self.final_conclusion(query=goal, synthesized_sections =str([s.synthesized_report for s in synthesis ]))
-        except Exception as e:
-            logger.log_message(f"Error during final conclusion: {str(e)}", logging.ERROR)
-            # Create fallback conclusion
-            final_conclusion = type('obj', (object,), {'final_conclusion': f"Final conclusion failed: {str(e)}"})()
-
-        logger.log_message("Conclusion Made")
-        return_dict = {
-            'goal':goal, 
-            'deep_questions':questions.deep_questions, 
-            'deep_plan':deep_plan.plan_instructions, 
-            'summaries':summaries, 
-            'code':code,
-            'plotly_figs':plotly_figs,
-            'synthesis':[s.synthesized_report for s in synthesis], 
-            'final_conclusion':final_conclusion.final_conclusion 
-        }
-        logger.log_message("Return dict created")
-        return return_dict
-
-
-
-
-
-def generate_html_report(return_dict):
-    """Generate a clean HTML report focusing on visualizations and key insights"""
-    
-    def convert_markdown_to_html(text):
-        """Convert markdown text to HTML safely"""
-        if not text:
-            return ""
-        # Don't escape HTML characters before markdown conversion
-        html = markdown.markdown(str(text), extensions=['tables', 'fenced_code', 'nl2br'])
-        # Use BeautifulSoup to clean up but preserve structure
-        soup = BeautifulSoup(html, 'html.parser')
-        return str(soup)
-
-    def convert_conclusion_to_html(text):
-        """Special conversion for conclusion with custom bullet point handling"""
-        if not text:
-            return ""
-        
-        # Clean and prepare text
-        text = str(text).strip()
-        
-        text = re.sub(r'\*\*(.*?)\*\*', r'<strong>\1</strong>', text)
-        text = re.sub(r'\*(.*?)\*', r'<em>\1</em>', text)
-        
-        # Handle bullet points that might not be properly formatted
-        lines = text.split('\n')
-        processed_lines = []
-        in_list = False
-        
-        for line in lines:
-            line = line.strip()
-            if not line:
-                if in_list:
-                    processed_lines.append('</ul>')
-                    in_list = False
-                processed_lines.append('')
-                continue
-                
-            # Check if line looks like a bullet point
-            if (line.startswith('- ') or line.startswith('• ') or 
-                line.startswith('* ') or re.match(r'^\d+\.\s', line)):
-                
-                if not in_list:
-                    processed_lines.append('<ul>')
-                    in_list = True
-                
-                # Clean the bullet point
-                clean_line = re.sub(r'^[-•*]\s*', '', line)
-                clean_line = re.sub(r'^\d+\.\s*', '', clean_line)
-                processed_lines.append(f'<li>{clean_line}</li>')
-            else:
-                if in_list:
-                    processed_lines.append('</ul>')
-                    in_list = False
-                processed_lines.append(f'<p>{line}</p>')
-        
-        if in_list:
-            processed_lines.append('</ul>')
-        
-        # Join and clean up
-        html_content = '\n'.join(processed_lines)
-        
-        # Clean up extra tags and escape HTML entities, but preserve our intentional HTML
-        html_content = html_content.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
-        
-        # Restore our intentional HTML tags
-        html_content = html_content.replace('&lt;strong&gt;', '<strong>').replace('&lt;/strong&gt;', '</strong>')
-        html_content = html_content.replace('&lt;em&gt;', '<em>').replace('&lt;/em&gt;', '</em>')
-        html_content = html_content.replace('&lt;ul&gt;', '<ul>').replace('&lt;/ul&gt;', '</ul>')
-        html_content = html_content.replace('&lt;li&gt;', '<li>').replace('&lt;/li&gt;', '</li>')
-        html_content = html_content.replace('&lt;p&gt;', '<p>').replace('&lt;/p&gt;', '</p>')
-        
-        return html_content
-
-    # Convert key text sections to HTML
-    goal = convert_markdown_to_html(return_dict['goal'])
-    questions = convert_markdown_to_html(return_dict['deep_questions'])
-    conclusion = convert_conclusion_to_html(return_dict['final_conclusion'])
-    # Remove duplicate conclusion headings and clean up
-    conclusion = re.sub(r'<p>\s*\*\*\s*Conclusion\s*\*\*\s*</p>', '', conclusion, flags=re.IGNORECASE)
-    conclusion = re.sub(r'<strong>\s*Conclusion\s*</strong>', '', conclusion, flags=re.IGNORECASE)
-    conclusion = re.sub(r'<h[1-6][^>]*>\s*Conclusion\s*</h[1-6]>', '', conclusion, flags=re.IGNORECASE)
-    conclusion = re.sub(r'^\s*Conclusion\s*$', '', conclusion, flags=re.MULTILINE)
-    
-    # Combine synthesis content
-    synthesis_content = ''
-    if return_dict.get('synthesis'):
-        synthesis_content = ''.join(f'<div class="synthesis-section">{convert_markdown_to_html(s)}</div>' 
-                       for s in return_dict['synthesis'])
-
-    # Generate all visualizations for synthesis section
-    all_visualizations = []
-    if return_dict['plotly_figs']:
-        for fig_group in return_dict['plotly_figs']:
-            try:
-                if isinstance(fig_group, list):
-                    # Handle list of figures
-                    for fig in fig_group:
-                        if hasattr(fig, 'to_html'):
-                            # It's a Plotly Figure object
-                            all_visualizations.append(fig.to_html(
-                                full_html=False, 
-                                include_plotlyjs='cdn', 
-                                config={'displayModeBar': True}
-                            ))
-                        elif isinstance(fig, str):
-                            # It might be JSON format - try to convert
-                            try:
-                                import plotly.io
-                                fig_obj = plotly.io.from_json(fig)
-                                all_visualizations.append(fig_obj.to_html(
-                                    full_html=False, 
-                                    include_plotlyjs='cdn', 
-                                    config={'displayModeBar': True}
-                                ))
-                            except Exception as e:
-                                print(f"Warning: Could not process figure JSON: {e}")
-                                continue
-                else:
-                    # Single figure
-                    if hasattr(fig_group, 'to_html'):
-                        # It's a Plotly Figure object
-                        all_visualizations.append(fig_group.to_html(
-                            full_html=False, 
-                            include_plotlyjs='cdn', 
-                            config={'displayModeBar': True}
-                        ))
-                    elif isinstance(fig_group, str):
-                        # It might be JSON format - try to convert
-                        try:
-                            import plotly.io
-                            fig_obj = plotly.io.from_json(fig_group)
-                            all_visualizations.append(fig_obj.to_html(
-                                full_html=False, 
-                                include_plotlyjs='cdn', 
-                                config={'displayModeBar': True}
-                            ))
-                        except Exception as e:
-                            print(f"Warning: Could not process figure JSON: {e}")
-                            continue
-                            
             except Exception as e:
-                print(f"Warning: Error processing visualizations: {e}")
+                logger.log_message(f"Error during code generation: {str(e)}", logging.ERROR)
+                raise e
 
-    # Prepare code for syntax highlighting
-    code_content = return_dict.get('code', '').strip()
-
-    html = f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <title>Deep Analysis Report</title>
-        <meta charset="utf-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1">
-        <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
-        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css">
-        <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
-        <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/python.min.js"></script>
-        <style>
-            body {{ 
-                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; 
-                line-height: 1.6; 
-                margin: 0; 
-                padding: 20px; 
-                color: #374151; 
-                background-color: #f9fafb;
-            }}
-            .container {{ max-width: 1400px; margin: 0 auto; }}
-            .section {{ 
-                margin-bottom: 24px; 
-                padding: 32px; 
-                background: #ffffff; 
-                border-radius: 12px; 
-                box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-                border-left: 4px solid #FF7F7F;
-                page-break-inside: avoid;
-            }}
-            h1 {{ 
-                color: #FF7F7F; 
-                font-size: 32px; 
-                margin-bottom: 12px; 
-                font-weight: 700;
-                page-break-after: avoid;
-            }}
-            h2 {{ 
-                color: #FF7F7F; 
-                font-size: 24px; 
-                margin-bottom: 20px; 
-                font-weight: 600;
-                border-bottom: 2px solid #FF7F7F;
-                padding-bottom: 10px;
-                page-break-after: avoid;
-            }}
-            h3 {{ color: #4b5563; font-size: 18px; margin-bottom: 14px; font-weight: 600; page-break-after: avoid; }}
-            h4 {{ color: #6b7280; font-size: 16px; margin-bottom: 12px; font-weight: 600; page-break-after: avoid; }}
-            .question-content {{ 
-                background: #FFF0F0; 
-                padding: 20px; 
-                border-radius: 8px; 
-                border-left: 3px solid #FF7F7F;
-                page-break-inside: avoid;
-            }}
-            .synthesis-content {{ 
-                background: #f9fafb; 
-                padding: 24px; 
-                border-radius: 8px;
-                margin-bottom: 24px;
-                page-break-inside: avoid;
-            }}
-            .visualization-container {{ 
-                margin: 24px 0; 
-                padding: 20px; 
-                background: #ffffff; 
-                border-radius: 8px; 
-                border: 1px solid #e5e7eb;
-                page-break-inside: avoid;
-            }}
-            .code-section {{ 
-                background: #1f2937; 
-                color: #e5e7eb; 
-                border-radius: 8px; 
-                overflow: hidden;
-                margin: 20px 0;
-                position: relative;
-                page-break-inside: avoid;
-            }}
-            .code-header {{ 
-                background: #FF7F7F; 
-                color: white; 
-                padding: 16px 20px; 
-                cursor: pointer; 
-                font-weight: 500;
-                user-select: none;
-                display: flex;
-                justify-content: space-between;
-                align-items: center;
-            }}
-            .code-header:hover {{ background: #FF6666; }}
-            .code-controls {{ 
-                display: flex; 
-                gap: 12px; 
-                align-items: center; 
-            }}
-            .copy-button {{ 
-                background: rgba(255, 255, 255, 0.2); 
-                border: none; 
-                color: white; 
-                padding: 8px 16px; 
-                border-radius: 6px; 
-                cursor: pointer; 
-                font-size: 14px;
-                transition: background 0.2s;
-            }}
-            .copy-button:hover {{ background: rgba(255, 255, 255, 0.3); }}
-            .copy-button.copied {{ background: #10b981; }}
-            .code-content {{ 
-                padding: 0; 
-                max-height: 0; 
-                overflow: hidden; 
-                transition: max-height 0.3s ease;
-                position: relative;
-            }}
-            .code-content.expanded {{ max-height: 1200px; overflow-y: auto; }}
-            .code-content pre {{ 
-                margin: 0; 
-                padding: 20px;
-                white-space: pre-wrap; 
-                word-wrap: break-word; 
-                font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
-                font-size: 14px;
-                line-height: 1.5;
-                background: #1f2937;
-            }}
-            .code-content code {{
-                font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
-                font-size: 14px;
-                line-height: 1.5;
-            }}
-            .conclusion-content {{ 
-                background: linear-gradient(135deg, #FFF0F0 0%, #fdf2f8 100%); 
-                padding: 28px; 
-                border-radius: 8px; 
-                border: 1px solid #FF7F7F;
-                font-size: 16px;
-                line-height: 1.7;
-                page-break-inside: avoid;
-            }}
-            /* Enhanced conclusion formatting */
-            .conclusion-content h1, .conclusion-content h2, .conclusion-content h3, .conclusion-content h4 {{
-                color: #FF7F7F;
-                margin-top: 20px;
-                margin-bottom: 12px;
-                font-weight: 600;
-                page-break-after: avoid;
-            }}
-            .conclusion-content h1 {{ font-size: 22px; }}
-            .conclusion-content h2 {{ font-size: 18px; }}
-            .conclusion-content h3 {{ font-size: 16px; }}
-            .conclusion-content h4 {{ font-size: 14px; }}
-            .conclusion-content ul {{ 
-                margin: 18px 0; 
-                padding-left: 28px;
-                list-style: none;
-                position: relative;
-                page-break-inside: avoid;
-            }}
-            .conclusion-content ul li {{ 
-                margin-bottom: 12px; 
-                line-height: 1.7;
-                position: relative;
-                padding-left: 0;
-            }}
-            .conclusion-content ul li:before {{
-                content: "•";
-                color: #FF7F7F;
-                font-weight: bold;
-                position: absolute;
-                left: -24px;
-                font-size: 18px;
-            }}
-            .conclusion-content ol {{
-                margin: 18px 0; 
-                padding-left: 28px;
-                counter-reset: item;
-                page-break-inside: avoid;
-            }}
-            .conclusion-content ol li {{
-                margin-bottom: 12px; 
-                line-height: 1.7;
-                display: block;
-                position: relative;
-                padding-left: 0;
-            }}
-            .conclusion-content ol li:before {{
-                content: counter(item) ".";
-                counter-increment: item;
-                color: #FF7F7F;
-                font-weight: bold;
-                position: absolute;
-                left: -28px;
-            }}
-            .conclusion-content p {{ 
-                margin-bottom: 18px; 
-                line-height: 1.7;
-            }}
-            .conclusion-content strong {{ 
-                color: #FF7F7F; 
-                font-weight: 600; 
-            }}
-            .conclusion-content em {{ 
-                font-style: italic; 
-                color: #6b7280;
-            }}
-            .synthesis-section {{ margin-bottom: 18px; page-break-inside: avoid; }}
-            .synthesis-section ul {{
-                margin: 14px 0;
-                padding-left: 24px;
-                list-style-type: disc;
-            }}
-            .synthesis-section ul li {{
-                margin-bottom: 8px;
-                line-height: 1.6;
-                list-style-type: disc;
-                display: list-item;
-            }}
-            p {{ margin-bottom: 14px; }}
-            /* General list styling for other sections (not conclusion) */
-            ul:not(.conclusion-content ul) {{ 
-                margin-bottom: 18px; 
-                padding-left: 24px; 
-                list-style-type: disc;
-            }}
-            ol:not(.conclusion-content ol) {{ 
-                margin-bottom: 18px; 
-                padding-left: 24px; 
-                list-style-type: decimal;
-            }}
-            li:not(.conclusion-content li) {{ 
-                margin-bottom: 8px; 
-                line-height: 1.6;
-                display: list-item;
-            }}
-            /* Syntax highlighting overrides - matching app's theme */
-            .hljs {{
-                background: #1f2937 !important;
-                color: #e5e7eb !important;
-                padding: 20px !important;
-                border-radius: 0 !important;
-            }}
-            .hljs-keyword {{ color: #f59e0b !important; }}
-            .hljs-string {{ color: #10b981 !important; }}
-            .hljs-number {{ color: #3b82f6 !important; }}
-            .hljs-comment {{ color: #6b7280 !important; }}
-            .hljs-function {{ color: #8b5cf6 !important; }}
-            .hljs-built_in {{ color: #FF7F7F !important; }}
+            code = deep_code.combined_code
+            code = code.replace('```python', '').replace('```', '')
             
-            /* PDF/Print Specific Styles */
-            @media print {{
-                body {{
-                    background-color: white !important;
-                    padding: 8mm;
-                    font-size: 14pt;
-                    line-height: 1.5;
-                    color: #000 !important;
-                }}
-                .container {{
-                    max-width: none;
-                    margin: 0;
-                }}
-                .section {{
-                    background: white !important;
-                    box-shadow: none !important;
-                    border-radius: 0 !important;
-                    border-left: 2pt solid #FF7F7F !important;
-                    padding: 18pt;
-                    margin-bottom: 15pt;
-                    page-break-inside: avoid;
-                    margin-top: 0 !important;
-                    padding-top: 20pt !important;
-                }}
-                /* Don't add page break before the first section */
-                .section:first-child {{
-                    page-break-before: avoid;
-                    margin-top: 0 !important;
-                    padding-top: 18pt !important;
-                }}
-                /* Hide code section completely in PDF */
-                .section:has(.code-section),
-                .section .code-section,
-                .code-section {{
-                    display: none !important;
-                }}
-                h1 {{
-                    font-size: 24pt;
-                    color: #FF7F7F !important;
-                    page-break-after: avoid;
-                    margin-top: 0;
-                    margin-bottom: 15pt;
-                }}
-                h2 {{
-                    font-size: 20pt;
-                    color: #FF7F7F !important;
-                    page-break-after: avoid;
-                    border-bottom: 1pt solid #FF7F7F !important;
-                    margin-bottom: 12pt;
-                }}
-                h3 {{
-                    font-size: 16pt;
-                    color: #333 !important;
-                    page-break-after: avoid;
-                    margin-bottom: 10pt;
-                }}
-                h4 {{
-                    font-size: 14pt;
-                    color: #333 !important;
-                    page-break-after: avoid;
-                    margin-bottom: 10pt;
-                }}
-                p {{
-                    font-size: 13pt;
-                    margin-bottom: 10pt;
-                    line-height: 1.5;
-                }}
-                .question-content {{
-                    background: #f9f9f9 !important;
-                    border-left: 2pt solid #FF7F7F !important;
-                    border-radius: 0 !important;
-                    padding: 15pt;
-                    page-break-inside: avoid;
-                    font-size: 13pt;
-                }}
-                .synthesis-content {{
-                    background: #f9f9f9 !important;
-                    border: 1pt solid #ddd !important;
-                    border-radius: 0 !important;
-                    padding: 15pt;
-                    page-break-inside: avoid;
-                    font-size: 13pt;
-                }}
-                .conclusion-content {{
-                    background: #f9f9f9 !important;
-                    border: 1pt solid #FF7F7F !important;
-                    border-radius: 0 !important;
-                    padding: 18pt;
-                    page-break-inside: avoid;
-                    font-size: 13pt;
-                }}
-                /* Chart/Visualization specific rules */
-                .visualization-container {{
-                    background: white !important;
-                    border: 1pt solid #ddd !important;
-                    border-radius: 0 !important;
-                    padding: 12pt;
-                    page-break-before: auto;
-                    page-break-after: auto;
-                    page-break-inside: avoid !important;
-                    margin: 12pt 0;
-                    max-height: none !important;
-                    height: auto !important;
-                    overflow: visible !important;
-                }}
-                /* Plotly charts - ensure they don't break and fit properly */
-                .plotly-graph-div {{
-                    page-break-inside: avoid !important;
-                    page-break-before: auto !important;
-                    page-break-after: auto !important;
-                    max-height: 60vh !important;
-                    max-width: 100% !important;
-                    height: auto !important;
-                    overflow: visible !important;
-                    margin: 6pt 0 !important;
-                }}
-                /* If chart is too tall, allow it to take a full page */
-                .visualization-container:has(.plotly-graph-div) {{
-                    page-break-before: auto;
-                    page-break-after: auto;
-                    page-break-inside: avoid;
-                    max-height: 85vh;
-                    overflow: visible;
-                }}
-                /* Hide all code-related elements */
-                .code-section,
-                .code-header,
-                .code-content,
-                .code-controls,
-                .copy-button,
-                pre code,
-                .hljs {{
-                    display: none !important;
-                }}
-                /* Page breaks */
-                .section {{
-                    page-break-before: always;
-                    page-break-after: auto;
-                    page-break-inside: avoid;
-                }}
-                /* Ensure section headings don't get orphaned */
-                .section h2 {{
-                    page-break-after: avoid;
-                    orphans: 2;
-                    widows: 2;
-                }}
-                /* Better control for large content blocks */
-                .synthesis-content {{
-                    orphans: 2;
-                    widows: 2;
-                }}
-                /* Ensure tables don't break poorly */
-                .section table {{
-                    page-break-inside: avoid;
-                    margin: 10pt 0;
-                    font-size: 12pt;
-                }}
-                .section table th,
-                .section table td {{
-                    padding: 6pt 10pt;
-                    font-size: 12pt;
-                }}
-                /* List styling for PDF */
-                ul, ol {{
-                    margin: 10pt 0;
-                    padding-left: 20pt;
-                }}
-                li {{
-                    margin-bottom: 6pt;
-                    font-size: 13pt;
-                    line-height: 1.5;
-                }}
-                /* Conclusion specific styling */
-                .conclusion-content ul li:before {{
-                    color: #FF7F7F !important;
-                }}
-                .conclusion-content ol li:before {{
-                    color: #FF7F7F !important;
-                }}
-                .conclusion-content strong {{
-                    color: #FF7F7F !important;
-                }}
-            }}
+            with open("updated_code.py", "w") as f:  #! ONLY FOR DEBUGGING
+                f.write(code)
             
-            /* Additional PDF optimization */
-            @page {{
-                size: A4;
-                margin: 15mm 12mm 20mm 12mm;
-            }}
+            yield {
+                "step": "code_synthesis",
+                "status": "completed",
+                "message": "Code synthesis completed",
+                "progress": 80
+            }
             
-            /* Print footer using CSS instead of @page for better compatibility */
-            @media print {{
-                body {{
-                    counter-reset: page;
-                }}
+            # Step 5: Execute code (85% progress)
+            yield {
+                "step": "code_execution",
+                "status": "processing",
+                "message": "Executing analysis code...",
+                "progress": 82
+            }
+            
+            # Execute the code with error handling and session DataFrame
+            try:
+                # Run code execution in thread pool to avoid blocking
+                import concurrent.futures
+                with concurrent.futures.ThreadPoolExecutor() as executor:
+                    future = executor.submit(clean_and_store_code, code, session_df)
+                    output = future.result(timeout=300)  # 5 minute timeout
                 
-                .page-footer {{
-                    position: fixed;
-                    bottom: 8mm;
-                    left: 0;
-                    right: 0;
-                    height: 10mm;
-                    text-align: center;
-                    font-size: 10pt;
-                    color: #666;
-                    z-index: 9999;
-                    background: white;
-                    border-top: 1pt solid #e5e7eb;
-                    padding-top: 3mm;
-                }}
+                logger.log_message(f"Deep Code executed")
                 
-                .page-footer:before {{
-                    content: "Auto-Analyst Deep Analysis Report - Page " counter(page);
-                    counter-increment: page;
-                }}
+                if output.get('error'):
+                    logger.log_message(f"Warning: Code execution had errors: {output['error']}", logging.ERROR)
                 
-                /* Ensure content doesn't overlap with footer */
-                .section:last-child {{
-                    margin-bottom: 25mm;
-                }}
-            }}
-        </style>
-        <script>
-            document.addEventListener('DOMContentLoaded', function() {{
-                hljs.highlightAll();
+                print_outputs = [output['printed_output']]
+                plotly_figs = [output['plotly_figs']]
                 
-                // Add print-specific functionality
-                window.addEventListener('beforeprint', function() {{
-                    // Ensure all Plotly graphs are visible and properly sized for printing
-                    const plotlyDivs = document.querySelectorAll('.plotly-graph-div');
-                    plotlyDivs.forEach(function(div) {{
-                        if (window.Plotly && window.Plotly.Plots) {{
-                            try {{
-                                // Resize plot for print
-                                window.Plotly.Plots.resize(div);
-                            }} catch (e) {{
-                                console.log('Note: Could not resize plot for print:', e);
-                            }}
-                        }}
-                    }});
-                    
-                    // Expand any collapsed code sections for PDF
-                    const codeContents = document.querySelectorAll('.code-content');
-                    codeContents.forEach(function(content) {{
-                        content.classList.add('expanded');
-                    }});
-                }});
-                
-                // Add a small delay for plots to render when window loads
-                setTimeout(function() {{
-                    const plotlyDivs = document.querySelectorAll('.plotly-graph-div');
-                    if (plotlyDivs.length > 0 && window.Plotly) {{
-                        plotlyDivs.forEach(function(div) {{
-                            try {{
-                                window.Plotly.Plots.resize(div);
-                            }} catch (e) {{
-                                // Silent fail - plot may not be fully initialized yet
-                            }}
-                        }});
-                    }}
-                }}, 2000);
-            }});
+            except Exception as e:
+                logger.log_message(f"Error during code execution: {str(e)}", logging.ERROR)
+                output = {
+                    'exec_result': None,
+                    'printed_output': f"Code execution failed: {str(e)}",
+                    'plotly_figs': [],
+                    'error': str(e)
+                }
+                print_outputs = [output['printed_output']]
+                plotly_figs = [output['plotly_figs']]
 
-            function toggleCode() {{
-                const content = document.getElementById('codeContent');
-                const header = document.getElementById('codeToggle');
-                if (content.classList.contains('expanded')) {{
-                    content.classList.remove('expanded');
-                    header.textContent = 'View Generated Code (Click to expand)';
-                }} else {{
-                    content.classList.add('expanded');
-                    header.textContent = 'Generated Code (Click to collapse)';
-                }}
-            }}
+            yield {
+                "step": "code_execution",
+                "status": "completed",
+                "message": "Code execution completed",
+                "progress": 85
+            }
+            
+            # Step 6: Synthesis (90% progress)
+            yield {
+                "step": "synthesis",
+                "status": "processing",
+                "message": "Synthesizing results...",
+                "progress": 87
+            }
+            
+            synthesis = []
+            try:
+                synthesis_result = await self.deep_synthesizer(
+                    query=goal, 
+                    summaries=str(summaries), 
+                    print_outputs=str(output['printed_output'])
+                )
+                synthesis.append(synthesis_result)
+            except Exception as e:
+                logger.log_message(f"Error during synthesis: {str(e)}", logging.ERROR)
+                synthesis.append(type('obj', (object,), {'synthesized_report': f"Synthesis failed: {str(e)}"})())
+            
+            logger.log_message("Synthesis done")
+            
+            yield {
+                "step": "synthesis",
+                "status": "completed",
+                "message": "Synthesis completed",
+                "progress": 90
+            }
+            
+            # Step 7: Final conclusion (100% progress)
+            yield {
+                "step": "conclusion",
+                "status": "processing",
+                "message": "Generating final conclusion...",
+                "progress": 95
+            }
+            
+            try:
+                final_conclusion = await self.final_conclusion(
+                    query=goal, 
+                    synthesized_sections=str([s.synthesized_report for s in synthesis])
+                )
+            except Exception as e:
+                logger.log_message(f"Error during final conclusion: {str(e)}", logging.ERROR)
+                final_conclusion = type('obj', (object,), {'final_conclusion': f"Final conclusion failed: {str(e)}"})()
 
-            function copyCode() {{
-                const codeElement = document.getElementById('rawCode');
-                const copyButton = document.getElementById('copyButton');
-                
-                if (codeElement) {{
-                    const textToCopy = codeElement.textContent || codeElement.innerText;
-                    
-                    if (navigator.clipboard && window.isSecureContext) {{
-                        navigator.clipboard.writeText(textToCopy).then(function() {{
-                            copyButton.textContent = 'Copied!';
-                            copyButton.classList.add('copied');
-                            setTimeout(function() {{
-                                copyButton.textContent = 'Copy';
-                                copyButton.classList.remove('copied');
-                            }}, 2000);
-                        }}).catch(function(err) {{
-                            console.error('Failed to copy: ', err);
-                            fallbackCopyTextToClipboard(textToCopy, copyButton);
-                        }});
-                    }} else {{
-                        fallbackCopyTextToClipboard(textToCopy, copyButton);
-                    }}
-                }}
-            }}
+            logger.log_message("Conclusion Made")
+            
+            return_dict = {
+                'goal': goal, 
+                'deep_questions': questions.deep_questions, 
+                'deep_plan': deep_plan.plan_instructions, 
+                'summaries': summaries, 
+                'code': code,
+                'plotly_figs': plotly_figs,
+                'synthesis': [s.synthesized_report for s in synthesis], 
+                'final_conclusion': final_conclusion.final_conclusion 
+            }
+            
+            yield {
+                "step": "conclusion",
+                "status": "completed",
+                "message": "Analysis completed successfully",
+                "progress": 100,
+                "final_result": return_dict
+            }
+            
+            logger.log_message("Return dict created")
+            
+        except Exception as e:
+            logger.log_message(f"Error in deep analysis: {str(e)}", logging.ERROR)
+            yield {
+                "step": "error",
+                "status": "failed",
+                "message": f"Deep analysis failed: {str(e)}",
+                "progress": 0,
+                "error": str(e)
+            }
 
-            function fallbackCopyTextToClipboard(text, button) {{
-                const textArea = document.createElement('textarea');
-                textArea.value = text;
-                textArea.style.top = '0';
-                textArea.style.left = '0';
-                textArea.style.position = 'fixed';
-                document.body.appendChild(textArea);
-                textArea.focus();
-                textArea.select();
-                try {{
-                    const successful = document.execCommand('copy');
-                    if (successful) {{
-                        button.textContent = 'Copied!';
-                        button.classList.add('copied');
-                        setTimeout(function() {{
-                            button.textContent = 'Copy';
-                            button.classList.remove('copied');
-                        }}, 2000);
-                    }} else {{
-                        button.textContent = 'Failed';
-                        setTimeout(function() {{
-                            button.textContent = 'Copy';
-                        }}, 2000);
-                    }}
-                }} catch (err) {{
-                    button.textContent = 'Failed';
-                    setTimeout(function() {{
-                        button.textContent = 'Copy';
-                    }}, 2000);
-                }}
-                document.body.removeChild(textArea);
-            }}
-        </script>
-    </head>
-    <body>
-        <div class="container">
-        <div class="section">
-                <h1>Deep Analysis Report</h1>
-                <h2>Original Question</h2>
-                <div class="question-content">
-                    {goal}
-                </div>
-        </div>
 
-        <div class="section">
-                <h2>Detailed Research Questions</h2>
-                <div class="question-content">
-            {questions}
-                </div>
-        </div>
-
-        <div class="section">
-                <h2>Analysis & Insights</h2>
-                <div class="synthesis-content">
-                    {synthesis_content}
-        </div>
-
-                {''.join(f'<div class="visualization-container">{viz}</div>' for viz in all_visualizations) if all_visualizations else '<p><em>No visualizations generated</em></p>'}
-            </div>
-
-            {f'''
-        <div class="section">
-                <h2>Generated Code</h2>
-                <div class="code-section">
-                    <div class="code-header">
-                        <span id="codeToggle" onclick="toggleCode()" style="cursor: pointer;">
-                            View Generated Code (Click to expand)
-                        </span>
-                        <div class="code-controls">
-                            <button id="copyButton" class="copy-button" onclick="copyCode()">Copy</button>
-        </div>
-                    </div>
-                    <div class="code-content" id="codeContent">
-                        <pre><code id="rawCode" class="language-python">{code_content}</code></pre>
-                    </div>
-                </div>
-            </div>
-            ''' if code_content else ''}
-
-        <div class="section">
-                <h2>Conclusion</h2>
-            <div class="conclusion-content">
-                {conclusion}
-                </div>
-            </div>
-        </div>
+    async def execute_deep_analysis(self, goal, dataset_info, session_df=None):
+        """
+        Legacy method for backward compatibility.
+        Executes the streaming analysis and returns the final result.
+        """
+        final_result = None
+        async for update in self.execute_deep_analysis_streaming(goal, dataset_info, session_df):
+            if update.get("step") == "conclusion" and update.get("status") == "completed":
+                final_result = update.get("final_result")
+            elif update.get("step") == "error":
+                raise Exception(update.get("message", "Unknown error"))
         
-        <!-- Page footer for PDF -->
-        <div class="page-footer"></div>
-    </body>
-    </html>"""
-    return html
-
+        return final_result

@@ -88,6 +88,7 @@ TECHNICAL CONSIDERATIONS FOR ANALYSIS:
     description = dspy.OutputField(desc="A comprehensive dataset description with business context and technical guidance for analysis agents.")
 
 
+
 class advanced_query_planner(dspy.Signature):
     """
 You are a advanced data analytics planner agent. Your task is to generate the most efficient plan—using the fewest necessary agents and variables—to achieve a user-defined goal. The plan must preserve data integrity, avoid unnecessary steps, and ensure clear data flow between agents.
@@ -101,7 +102,7 @@ You are a advanced data analytics planner agent. Your task is to generate the mo
 3. **Instructions**: For each agent, define:
    * **create**: output variables and their purpose
    * **use**: input variables and their role
-   * **instruction**: concise explanation of the agent's function and relevance to the goal
+   * **instruction**: concise explanation of the agent’s function and relevance to the goal
 4. **Clarity**: Keep instructions precise; avoid intermediate steps unless necessary; ensure each agent has a distinct, relevant role.
 ### **Output Format**:
 Example: 1 agent use
@@ -153,9 +154,7 @@ plan: planner_preprocessing_agent -> planner_statistical_analytics_agent -> plan
   }
 }
 Try to use as few agents to answer the user query as possible.
-
 Respond in the user's language for all explanations and instructions, but keep all code, variable names, function names, model names, agent names, and library names in English.
-
     """
     dataset = dspy.InputField(desc="Available datasets loaded in the system, use this df, columns set df as copy of df")
     Agent_desc = dspy.InputField(desc="The agents available in the system")
@@ -186,7 +185,8 @@ class basic_query_planner(dspy.Signature):
                         "use": ["original_data"],
                         "instruction": "use the original_data to measure correlation of X & Y, using pandas"
                     }
-                    
+    
+    
     Respond in the user's language for all explanations and instructions, but keep all code, variable names, function names, model names, agent names, and library names in English.
     """
     dataset = dspy.InputField(desc="Available datasets loaded in the system, use this df, columns set df as copy of df")
@@ -232,8 +232,6 @@ class intermediate_query_planner(dspy.Signature):
     plan = dspy.OutputField(desc="The plan that would achieve the user defined goal", prefix='Plan:')
     plan_instructions= dspy.OutputField(desc="Instructions from the planner")
 
-# class allocator(dspy.Signature):
-
 
 
 class planner_module(dspy.Module):
@@ -274,6 +272,7 @@ class planner_module(dspy.Module):
                       }
         # print(output)
         return output
+
 
 
 
@@ -337,6 +336,7 @@ You are given:
 -Preserve column structure  and avoid unnecessary modifications.
 -Ensure data types are appropriate  (e.g., dates parsed correctly).
 -Log assumptions  in the code.
+Respond in the user's language for all summary and reasoning but keep the code in english
     """
     dataset = dspy.InputField(desc="The dataset, preloaded as df")
     goal = dspy.InputField(desc="User-defined goal for the analysis")
@@ -392,6 +392,7 @@ class planner_data_viz_agent(dspy.Signature):
     * You **never** create any data.
     * You **only** use the data and variables passed to you.
     * If any required data or variable is missing or invalid, **you must stop** and return a clear error message.
+    * Respond in the user's language for all summary and reasoning but keep the code in english
     * it should be update_yaxes, update_xaxes, not axis
     By following these conditions and responsibilities, your role is to ensure that the **visualizations** are generated as per the user goal, using the valid data and instructions given to you.
         """
@@ -491,6 +492,7 @@ def statistical_model(X, y, goal, period=None):
 **Output:**
 * The **code** implementing the statistical analysis, including all required steps.
 * A **summary** of what the statistical analysis does, how it's performed, and why it fits the goal.
+* Respond in the user's language for all summary and reasoning but keep the code in english
     """
     dataset = dspy.InputField(desc="Preprocessed dataset, often named df_cleaned")
     goal = dspy.InputField(desc="The user's statistical analysis goal, e.g., regression or seasonal_decompose")
@@ -499,9 +501,8 @@ def statistical_model(X, y, goal, period=None):
     code = dspy.OutputField(desc="Python code for statistical modeling using statsmodels")
     summary = dspy.OutputField(desc="Explanation of statistical analysis steps")
     
-# class basic_qa_signature(dspy.Signature):
-
     
+
 class planner_sk_learn_agent(dspy.Signature):
     """
     **Agent Definition:**
@@ -580,6 +581,7 @@ class planner_sk_learn_agent(dspy.Signature):
     **Output:**
     * The **code** implementing the ML task, including all required steps.
     * A **summary** of what the model does, how it is evaluated, and why it fits the goal.
+    * Respond in the user's language for all summary and reasoning but keep the code in english
     """
     dataset = dspy.InputField(desc="Input dataset, often cleaned and feature-selected (e.g., df_cleaned)")
     goal = dspy.InputField(desc="The user's machine learning goal (e.g., classification or regression)")
@@ -626,6 +628,7 @@ class preprocessing_agent(dspy.Signature):
     • Filled missing numeric values with column means
     • Filled missing categorical values with column modes
     • Converted 1 date column to datetime format
+     Respond in the user's language for all summary and reasoning but keep the code in english
     """
     dataset = dspy.InputField(desc="Available datasets loaded in the system, use this df, column_names  set df as copy of df")
     goal = dspy.InputField(desc="The user defined goal could ")
@@ -701,6 +704,7 @@ class statistical_analytics_agent(dspy.Signature):
     • Significant predictors include square footage (p<0.001) and number of bathrooms (p<0.01)
     • Detected strong seasonal pattern with 12-month periodicity
     • Forecast shows 15% growth trend over next quarter
+    Respond in the user's language for all summary and reasoning but keep the code in english
     """
     dataset = dspy.InputField(desc="Available datasets loaded in the system, use this df,columns  set df as copy of df")
     goal = dspy.InputField(desc="The user defined goal for the analysis to be performed")
@@ -723,7 +727,7 @@ class sk_learn_agent(dspy.Signature):
     • Feature importance analysis revealed that contract length and monthly charges are the strongest predictors of churn
     • Implemented K-means clustering (k=4) on customer shopping behaviors
     • Identified distinct segments: high-value frequent shoppers (22%), occasional big spenders (35%), budget-conscious regulars (28%), and rare visitors (15%)
-    
+    Respond in the user's language for all summary and reasoning but keep the code in english
     """
     dataset = dspy.InputField(desc="Available datasets loaded in the system, use this df,columns. set df as copy of df")
     goal = dspy.InputField(desc="The user defined goal ")
@@ -756,6 +760,7 @@ class code_combiner_agent(dspy.Signature):
     • Fixed variable scope issues, standardized DataFrame handling (e.g., using `df.copy()`), and corrected errors.
     • Validated column names and data types against the dataset definition to prevent runtime issues.
     • Ensured visualizations are displayed correctly (e.g., added `fig.show()`).
+    Respond in the user's language for all summary and reasoning but keep the code in english
     """
     dataset = dspy.InputField(desc="Use this double check column_names, data types")
     agent_code_list =dspy.InputField(desc="A list of code given by each agent")
@@ -763,6 +768,7 @@ class code_combiner_agent(dspy.Signature):
     summary = dspy.OutputField(desc="A concise 4 bullet-point summary of the code integration performed and improvements made")
     
     
+
 class data_viz_agent(dspy.Signature):
     # Visualizes data using Plotly
     """    
@@ -794,6 +800,7 @@ class data_viz_agent(dspy.Signature):
     - Output only the code and a concise bullet-point summary of what the visualization reveals.
     - Always end each visualization with:  
     fig.to_html(full_html=False)
+    Respond in the user's language for all summary and reasoning but keep the code in english
     Example Summary:  
     • Created an interactive scatter plot of sales vs. marketing spend with color-coded product categories  
     • Included a trend line showing positive correlation (r=0.72)  
@@ -801,6 +808,7 @@ class data_viz_agent(dspy.Signature):
     • Generated a time series chart of monthly revenue from 2020-2023  
     • Added annotations for key business events  
     • Visualization reveals 35% YoY growth with seasonal peaks in Q4
+    
     """
     goal = dspy.InputField(desc="user defined goal which includes information about data and chart they want to plot")
     dataset = dspy.InputField(desc=" Provides information about the data in the data frame. Only use column names and dataframe_name as in this context")
@@ -845,6 +853,7 @@ fixed_code:
 # Convert percentage strings to floats
 df['Change %'] = df['Change %'].astype(str).str.rstrip('%').astype(float)
 df['Change % BTC'] = df['Change % BTC'].astype(str).str.rstrip('%').astype(float)
+Respond in the user's language for all summary and reasoning but keep the code in english
 ===
     """
     dataset_context = dspy.InputField(desc="The dataset context to be used for the code fix")
