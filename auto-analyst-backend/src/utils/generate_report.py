@@ -431,6 +431,26 @@ def generate_html_report(return_dict):
                     margin-top: 0 !important;
                     padding-top: 18pt !important;
                 }}
+                
+                /* Larger fonts for first page section */
+                .section:first-child h1 {{
+                    font-size: 27pt !important;
+                    margin-bottom: 18pt;
+                }}
+                .section:first-child h2 {{
+                    font-size: 23pt !important;
+                    margin-bottom: 15pt;
+                }}
+                .section:first-child .question-content {{
+                    font-size: 16pt !important;
+                    line-height: 1.6;
+                    padding: 18pt;
+                }}
+                .section:first-child .question-content p {{
+                    font-size: 16pt !important;
+                    margin-bottom: 12pt;
+                }}
+                
                 /* Hide code section completely in PDF */
                 .section:has(.code-section),
                 .section .code-section,
@@ -490,8 +510,43 @@ def generate_html_report(return_dict):
                     border-radius: 0 !important;
                     padding: 18pt;
                     page-break-inside: avoid;
-                    font-size: 13pt;
+                    font-size: 16pt !important;
+                    line-height: 1.6;
                 }}
+                
+                /* Larger fonts for conclusion section */
+                .conclusion-content h1 {{
+                    font-size: 25pt !important;
+                    margin-bottom: 15pt;
+                }}
+                .conclusion-content h2 {{
+                    font-size: 21pt !important;
+                    margin-bottom: 12pt;
+                }}
+                .conclusion-content h3 {{
+                    font-size: 19pt !important;
+                    margin-bottom: 10pt;
+                }}
+                .conclusion-content h4 {{
+                    font-size: 17pt !important;
+                    margin-bottom: 10pt;
+                }}
+                .conclusion-content p {{
+                    font-size: 16pt !important;
+                    margin-bottom: 12pt;
+                    line-height: 1.6;
+                }}
+                .conclusion-content ul li {{
+                    font-size: 16pt !important;
+                    margin-bottom: 10pt;
+                    line-height: 1.6;
+                }}
+                .conclusion-content ol li {{
+                    font-size: 16pt !important;
+                    margin-bottom: 10pt;
+                    line-height: 1.6;
+                }}
+                
                 /* Chart/Visualization specific rules */
                 .visualization-container {{
                     background: white !important;
