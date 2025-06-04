@@ -284,9 +284,6 @@ def clean_and_store_code(code, session_df=None):
         # Clean Unicode characters that might cause encoding issues
         cleaned_code = clean_unicode_chars(cleaned_code)
         
-        with open("sample_code.py", "w", encoding="utf-8") as f: #! ONLY FOR DEBUGGING
-            f.write(cleaned_code)
-        
         # Capture printed output
         old_stdout = sys.stdout
         captured_output = io.StringIO()
@@ -321,8 +318,6 @@ def clean_and_store_code(code, session_df=None):
             exec_globals['warnings'] = __import__('warnings')
         except ImportError as e:
             print(f"Warning: Could not import some optional libraries: {e}")
-        
-        # exec_code = cleaned_code
         
         # Execute the code
         exec(cleaned_code, exec_globals)
@@ -940,9 +935,6 @@ class deep_analysis_module(dspy.Module):
             
             # Clean Unicode characters that might cause encoding issues
             code = clean_unicode_chars(code)
-            
-            with open("updated_code.py", "w", encoding="utf-8") as f:  #! ONLY FOR DEBUGGING
-                f.write(code)
             
             yield {
                 "step": "code_synthesis",

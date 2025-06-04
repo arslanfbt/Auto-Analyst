@@ -47,28 +47,31 @@ export default function CurrentAnalysisView({
     )
   }
 
+  // TypeScript assertion: currentReport is guaranteed to be non-null here
+  const report = currentReport as DeepAnalysisReport
+
   return (
     <ScrollArea className="h-full">
       <div className="p-3 space-y-3">
         {/* Analysis Info */}
         <div className="bg-gray-50 rounded-lg p-3">
-          <h3 className="font-medium text-xs text-gray-800 mb-1">{currentReport.goal}</h3>
+          <h3 className="font-medium text-xs text-gray-800 mb-1">{report.goal}</h3>
           <div className="flex items-center justify-between text-xs text-gray-500">
-            <span>Started: {formatTime(currentReport.startTime)}</span>
-            <span>{formatDuration(currentReport.startTime, currentReport.endTime)}</span>
+            <span>Started: {formatTime(report.startTime)}</span>
+            <span>{formatDuration(report.startTime, report.endTime)}</span>
           </div>
         </div>
 
         {/* Progress */}
-        {currentReport.status === 'running' && (
+        {report.status === 'running' && (
           <div className="space-y-2">
             <div className="flex justify-between text-xs">
               <span>Progress</span>
-              <span className="font-medium">{Math.round(currentReport.progress)}%</span>
+              <span className="font-medium">{Math.round(report.progress)}%</span>
             </div>
-            <Progress value={currentReport.progress} className="w-full transition-all duration-500" />
+            <Progress value={report.progress} className="w-full transition-all duration-500" />
             <div className="text-xs text-gray-500 text-center">
-              {currentReport.steps.find(s => s.status === 'processing' || s.status === 'starting')?.message || 'Processing...'}
+              {report.steps.find(s => s.status === 'processing' || s.status === 'starting')?.message || 'Processing...'}
             </div>
           </div>
         )}
@@ -77,15 +80,15 @@ export default function CurrentAnalysisView({
         <div className="flex justify-center">
           <Badge 
             variant={
-              currentReport.status === 'completed' ? 'default' :
-              currentReport.status === 'running' ? 'secondary' : 'destructive'
+              report.status === 'completed' ? 'default' :
+              report.status === 'running' ? 'secondary' : 'destructive'
             }
             className="text-xs"
           >
-            {currentReport.status === 'running' && <Loader2 className="w-3 h-3 mr-1 animate-spin" />}
-            {currentReport.status === 'completed' && <CheckCircle2 className="w-3 h-3 mr-1" />}
-            {currentReport.status === 'failed' && <AlertCircle className="w-3 h-3 mr-1" />}
-            {currentReport.status.charAt(0).toUpperCase() + currentReport.status.slice(1)}
+            {report.status === 'running' && <Loader2 className="w-3 h-3 mr-1 animate-spin" />}
+            {report.status === 'completed' && <CheckCircle2 className="w-3 h-3 mr-1" />}
+            {report.status === 'failed' && <AlertCircle className="w-3 h-3 mr-1" />}
+            {report.status.charAt(0).toUpperCase() + report.status.slice(1)}
           </Badge>
         </div>
 
@@ -93,7 +96,7 @@ export default function CurrentAnalysisView({
         <div className="space-y-2">
           <h4 className="text-xs font-medium text-gray-700">Analysis Steps</h4>
           <div className="space-y-1">
-            {currentReport.steps.map((step, index) => (
+            {report.steps.map((step, index) => (
               <AnalysisStep
                 key={`${step.step}-${index}`}
                 step={step}
@@ -104,10 +107,10 @@ export default function CurrentAnalysisView({
         </div>
 
         {/* Download Buttons */}
-        {currentReport.status === 'completed' && (
+        {report.status === 'completed' && (
           <div className="flex gap-2">
             <Button 
-              onClick={() => onDownloadReport(currentReport, 'html')}
+              onClick={() => onDownloadReport(report, 'html')}
               variant="outline" 
               className="flex-1 text-xs"
               size="sm"
@@ -126,7 +129,7 @@ export default function CurrentAnalysisView({
               )}
             </Button>
             <Button 
-              onClick={() => onDownloadReport(currentReport, 'pdf')}
+              onClick={() => onDownloadReport(report, 'pdf')}
               variant="outline" 
               className="flex-1 text-xs"
               size="sm"
@@ -148,25 +151,25 @@ export default function CurrentAnalysisView({
         )}
 
         {/* Results Preview */}
-        {currentReport.status === 'completed' && (
+        {report.status === 'completed' && (
           <div className="space-y-2">
             <h4 className="text-xs font-medium text-gray-700">Quick Preview</h4>
             
-            {currentReport.final_conclusion && (
+            {report.final_conclusion && (
               <div className="bg-green-50 rounded-lg p-2">
                 <h5 className="text-xs font-medium text-green-800 mb-1">Conclusion</h5>
                 <div className="text-xs text-green-700">
                   <ReactMarkdown className="prose prose-xs max-w-none">
-                    {currentReport.final_conclusion.substring(0, 200) + '...'}
+                    {report.final_conclusion.substring(0, 200) + '...'}
                   </ReactMarkdown>
                 </div>
               </div>
             )}
 
-            {currentReport.plotly_figs && currentReport.plotly_figs.length > 0 && (
+            {report.plotly_figs && report.plotly_figs.length > 0 && (
               <div className="bg-red-50 rounded-lg p-2">
                 <h5 className="text-xs font-medium text-red-800 mb-1">
-                  {currentReport.plotly_figs.flat().length} Visualization(s) Generated
+                  {report.plotly_figs.flat().length} Visualization(s) Generated
                 </h5>
                 <p className="text-xs text-red-700">View full report for interactive charts</p>
               </div>

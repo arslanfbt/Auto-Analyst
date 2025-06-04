@@ -128,12 +128,52 @@ export default function DeepAnalysisSidebar({
     })
   }
 
-  const updateStep = (stepName: string, status: AnalysisStep['status'], message?: string, content?: string, progressValue?: number) => {
+  // Map backend step names to frontend step names
+  const mapBackendStepToFrontend = (backendStep: string): string => {
+    const stepMapping: Record<string, string> = {
+      'initialization': 'initialization',
+      'questions': 'questions',
+      'planning': 'planning',
+      'agent_execution': 'analysis',
+      'code_synthesis': 'analysis',
+      'code_execution': 'analysis',
+      'synthesis': 'analysis',
+      'conclusion': 'report',
+      'completed': 'completed',
+      'error': 'report'
+    }
+    return stepMapping[backendStep] || backendStep
+  }
+
+  const stepOrder = ['initialization', 'questions', 'planning', 'analysis', 'report', 'completed']
+
+  const markPreviousStepsCompleted = (currentStep: string) => {
+    const frontendStep = mapBackendStepToFrontend(currentStep)
+    const currentIndex = stepOrder.indexOf(frontendStep)
+    
+    setCurrentReport(prevReport => {
+      if (!prevReport) return prevReport
+      
+      const updatedSteps = prevReport.steps.map((step, index) => {
+        // Mark all previous steps as completed
+        if (index < currentIndex && step.status !== 'completed') {
+          return { ...step, status: 'completed' as AnalysisStep['status'], timestamp: new Date().toISOString() }
+        }
+        return step
+      })
+      
+      return { ...prevReport, steps: updatedSteps }
+    })
+  }
+
+  const updateStep = (backendStepName: string, status: AnalysisStep['status'], message?: string, content?: string, progressValue?: number) => {
+    const frontendStepName = mapBackendStepToFrontend(backendStepName)
+    
     setCurrentReport(prevReport => {
       if (!prevReport) return prevReport
       
       const updatedSteps = prevReport.steps.map(step => 
-        step.step === stepName 
+        step.step === frontendStepName 
           ? { ...step, status, message: message || step.message, content, progress: progressValue, timestamp: new Date().toISOString() }
           : step
       )
@@ -148,34 +188,6 @@ export default function DeepAnalysisSidebar({
       
       return updatedReport
     })
-  }
-
-  const markPreviousStepsCompleted = (currentStepName: string) => {
-    const stepOrder = ['initialization', 'questions', 'planning', 'analysis', 'report', 'completed']
-    const currentStepIndex = stepOrder.indexOf(currentStepName)
-    
-    if (currentStepIndex > 0) {
-      setCurrentReport(prevReport => {
-        if (!prevReport) return prevReport
-        
-        const updatedSteps = prevReport.steps.map(step => {
-          const stepIndex = stepOrder.indexOf(step.step)
-          if (stepIndex < currentStepIndex && step.status === 'pending') {
-            return { ...step, status: 'completed' as AnalysisStep['status'], timestamp: new Date().toISOString() }
-          }
-          return step
-        })
-        
-        const updatedReport = {
-          ...prevReport,
-          steps: updatedSteps
-        }
-        
-        setTimeout(() => forceUpdate(), 10)
-        
-        return updatedReport
-      })
-    }
   }
 
   const handleStartAnalysis = async () => {
@@ -292,26 +304,56 @@ export default function DeepAnalysisSidebar({
               continue
             }
             
-            console.log('Received streaming data:', data)
-            
             if (data.type === 'step_update' || (data.step && data.status)) {
               const step = data.step
               const status = data.status
               const message = data.message
               const progress = data.progress
               
-              console.log(`Step update: ${step} - ${status} (${progress}%)`)
-              
+              // Mark previous steps as completed when we start or complete a new step
               if (status === 'processing' || status === 'starting' || status === 'completed' || status === 'success') {
                 markPreviousStepsCompleted(step)
+              }
+              
+              // Update the current step
+              updateStep(step, status, message, data.content, progress)
+              
+              // Update overall progress
+              if (progress !== undefined) {
+                updateProgress(progress, message)
+              }
+              
+              // Handle specific step completions
+              if (status === 'completed' || status === 'success') {
+                const frontendStep = mapBackendStepToFrontend(step)
                 
-                if (step === 'report') {
+                // Only mark analysis step as completed when synthesis (the final analysis step) completes
+                if (step === 'synthesis') {
                   setTimeout(() => {
                     setCurrentReport(prevReport => {
                       if (!prevReport) return prevReport
                       
                       const updatedSteps = prevReport.steps.map(s => {
-                        if (['initialization', 'questions', 'planning', 'analysis'].includes(s.step) && s.status !== 'completed') {
+                        if (s.step === 'analysis' && s.status !== 'completed') {
+                          return { ...s, status: 'completed' as AnalysisStep['status'], timestamp: new Date().toISOString() }
+                        }
+                        return s
+                      })
+                      
+                      return { ...prevReport, steps: updatedSteps }
+                    })
+                    forceUpdate()
+                  }, 100)
+                }
+                
+                // When conclusion completes, mark report step as completed
+                if (step === 'conclusion') {
+                  setTimeout(() => {
+                    setCurrentReport(prevReport => {
+                      if (!prevReport) return prevReport
+                      
+                      const updatedSteps = prevReport.steps.map(s => {
+                        if (s.step === 'report' && s.status !== 'completed') {
                           return { ...s, status: 'completed' as AnalysisStep['status'], timestamp: new Date().toISOString() }
                         }
                         return s
@@ -324,15 +366,7 @@ export default function DeepAnalysisSidebar({
                 }
               }
               
-              updateStep(step, status, message, data.content, progress)
-              
-              if (progress !== undefined) {
-                updateProgress(progress, message)
-              }
-              
               if (step === 'completed' && (status === 'completed' || status === 'success')) {
-                console.log('Analysis completed successfully')
-                
                 markAllStepsCompleted()
                 
                 // Show completion notification
@@ -484,8 +518,6 @@ export default function DeepAnalysisSidebar({
                 }
               }
             } else if (data.type === 'final_result') {
-              console.log('Received final result')
-              
               markAllStepsCompleted()
               
               setCurrentReport(prevReport => {
