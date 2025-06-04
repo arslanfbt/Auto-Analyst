@@ -61,7 +61,7 @@ export default function DeepAnalysisSidebar({
   const deepAnalysisAccess = useFeatureAccess('DEEP_ANALYSIS', subscription)
   const [showPremiumUpgradeModal, setShowPremiumUpgradeModal] = useState(false)
   const { toast } = useToast()
-  const [isDownloadingReport, setIsDownloadingReport] = useState(false)
+  const [downloadingFormat, setDownloadingFormat] = useState<'html' | 'pdf' | null>(null)
   
   const activeSessionId = sessionId || storeSessionId
 
@@ -719,7 +719,7 @@ export default function DeepAnalysisSidebar({
   }
 
   const handleDownloadReport = async (reportData?: any, format: 'html' | 'pdf' = 'html') => {
-    if (isDownloadingReport) {
+    if (downloadingFormat) {
       toast({
         title: "Download in progress",
         description: "Please wait while your report is being prepared...",
@@ -728,7 +728,7 @@ export default function DeepAnalysisSidebar({
       return;
     }
 
-    setIsDownloadingReport(true);
+    setDownloadingFormat(format)
     
     toast({
       title: `Preparing your ${format.toUpperCase()} report...`,
@@ -773,7 +773,7 @@ export default function DeepAnalysisSidebar({
               duration: 4000,
             });
             
-            setIsDownloadingReport(false);
+            setDownloadingFormat(null);
             return;
           } else if (response.status !== 404) {
             // If error other than 404, log it but continue with the fallback below
@@ -818,7 +818,7 @@ export default function DeepAnalysisSidebar({
           variant: "destructive",
           duration: 3000,
         });
-        setIsDownloadingReport(false);
+        setDownloadingFormat(null);
         return;
       }
 
@@ -922,7 +922,7 @@ export default function DeepAnalysisSidebar({
         }
       }
     } finally {
-      setIsDownloadingReport(false);
+      setDownloadingFormat(null);
     }
   }
 
@@ -1025,7 +1025,7 @@ export default function DeepAnalysisSidebar({
                 currentReport={currentReport}
                 refreshTrigger={refreshTrigger}
                 onDownloadReport={handleDownloadReport}
-                isDownloadingReport={isDownloadingReport}
+                downloadingFormat={downloadingFormat}
               />
             </TabsContent>
 
@@ -1036,7 +1036,7 @@ export default function DeepAnalysisSidebar({
                 onSelectReport={setSelectedHistoryReport}
                 onDownloadReport={handleDownloadReport}
                 onDeleteReport={handleDeleteReport}
-                isDownloadingReport={isDownloadingReport}
+                downloadingFormat={downloadingFormat}
               />
             </TabsContent>
           </Tabs>

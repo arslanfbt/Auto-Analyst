@@ -46,8 +46,8 @@ from src.schemas.query_schemas import QueryRequest
 from src.utils.logger import Logger
 
 # Import deep analysis components directly
-# from src.agents.test_deep_agents import deep_analysis_module, generate_html_report
-from src.agents.deep_agents import deep_analysis_module, generate_html_report
+from src.agents.test_deep_agents import deep_analysis_module, generate_html_report
+# from src.agents.deep_agents import deep_analysis_module, generate_html_report
 logger = Logger("app", see_time=True, console_log=False)
 load_dotenv()
 

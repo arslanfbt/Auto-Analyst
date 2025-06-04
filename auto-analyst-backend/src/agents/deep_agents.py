@@ -875,6 +875,8 @@ class deep_analysis_module(dspy.Module):
 
 
 
+
+
 def generate_html_report(return_dict):
     """Generate a clean HTML report focusing on visualizations and key insights"""
     
@@ -1275,9 +1277,9 @@ def generate_html_report(return_dict):
             @media print {{
                 body {{
                     background-color: white !important;
-                    padding: 10mm;
-                    font-size: 12pt;
-                    line-height: 1.4;
+                    padding: 8mm;
+                    font-size: 14pt;
+                    line-height: 1.5;
                     color: #000 !important;
                 }}
                 .container {{
@@ -1288,102 +1290,162 @@ def generate_html_report(return_dict):
                     background: white !important;
                     box-shadow: none !important;
                     border-radius: 0 !important;
-                    border-left: 3pt solid #FF7F7F !important;
-                    padding: 15pt;
+                    border-left: 2pt solid #FF7F7F !important;
+                    padding: 18pt;
                     margin-bottom: 15pt;
                     page-break-inside: avoid;
+                    margin-top: 0 !important;
+                    padding-top: 20pt !important;
+                }}
+                /* Don't add page break before the first section */
+                .section:first-child {{
+                    page-break-before: avoid;
+                    margin-top: 0 !important;
+                    padding-top: 18pt !important;
+                }}
+                /* Hide code section completely in PDF */
+                .section:has(.code-section),
+                .section .code-section,
+                .code-section {{
+                    display: none !important;
                 }}
                 h1 {{
-                    font-size: 20pt;
+                    font-size: 24pt;
                     color: #FF7F7F !important;
                     page-break-after: avoid;
                     margin-top: 0;
+                    margin-bottom: 15pt;
                 }}
                 h2 {{
-                    font-size: 16pt;
+                    font-size: 20pt;
                     color: #FF7F7F !important;
                     page-break-after: avoid;
                     border-bottom: 1pt solid #FF7F7F !important;
+                    margin-bottom: 12pt;
                 }}
                 h3 {{
+                    font-size: 16pt;
+                    color: #333 !important;
+                    page-break-after: avoid;
+                    margin-bottom: 10pt;
+                }}
+                h4 {{
                     font-size: 14pt;
                     color: #333 !important;
                     page-break-after: avoid;
+                    margin-bottom: 10pt;
                 }}
-                h4 {{
-                    font-size: 12pt;
-                    color: #333 !important;
-                    page-break-after: avoid;
+                p {{
+                    font-size: 13pt;
+                    margin-bottom: 10pt;
+                    line-height: 1.5;
                 }}
                 .question-content {{
                     background: #f9f9f9 !important;
                     border-left: 2pt solid #FF7F7F !important;
                     border-radius: 0 !important;
-                    padding: 10pt;
+                    padding: 15pt;
                     page-break-inside: avoid;
+                    font-size: 13pt;
                 }}
                 .synthesis-content {{
                     background: #f9f9f9 !important;
                     border: 1pt solid #ddd !important;
                     border-radius: 0 !important;
-                    padding: 10pt;
+                    padding: 15pt;
                     page-break-inside: avoid;
+                    font-size: 13pt;
                 }}
                 .conclusion-content {{
                     background: #f9f9f9 !important;
                     border: 1pt solid #FF7F7F !important;
                     border-radius: 0 !important;
-                    padding: 15pt;
+                    padding: 18pt;
                     page-break-inside: avoid;
+                    font-size: 13pt;
                 }}
+                /* Chart/Visualization specific rules */
                 .visualization-container {{
                     background: white !important;
                     border: 1pt solid #ddd !important;
                     border-radius: 0 !important;
-                    padding: 10pt;
-                    page-break-inside: avoid;
-                    max-height: 400pt;
-                    overflow: hidden;
-                }}
-                .code-section {{
-                    background: #f5f5f5 !important;
-                    color: #333 !important;
-                    border: 1pt solid #ddd !important;
-                    border-radius: 0 !important;
-                    page-break-inside: avoid;
-                }}
-                .code-header {{
-                    background: #FF7F7F !important;
-                    color: white !important;
-                    padding: 8pt;
-                    border-radius: 0 !important;
-                }}
-                .code-content {{
+                    padding: 12pt;
+                    page-break-before: auto;
+                    page-break-after: auto;
+                    page-break-inside: avoid !important;
+                    margin: 12pt 0;
                     max-height: none !important;
+                    height: auto !important;
                     overflow: visible !important;
-                    display: block !important;
                 }}
-                .code-content pre {{
-                    background: #f8f8f8 !important;
-                    color: #333 !important;
-                    padding: 10pt;
-                    font-size: 9pt;
-                    line-height: 1.3;
-                    white-space: pre-wrap;
-                    word-break: break-word;
-                    page-break-inside: auto;
+                /* Plotly charts - ensure they don't break and fit properly */
+                .plotly-graph-div {{
+                    page-break-inside: avoid !important;
+                    page-break-before: auto !important;
+                    page-break-after: auto !important;
+                    max-height: 60vh !important;
+                    max-width: 100% !important;
+                    height: auto !important;
+                    overflow: visible !important;
+                    margin: 6pt 0 !important;
                 }}
-                .code-controls {{
+                /* If chart is too tall, allow it to take a full page */
+                .visualization-container:has(.plotly-graph-div) {{
+                    page-break-before: auto;
+                    page-break-after: auto;
+                    page-break-inside: avoid;
+                    max-height: 85vh;
+                    overflow: visible;
+                }}
+                /* Hide all code-related elements */
+                .code-section,
+                .code-header,
+                .code-content,
+                .code-controls,
+                .copy-button,
+                pre code,
+                .hljs {{
                     display: none !important;
                 }}
-                .copy-button {{
-                    display: none !important;
+                /* Page breaks */
+                .section {{
+                    page-break-before: always;
+                    page-break-after: auto;
+                    page-break-inside: avoid;
                 }}
-                /* Hide interactive elements in PDF */
-                .code-header {{
-                    cursor: default !important;
+                /* Ensure section headings don't get orphaned */
+                .section h2 {{
+                    page-break-after: avoid;
+                    orphans: 2;
+                    widows: 2;
                 }}
-                /* Ensure good contrast for PDF */
+                /* Better control for large content blocks */
+                .synthesis-content {{
+                    orphans: 2;
+                    widows: 2;
+                }}
+                /* Ensure tables don't break poorly */
+                .section table {{
+                    page-break-inside: avoid;
+                    margin: 10pt 0;
+                    font-size: 12pt;
+                }}
+                .section table th,
+                .section table td {{
+                    padding: 6pt 10pt;
+                    font-size: 12pt;
+                }}
+                /* List styling for PDF */
+                ul, ol {{
+                    margin: 10pt 0;
+                    padding-left: 20pt;
+                }}
+                li {{
+                    margin-bottom: 6pt;
+                    font-size: 13pt;
+                    line-height: 1.5;
+                }}
+                /* Conclusion specific styling */
                 .conclusion-content ul li:before {{
                     color: #FF7F7F !important;
                 }}
@@ -1393,50 +1455,43 @@ def generate_html_report(return_dict):
                 .conclusion-content strong {{
                     color: #FF7F7F !important;
                 }}
-                /* Plotly charts - ensure they print well */
-                .plotly-graph-div {{
-                    page-break-inside: avoid !important;
-                    max-height: 350pt !important;
-                }}
-                /* Syntax highlighting for print */
-                .hljs {{
-                    background: #f8f8f8 !important;
-                    color: #333 !important;
-                    padding: 10pt !important;
-                    border: 1pt solid #ddd !important;
-                }}
-                .hljs-keyword {{ color: #d73a49 !important; }}
-                .hljs-string {{ color: #032f62 !important; }}
-                .hljs-number {{ color: #005cc5 !important; }}
-                .hljs-comment {{ color: #6a737d !important; }}
-                .hljs-function {{ color: #6f42c1 !important; }}
-                .hljs-built_in {{ color: #FF7F7F !important; }}
-                /* Page breaks */
-                .section {{
-                    page-break-before: auto;
-                    page-break-after: auto;
-                    page-break-inside: avoid;
-                }}
-                /* Footer for PDF */
-                .footer {{
-                    position: fixed;
-                    bottom: 5mm;
-                    left: 0;
-                    right: 0;
-                    text-align: center;
-                    font-size: 9pt;
-                    color: #666;
-                }}
             }}
             
             /* Additional PDF optimization */
             @page {{
                 size: A4;
-                margin: 15mm;
-                @bottom-center {{
-                    content: "Auto-Analyst Deep Analysis Report - Page " counter(page);
-                    font-size: 9pt;
+                margin: 15mm 12mm 20mm 12mm;
+            }}
+            
+            /* Print footer using CSS instead of @page for better compatibility */
+            @media print {{
+                body {{
+                    counter-reset: page;
+                }}
+                
+                .page-footer {{
+                    position: fixed;
+                    bottom: 8mm;
+                    left: 0;
+                    right: 0;
+                    height: 10mm;
+                    text-align: center;
+                    font-size: 10pt;
                     color: #666;
+                    z-index: 9999;
+                    background: white;
+                    border-top: 1pt solid #e5e7eb;
+                    padding-top: 3mm;
+                }}
+                
+                .page-footer:before {{
+                    content: "Auto-Analyst Deep Analysis Report - Page " counter(page);
+                    counter-increment: page;
+                }}
+                
+                /* Ensure content doesn't overlap with footer */
+                .section:last-child {{
+                    margin-bottom: 25mm;
                 }}
             }}
         </style>
@@ -1604,6 +1659,9 @@ def generate_html_report(return_dict):
                 </div>
             </div>
         </div>
+        
+        <!-- Page footer for PDF -->
+        <div class="page-footer"></div>
     </body>
     </html>"""
     return html

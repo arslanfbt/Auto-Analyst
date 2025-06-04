@@ -11,9 +11,9 @@ interface HistoryViewProps {
   storedReports: StoredReport[]
   selectedHistoryReport: StoredReport | null
   onSelectReport: (report: StoredReport | null) => void
-  onDownloadReport: (reportData: any, format?: 'html' | 'pdf') => void
+  onDownloadReport: (reportData?: any, format?: 'html' | 'pdf') => void
   onDeleteReport: (reportId: string) => void
-  isDownloadingReport?: boolean
+  downloadingFormat?: 'html' | 'pdf' | null
 }
 
 export default function HistoryView({
@@ -22,7 +22,7 @@ export default function HistoryView({
   onSelectReport,
   onDownloadReport,
   onDeleteReport,
-  isDownloadingReport = false
+  downloadingFormat = null
 }: HistoryViewProps) {
   const [fullReportData, setFullReportData] = useState<any>(null);
   const [isLoadingDetails, setIsLoadingDetails] = useState(false);
@@ -124,9 +124,9 @@ export default function HistoryView({
                 variant="outline" 
                 className="flex-1 text-xs"
                 size="sm"
-                disabled={isDownloadingReport}
+                disabled={downloadingFormat === 'html'}
               >
-                {isDownloadingReport ? (
+                {downloadingFormat === 'html' ? (
                   <>
                     <Loader2 className="w-3 h-3 mr-2 animate-spin" />
                     Preparing...
@@ -143,9 +143,9 @@ export default function HistoryView({
                 variant="outline" 
                 className="flex-1 text-xs"
                 size="sm"
-                disabled={isDownloadingReport}
+                disabled={downloadingFormat === 'pdf'}
               >
-                {isDownloadingReport ? (
+                {downloadingFormat === 'pdf' ? (
                   <>
                     <Loader2 className="w-3 h-3 mr-2 animate-spin" />
                     Preparing...

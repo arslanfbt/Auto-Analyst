@@ -23,8 +23,8 @@ const pricingTiers = [
       priceId: null, // No price ID for free tier
     },
     credits: {
-      monthly: 100,
-      yearly: 100,
+      monthly: 50,
+      yearly: 50,
     },
     features: [
       'Basic data analysis',
