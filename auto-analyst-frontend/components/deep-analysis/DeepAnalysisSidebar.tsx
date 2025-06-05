@@ -1107,11 +1107,11 @@ export default function DeepAnalysisSidebar({
             </div>
             
             <div className="space-y-3">
-              <h5 className="font-semibold text-gray-900 text-base">What makes Deep Analysis special:</h5>
+              <h5 className="font-semibold text-gray-900 text-base">What it can do:</h5>
               <ul className="text-base text-gray-700 space-y-2 ml-4">
-                <li>• AI-powered multi-dimensional data exploration</li>
-                <li>• Automatic pattern discovery and statistical insights</li>
-                <li>• Professional-grade research reports with visualizations</li>
+                <li>• Asks deeper, smarter questions.</li>
+                <li>• Builds a strategic plan and delegates with precision.</li>
+                <li>• Synthesizes everything into a clear conclusion.</li>
               </ul>
             </div>
             <div className="flex gap-3 pt-4">

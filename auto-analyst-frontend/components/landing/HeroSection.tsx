@@ -28,7 +28,7 @@ const screenshots = [
     description: "Auto-Analyst provides advanced analytics capabilities, including time series analysis, trend identification, and predictive modeling."
   },
   {
-    src: "/images/screenshots/autoanalyst-deepanalysis.png",
+    src: "/images/screenshots/autoanalyst-deepanalysis.gif",
     alt: "Deep analysis screenshot",
     title: "Introducing Deep Analysis",
     description: "A 5-step process for critical insight: ask deeper questions, craft an in-depth plan, execute with agents, synthesize findings, and deliver a final recommendation."
@@ -249,13 +249,15 @@ export default function HeroSection() {
                 className={`flex flex-col ${idx % 2 === 0 ? 'sm:flex-row' : 'sm:flex-row-reverse'} gap-8 sm:gap-12 items-center`}
               >
                 <div className="w-full sm:w-1/2">
-                  <div className="rounded-2xl shadow-xl overflow-hidden bg-white border border-gray-100 transform hover:scale-[1.02] transition-transform duration-300">
+                  <div className={`rounded-2xl shadow-xl overflow-hidden transform hover:scale-[1.02] transition-transform duration-300 ${shot.src.includes('.gif') ? 'bg-transparent border-0 shadow-none' : 'bg-white border border-gray-100'}`}>
                     <Image
                       src={shot.src}
                       alt={shot.alt}
                       width={600}
                       height={400}
-                      className="w-full h-auto object-cover"
+                      className={`w-full h-auto ${shot.src.includes('.gif') ? 'object-contain bg-transparent rounded-2xl' : 'object-cover'}`}
+                      unoptimized={shot.src.includes('.gif')}
+                      style={shot.src.includes('.gif') ? { filter: 'none', background: 'transparent' } : {}}
                     />
                   </div>
                 </div>
