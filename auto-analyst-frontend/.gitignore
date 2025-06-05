@@ -50,3 +50,4 @@ terraform/.tfvars
 
 
 logs/
+*_code*.py

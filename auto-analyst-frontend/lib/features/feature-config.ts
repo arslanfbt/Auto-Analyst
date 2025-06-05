@@ -68,17 +68,16 @@ export const FEATURES: Record<string, Feature> = {
     requiredTier: ['free', 'standard', 'enterprise'],
   },
 
-  // Paid Features - Coming Soon
+  // Paid Features - Available
   DEEP_ANALYSIS: {
-    id: 'deep_analysis',
+    id: 'DEEP_ANALYSIS',
     name: 'Deep Analysis',
     description: 'Advanced data analysis with comprehensive insights and visualizations',
     accessLevel: 'paid',
-    status: 'coming_soon',
+    status: 'available',
     category: FEATURE_CATEGORIES.ANALYSIS,
     icon: '📊',
     requiredTier: ['standard', 'enterprise'],
-    comingSoonEta: 'Q2 2025',
   },
 
   CUSTOM_AGENTS: {

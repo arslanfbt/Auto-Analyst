@@ -3,7 +3,7 @@ from typing import Optional, Dict, Any
 import time
 from src.db.schemas.models import ModelUsage
 from src.db.init_db import session_factory
-from datetime import datetime
+from datetime import datetime, UTC
 import tiktoken
 from src.routes.analytics_routes import handle_new_model_usage
 import asyncio
@@ -45,7 +45,7 @@ class AI_Manager:
                 query_size=query_size,
                 response_size=response_size,
                 cost=cost,
-                timestamp=datetime.utcnow(),
+                timestamp=datetime.now(UTC),
                 is_streaming=is_streaming,
                 request_time_ms=request_time_ms
             )

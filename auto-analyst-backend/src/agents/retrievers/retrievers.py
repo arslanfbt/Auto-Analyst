@@ -2,7 +2,7 @@
 
 import pandas as pd
 import numpy as np
-import datetime
+from datetime import datetime
 
 # instructions also stored here
 instructions ="""
@@ -34,7 +34,7 @@ PLEASE READ THE INSTRUCTIONS! Thank you
 def return_vals(df,c):
     if isinstance(df[c].iloc[10], (int, float, complex)):
         return {'max_value':max(df[c]),'min_value': min(df[c]), 'mean_value':np.mean(df[c])}
-    elif(isinstance(df[c].iloc[10],datetime.datetime)):
+    elif(isinstance(df[c].iloc[10],datetime)):
         return {str(max(df[c])), str(min(df[c])), str(np.mean(df[c]))}
     else:
         return {'top_10_values':df[c].value_counts()[:10], 'total_categoy_count':len(df[c].unique())}

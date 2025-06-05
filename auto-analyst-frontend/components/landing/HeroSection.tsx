@@ -27,6 +27,13 @@ const screenshots = [
     title: "Advanced Analytics",
     description: "Auto-Analyst provides advanced analytics capabilities, including time series analysis, trend identification, and predictive modeling."
   },
+  {
+    src: "/images/screenshots/autoanalyst-deepanalysis.png",
+    alt: "Deep analysis screenshot",
+    title: "Deep Analysis",
+    description: "Multi-step analysis, automated planning, and detailed insights, with the ability to download and share reports in PDF or HTML formats."
+
+  }
   // {
   //   src: "/images/screenshots/autoanalyst-code-edit.png",
   //   alt: "Code editor screenshot",

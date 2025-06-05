@@ -299,7 +299,7 @@ export default function UserActivityPage() {
             {/* User Table */}
             <div className={styles.card}>
               <div className={styles.cardHeader}>
-                <h3 className={styles.cardTitle}>User Details</h3>
+                <h3 className={styles.cardTitle}>User Details (Last 7 Days)</h3>
               </div>
               <div className={styles.cardBody}>
                 <div className="overflow-x-auto">

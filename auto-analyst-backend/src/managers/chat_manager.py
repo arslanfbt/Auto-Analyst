@@ -6,7 +6,7 @@ import logging
 import requests
 import json
 from typing import List, Dict, Optional, Tuple, Any
-from datetime import datetime
+from datetime import datetime, UTC
 import time
 import tiktoken
 from src.utils.logger import Logger
@@ -92,7 +92,7 @@ class ChatManager:
             chat = Chat(
                 user_id=user_id,
                 title='New Chat',
-                created_at=datetime.utcnow()
+                created_at=datetime.now(UTC)
             )
             session.add(chat)
             session.flush()  # Flush to get the ID before commit
@@ -151,7 +151,7 @@ class ChatManager:
                 chat_id=chat_id,
                 content=content,
                 sender=sender,
-                timestamp=datetime.utcnow()
+                timestamp=datetime.now(UTC)
             )
             session.add(message)
             session.flush()  # Flush to get the ID before commit
@@ -760,7 +760,7 @@ class ChatManager:
                 MessageFeedback.message_id == message_id
             ).first()
             
-            now = datetime.utcnow()
+            now = datetime.now(UTC)
             
             # Extract model settings
             model_name = None

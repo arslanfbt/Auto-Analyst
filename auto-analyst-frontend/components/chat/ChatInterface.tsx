@@ -1597,6 +1597,8 @@ const ChatInterface: React.FC = () => {
           disabled={isInputDisabled()} 
           isLoading={isLoading}
           onStopGeneration={handleStopGeneration}
+          chatId={activeChatId}
+          userId={userId}
         />
 
         <SettingsPopup 

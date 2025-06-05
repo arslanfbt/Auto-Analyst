@@ -8,7 +8,7 @@ from src.managers.chat_manager import ChatManager
 from src.utils.logger import Logger
 import os
 from dotenv import load_dotenv
-from datetime import datetime
+from datetime import datetime, UTC
 
 load_dotenv()
 
@@ -40,7 +40,7 @@ async def create_message_feedback(message_id: int, feedback: MessageFeedbackCrea
             MessageFeedback.message_id == message_id
         ).first()
         
-        now = datetime.utcnow()
+        now = datetime.now(UTC)
         
         if existing_feedback:
             # Log that we're updating existing feedback
