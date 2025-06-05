@@ -30,10 +30,9 @@ const screenshots = [
   {
     src: "/images/screenshots/autoanalyst-deepanalysis.png",
     alt: "Deep analysis screenshot",
-    title: "Deep Analysis",
-    description: "Multi-step analysis, automated planning, and detailed insights, with the ability to download and share reports in PDF or HTML formats."
-
-  }
+    title: "Introducing Deep Analysis",
+    description: "A 5-step process for critical insight: ask deeper questions, craft an in-depth plan, execute with agents, synthesize findings, and deliver a final recommendation."
+  }  
   // {
   //   src: "/images/screenshots/autoanalyst-code-edit.png",
   //   alt: "Code editor screenshot",
