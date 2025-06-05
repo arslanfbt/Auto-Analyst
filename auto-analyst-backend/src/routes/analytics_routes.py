@@ -2,7 +2,7 @@ import json
 import logging
 import os
 from collections import defaultdict
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, WebSocket
 from fastapi.security import APIKeyHeader
@@ -72,7 +72,7 @@ def get_model_tier(model_name):
 
 # Helper function to parse period parameter
 def get_date_range(period: str):
-    today = datetime.utcnow()
+    today = datetime.now(UTC)
     if period == '7d':
         start_date = today - timedelta(days=7)
     elif period == '30d':
@@ -219,6 +219,10 @@ async def get_users(
     api_key: str = Depends(verify_admin_api_key)
 ):
     logger.log_message(f"User analytics requested with limit: {limit}, offset: {offset}", logging.INFO)
+    
+    # Only show users from the past 7 days
+    seven_days_ago = datetime.now(UTC) - timedelta(days=7)
+    
     user_query = db.query(
         ModelUsage.user_id,
         func.sum(ModelUsage.total_tokens).label("tokens"),
@@ -227,7 +231,8 @@ async def get_users(
         func.min(ModelUsage.timestamp).label("first_seen"),
         func.max(ModelUsage.timestamp).label("last_seen")
     ).filter(
-        ModelUsage.user_id.isnot(None)
+        ModelUsage.user_id.isnot(None),
+        ModelUsage.timestamp >= seven_days_ago
     ).group_by(
         ModelUsage.user_id
     ).order_by(
@@ -246,9 +251,12 @@ async def get_users(
         for user in user_query
     ]
     
-    # Get total users count for pagination
+    # Get total users count for pagination (past 7 days only)
     total_users = db.query(func.count(func.distinct(ModelUsage.user_id)))\
-        .filter(ModelUsage.user_id.isnot(None))\
+        .filter(
+            ModelUsage.user_id.isnot(None),
+            ModelUsage.timestamp >= seven_days_ago
+        )\
         .scalar() or 0
     
     logger.log_message(f"Retrieved {len(users)} users, total users: {total_users}", logging.INFO)
@@ -343,7 +351,7 @@ async def get_session_stats(
         .scalar() or 0
     
     # Active users today
-    today = datetime.utcnow().date()
+    today = datetime.now(UTC).date()
     active_today = db.query(func.count(func.distinct(ModelUsage.user_id)))\
         .filter(
             func.date(ModelUsage.timestamp) == today,
@@ -683,7 +691,7 @@ async def get_cost_projections(
 ):
     logger.log_message("Cost projections requested", logging.INFO)
     # Get last 30 days usage as baseline
-    thirty_days_ago = datetime.utcnow() - timedelta(days=30)
+    thirty_days_ago = datetime.now(UTC) - timedelta(days=30)
     
     baseline = db.query(
         func.sum(ModelUsage.cost).label("total_cost"),
@@ -720,7 +728,7 @@ async def get_today_costs(
     api_key: str = Depends(verify_admin_api_key)
 ):
     logger.log_message("Today's costs requested", logging.INFO)
-    today = datetime.utcnow().date()
+    today = datetime.now(UTC).date()
     
     # Get today's costs
     today_data = db.query(

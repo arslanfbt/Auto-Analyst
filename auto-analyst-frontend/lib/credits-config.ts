@@ -58,6 +58,14 @@ export const PLAN_CREDITS: Record<PlanName, PlanCredits> = {
 }
 
 /**
+ * Credit costs for different features
+ */
+export const FEATURE_COSTS = {
+  /** Cost for deep analysis - premium feature for paid users */
+  DEEP_ANALYSIS: 50,
+}
+
+/**
  * Credit thresholds and limits
  */
 export const CREDIT_THRESHOLDS: CreditThresholds = {
@@ -143,6 +151,20 @@ export class CreditConfig {
     }
     const usagePercentage = this.calculateUsagePercentage(used, total)
     return usagePercentage >= CREDIT_THRESHOLDS.warningThreshold
+  }
+
+  /**
+   * Get the cost for deep analysis feature
+   */
+  static getDeepAnalysisCost(): number {
+    return FEATURE_COSTS.DEEP_ANALYSIS
+  }
+
+  /**
+   * Check if user can afford deep analysis based on their remaining credits
+   */
+  static canAffordDeepAnalysis(remainingCredits: number): boolean {
+    return remainingCredits >= FEATURE_COSTS.DEEP_ANALYSIS
   }
 
   /**

@@ -68,7 +68,7 @@ async def get_excel_sheets(
         sheet_names = excel_file.sheet_names
         
         # Log the sheets found
-        logger.log_message(f"Found {len(sheet_names)} sheets in Excel file: {', '.join(sheet_names)}", level=logging.INFO)
+        # logger.log_message(f"Found {len(sheet_names)} sheets in Excel file: {', '.join(sheet_names)}", level=logging.INFO)
         
         # Return the sheet names
         return {"sheets": sheet_names}
@@ -89,13 +89,13 @@ async def upload_excel(
     """Upload and process an Excel file with a specific sheet"""
     try:
         # Log the incoming request details
-        logger.log_message(f"Excel upload request for session {session_id}: name='{name}', description='{description}', sheet='{sheet_name}'", level=logging.INFO)
+        # logger.log_message(f"Excel upload request for session {session_id}: name='{name}', description='{description}', sheet='{sheet_name}'", level=logging.INFO)
         
         # Check if we need to force a complete session reset before upload
         force_refresh = request.headers.get("X-Force-Refresh") == "true" if request else False
         
         if force_refresh:
-            logger.log_message(f"Force refresh requested for session {session_id} before Excel upload", level=logging.INFO)
+            # logger.log_message(f"Force refresh requested for session {session_id} before Excel upload", level=logging.INFO)
             # Reset the session but don't completely wipe it, so we maintain user association
             app_state.reset_session_to_default(session_id)
         
@@ -123,7 +123,7 @@ async def upload_excel(
             new_df = pd.read_csv(csv_buffer)
             
             # Log some info about the processed data
-            logger.log_message(f"Processed Excel sheet '{sheet_name}' into dataframe with {len(new_df)} rows and {len(new_df.columns)} columns", level=logging.INFO)
+            # logger.log_message(f"Processed Excel sheet '{sheet_name}' into dataframe with {len(new_df)} rows and {len(new_df.columns)} columns", level=logging.INFO)
             
         except Exception as e:
             logger.log_message(f"Error processing Excel file: {str(e)}", level=logging.ERROR)
@@ -132,12 +132,12 @@ async def upload_excel(
         # Update the dataset description to include sheet name
         desc = f"{name} Dataset (from Excel sheet '{sheet_name}'): {description}"
         
-        logger.log_message(f"Updating session dataset with Excel data and description: '{desc}'", level=logging.INFO)
+        # logger.log_message(f"Updating session dataset with Excel data and description: '{desc}'", level=logging.INFO)
         app_state.update_session_dataset(session_id, new_df, name, desc)
         
         # Log the final state
         session_state = app_state.get_session_state(session_id)
-        logger.log_message(f"Session dataset updated with Excel data and description: '{session_state.get('description')}'", level=logging.INFO)
+        # logger.log_message(f"Session dataset updated with Excel data and description: '{session_state.get('description')}'", level=logging.INFO)
         
         return {"message": "Excel file processed successfully", "session_id": session_id, "sheet": sheet_name}
     except Exception as e:
@@ -155,13 +155,13 @@ async def upload_dataframe(
 ):
     try:
         # Log the incoming request details
-        logger.log_message(f"Upload request for session {session_id}: name='{name}', description='{description}'", level=logging.INFO)
+        # logger.log_message(f"Upload request for session {session_id}: name='{name}', description='{description}'", level=logging.INFO)
         
         # Check if we need to force a complete session reset before upload
         force_refresh = request.headers.get("X-Force-Refresh") == "true" if request else False
         
         if force_refresh:
-            logger.log_message(f"Force refresh requested for session {session_id} before upload", level=logging.INFO)
+            # logger.log_message(f"Force refresh requested for session {session_id} before upload", level=logging.INFO)
             # Reset the session but don't completely wipe it, so we maintain user association
             app_state.reset_session_to_default(session_id)
         
@@ -179,12 +179,12 @@ async def upload_dataframe(
                     raise HTTPException(status_code=400, detail=f"Error reading file: {str(e)}")
         desc = f"{name} Dataset: {description}"
         
-        logger.log_message(f"Updating session dataset with description: '{desc}'", level=logging.INFO)
+        # logger.log_message(f"Updating session dataset with description: '{desc}'", level=logging.INFO)
         app_state.update_session_dataset(session_id, new_df, name, desc)
         
         # Log the final state
         session_state = app_state.get_session_state(session_id)
-        logger.log_message(f"Session dataset updated with description: '{session_state.get('description')}'", level=logging.INFO)
+        # logger.log_message(f"Session dataset updated with description: '{session_state.get('description')}'", level=logging.INFO)
         
         return {"message": "Dataframe uploaded successfully", "session_id": session_id}
     except Exception as e:
@@ -235,8 +235,8 @@ async def update_model_settings(
         
         if settings.provider.lower() == "groq":
             logger.log_message(f"Groq Model: {settings.model}", level=logging.INFO)
-            lm = dspy.GROQ(
-                model=settings.model,
+            lm = dspy.LM(
+                model=f"groq/{settings.model}",
                 api_key=settings.api_key,
                 temperature=settings.temperature,
                 max_tokens=settings.max_tokens
@@ -244,7 +244,7 @@ async def update_model_settings(
         elif settings.provider.lower() == "anthropic":
             logger.log_message(f"Anthropic Model: {settings.model}", level=logging.INFO)
             lm = dspy.LM(
-                model=settings.model,
+                model=f"anthropic/{settings.model}",
                 api_key=settings.api_key,
                 temperature=settings.temperature,
                 max_tokens=settings.max_tokens
@@ -260,7 +260,7 @@ async def update_model_settings(
         else:  # OpenAI is the default
             logger.log_message(f"OpenAI Model: {settings.model}", level=logging.INFO)
             lm = dspy.LM(
-                model=settings.model,
+                model=f"openai/{settings.model}",
                 api_key=settings.api_key,
                 temperature=settings.temperature,
                 max_tokens=settings.max_tokens
@@ -269,8 +269,8 @@ async def update_model_settings(
 
         # Test the model configuration without setting it globally
         try:
-            # resp = lm("Hello, are you working?")
-            # logger.log_message(f"Model Response: {resp}", level=logging.INFO)
+            resp = lm("Hello, are you working?")
+            logger.log_message(f"Model Response: {resp}", level=logging.INFO)
             # REMOVED: dspy.configure(lm=lm) - no longer set globally
             return {"message": "Model settings updated successfully"}
         except Exception as model_error:
@@ -366,7 +366,7 @@ async def preview_csv(app_state = Depends(get_app_state), session_id: str = Depe
                     if extracted_description and extracted_description != "No description available":
                         description = extracted_description
                     
-                    logger.log_message(f"Extracted name: '{name}', description: '{description}'", level=logging.INFO)
+                    # logger.log_message(f"Extracted name: '{name}', description: '{description}'", level=logging.INFO)
                 else:
                     # If we can't parse it, use the full description
                     if full_desc and full_desc != "No description available":
@@ -456,7 +456,7 @@ async def reset_session(
             try:
                 session_state = app_state.get_session_state(session_id)
                 session_state["model_config"] = model_config
-                logger.log_message(f"Preserved model settings for session {session_id}", level=logging.INFO)
+                # logger.log_message(f"Preserved model settings for session {session_id}", level=logging.INFO)
             except Exception as e:
                 logger.log_message(f"Failed to restore model settings: {str(e)}", level=logging.ERROR)
         
@@ -623,24 +623,24 @@ async def set_message_info(
         current_chat_id = session_state.get("chat_id")
         current_user_id = session_state.get("user_id")
         
-        # Log changes
-        logger.log_message(
-            f"Message info updated for session {session_id}:\n"
-            f"  message_id: {previous_message_id} -> {current_message_id}\n"
-            f"  chat_id: {previous_chat_id} -> {current_chat_id}\n"
-            f"  user_id: {previous_user_id} -> {current_user_id}",
-            level=logging.INFO
-        )
+        # # Log changes
+        # logger.log_message(
+        #     f"Message info updated for session {session_id}:\n"
+        #     f"  message_id: {previous_message_id} -> {current_message_id}\n"
+        #     f"  chat_id: {previous_chat_id} -> {current_chat_id}\n"
+        #     f"  user_id: {previous_user_id} -> {current_user_id}",
+        #     level=logging.INFO
+        # )
         
         # Verify session state was updated
         updated_session_state = app_state.get_session_state(session_id)
-        logger.log_message(
-            f"Verified session state after update:\n"
-            f"  current_message_id: {updated_session_state.get('current_message_id')}\n"
-            f"  chat_id: {updated_session_state.get('chat_id')}\n"
-            f"  user_id: {updated_session_state.get('user_id')}",
-            level=logging.INFO
-        )
+        # logger.log_message(
+        #     f"Verified session state after update:\n"
+        #     f"  current_message_id: {updated_session_state.get('current_message_id')}\n"
+        #     f"  chat_id: {updated_session_state.get('chat_id')}\n"
+        #     f"  user_id: {updated_session_state.get('user_id')}",
+        #     level=logging.INFO
+        # )
         
         return {
             "success": True,

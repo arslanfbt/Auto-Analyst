@@ -1,8 +1,6 @@
 import dspy
 import src.agents.memory_agents as m
 import asyncio
-from concurrent.futures import ThreadPoolExecutor
-import os
 from dotenv import load_dotenv
 import logging
 from src.utils.logger import Logger
@@ -90,6 +88,7 @@ TECHNICAL CONSIDERATIONS FOR ANALYSIS:
     description = dspy.OutputField(desc="A comprehensive dataset description with business context and technical guidance for analysis agents.")
 
 
+
 class advanced_query_planner(dspy.Signature):
     """
 You are a advanced data analytics planner agent. Your task is to generate the most efficient plan—using the fewest necessary agents and variables—to achieve a user-defined goal. The plan must preserve data integrity, avoid unnecessary steps, and ensure clear data flow between agents.
@@ -155,9 +154,7 @@ plan: planner_preprocessing_agent -> planner_statistical_analytics_agent -> plan
   }
 }
 Try to use as few agents to answer the user query as possible.
-
 Respond in the user's language for all explanations and instructions, but keep all code, variable names, function names, model names, agent names, and library names in English.
-
     """
     dataset = dspy.InputField(desc="Available datasets loaded in the system, use this df, columns set df as copy of df")
     Agent_desc = dspy.InputField(desc="The agents available in the system")
@@ -235,8 +232,6 @@ class intermediate_query_planner(dspy.Signature):
     plan = dspy.OutputField(desc="The plan that would achieve the user defined goal", prefix='Plan:')
     plan_instructions= dspy.OutputField(desc="Instructions from the planner")
 
-# class allocator(dspy.Signature):
-
 
 
 class planner_module(dspy.Module):
@@ -244,9 +239,9 @@ class planner_module(dspy.Module):
         
 
         self.planners = {
-                         "advanced":dspy.ChainOfThought(advanced_query_planner),
-                         "intermediate":dspy.ChainOfThought(intermediate_query_planner),
-                         "basic":dspy.ChainOfThought(basic_query_planner),
+                         "advanced":dspy.asyncify(dspy.ChainOfThought(advanced_query_planner)),
+                         "intermediate":dspy.asyncify(dspy.ChainOfThought(intermediate_query_planner)),
+                         "basic":dspy.asyncify(dspy.ChainOfThought(basic_query_planner)),
                         #  "unrelated":dspy.Predict(self.basic_qa_agent)
                          }
         self.planner_desc = {
@@ -259,15 +254,15 @@ class planner_module(dspy.Module):
 
         self.allocator = dspy.Predict("goal,planner_desc,dataset->exact_word_complexity,reasoning")
 
-    def forward(self, goal,dataset,Agent_desc):
+    async def forward(self, goal,dataset,Agent_desc):
         complexity = self.allocator(goal=goal, planner_desc= str(self.planner_desc), dataset=str(dataset))
         # print(complexity)
         if complexity.exact_word_complexity.strip() != "unrelated":
             try:
-                plan = self.planners[complexity.exact_word_complexity.strip()](goal=goal, dataset=dataset, Agent_desc=Agent_desc)
+                plan = await self.planners[complexity.exact_word_complexity.strip()](goal=goal, dataset=dataset, Agent_desc=Agent_desc)
 
             except Exception as e:
-                plan = self.planners["intermediate"](goal=goal, dataset=dataset, Agent_desc=Agent_desc)
+                plan = await self.planners["intermediate"](goal=goal, dataset=dataset, Agent_desc=Agent_desc)
             
             output = {"complexity":complexity.exact_word_complexity.strip()
                     ,"plan":dict(plan)}
@@ -277,6 +272,7 @@ class planner_module(dspy.Module):
                       }
         # print(output)
         return output
+
 
 
 
@@ -340,6 +336,7 @@ You are given:
 -Preserve column structure  and avoid unnecessary modifications.
 -Ensure data types are appropriate  (e.g., dates parsed correctly).
 -Log assumptions  in the code.
+Respond in the user's language for all summary and reasoning but keep the code in english
     """
     dataset = dspy.InputField(desc="The dataset, preloaded as df")
     goal = dspy.InputField(desc="User-defined goal for the analysis")
@@ -395,6 +392,7 @@ class planner_data_viz_agent(dspy.Signature):
     * You **never** create any data.
     * You **only** use the data and variables passed to you.
     * If any required data or variable is missing or invalid, **you must stop** and return a clear error message.
+    * Respond in the user's language for all summary and reasoning but keep the code in english
     * it should be update_yaxes, update_xaxes, not axis
     By following these conditions and responsibilities, your role is to ensure that the **visualizations** are generated as per the user goal, using the valid data and instructions given to you.
         """
@@ -494,6 +492,7 @@ def statistical_model(X, y, goal, period=None):
 **Output:**
 * The **code** implementing the statistical analysis, including all required steps.
 * A **summary** of what the statistical analysis does, how it's performed, and why it fits the goal.
+* Respond in the user's language for all summary and reasoning but keep the code in english
     """
     dataset = dspy.InputField(desc="Preprocessed dataset, often named df_cleaned")
     goal = dspy.InputField(desc="The user's statistical analysis goal, e.g., regression or seasonal_decompose")
@@ -502,9 +501,8 @@ def statistical_model(X, y, goal, period=None):
     code = dspy.OutputField(desc="Python code for statistical modeling using statsmodels")
     summary = dspy.OutputField(desc="Explanation of statistical analysis steps")
     
-# class basic_qa_signature(dspy.Signature):
-
     
+
 class planner_sk_learn_agent(dspy.Signature):
     """
     **Agent Definition:**
@@ -583,6 +581,7 @@ class planner_sk_learn_agent(dspy.Signature):
     **Output:**
     * The **code** implementing the ML task, including all required steps.
     * A **summary** of what the model does, how it is evaluated, and why it fits the goal.
+    * Respond in the user's language for all summary and reasoning but keep the code in english
     """
     dataset = dspy.InputField(desc="Input dataset, often cleaned and feature-selected (e.g., df_cleaned)")
     goal = dspy.InputField(desc="The user's machine learning goal (e.g., classification or regression)")
@@ -629,6 +628,7 @@ class preprocessing_agent(dspy.Signature):
     • Filled missing numeric values with column means
     • Filled missing categorical values with column modes
     • Converted 1 date column to datetime format
+     Respond in the user's language for all summary and reasoning but keep the code in english
     """
     dataset = dspy.InputField(desc="Available datasets loaded in the system, use this df, column_names  set df as copy of df")
     goal = dspy.InputField(desc="The user defined goal could ")
@@ -704,6 +704,7 @@ class statistical_analytics_agent(dspy.Signature):
     • Significant predictors include square footage (p<0.001) and number of bathrooms (p<0.01)
     • Detected strong seasonal pattern with 12-month periodicity
     • Forecast shows 15% growth trend over next quarter
+    Respond in the user's language for all summary and reasoning but keep the code in english
     """
     dataset = dspy.InputField(desc="Available datasets loaded in the system, use this df,columns  set df as copy of df")
     goal = dspy.InputField(desc="The user defined goal for the analysis to be performed")
@@ -726,7 +727,7 @@ class sk_learn_agent(dspy.Signature):
     • Feature importance analysis revealed that contract length and monthly charges are the strongest predictors of churn
     • Implemented K-means clustering (k=4) on customer shopping behaviors
     • Identified distinct segments: high-value frequent shoppers (22%), occasional big spenders (35%), budget-conscious regulars (28%), and rare visitors (15%)
-    
+    Respond in the user's language for all summary and reasoning but keep the code in english
     """
     dataset = dspy.InputField(desc="Available datasets loaded in the system, use this df,columns. set df as copy of df")
     goal = dspy.InputField(desc="The user defined goal ")
@@ -759,6 +760,7 @@ class code_combiner_agent(dspy.Signature):
     • Fixed variable scope issues, standardized DataFrame handling (e.g., using `df.copy()`), and corrected errors.
     • Validated column names and data types against the dataset definition to prevent runtime issues.
     • Ensured visualizations are displayed correctly (e.g., added `fig.show()`).
+    Respond in the user's language for all summary and reasoning but keep the code in english
     """
     dataset = dspy.InputField(desc="Use this double check column_names, data types")
     agent_code_list =dspy.InputField(desc="A list of code given by each agent")
@@ -766,6 +768,7 @@ class code_combiner_agent(dspy.Signature):
     summary = dspy.OutputField(desc="A concise 4 bullet-point summary of the code integration performed and improvements made")
     
     
+
 class data_viz_agent(dspy.Signature):
     # Visualizes data using Plotly
     """    
@@ -797,6 +800,7 @@ class data_viz_agent(dspy.Signature):
     - Output only the code and a concise bullet-point summary of what the visualization reveals.
     - Always end each visualization with:  
     fig.to_html(full_html=False)
+    Respond in the user's language for all summary and reasoning but keep the code in english
     Example Summary:  
     • Created an interactive scatter plot of sales vs. marketing spend with color-coded product categories  
     • Included a trend line showing positive correlation (r=0.72)  
@@ -804,6 +808,7 @@ class data_viz_agent(dspy.Signature):
     • Generated a time series chart of monthly revenue from 2020-2023  
     • Added annotations for key business events  
     • Visualization reveals 35% YoY growth with seasonal peaks in Q4
+    
     """
     goal = dspy.InputField(desc="user defined goal which includes information about data and chart they want to plot")
     dataset = dspy.InputField(desc=" Provides information about the data in the data frame. Only use column names and dataframe_name as in this context")
@@ -848,6 +853,7 @@ fixed_code:
 # Convert percentage strings to floats
 df['Change %'] = df['Change %'].astype(str).str.rstrip('%').astype(float)
 df['Change % BTC'] = df['Change % BTC'].astype(str).str.rstrip('%').astype(float)
+Respond in the user's language for all summary and reasoning but keep the code in english
 ===
     """
     dataset_context = dspy.InputField(desc="The dataset context to be used for the code fix")
@@ -890,56 +896,34 @@ class auto_analyst_ind(dspy.Module):
         # Create modules from agent signatures
         for i, a in enumerate(agents):
             name = a.__pydantic_core_schema__['schema']['model_name']
-            self.agents[name] = dspy.ChainOfThoughtWithHint(a)
+            self.agents[name] = dspy.asyncify(dspy.ChainOfThoughtWithHint(a))
             self.agent_inputs[name] = {x.strip() for x in str(agents[i].__pydantic_core_schema__['cls']).split('->')[0].split('(')[1].split(',')}
             self.agent_desc.append(get_agent_description(name))
             
         # Initialize components
-        self.memory_summarize_agent = dspy.ChainOfThought(m.memory_summarize_agent)
+        # self.memory_summarize_agent = dspy.ChainOfThought(m.memory_summarize_agent)
         self.dataset = retrievers['dataframe_index'].as_retriever(k=1)
         self.styling_index = retrievers['style_index'].as_retriever(similarity_top_k=1)
-        self.code_combiner_agent = dspy.ChainOfThought(code_combiner_agent)
+        # self.code_combiner_agent = dspy.ChainOfThought(code_combiner_agent)
         
-        # Initialize thread pool
-        self.executor = ThreadPoolExecutor(max_workers=min(4, os.cpu_count() * 2))
     
-    def execute_agent(self, specified_agent, inputs):
+    async def execute_agent(self, specified_agent, inputs):
         """Execute agent and generate memory summary in parallel"""
         try:
             # Execute main agent
-            agent_result = self.agents[specified_agent.strip()](**inputs)
+            agent_result = await self.agents[specified_agent.strip()](**inputs)
             return specified_agent.strip(), dict(agent_result)
             
         except Exception as e:
             return specified_agent.strip(), {"error": str(e)}
 
-    def execute_agent_with_memory(self, specified_agent, inputs, query):
-        """Execute agent and generate memory summary in parallel"""
-        try:
-            # Execute main agent
-            agent_result = self.agents[specified_agent.strip()](**inputs)
-            agent_dict = dict(agent_result)
-            
-            # Generate memory summary
-            memory_result = self.memory_summarize_agent(
-                agent_response=specified_agent+' '+agent_dict['code']+'\n'+agent_dict['summary'],
-                user_goal=query
-            )
-            
-            return {
-                specified_agent.strip(): agent_dict,
-                'memory_'+specified_agent.strip(): str(memory_result.summary)
-            }
-        except Exception as e:
-            return {"error": str(e)}
-
-    def forward(self, query, specified_agent):
+    async def forward(self, query, specified_agent):
         try:
             # If specified_agent contains multiple agents separated by commas
             # This is for handling multiple @agent mentions in one query
             if "," in specified_agent:
                 agent_list = [agent.strip() for agent in specified_agent.split(",")]
-                return self.execute_multiple_agents(query, agent_list)
+                return await self.execute_multiple_agents(query, agent_list)
             
             # Process query with specified agent (single agent case)
             dict_ = {}
@@ -954,7 +938,7 @@ class auto_analyst_ind(dspy.Module):
             inputs['hint'] = str(dict_['hint']).replace('[','').replace(']','')
             
             # Execute agent
-            result = self.agents[specified_agent.strip()](**inputs)
+            result = await self.agents[specified_agent.strip()](**inputs)
             output_dict = {specified_agent.strip(): dict(result)}
 
             if "error" in output_dict:
@@ -965,7 +949,7 @@ class auto_analyst_ind(dspy.Module):
         except Exception as e:
             return {"response": f"This is the error from the system: {str(e)}"}
     
-    def execute_multiple_agents(self, query, agent_list):
+    async def execute_multiple_agents(self, query, agent_list):
         """Execute multiple agents sequentially on the same query"""
         try:
             # Initialize resources
@@ -990,7 +974,7 @@ class auto_analyst_ind(dspy.Module):
                 inputs['hint'] = str(dict_['hint']).replace('[','').replace(']','')
                 
                 # Execute agent
-                agent_result = self.agents[agent_name](**inputs)
+                agent_result = await self.agents[agent_name](**inputs)
                 agent_dict = dict(agent_result)
                 results[agent_name] = agent_dict
                 
@@ -1016,38 +1000,35 @@ class auto_analyst(dspy.Module):
         
         for i, a in enumerate(agents):
             name = a.__pydantic_core_schema__['schema']['model_name']
-            self.agents[name] = dspy.ChainOfThought(a)
+            self.agents[name] = dspy.asyncify(dspy.ChainOfThought(a))
             self.agent_inputs[name] = {x.strip() for x in str(agents[i].__pydantic_core_schema__['cls']).split('->')[0].split('(')[1].split(',')}
             self.agent_desc.append({name: get_agent_description(name)})
 
-        self.agents['basic_qa_agent'] = dspy.Predict("goal->answer") 
+        self.agents['basic_qa_agent'] = dspy.asyncify(dspy.Predict("goal->answer")) 
         self.agent_inputs['basic_qa_agent'] = {"goal"}
         self.agent_desc.append({'basic_qa_agent':"Answers queries unrelated to data & also that include links, poison or attempts to attack the system"})
 
         
         # Initialize coordination agents
         self.planner = planner_module()
-        self.refine_goal = dspy.ChainOfThought(goal_refiner_agent)
-        self.code_combiner_agent = dspy.ChainOfThought(code_combiner_agent)
-        self.story_teller = dspy.ChainOfThought(story_teller_agent)
+        # self.refine_goal = dspy.ChainOfThought(goal_refiner_agent)
+        # self.code_combiner_agent = dspy.ChainOfThought(code_combiner_agent)
+        # self.story_teller = dspy.ChainOfThought(story_teller_agent)
         self.memory_summarize_agent = dspy.ChainOfThought(m.memory_summarize_agent)
                 
         # Initialize retrievers
         self.dataset = retrievers['dataframe_index'].as_retriever(k=1)
         self.styling_index = retrievers['style_index'].as_retriever(similarity_top_k=1)
-        
-        # Initialize thread pool for parallel execution
-        self.executor = ThreadPoolExecutor(max_workers=min(len(agents) + 2, os.cpu_count() * 2))
 
-    def execute_agent(self, agent_name, inputs):
+    async def execute_agent(self, agent_name, inputs):
         """Execute a single agent with given inputs"""
         try:
-            result = self.agents[agent_name.strip()](**inputs)
+            result = await self.agents[agent_name.strip()](**inputs)
             return agent_name.strip(), dict(result)
         except Exception as e:
             return agent_name.strip(), {"error": str(e)}
 
-    def get_plan(self, query):
+    async def get_plan(self, query):
         """Get the analysis plan"""
         dict_ = {}
         dict_['dataset'] = self.dataset.retrieve(query)[0].text
@@ -1055,14 +1036,14 @@ class auto_analyst(dspy.Module):
         dict_['goal'] = query
         dict_['Agent_desc'] = str(self.agent_desc)
         
-        module_return = self.planner(goal=dict_['goal'], dataset=dict_['dataset'], Agent_desc=dict_['Agent_desc'])
+        module_return = await self.planner(goal=dict_['goal'], dataset=dict_['dataset'], Agent_desc=dict_['Agent_desc'])
         plan_dict = dict(module_return['plan'])
+        logger.log_message(f"Plan: {plan_dict}", level=logging.INFO)
         if 'complexity' in module_return:
             complexity = module_return['complexity']
         else:
             complexity = 'basic'
         plan_dict['complexity'] = complexity
-
 
         return plan_dict
 
@@ -1082,11 +1063,9 @@ class auto_analyst(dspy.Module):
         
         if "basic_qa_agent" in plan_text:
             inputs = dict(goal=query)
-            response = self.execute_agent('basic_qa_agent', inputs)
-            yield "basic_qa_agent", input, response
+            agent_name, response = await self.execute_agent('basic_qa_agent', inputs) #! SHOULDN'T THIS BE **inputs ?
+            yield agent_name, inputs, response
             return 
-
-
 
         plan_list = [agent.strip() for agent in plan_text.split("->") if agent.strip()]
 
@@ -1102,16 +1081,16 @@ class auto_analyst(dspy.Module):
         else:
             plan_instructions = {}
 
-
-
         # If no plan was produced, short-circuit
         if not plan_list:
             yield "plan_not_found", dict(plan), {"error": "No plan found"}
             return
         
 
-        # Launch each agent in parallel, attaching its own instructions
-        futures = []
+        # Create async tasks for each agent, similar to deep analysis approach
+        tasks = []
+        task_info = []
+        
         for idx, agent_name in enumerate(plan_list):
             key = agent_name.strip()
             # gather input fields except plan_instructions
@@ -1141,19 +1120,31 @@ class auto_analyst(dspy.Module):
                     next_instructions = plan_instructions.get(next_agent, {}).get("instruction", "")
                     formatted_instructions[f"Next Agent {next_agent}"] = next_instructions
                 
-                
                 inputs["plan_instructions"] = str(formatted_instructions)
+            
             logger.log_message(f"Inputs: {inputs}", level=logging.INFO)
-            future = self.executor.submit(self.execute_agent, agent_name, inputs)
-            futures.append((agent_name, inputs, future))
+            
+            # Create async task directly from the asyncified agent
+            task = self.execute_agent(agent_name, inputs)
+            tasks.append(task)
+            task_info.append((agent_name, inputs))
         
-        # Yield results as they complete 
-        completed_results = []
-        for agent_name, inputs, future in futures:
-            try:
-                name, result = await asyncio.get_event_loop().run_in_executor(None, future.result)
-                completed_results.append((name, result))
-                yield name, inputs, result
-            except Exception as e:
-                yield agent_name, inputs, {"error": str(e)}
+        # Execute all tasks concurrently and yield results as they complete
+        try:
+            # Execute all tasks concurrently
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            
+            # Yield results with their corresponding task info
+            for i, result in enumerate(results):
+                agent_name, inputs = task_info[i]
+                
+                if isinstance(result, Exception):
+                    yield agent_name, inputs, {"error": str(result)}
+                else:
+                    name, response = result
+                    yield name, inputs, response
+                    
+        except Exception as e:
+            logger.log_message(f"Error in task execution: {str(e)}", level=logging.ERROR)
+            yield "error", {}, {"error": str(e)}
 
