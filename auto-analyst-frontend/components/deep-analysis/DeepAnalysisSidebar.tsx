@@ -74,6 +74,13 @@ export default function DeepAnalysisSidebar({
   
   const activeSessionId = sessionId || storeSessionId
 
+  // Check access immediately when sidebar opens
+  useEffect(() => {
+    if (isOpen && !deepAnalysisAccess.hasAccess) {
+      setShowPremiumUpgradeModal(true)
+    }
+  }, [isOpen, deepAnalysisAccess.hasAccess])
+
   const forceUpdate = () => setRefreshTrigger(prev => prev + 1)
 
   const initialSteps: AnalysisStep[] = [
@@ -1083,8 +1090,8 @@ export default function DeepAnalysisSidebar({
       <Dialog open={showPremiumUpgradeModal} onOpenChange={setShowPremiumUpgradeModal}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Crown className="w-5 h-5 text-yellow-500" />
+            <DialogTitle className="flex items-center gap-2 text-lg">
+              <Crown className="w-6 h-6 text-yellow-500" />
               Deep Analysis - Premium Feature
             </DialogTitle>
           </DialogHeader>
@@ -1092,19 +1099,19 @@ export default function DeepAnalysisSidebar({
             <div className="flex items-center gap-3 p-4 bg-gradient-to-r from-red-50 to-orange-50 rounded-lg border border-[#FF7F7F]/20">
               <Lock className="w-6 h-6 text-[#FF7F7F]" />
               <div>
-                <h4 className="font-medium text-gray-900">Upgrade Required</h4>
-                <p className="text-sm text-gray-600">
-                  Deep Analysis is a premium feature that provides a comprehensive research report examining your data from every possible angle, uncovering hidden patterns and relationships.
+                <h4 className="font-semibold text-gray-900 text-base">Upgrade Required</h4>
+                <p className="text-base text-gray-700 mt-1">
+                  You need to upgrade to the standard tier to use this. Here is a <a href="https://firebird-technologies.github.io/" className="text-[#FF7F7F] hover:underline underline" target="_blank" rel="noopener noreferrer">sample report</a>.
                 </p>
               </div>
             </div>
             
-            <div className="space-y-2">
-              <h5 className="font-medium text-gray-900">What you'll get:</h5>
-              <ul className="text-sm text-gray-600 space-y-1 ml-4">
-                <li>• Advanced statistical analysis</li>
-                <li>• Detailed visualizations and insights</li>
-                <li>• Comprehensive research report</li>
+            <div className="space-y-3">
+              <h5 className="font-semibold text-gray-900 text-base">What it can do:</h5>
+              <ul className="text-base text-gray-700 space-y-2 ml-4">
+                <li>• Asks deeper, smarter questions.</li>
+                <li>• Builds a strategic plan and delegates with precision.</li>
+                <li>• Synthesizes everything into a clear conclusion.</li>
               </ul>
             </div>
             <div className="flex gap-3 pt-4">
