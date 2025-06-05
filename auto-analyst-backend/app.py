@@ -46,7 +46,7 @@ from src.schemas.query_schemas import QueryRequest
 from src.utils.logger import Logger
 
 # Import deep analysis components directly
-# from src.agents.test_deep_agents import deep_analysis_module
+# from src.agents.try_deep_agents import deep_analysis_module
 from src.agents.deep_agents import deep_analysis_module
 from src.utils.generate_report import generate_html_report
 logger = Logger("app", see_time=True, console_log=False)
@@ -1032,10 +1032,20 @@ async def _generate_deep_analysis_stream(session_state: dict, goal: str, session
                                     report.synthesis = json.dumps(content["synthesis"])
                         
                         # For the final step, update the HTML report
-                        if step == "completed" and content:
-                            report.html_report = content
+                        if step == "completed":
+                            if content:
+                                report.html_report = content
+                                logger.log_message(f"Storing HTML report in database, length: {len(content)}", level=logging.INFO)
+                            else:
+                                logger.log_message("No HTML content provided for completed step", level=logging.WARNING)
+                                
                             report.end_time = datetime.now(UTC)
-                            report.duration_seconds = int((report.end_time - report.start_time).total_seconds())
+                            # Ensure start_time is timezone-aware before calculating duration
+                            if report.start_time.tzinfo is None:
+                                start_time_utc = report.start_time.replace(tzinfo=UTC)
+                            else:
+                                start_time_utc = report.start_time
+                            report.duration_seconds = int((report.end_time - start_time_utc).total_seconds())
                             
                         report.updated_at = datetime.now(UTC)
                         db_session.commit()
@@ -1084,65 +1094,76 @@ async def _generate_deep_analysis_stream(session_state: dict, goal: str, session
                 elif update.get("step") == "conclusion" and update.get("status") == "completed":
                     # Store the final result for later processing
                     final_result = update.get("final_result")
-            
-            # Convert Plotly figures to JSON format for network transmission
+                    
+                    # Convert Plotly figures to JSON format for network transmission
                     if final_result:
-            import plotly.io
+                        import plotly.io
                         serialized_return_dict = final_result.copy()
-            
-            # Convert plotly_figs to JSON format
-            if 'plotly_figs' in serialized_return_dict and serialized_return_dict['plotly_figs']:
-                json_figs = []
-                for fig_list in serialized_return_dict['plotly_figs']:
-                    if isinstance(fig_list, list):
-                        json_fig_list = []
-                        for fig in fig_list:
-                            if hasattr(fig, 'to_json'):  # Check if it's a Plotly figure
-                                json_fig_list.append(plotly.io.to_json(fig))
-                            else:
-                                json_fig_list.append(fig)  # Already JSON or other format
-                        json_figs.append(json_fig_list)
-                    else:
-                        # Single figure case
-                        if hasattr(fig_list, 'to_json'):
-                            json_figs.append(plotly.io.to_json(fig_list))
-                        else:
-                            json_figs.append(fig_list)
-                serialized_return_dict['plotly_figs'] = json_figs
-            
+                        
+                        # Convert plotly_figs to JSON format
+                        if 'plotly_figs' in serialized_return_dict and serialized_return_dict['plotly_figs']:
+                            json_figs = []
+                            for fig_list in serialized_return_dict['plotly_figs']:
+                                if isinstance(fig_list, list):
+                                    json_fig_list = []
+                                    for fig in fig_list:
+                                        if hasattr(fig, 'to_json'):  # Check if it's a Plotly figure
+                                            json_fig_list.append(plotly.io.to_json(fig))
+                                        else:
+                                            json_fig_list.append(fig)  # Already JSON or other format
+                                    json_figs.append(json_fig_list)
+                                else:
+                                    # Single figure case
+                                    if hasattr(fig_list, 'to_json'):
+                                        json_figs.append(plotly.io.to_json(fig_list))
+                                    else:
+                                        json_figs.append(fig_list)
+                            serialized_return_dict['plotly_figs'] = json_figs
+                        
                         # Update DB with analysis results
                         await update_report_in_db("running", update.get("progress", 0), "analysis", serialized_return_dict)
                         
                         # Generate HTML report using the original final_result with Figure objects
-                        html_report = generate_html_report(final_result)
+                        html_report = None
+                        try:
+                            logger.log_message("Generating HTML report...", level=logging.INFO)
+                            html_report = generate_html_report(final_result)
+                            logger.log_message(f"HTML report generated successfully, length: {len(html_report) if html_report else 0}", level=logging.INFO)
+                        except Exception as e:
+                            logger.log_message(f"Error generating HTML report: {str(e)}", level=logging.ERROR)
+                            # Continue even if HTML generation fails
                         
                         # Send the analysis results
-            yield json.dumps({
-                "step": "analysis",
-                "status": "completed",
-                "content": serialized_return_dict,
-                "progress": 90
-            }) + "\n"
-            
+                        yield json.dumps({
+                            "step": "analysis",
+                            "status": "completed",
+                            "content": serialized_return_dict,
+                            "progress": 90
+                        }) + "\n"
+                        
                         # Send report generation status
-            yield json.dumps({
-                "step": "report",
-                "status": "processing",
-                "message": "Generating final report...",
-                "progress": 95
-            }) + "\n"
-            
+                        yield json.dumps({
+                            "step": "report",
+                            "status": "processing",
+                            "message": "Generating final report...",
+                            "progress": 95
+                        }) + "\n"
+                        
                         # Send final completion
-            yield json.dumps({
-                "step": "completed",
-                "status": "success",
-                "analysis": serialized_return_dict,
-                "html_report": html_report,
-                "progress": 100
-            }) + "\n"
-            
-            # Update DB with completed report
-            await update_report_in_db("completed", 100, "completed", html_report)
+                        yield json.dumps({
+                            "step": "completed",
+                            "status": "success",
+                            "analysis": serialized_return_dict,
+                            "html_report": html_report,
+                            "progress": 100
+                        }) + "\n"
+                        
+                        # Update DB with completed report (with HTML if generated)
+                        if html_report:
+                            logger.log_message(f"Saving HTML report to database, length: {len(html_report)}", level=logging.INFO)
+                        else:
+                            logger.log_message("No HTML report to save to database", level=logging.WARNING)
+                        await update_report_in_db("completed", 100, "completed", html_report)
                 elif update.get("step") == "error":
                     # Forward error directly
                     yield json.dumps(update) + "\n"
@@ -1161,7 +1182,7 @@ async def _generate_deep_analysis_stream(session_state: dict, goal: str, session
                     "progress": 0
                 }) + "\n"
                 await update_report_in_db("failed", 0)
-            
+        
     except Exception as e:
         logger.log_message(f"Error in deep analysis stream: {str(e)}", level=logging.ERROR)
         yield json.dumps({
