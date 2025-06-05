@@ -62,7 +62,7 @@ export const PLAN_CREDITS: Record<PlanName, PlanCredits> = {
  */
 export const FEATURE_COSTS = {
   /** Cost for deep analysis - premium feature for paid users */
-  DEEP_ANALYSIS: 29,
+  DEEP_ANALYSIS: 50,
 }
 
 /**

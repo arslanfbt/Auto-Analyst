@@ -1,5 +1,5 @@
 import React from 'react'
-import { Brain, Loader2, CheckCircle2, AlertCircle, Download, FileText } from 'lucide-react'
+import { Brain, Loader2, CheckCircle2, AlertCircle, Download } from 'lucide-react'
 import { Button } from '../ui/button'
 import { Progress } from '../ui/progress'
 import { Badge } from '../ui/badge'
@@ -11,8 +11,8 @@ import { DeepAnalysisReport } from './types'
 interface CurrentAnalysisViewProps {
   currentReport: DeepAnalysisReport | null
   refreshTrigger: number
-  onDownloadReport: (reportData?: any, format?: 'html' | 'pdf') => void
-  downloadingFormat?: 'html' | 'pdf' | null
+  onDownloadReport: (reportData?: any) => void
+  downloadingFormat?: 'html' | null
 }
 
 export default function CurrentAnalysisView({
@@ -106,47 +106,33 @@ export default function CurrentAnalysisView({
           </div>
         </div>
 
-        {/* Download Buttons */}
+        {/* Download Button */}
         {report.status === 'completed' && (
-          <div className="flex gap-2">
-            <Button 
-              onClick={() => onDownloadReport(report, 'html')}
-              variant="outline" 
-              className="flex-1 text-xs"
-              size="sm"
-              disabled={downloadingFormat === 'html'}
-            >
-              {downloadingFormat === 'html' ? (
-                <>
-                  <Loader2 className="w-3 h-3 mr-2 animate-spin" />
-                  Preparing...
-                </>
-              ) : (
-                <>
-                  <Download className="w-3 h-3 mr-2" />
-                  HTML
-                </>
-              )}
-            </Button>
-            <Button 
-              onClick={() => onDownloadReport(report, 'pdf')}
-              variant="outline" 
-              className="flex-1 text-xs"
-              size="sm"
-              disabled={downloadingFormat === 'pdf'}
-            >
-              {downloadingFormat === 'pdf' ? (
-                <>
-                  <Loader2 className="w-3 h-3 mr-2 animate-spin" />
-                  Preparing...
-                </>
-              ) : (
-                <>
-                  <FileText className="w-3 h-3 mr-2" />
-                  PDF
-                </>
-              )}
-            </Button>
+          <div className="space-y-2">
+            <div className="flex">
+              <Button 
+                onClick={() => onDownloadReport(report)}
+                variant="outline" 
+                className="w-full text-xs"
+                size="sm"
+                disabled={downloadingFormat === 'html'}
+              >
+                {downloadingFormat === 'html' ? (
+                  <>
+                    <Loader2 className="w-3 h-3 mr-2 animate-spin" />
+                    Preparing HTML Report...
+                  </>
+                ) : (
+                  <>
+                    <Download className="w-3 h-3 mr-2" />
+                    Download Report
+                  </>
+                )}
+              </Button>
+            </div>
+            <div className="text-xs text-gray-500 text-center">
+              Downloads as HTML - you can print as PDF using your browser
+            </div>
           </div>
         )}
 

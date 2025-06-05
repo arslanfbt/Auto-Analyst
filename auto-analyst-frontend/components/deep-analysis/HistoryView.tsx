@@ -11,9 +11,9 @@ interface HistoryViewProps {
   storedReports: StoredReport[]
   selectedHistoryReport: StoredReport | null
   onSelectReport: (report: StoredReport | null) => void
-  onDownloadReport: (reportData?: any, format?: 'html' | 'pdf') => void
+  onDownloadReport: (reportData?: any) => void
   onDeleteReport: (reportId: string) => void
-  downloadingFormat?: 'html' | 'pdf' | null
+  downloadingFormat?: 'html' | null
 }
 
 export default function HistoryView({
@@ -118,53 +118,39 @@ export default function HistoryView({
               <p className="text-xs text-gray-600">{selectedHistoryReport.summary}</p>
             </div>
 
-            <div className="flex gap-2">
-              <Button 
-                onClick={() => onDownloadReport(fullReportData || selectedHistoryReport, 'html')}
-                variant="outline" 
-                className="flex-1 text-xs"
-                size="sm"
-                disabled={downloadingFormat === 'html'}
-              >
-                {downloadingFormat === 'html' ? (
-                  <>
-                    <Loader2 className="w-3 h-3 mr-2 animate-spin" />
-                    Preparing...
-                  </>
-                ) : (
-                  <>
-                    <Download className="w-3 h-3 mr-2" />
-                    HTML
-                  </>
-                )}
-              </Button>
-              <Button 
-                onClick={() => onDownloadReport(fullReportData || selectedHistoryReport, 'pdf')}
-                variant="outline" 
-                className="flex-1 text-xs"
-                size="sm"
-                disabled={downloadingFormat === 'pdf'}
-              >
-                {downloadingFormat === 'pdf' ? (
-                  <>
-                    <Loader2 className="w-3 h-3 mr-2 animate-spin" />
-                    Preparing...
-                  </>
-                ) : (
-                  <>
-                    <FileText className="w-3 h-3 mr-2" />
-                    PDF
-                  </>
-                )}
-              </Button>
-              <Button 
-                onClick={() => onDeleteReport(selectedHistoryReport.id)}
-                variant="outline"
-                className="px-3 text-xs"
-                size="sm"
-              >
-                <Trash2 className="w-3 h-3" />
-              </Button>
+            <div className="space-y-2">
+              <div className="flex gap-2">
+                <Button 
+                  onClick={() => onDownloadReport(fullReportData || selectedHistoryReport)}
+                  variant="outline" 
+                  className="flex-1 text-xs"
+                  size="sm"
+                  disabled={downloadingFormat === 'html'}
+                >
+                  {downloadingFormat === 'html' ? (
+                    <>
+                      <Loader2 className="w-3 h-3 mr-2 animate-spin" />
+                      Preparing...
+                    </>
+                  ) : (
+                    <>
+                      <Download className="w-3 h-3 mr-2" />
+                      Download Report
+                    </>
+                  )}
+                </Button>
+                <Button 
+                  onClick={() => onDeleteReport(selectedHistoryReport.id)}
+                  variant="outline"
+                  className="px-3 text-xs"
+                  size="sm"
+                >
+                  <Trash2 className="w-3 h-3" />
+                </Button>
+              </div>
+              <div className="text-xs text-gray-500 text-center">
+                Downloads as HTML - you can print as PDF using your browser
+              </div>
             </div>
           </div>
         </div>

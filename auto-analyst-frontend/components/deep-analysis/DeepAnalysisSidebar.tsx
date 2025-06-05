@@ -70,7 +70,7 @@ export default function DeepAnalysisSidebar({
   const deepAnalysisAccess = useFeatureAccess('DEEP_ANALYSIS', subscription)
   const [showPremiumUpgradeModal, setShowPremiumUpgradeModal] = useState(false)
   const { toast } = useToast()
-  const [downloadingFormat, setDownloadingFormat] = useState<'html' | 'pdf' | null>(null)
+  const [downloadingFormat, setDownloadingFormat] = useState<'html' | null>(null)
   
   const activeSessionId = sessionId || storeSessionId
 
@@ -741,7 +741,7 @@ export default function DeepAnalysisSidebar({
     }
   }
 
-  const handleDownloadReport = async (reportData?: any, format: 'html' | 'pdf' = 'html') => {
+  const handleDownloadReport = async (reportData?: any) => {
     if (downloadingFormat) {
       toast({
         title: "Download in progress",
@@ -751,10 +751,10 @@ export default function DeepAnalysisSidebar({
       return;
     }
 
-    setDownloadingFormat(format)
+    setDownloadingFormat('html')
     
     toast({
-      title: `Preparing your ${format.toUpperCase()} report...`,
+      title: "Preparing your HTML report...",
       description: "This may take a few seconds. Please don't close this window.",
       duration: 3000,
     });
@@ -767,9 +767,7 @@ export default function DeepAnalysisSidebar({
         
         // Try to get the report directly from the backend
         try {
-          const endpoint = format === 'pdf' 
-            ? `${API_URL}/deep_analysis/download_pdf/${report_uuid}${userId ? `?user_id=${userId}` : ''}` 
-            : `${API_URL}/deep_analysis/download_from_db/${report_uuid}${userId ? `?user_id=${userId}` : ''}`;
+          const endpoint = `${API_URL}/deep_analysis/download_from_db/${report_uuid}${userId ? `?user_id=${userId}` : ''}`;
           
           const response = await fetch(endpoint, {
             method: 'POST'
@@ -782,17 +780,15 @@ export default function DeepAnalysisSidebar({
             
             const a = document.createElement('a');
             a.href = url;
-            a.download = format === 'pdf' 
-              ? `deep-analysis-report-${Date.now()}.pdf`
-              : `deep-analysis-report-${Date.now()}.html`;
+            a.download = `deep-analysis-report-${Date.now()}.html`;
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
             URL.revokeObjectURL(url);
             
             toast({
-              title: `${format.toUpperCase()} report downloaded successfully! 📄`,
-              description: "Your deep analysis report has been saved to your downloads folder.",
+              title: "HTML report downloaded successfully! 📄",
+              description: "Your deep analysis report has been saved to your downloads folder. You can print it as PDF using your browser.",
               duration: 4000,
             });
             
@@ -869,12 +865,7 @@ export default function DeepAnalysisSidebar({
 
       console.log('Sending analysis data to backend:', requestData);
 
-      // Use different endpoints based on format
-      const endpoint = format === 'pdf' 
-        ? `${API_URL}/deep_analysis/download_pdf_report`
-        : `${API_URL}/deep_analysis/download_report`;
-
-      const response = await fetch(endpoint, {
+      const response = await fetch(`${API_URL}/deep_analysis/download_report`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -892,17 +883,15 @@ export default function DeepAnalysisSidebar({
       
       const a = document.createElement('a');
       a.href = url;
-      a.download = format === 'pdf' 
-        ? `deep-analysis-report-${Date.now()}.pdf`
-        : `deep-analysis-report-${Date.now()}.html`;
+      a.download = `deep-analysis-report-${Date.now()}.html`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
       
       toast({
-        title: `${format.toUpperCase()} report downloaded successfully! 📄`,
-        description: "Your deep analysis report has been saved to your downloads folder.",
+        title: "HTML report downloaded successfully! 📄",
+        description: "Your deep analysis report has been saved to your downloads folder. You can print it as PDF using your browser.",
         duration: 4000,
       });
       
@@ -911,38 +900,36 @@ export default function DeepAnalysisSidebar({
       
       toast({
         title: "Download failed",
-        description: `Failed to generate ${format.toUpperCase()} report. ${format === 'pdf' ? 'PDF generation may not be available on this server.' : 'Please try again later.'}`,
+        description: "Failed to generate HTML report. Please try again later.",
         variant: "destructive",
         duration: 5000,
       });
       
-      // Only try fallback for HTML format
-      if (format === 'html') {
-        const fallbackHtml = currentReport?.html_report || reportData?.html_report;
-        if (fallbackHtml) {
-          const blob = new Blob([fallbackHtml], { type: 'text/html' });
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = url;
-          a.download = `deep-analysis-report-fallback-${Date.now()}.html`;
-          document.body.appendChild(a);
-          a.click();
-          document.body.removeChild(a);
-          URL.revokeObjectURL(url);
-          
-          toast({
-            title: "Fallback download successful",
-            description: "Report downloaded using cached data.",
-            duration: 3000,
-          });
-        } else {
-          toast({
-            title: "Download completely failed",
-            description: "Unable to download the report. Please try again later.",
-            variant: "destructive",
-            duration: 5000,
-          });
-        }
+      // Try fallback with cached data
+      const fallbackHtml = currentReport?.html_report || reportData?.html_report;
+      if (fallbackHtml) {
+        const blob = new Blob([fallbackHtml], { type: 'text/html' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `deep-analysis-report-fallback-${Date.now()}.html`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        
+        toast({
+          title: "Fallback download successful",
+          description: "Report downloaded using cached data. You can print it as PDF using your browser.",
+          duration: 3000,
+        });
+      } else {
+        toast({
+          title: "Download completely failed",
+          description: "Unable to download the report. Please try again later.",
+          variant: "destructive",
+          duration: 5000,
+        });
       }
     } finally {
       setDownloadingFormat(null);
