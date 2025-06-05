@@ -90,6 +90,8 @@ async def create_report(report: DeepAnalysisReportCreate):
             # Create a summary if not provided
             report_summary = report.report_summary
             if not report_summary and report.final_conclusion:
+                # remove the **Conclusion** and **Key Takeaways** from the final conclusion
+                report_summary = report.final_conclusion.replace("**Conclusion**", "")
                 # Create a summary from the conclusion (first 200 chars)
                 report_summary = report.final_conclusion[:200] + "..." if len(report.final_conclusion) > 200 else report.final_conclusion
                 

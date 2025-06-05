@@ -1021,6 +1021,7 @@ async def _generate_deep_analysis_stream(session_state: dict, goal: str, session
                                     report.final_conclusion = content["final_conclusion"]
                                     # Also update summary from conclusion
                                     conclusion = content["final_conclusion"]
+                                    conclusion = conclusion.replace("**Conclusion**", "")
                                     report.report_summary = conclusion[:200] + "..." if len(conclusion) > 200 else conclusion
                                 
                                 # Handle JSON fields

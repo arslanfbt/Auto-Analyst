@@ -81,6 +81,7 @@ export default function DeepAnalysisSidebar({
     { step: 'questions', status: 'pending', message: 'Generating analytical questions...' },
     { step: 'planning', status: 'pending', message: 'Creating analysis plan...' },
     { step: 'analysis', status: 'pending', message: 'Executing analysis...' },
+    { step: 'synthesis', status: 'pending', message: 'Synthesizing results...' },
     { step: 'report', status: 'pending', message: 'Generating report...' },
     { step: 'completed', status: 'pending', message: 'Finalizing results...' }
   ]
@@ -146,7 +147,7 @@ export default function DeepAnalysisSidebar({
       'agent_execution': 'analysis',
       'code_synthesis': 'analysis',
       'code_execution': 'analysis',
-      'synthesis': 'analysis',
+      'synthesis': 'synthesis',
       'conclusion': 'report',
       'completed': 'completed',
       'error': 'report'
@@ -154,7 +155,7 @@ export default function DeepAnalysisSidebar({
     return stepMapping[backendStep] || backendStep
   }
 
-    const stepOrder = ['initialization', 'questions', 'planning', 'analysis', 'report', 'completed']
+    const stepOrder = ['initialization', 'questions', 'planning', 'analysis', 'synthesis', 'report', 'completed']
     
   const markPreviousStepsCompleted = (currentStep: string) => {
     const frontendStep = mapBackendStepToFrontend(currentStep)
@@ -335,26 +336,7 @@ export default function DeepAnalysisSidebar({
               // Handle specific step completions
               if (status === 'completed' || status === 'success') {
                 const frontendStep = mapBackendStepToFrontend(step)
-                
-                // Only mark analysis step as completed when synthesis (the final analysis step) completes
-                if (step === 'synthesis') {
-                  setTimeout(() => {
-                    setCurrentReport(prevReport => {
-                      if (!prevReport) return prevReport
-                      
-                      const updatedSteps = prevReport.steps.map(s => {
-                        if (s.step === 'analysis' && s.status !== 'completed') {
-                          return { ...s, status: 'completed' as AnalysisStep['status'], timestamp: new Date().toISOString() }
-                        }
-                        return s
-                      })
-                      
-                      return { ...prevReport, steps: updatedSteps }
-                    })
-                    forceUpdate()
-                  }, 100)
-                }
-                
+                                
                 // When conclusion completes, mark report step as completed
                 if (step === 'conclusion') {
                   setTimeout(() => {

@@ -874,7 +874,7 @@ class deep_analysis_module(dspy.Module):
             yield {
                 "step": "code_synthesis",
                 "status": "processing",
-                "message": "Synthesizing analysis code...",
+                "message": "Analyzing code...",
                 "progress": 65
             }
             
@@ -947,7 +947,7 @@ class deep_analysis_module(dspy.Module):
             yield {
                 "step": "code_execution",
                 "status": "processing",
-                "message": "Executing analysis code...",
+                "message": "Executing code...",
                 "progress": 82
             }
             
