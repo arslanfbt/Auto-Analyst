@@ -42,6 +42,19 @@ export default function AnalysisStep({ step, refreshTrigger }: AnalysisStepProps
     return new Date(timestamp).toLocaleString()
   }
 
+  const getStepDisplayName = (stepName: string) => {
+    const stepNames: Record<string, string> = {
+      'initialization': 'Planning',
+      'questions': 'Analysis',
+      'planning': 'Planning',
+      'analysis': 'Analysis',
+      'synthesis': 'Synthesis',
+      'report': 'Report',
+      'completed': 'Completed'
+    }
+    return stepNames[stepName] || stepName.replace('_', ' ')
+  }
+
   return (
     <div
       key={`${step.step}-${refreshTrigger}-${step.status}`}
@@ -50,7 +63,7 @@ export default function AnalysisStep({ step, refreshTrigger }: AnalysisStepProps
       {getStepIcon(step.status)}
       <div className="flex-1 min-w-0">
         <div className="text-xs font-medium capitalize">
-          {step.step.replace('_', ' ')}
+          {getStepDisplayName(step.step)}
         </div>
         {step.message && (
           <div className="text-xs text-gray-600 truncate">

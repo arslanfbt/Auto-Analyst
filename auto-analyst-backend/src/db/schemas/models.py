@@ -1,7 +1,7 @@
 from sqlalchemy import create_engine, Column, Integer, String, ForeignKey, DateTime, Text, Float, Boolean, JSON
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
-from datetime import datetime
+from datetime import datetime, UTC
 
 # Define the base class for declarative models
 Base = declarative_base()
@@ -13,7 +13,7 @@ class User(Base):
     user_id = Column(Integer, primary_key=True, autoincrement=True)
     username = Column(String, unique=True, nullable=False)
     email = Column(String, unique=True, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(UTC))
     # Add relationship for cascade options
     chats = relationship("Chat", back_populates="user", cascade="all, delete-orphan")
     usage_records = relationship("ModelUsage", back_populates="user")
@@ -26,7 +26,7 @@ class Chat(Base):
     chat_id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(Integer, ForeignKey('users.user_id', ondelete="CASCADE"), nullable=True)
     title = Column(String, default='New Chat')
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(UTC))
     # Add relationships for cascade options
     user = relationship("User", back_populates="chats")
     messages = relationship("Message", back_populates="chat", cascade="all, delete-orphan")
@@ -40,7 +40,7 @@ class Message(Base):
     chat_id = Column(Integer, ForeignKey('chats.chat_id', ondelete="CASCADE"), nullable=False)
     sender = Column(String, nullable=False)  # 'user' or 'ai'
     content = Column(Text, nullable=False)
-    timestamp = Column(DateTime, default=datetime.utcnow)
+    timestamp = Column(DateTime, default=lambda: datetime.now(UTC))
     # Add relationship for cascade options
     chat = relationship("Chat", back_populates="messages")
     feedback = relationship("MessageFeedback", back_populates="message", uselist=False, cascade="all, delete-orphan")
@@ -61,7 +61,7 @@ class ModelUsage(Base):
     query_size = Column(Integer, default=0)  # Size in characters
     response_size = Column(Integer, default=0)  # Size in characters
     cost = Column(Float, default=0.0)  # Cost in USD
-    timestamp = Column(DateTime, default=datetime.utcnow)
+    timestamp = Column(DateTime, default=lambda: datetime.now(UTC))
     is_streaming = Column(Boolean, default=False)
     request_time_ms = Column(Integer, default=0)  # Request processing time in milliseconds
     # Add relationships
@@ -97,8 +97,8 @@ class CodeExecution(Base):
     error_messages = Column(Text, nullable=True)  # JSON map of error messages by agent
     
     # Metadata
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(UTC))
+    updated_at = Column(DateTime, default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC))
     
 class MessageFeedback(Base):
     """Tracks user feedback and model settings for each message."""
@@ -117,8 +117,8 @@ class MessageFeedback(Base):
     max_tokens = Column(Integer, nullable=True)
 
     # Metadata
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(UTC))
+    updated_at = Column(DateTime, default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC))
     
     # Relationship
     message = relationship("Message", back_populates="feedback")
@@ -136,7 +136,7 @@ class DeepAnalysisReport(Base):
     status = Column(String(20), nullable=False, default='pending')  # 'pending', 'running', 'completed', 'failed'
     
     # Timing information
-    start_time = Column(DateTime, default=datetime.utcnow)
+    start_time = Column(DateTime, default=lambda: datetime.now(UTC))
     end_time = Column(DateTime, nullable=True)
     duration_seconds = Column(Integer, nullable=True)  # Calculated duration
     
@@ -166,8 +166,8 @@ class DeepAnalysisReport(Base):
     credits_consumed = Column(Integer, default=0)  # Credits deducted for this analysis
     
     # Metadata
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(UTC))
+    updated_at = Column(DateTime, default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC))
     
     # Relationships
     user = relationship("User", back_populates="deep_analysis_reports")

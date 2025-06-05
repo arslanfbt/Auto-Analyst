@@ -224,6 +224,7 @@ const ChatInput = forwardRef<
   // Deep Analysis states
   const { state: deepAnalysisState } = useDeepAnalysis()
   const [showDeepAnalysisSidebar, setShowDeepAnalysisSidebar] = useState(false)
+  const [shouldForceExpanded, setShouldForceExpanded] = useState(false)
   const [showCommandSuggestions, setShowCommandSuggestions] = useState(false)
   const [commandQuery, setCommandQuery] = useState('')
   
@@ -993,9 +994,12 @@ const ChatInput = forwardRef<
     setCommandQuery('')
     
     if (command.id === 'deep-analysis') {
-      // Show deep analysis sidebar
+      // Show deep analysis sidebar in expanded state
+      setShouldForceExpanded(true)
       setShowDeepAnalysisSidebar(true)
       setMessage('')
+      // Reset force expanded after a brief moment
+      setTimeout(() => setShouldForceExpanded(false), 100)
     } else {
       // For other commands, replace the "/" with the command
       setMessage(`${command.name} `)
@@ -2005,7 +2009,12 @@ const ChatInput = forwardRef<
                 </button>
                 
                 <DeepAnalysisButton
-                  onClick={() => setShowDeepAnalysisSidebar(true)}
+                  onClick={() => {
+                    setShouldForceExpanded(true)
+                    setShowDeepAnalysisSidebar(true)
+                    // Reset force expanded after a brief moment
+                    setTimeout(() => setShouldForceExpanded(false), 100)
+                  }}
                   userProfile={subscription}
                   showLabel={true}
                   size="sm"
@@ -2479,6 +2488,7 @@ const ChatInput = forwardRef<
         onClose={() => setShowDeepAnalysisSidebar(false)}
         sessionId={sessionId || undefined}
         userId={userId}
+        forceExpanded={shouldForceExpanded}
       />
     </>
   )

@@ -46,7 +46,7 @@ from src.schemas.query_schemas import QueryRequest
 from src.utils.logger import Logger
 
 # Import deep analysis components directly
-# from src.agents.test_deep_agents import deep_analysis_module
+# from src.agents.try_deep_agents import deep_analysis_module
 from src.agents.deep_agents import deep_analysis_module
 from src.utils.generate_report import generate_html_report
 logger = Logger("app", see_time=True, console_log=False)
@@ -1021,6 +1021,7 @@ async def _generate_deep_analysis_stream(session_state: dict, goal: str, session
                                     report.final_conclusion = content["final_conclusion"]
                                     # Also update summary from conclusion
                                     conclusion = content["final_conclusion"]
+                                    conclusion = conclusion.replace("**Conclusion**", "")
                                     report.report_summary = conclusion[:200] + "..." if len(conclusion) > 200 else conclusion
                                 
                                 # Handle JSON fields
@@ -1032,10 +1033,20 @@ async def _generate_deep_analysis_stream(session_state: dict, goal: str, session
                                     report.synthesis = json.dumps(content["synthesis"])
                         
                         # For the final step, update the HTML report
-                        if step == "completed" and content:
-                            report.html_report = content
+                        if step == "completed":
+                            if content:
+                                report.html_report = content
+                                logger.log_message(f"Storing HTML report in database, length: {len(content)}", level=logging.INFO)
+                            else:
+                                logger.log_message("No HTML content provided for completed step", level=logging.WARNING)
+                                
                             report.end_time = datetime.now(UTC)
-                            report.duration_seconds = int((report.end_time - report.start_time).total_seconds())
+                            # Ensure start_time is timezone-aware before calculating duration
+                            if report.start_time.tzinfo is None:
+                                start_time_utc = report.start_time.replace(tzinfo=UTC)
+                            else:
+                                start_time_utc = report.start_time
+                            report.duration_seconds = int((report.end_time - start_time_utc).total_seconds())
                             
                         report.updated_at = datetime.now(UTC)
                         db_session.commit()
@@ -1114,7 +1125,14 @@ async def _generate_deep_analysis_stream(session_state: dict, goal: str, session
                         await update_report_in_db("running", update.get("progress", 0), "analysis", serialized_return_dict)
                         
                         # Generate HTML report using the original final_result with Figure objects
-                        html_report = generate_html_report(final_result)
+                        html_report = None
+                        try:
+                            logger.log_message("Generating HTML report...", level=logging.INFO)
+                            html_report = generate_html_report(final_result)
+                            logger.log_message(f"HTML report generated successfully, length: {len(html_report) if html_report else 0}", level=logging.INFO)
+                        except Exception as e:
+                            logger.log_message(f"Error generating HTML report: {str(e)}", level=logging.ERROR)
+                            # Continue even if HTML generation fails
                         
                         # Send the analysis results
                         yield json.dumps({
@@ -1141,7 +1159,11 @@ async def _generate_deep_analysis_stream(session_state: dict, goal: str, session
                             "progress": 100
                         }) + "\n"
                         
-                        # Update DB with completed report
+                        # Update DB with completed report (with HTML if generated)
+                        if html_report:
+                            logger.log_message(f"Saving HTML report to database, length: {len(html_report)}", level=logging.INFO)
+                        else:
+                            logger.log_message("No HTML report to save to database", level=logging.WARNING)
                         await update_report_in_db("completed", 100, "completed", html_report)
                 elif update.get("step") == "error":
                     # Forward error directly

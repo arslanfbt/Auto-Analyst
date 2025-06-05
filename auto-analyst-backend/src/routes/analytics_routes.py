@@ -219,6 +219,10 @@ async def get_users(
     api_key: str = Depends(verify_admin_api_key)
 ):
     logger.log_message(f"User analytics requested with limit: {limit}, offset: {offset}", logging.INFO)
+    
+    # Only show users from the past 7 days
+    seven_days_ago = datetime.now(UTC) - timedelta(days=7)
+    
     user_query = db.query(
         ModelUsage.user_id,
         func.sum(ModelUsage.total_tokens).label("tokens"),
@@ -227,7 +231,8 @@ async def get_users(
         func.min(ModelUsage.timestamp).label("first_seen"),
         func.max(ModelUsage.timestamp).label("last_seen")
     ).filter(
-        ModelUsage.user_id.isnot(None)
+        ModelUsage.user_id.isnot(None),
+        ModelUsage.timestamp >= seven_days_ago
     ).group_by(
         ModelUsage.user_id
     ).order_by(
@@ -246,9 +251,12 @@ async def get_users(
         for user in user_query
     ]
     
-    # Get total users count for pagination
+    # Get total users count for pagination (past 7 days only)
     total_users = db.query(func.count(func.distinct(ModelUsage.user_id)))\
-        .filter(ModelUsage.user_id.isnot(None))\
+        .filter(
+            ModelUsage.user_id.isnot(None),
+            ModelUsage.timestamp >= seven_days_ago
+        )\
         .scalar() or 0
     
     logger.log_message(f"Retrieved {len(users)} users, total users: {total_users}", logging.INFO)

@@ -36,16 +36,25 @@ interface DeepAnalysisSidebarProps {
   onClose: () => void
   sessionId?: string
   userId?: number | null
+  forceExpanded?: boolean
 }
 
 export default function DeepAnalysisSidebar({ 
   isOpen, 
   onClose, 
   sessionId,
-  userId 
+  userId,
+  forceExpanded = false
 }: DeepAnalysisSidebarProps) {
   const { state: analysisState, startAnalysis, updateProgress, completeAnalysis, failAnalysis } = useDeepAnalysis()
   const [isCollapsed, setIsCollapsed] = useState(false)
+  
+  // Reset collapsed state only when initially opening with forceExpanded
+  useEffect(() => {
+    if (forceExpanded && isOpen) {
+      setIsCollapsed(false)
+    }
+  }, [forceExpanded, isOpen])
   const [activeTab, setActiveTab] = useState<'new' | 'current' | 'history'>('new')
   const [goal, setGoal] = useState('')
   const [currentReport, setCurrentReport] = useState<DeepAnalysisReport | null>(null)
@@ -72,6 +81,7 @@ export default function DeepAnalysisSidebar({
     { step: 'questions', status: 'pending', message: 'Generating analytical questions...' },
     { step: 'planning', status: 'pending', message: 'Creating analysis plan...' },
     { step: 'analysis', status: 'pending', message: 'Executing analysis...' },
+    { step: 'synthesis', status: 'pending', message: 'Synthesizing results...' },
     { step: 'report', status: 'pending', message: 'Generating report...' },
     { step: 'completed', status: 'pending', message: 'Finalizing results...' }
   ]
@@ -137,7 +147,7 @@ export default function DeepAnalysisSidebar({
       'agent_execution': 'analysis',
       'code_synthesis': 'analysis',
       'code_execution': 'analysis',
-      'synthesis': 'analysis',
+      'synthesis': 'synthesis',
       'conclusion': 'report',
       'completed': 'completed',
       'error': 'report'
@@ -145,22 +155,22 @@ export default function DeepAnalysisSidebar({
     return stepMapping[backendStep] || backendStep
   }
 
-  const stepOrder = ['initialization', 'questions', 'planning', 'analysis', 'report', 'completed']
-
+    const stepOrder = ['initialization', 'questions', 'planning', 'analysis', 'synthesis', 'report', 'completed']
+    
   const markPreviousStepsCompleted = (currentStep: string) => {
     const frontendStep = mapBackendStepToFrontend(currentStep)
     const currentIndex = stepOrder.indexOf(frontendStep)
     
-    setCurrentReport(prevReport => {
-      if (!prevReport) return prevReport
-      
+      setCurrentReport(prevReport => {
+        if (!prevReport) return prevReport
+        
       const updatedSteps = prevReport.steps.map((step, index) => {
         // Mark all previous steps as completed
         if (index < currentIndex && step.status !== 'completed') {
-          return { ...step, status: 'completed' as AnalysisStep['status'], timestamp: new Date().toISOString() }
-        }
-        return step
-      })
+            return { ...step, status: 'completed' as AnalysisStep['status'], timestamp: new Date().toISOString() }
+          }
+          return step
+        })
       
       return { ...prevReport, steps: updatedSteps }
     })
@@ -177,17 +187,17 @@ export default function DeepAnalysisSidebar({
           ? { ...step, status, message: message || step.message, content, progress: progressValue, timestamp: new Date().toISOString() }
           : step
       )
-      
-      const updatedReport = {
-        ...prevReport,
+        
+        const updatedReport = {
+          ...prevReport,
         steps: updatedSteps,
         progress: progressValue !== undefined ? progressValue : prevReport.progress
-      }
-      
-      setTimeout(() => forceUpdate(), 10)
-      
-      return updatedReport
-    })
+        }
+        
+        setTimeout(() => forceUpdate(), 10)
+        
+        return updatedReport
+      })
   }
 
   const handleStartAnalysis = async () => {
@@ -326,26 +336,7 @@ export default function DeepAnalysisSidebar({
               // Handle specific step completions
               if (status === 'completed' || status === 'success') {
                 const frontendStep = mapBackendStepToFrontend(step)
-                
-                // Only mark analysis step as completed when synthesis (the final analysis step) completes
-                if (step === 'synthesis') {
-                  setTimeout(() => {
-                    setCurrentReport(prevReport => {
-                      if (!prevReport) return prevReport
-                      
-                      const updatedSteps = prevReport.steps.map(s => {
-                        if (s.step === 'analysis' && s.status !== 'completed') {
-                          return { ...s, status: 'completed' as AnalysisStep['status'], timestamp: new Date().toISOString() }
-                        }
-                        return s
-                      })
-                      
-                      return { ...prevReport, steps: updatedSteps }
-                    })
-                    forceUpdate()
-                  }, 100)
-                }
-                
+                                
                 // When conclusion completes, mark report step as completed
                 if (step === 'conclusion') {
                   setTimeout(() => {
@@ -993,15 +984,38 @@ export default function DeepAnalysisSidebar({
   if (!isOpen) return null
 
   return (
-    <motion.div
-      initial={{ x: '100%' }}
-      animate={{ x: 0 }}
-      exit={{ x: '100%' }}
-      transition={{ type: 'tween', duration: 0.3 }}
-      className={`fixed top-0 right-0 h-full bg-white shadow-2xl z-50 flex flex-col border-l border-gray-200 ${
-        isCollapsed ? 'w-16' : 'w-96'
-      }`}
-    >
+    <>
+      {/* Minimized simple arrow */}
+      {isCollapsed && (
+        <motion.div
+          initial={{ x: '100%' }}
+          animate={{ x: 0 }}
+          exit={{ x: '100%' }}
+          transition={{ type: 'tween', duration: 0.3 }}
+          className="fixed top-1/2 right-0 transform -translate-y-1/2 z-50"
+        >
+          <button
+            onClick={() => setIsCollapsed(false)}
+            className="bg-white shadow-lg border border-gray-200 rounded-l-md p-2 hover:bg-gray-50 transition-colors flex items-center"
+            title="Expand Deep Analysis"
+          >
+            <ChevronLeft className="w-4 h-4 text-[#FF7F7F]" />
+            {currentReport?.status === 'running' && (
+              <div className="w-1 h-4 bg-[#FF7F7F] rounded-full ml-1 animate-pulse" />
+            )}
+          </button>
+        </motion.div>
+      )}
+
+      {/* Full sidebar */}
+      {!isCollapsed && (
+        <motion.div
+          initial={{ x: '100%' }}
+          animate={{ x: 0 }}
+          exit={{ x: '100%' }}
+          transition={{ type: 'tween', duration: 0.3 }}
+          className="fixed top-0 right-0 h-full bg-white shadow-2xl z-50 flex flex-col border-l border-gray-200 w-96"
+        >
       {/* Header */}
       <div className="flex items-center justify-between p-3 border-b border-gray-200 bg-gray-50 flex-shrink-0">
         {!isCollapsed && (
@@ -1075,21 +1089,9 @@ export default function DeepAnalysisSidebar({
         </>
       )}
 
-      {/* Collapsed State Indicator */}
-      {isCollapsed && currentReport?.status === 'running' && (
-        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2">
-          <div className="flex flex-col items-center gap-1">
-            <Loader2 className="w-5 h-5 animate-spin text-[#FF7F7F]" />
-            <div className="text-xs text-gray-600 text-center font-medium">
-              {Math.round(currentReport.progress)}%
-            </div>
-            <div className="text-xs text-gray-500 text-center max-w-[50px] leading-tight">
-              {currentReport.steps.find(s => s.status === 'processing' || s.status === 'starting')?.step?.replace('_', ' ') || 'Processing'}
-            </div>
-          </div>
-        </div>
+        </motion.div>
       )}
-
+      
       {/* Premium Upgrade Modal */}
       <Dialog open={showPremiumUpgradeModal} onOpenChange={setShowPremiumUpgradeModal}>
         <DialogContent className="sm:max-w-md">
@@ -1153,6 +1155,6 @@ export default function DeepAnalysisSidebar({
         }}
         requiredCredits={requiredCredits}
       />
-    </motion.div>
+    </>
   )
 } 
