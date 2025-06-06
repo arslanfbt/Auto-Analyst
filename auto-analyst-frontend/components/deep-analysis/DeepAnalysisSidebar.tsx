@@ -1008,7 +1008,7 @@ export default function DeepAnalysisSidebar({
           animate={{ x: 0 }}
           exit={{ x: '100%' }}
           transition={{ type: 'tween', duration: 0.3 }}
-          className="fixed top-0 right-0 h-full bg-white shadow-2xl z-50 flex flex-col border-l border-gray-200 w-96"
+          className="fixed top-0 right-0 h-full bg-white shadow-2xl z-50 flex flex-col border-l border-gray-200 w-96 overflow-hidden"
         >
       {/* Header */}
       <div className="flex items-center justify-between p-3 border-b border-gray-200 bg-gray-50 flex-shrink-0">
@@ -1049,7 +1049,7 @@ export default function DeepAnalysisSidebar({
               <TabsTrigger value="history" className="text-xs">History</TabsTrigger>
             </TabsList>
 
-            <TabsContent value="new" className="flex-1 min-h-0">
+            <TabsContent value="new" className="flex-1 min-h-0 overflow-hidden">
               <NewAnalysisForm
                 goal={goal}
                 setGoal={setGoal}
@@ -1060,7 +1060,7 @@ export default function DeepAnalysisSidebar({
               />
             </TabsContent>
 
-            <TabsContent value="current" className="flex-1 min-h-0">
+            <TabsContent value="current" className="flex-1 min-h-0 overflow-hidden">
               <CurrentAnalysisView
                 currentReport={currentReport}
                 refreshTrigger={refreshTrigger}
@@ -1069,7 +1069,7 @@ export default function DeepAnalysisSidebar({
               />
             </TabsContent>
 
-            <TabsContent value="history" className="flex-1 min-h-0">
+            <TabsContent value="history" className="flex-1 min-h-0 overflow-hidden">
               <HistoryView
                 storedReports={storedReports}
                 selectedHistoryReport={selectedHistoryReport}

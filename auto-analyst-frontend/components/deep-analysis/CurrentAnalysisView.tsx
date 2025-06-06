@@ -55,7 +55,7 @@ export default function CurrentAnalysisView({
       <div className="p-3 space-y-3">
         {/* Analysis Info */}
         <div className="bg-gray-50 rounded-lg p-3">
-          <h3 className="font-medium text-xs text-gray-800 mb-1">{report.goal}</h3>
+          <h3 className="font-medium text-xs text-gray-800 mb-1 break-words leading-relaxed">{report.goal}</h3>
           <div className="flex items-center justify-between text-xs text-gray-500">
             <span>Started: {formatTime(report.startTime)}</span>
             <span>{formatDuration(report.startTime, report.endTime)}</span>
