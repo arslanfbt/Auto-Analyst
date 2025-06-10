@@ -7,7 +7,7 @@ import Link from 'next/link'
 import { Elements } from '@stripe/react-stripe-js'
 import { loadStripe, StripeElementsOptions } from '@stripe/stripe-js'
 import { motion } from 'framer-motion'
-import { ArrowLeft, CreditCard, ShieldCheck, Lock } from 'lucide-react'
+import { ArrowLeft, CreditCard, ShieldCheck, Lock, CheckCircle } from 'lucide-react'
 import CheckoutForm from '@/components/CheckoutForm'
 import { useSession } from 'next-auth/react'
 
@@ -30,10 +30,97 @@ export default function CheckoutPage() {
     priceId: '',
   })
   
-  // Add state for payment intent
   const [clientSecret, setClientSecret] = useState('')
   const [paymentLoading, setPaymentLoading] = useState(false)
   const [paymentError, setPaymentError] = useState('')
+  const [promoError, setPromoError] = useState('')
+  const [promoCode, setPromoCode] = useState('')
+  const [discountApplied, setDiscountApplied] = useState(false)
+  const [discountInfo, setDiscountInfo] = useState<{type: string, value: number} | null>(null)
+
+  // Create or recreate payment intent
+  const createPaymentIntent = async (planData: any, promoCodeValue: string = '') => {
+    if (!planData.priceId || !session) return
+
+    setPaymentLoading(true)
+
+    try {
+      const response = await fetch('/api/checkout-sessions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          priceId: planData.priceId,
+          userId: session.user?.email,
+          planName: planData.name,
+          interval: planData.cycle,
+          promoCode: promoCodeValue.trim() || undefined,
+        }),
+      })
+
+      const data = await response.json()
+
+      if (data.message) {
+        if (promoCodeValue) {
+          setPromoError(data.message)
+          setDiscountApplied(false)
+          setDiscountInfo(null)
+        } else {
+          setPaymentError(data.message)
+          setClientSecret('')
+        }
+      } else {
+        setClientSecret(data.clientSecret)
+        setDiscountApplied(data.discountApplied || false)
+        setPaymentError('')
+        setPromoError('')
+        
+        if (data.discountApplied && data.couponId) {
+          fetchCouponDetails(data.couponId, planData.amount)
+        } else {
+          setDiscountInfo(null)
+        }
+      }
+    } catch (err) {
+      if (promoCodeValue) {
+        setPromoError('Failed to validate promo code. Please try again.')
+        setDiscountApplied(false)
+        setDiscountInfo(null)
+      } else {
+        setPaymentError('Failed to set up payment. Please try again.')
+        setClientSecret('')
+      }
+    } finally {
+      setPaymentLoading(false)
+    }
+  }
+
+  // Fetch coupon details for discount calculation
+  const fetchCouponDetails = async (couponId: string, originalAmount: number) => {
+    try {
+      const response = await fetch(`/api/coupon-details?couponId=${couponId}`)
+      if (response.ok) {
+        const coupon = await response.json()
+        setDiscountInfo({
+          type: coupon.percent_off ? 'percent' : 'amount',
+          value: coupon.percent_off || (coupon.amount_off / 100)
+        })
+      }
+    } catch (err) {
+      // Silently fail - discount info is not critical
+    }
+  }
+
+  // Handle promo code changes
+  const handlePromoCodeChange = (newPromoCode: string) => {
+    if (newPromoCode.trim() && planDetails.priceId) {
+      createPaymentIntent(planDetails, newPromoCode)
+    } else if (!newPromoCode.trim() && clientSecret) {
+      setDiscountApplied(false)
+      setDiscountInfo(null)
+      setPromoError('')
+      createPaymentIntent(planDetails, '')
+    }
+  }
   
   useEffect(() => {
     if (!plan || !cycle || status === 'loading') {
@@ -88,37 +175,8 @@ export default function CheckoutPage() {
       
       setPlanDetails(planData)
       
-      // Create checkout session when plan is selected
-      if (planData.priceId && session) {
-        setPaymentLoading(true)
-        
-        fetch('/api/checkout-sessions', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            priceId: planData.priceId,
-            userId: session.user?.email,
-            planName: planData.name,
-            interval: planData.cycle,
-          }),
-        })
-          .then(res => res.json())
-          .then(data => {
-            if (data.message) {
-              setPaymentError(data.message)
-            } else {
-              setClientSecret(data.clientSecret)
-            }
-            setPaymentLoading(false)
-          })
-          .catch(err => {
-            console.error('Error creating payment intent:', err)
-            setPaymentError('Failed to set up payment. Please try again.')
-            setPaymentLoading(false)
-          })
-      }
+      // Create initial payment intent without promo code
+      createPaymentIntent(planData)
     } else {
       // Plan not found, redirect to pricing
       router.push('/pricing')
@@ -175,8 +233,8 @@ export default function CheckoutPage() {
               </div>
             )}
             
-            <div className="grid gap-10 lg:grid-cols-5">
-              <div className="lg:col-span-3">
+            <div className="grid gap-6 lg:gap-10 md:grid-cols-1 lg:grid-cols-2">
+              <div className="order-2 lg:order-1">
                 {clientSecret && (
                   <Elements 
                     stripe={stripePromise} 
@@ -197,24 +255,120 @@ export default function CheckoutPage() {
                 )}
               </div>
               
-              <div className="lg:col-span-2">
+              <div className="order-1 lg:order-2">
+                {/* Promo Code Section */}
+                <div className="bg-white p-6 rounded-lg shadow-md border border-gray-100 mb-6">
+                  <h3 className="text-lg font-medium text-gray-900 mb-4">Promo Code</h3>
+                  <div className="flex flex-col sm:flex-row gap-3">
+                    <div className="relative flex-1">
+                      <input
+                        type="text"
+                        value={promoCode}
+                        onChange={(e) => setPromoCode(e.target.value.toUpperCase())}
+                        placeholder="Enter promo code"
+                        className="w-full h-12 px-4 border border-gray-300 rounded-md focus:ring-2 focus:ring-[#FF7F7F] focus:border-[#FF7F7F] transition-all text-center sm:text-left"
+                        disabled={paymentLoading}
+                      />
+                      {discountApplied && (
+                        <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                          <CheckCircle className="w-5 h-5 text-green-500" />
+                        </div>
+                      )}
+                    </div>
+                    {!discountApplied ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (promoCode.trim()) {
+                            handlePromoCodeChange(promoCode.trim())
+                          }
+                        }}
+                        disabled={!promoCode.trim() || paymentLoading}
+                        className="h-12 px-8 bg-[#FF7F7F] hover:bg-[#FF6666] text-white rounded-md transition-all disabled:opacity-50 disabled:cursor-not-allowed font-medium whitespace-nowrap w-full sm:w-auto"
+                      >
+                        Apply
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setPromoCode('')
+                          handlePromoCodeChange('')
+                        }}
+                        disabled={paymentLoading}
+                        className="h-12 px-8 bg-gray-500 hover:bg-gray-600 text-white rounded-md transition-all disabled:opacity-50 disabled:cursor-not-allowed font-medium whitespace-nowrap w-full sm:w-auto"
+                      >
+                        Clear
+                      </button>
+                    )}
+                  </div>
+                  {promoError && (
+                    <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-md">
+                      <p className="text-sm text-red-600 text-center sm:text-left">{promoError}</p>
+                    </div>
+                  )}
+                  {discountApplied && (
+                    <div className="mt-3 p-3 bg-green-50 border border-green-200 rounded-md">
+                      <p className="text-sm text-green-600 text-center sm:text-left">✓ Promo code applied!</p>
+                    </div>
+                  )}
+                </div>
+
                 <div className="bg-white p-6 rounded-lg shadow-md border border-gray-100">
                   <h3 className="text-lg font-medium text-gray-900 mb-4">Order Summary</h3>
                   
                   <div className="border-t border-gray-200 py-4">
                     <div className="flex justify-between mb-2">
                       <span className="text-gray-700">{planDetails.name} Plan</span>
-                      <span className="text-gray-900">${planDetails.amount}</span>
+                      <span className={`text-gray-900 ${discountApplied ? 'line-through text-gray-500' : ''}`}>
+                        ${planDetails.amount}
+                      </span>
                     </div>
+                    {discountApplied && discountInfo && (
+                      <div className="flex justify-between mb-2">
+                        <span className="text-green-700 font-medium">
+                          Discount ({discountInfo.type === 'percent' ? `${discountInfo.value}% off` : `$${discountInfo.value} off`})
+                        </span>
+                        <span className="text-green-700 font-medium">
+                          {discountInfo.type === 'percent' 
+                            ? `-$${((planDetails.amount * discountInfo.value) / 100).toFixed(2)}`
+                            : `-$${discountInfo.value.toFixed(2)}`
+                          }
+                        </span>
+                      </div>
+                    )}
                     <p className="text-sm text-gray-500">
                       Billed {planDetails.cycle === 'year' ? 'yearly' : planDetails.cycle === 'day' ? 'daily' : 'monthly'}
                     </p>
+                    {discountApplied && (
+                      <div className="mt-2 p-2 bg-green-50 border border-green-200 rounded-md">
+                        <p className="text-sm text-green-700 font-medium">✓ Promo code applied!</p>
+                      </div>
+                    )}
                   </div>
                   
                   <div className="border-t border-gray-200 py-4">
                     <div className="flex justify-between font-medium text-gray-900">
                       <span>Total (USD)</span>
-                      <span>${planDetails.amount}</span>
+                      <span>
+                        {discountApplied && discountInfo ? (
+                          <div className="text-right">
+                            <div className="text-lg font-bold text-green-600">
+                              ${discountInfo.type === 'percent' 
+                                ? (planDetails.amount - (planDetails.amount * discountInfo.value) / 100).toFixed(2)
+                                : Math.max(0, planDetails.amount - discountInfo.value).toFixed(2)
+                              }
+                            </div>
+                            <div className="text-xs text-gray-500">You save ${
+                              discountInfo.type === 'percent' 
+                                ? ((planDetails.amount * discountInfo.value) / 100).toFixed(2)
+                                : discountInfo.value.toFixed(2)
+                            }!</div>
+                          </div>
+                        ) : (
+                          `$${planDetails.amount}`
+                        )}
+                      </span>
                     </div>
                   </div>
                   
