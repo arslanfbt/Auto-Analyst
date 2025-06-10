@@ -100,10 +100,10 @@ export default function StatsTicker() {
     >
       <div className="text-center mb-6">
         <h3 className="text-2xl font-bold text-gray-900 mb-2">
-          Transform Your Data Into Actionable Insights
+        Be part of the data-driven wave
         </h3>
         <p className="text-gray-600">
-            Be part of the data-driven wave, thousands have already joined.
+            Thousands have already joined.
         </p>
       </div>
       
@@ -173,7 +173,7 @@ export default function StatsTicker() {
           onClick={() => window.location.href = '/login'}
           className="bg-[#FF7F7F] hover:bg-[#FF6666] text-white font-semibold px-8 py-3 rounded-xl shadow-lg transition-colors duration-300"
         >
-          Start Your Free Analysis
+          Start Analyzing
         </motion.button>
       </div>
     </motion.div>
