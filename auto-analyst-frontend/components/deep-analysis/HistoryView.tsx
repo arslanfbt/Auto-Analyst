@@ -105,7 +105,7 @@ export default function HistoryView({
             </div>
 
             <div className="bg-gray-50 rounded-lg p-3">
-              <h4 className="font-medium text-xs text-gray-800 mb-2">{selectedHistoryReport.goal}</h4>
+              <h4 className="font-medium text-xs text-gray-800 mb-2 break-words leading-relaxed">{selectedHistoryReport.goal}</h4>
               <div className="space-y-1 text-xs text-gray-500">
                 <div>Started: {formatTime(selectedHistoryReport.startTime)}</div>
                 <div>Completed: {formatTime(selectedHistoryReport.endTime)}</div>
@@ -114,9 +114,9 @@ export default function HistoryView({
             </div>
 
             <div className="bg-white rounded-lg border p-3">
-              <h5 className="text-xs font-medium text-gray-700 mb-2">Summary</h5>
-              <p className="text-xs text-gray-600">{selectedHistoryReport.summary}</p>
-            </div>
+                <h5 className="text-xs font-medium text-gray-700 mb-2">Summary</h5>
+                <p className="text-xs text-gray-600 break-words leading-relaxed">{selectedHistoryReport.summary}</p>
+              </div>
 
             <div className="space-y-2">
               <div className="flex gap-2">
@@ -172,9 +172,9 @@ export default function HistoryView({
                   className="p-2 rounded-lg border border-gray-200 hover:bg-gray-50 cursor-pointer"
                   onClick={() => onSelectReport(report)}
                 >
-                  <div className="flex items-start justify-between mb-1">
-                    <h4 className="text-xs font-medium text-gray-800 line-clamp-2">{report.goal}</h4>
-                    <div className="flex items-center gap-1 ml-2">
+                  <div className="flex items-start justify-between mb-1 gap-2">
+                    <h4 className="text-xs font-medium text-gray-800 flex-1 min-w-0 break-words line-clamp-2 leading-relaxed">{report.goal}</h4>
+                    <div className="flex items-center gap-1 flex-shrink-0">
                       {report.status === 'completed' ? (
                         <CheckCircle2 className="w-3 h-3 text-green-500" />
                       ) : (

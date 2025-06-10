@@ -98,7 +98,7 @@ export default function MissionSection() {
               <Button
                 variant="outline"
                 size="lg"
-                onClick={() => window.open('https://medium.com/firebird-technologies/auto-analyst-3-0-ai-data-scientist-new-web-ui-and-more-reliable-system-c194cced2e93', '_blank')}
+                onClick={() => window.open('https://www.firebird-technologies.com/p/auto-analyst-30-ai-data-scientist', '_blank')}
                 className="border-white text-gray-900 hover:bg-gray-200 w-full sm:w-auto"
               >
                 Technical Blog

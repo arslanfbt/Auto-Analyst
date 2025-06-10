@@ -945,7 +945,7 @@ async def deep_analysis_streaming(
         
         # Get session-specific model
         # session_lm = get_session_lm(session_state)
-        session_lm = dspy.LM(model="anthropic/claude-4-sonnet-20250514", max_tokens=7000, temperature=0.5)
+        session_lm = dspy.LM(model="anthropic/claude-sonnet-4-20250514", max_tokens=7000, temperature=0.5)
         
         return StreamingResponse(
             _generate_deep_analysis_stream(session_state, request.goal, session_lm),

@@ -37,7 +37,7 @@ export default function NewAnalysisForm({
             onChange={(e) => setGoal(e.target.value)}
             disabled={isAnalysisRunning}
             rows={3}
-            className="resize-none text-xs"
+            className="resize-none text-xs overflow-y-auto"
           />
         </div>
         
@@ -61,12 +61,12 @@ export default function NewAnalysisForm({
                   className="p-2 rounded-lg border border-gray-200 hover:bg-gray-50 cursor-pointer"
                   onClick={() => onSelectReport(report)}
                 >
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center justify-between gap-2">
                     <div className="flex-1 min-w-0">
-                      <p className="text-xs font-medium text-gray-800 truncate">{report.goal}</p>
+                      <p className="text-xs font-medium text-gray-800 break-words line-clamp-2 leading-relaxed">{report.goal}</p>
                       <p className="text-xs text-gray-500">{formatTime(report.endTime)}</p>
                     </div>
-                    <div className="flex items-center gap-1">
+                    <div className="flex items-center gap-1 flex-shrink-0">
                       {report.status === 'completed' ? (
                         <CheckCircle2 className="w-3 h-3 text-green-500" />
                       ) : (

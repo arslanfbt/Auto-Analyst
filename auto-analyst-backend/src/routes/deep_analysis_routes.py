@@ -33,6 +33,14 @@ class DeepAnalysisReportCreate(BaseModel):
     report_summary: Optional[str] = None
     progress_percentage: Optional[int] = 100
     duration_seconds: Optional[int] = None
+    # Credit and error tracking
+    credits_consumed: Optional[int] = 0
+    error_message: Optional[str] = None
+    model_provider: Optional[str] = "anthropic"
+    model_name: Optional[str] = "claude-sonnet-4-20250514"
+    total_tokens_used: Optional[int] = 0
+    estimated_cost: Optional[float] = 0.0
+    steps_completed: Optional[List[str]] = None  # Array of completed step names
 
 class DeepAnalysisReportResponse(BaseModel):
     report_id: int
@@ -57,6 +65,14 @@ class DeepAnalysisReportDetailResponse(DeepAnalysisReportResponse):
     final_conclusion: Optional[str]
     html_report: Optional[str]
     progress_percentage: Optional[int]
+    # Credit and error tracking
+    credits_consumed: Optional[int]
+    error_message: Optional[str]
+    model_provider: Optional[str] = "anthropic"
+    model_name: Optional[str] = "claude-sonnet-4-20250514"
+    total_tokens_used: Optional[int]
+    estimated_cost: Optional[float]
+    steps_completed: Optional[List[str]] = None
 
 # Routes
 @router.post("/reports", response_model=DeepAnalysisReportResponse)
@@ -115,6 +131,14 @@ async def create_report(report: DeepAnalysisReportCreate):
                 html_report=report.html_report,
                 report_summary=report_summary,
                 progress_percentage=report.progress_percentage,
+                # Credit and error tracking
+                credits_consumed=report.credits_consumed or 0,
+                error_message=report.error_message,
+                model_provider=report.model_provider or "anthropic",
+                model_name=report.model_name or "claude-sonnet-4-20250514",
+                total_tokens_used=report.total_tokens_used or 0,
+                estimated_cost=report.estimated_cost or 0.0,
+                steps_completed=report.steps_completed,
                 created_at=now,
                 updated_at=now
             )
@@ -289,6 +313,14 @@ async def get_report_by_id(report_id: int, user_id: Optional[int] = None):
                 "html_report": report.html_report,
                 "report_summary": report.report_summary,
                 "progress_percentage": report.progress_percentage,
+                # Credit and error tracking
+                "credits_consumed": report.credits_consumed,
+                "error_message": report.error_message,
+                "model_provider": report.model_provider,
+                "model_name": report.model_name,
+                "total_tokens_used": report.total_tokens_used,
+                "estimated_cost": report.estimated_cost,
+                "steps_completed": report.steps_completed,
                 "created_at": report.created_at,
                 "updated_at": report.updated_at
             }
@@ -362,6 +394,14 @@ async def get_report_by_uuid(report_uuid: str, user_id: Optional[int] = None):
                 "html_report": report.html_report,
                 "report_summary": report.report_summary,
                 "progress_percentage": report.progress_percentage,
+                # Credit and error tracking
+                "credits_consumed": report.credits_consumed,
+                "error_message": report.error_message,
+                "model_provider": report.model_provider,
+                "model_name": report.model_name,
+                "total_tokens_used": report.total_tokens_used,
+                "estimated_cost": report.estimated_cost,
+                "steps_completed": report.steps_completed,
                 "created_at": report.created_at,
                 "updated_at": report.updated_at
             }

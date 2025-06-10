@@ -74,7 +74,56 @@ export default function DeepAnalysisSidebar({
   
   const activeSessionId = sessionId || storeSessionId
 
+  // Check access immediately when sidebar opens
+  useEffect(() => {
+    if (isOpen && !deepAnalysisAccess.hasAccess) {
+      setShowPremiumUpgradeModal(true)
+    }
+  }, [isOpen, deepAnalysisAccess.hasAccess])
+
   const forceUpdate = () => setRefreshTrigger(prev => prev + 1)
+
+  // Helper function to detect known errors that should not result in credit deduction
+  const isKnownError = (content: string): boolean => {
+    const knownErrorPatterns = [
+      'BadRequestError',
+      'AnthropicException',
+      'credit balance is too low',
+      'invalid_request_error',
+      'rate_limit_exceeded',
+      'insufficient_quota',
+      'authentication_error',
+      'permission_denied',
+      'service_unavailable',
+      'timeout',
+      'connection_error',
+      'network_error',
+      'api_error'
+    ]
+    
+    const contentLower = content.toLowerCase()
+    return knownErrorPatterns.some(pattern => contentLower.includes(pattern.toLowerCase()))
+  }
+
+  // Helper function to check if analysis completed successfully (no errors in final content)
+  const isSuccessfulCompletion = (data: any): boolean => {
+    // Check final conclusion for errors
+    if (data.final_conclusion && isKnownError(data.final_conclusion)) {
+      return false
+    }
+    
+    // Check analysis final conclusion for errors
+    if (data.analysis?.final_conclusion && isKnownError(data.analysis.final_conclusion)) {
+      return false
+    }
+    
+    // Check if there are any error indicators in the data
+    if (data.error || data.type === 'error') {
+      return false
+    }
+    
+    return true
+  }
 
   const initialSteps: AnalysisStep[] = [
     { step: 'initialization', status: 'pending', message: 'Preparing analysis...' },
@@ -145,8 +194,8 @@ export default function DeepAnalysisSidebar({
       'questions': 'questions',
       'planning': 'planning',
       'agent_execution': 'analysis',
-      'code_synthesis': 'analysis',
-      'code_execution': 'analysis',
+      'code_synthesis': 'synthesis',
+      'code_execution': 'synthesis',
       'synthesis': 'synthesis',
       'conclusion': 'report',
       'completed': 'completed',
@@ -360,19 +409,32 @@ export default function DeepAnalysisSidebar({
               if (step === 'completed' && (status === 'completed' || status === 'success')) {
                 markAllStepsCompleted()
                 
-                // Show completion notification
-                toast({
-                  title: "Deep Analysis Complete! 🎉",
-                  description: "Your analysis report is ready for download.",
-                  duration: 5000,
-                })
+                // Check if the analysis completed successfully without errors
+                const isSuccessful = isSuccessfulCompletion(data)
+                
+                if (isSuccessful) {
+                  // Show success notification
+                  toast({
+                    title: "Deep Analysis Complete! 🎉",
+                    description: "Your analysis report is ready for download.",
+                    duration: 5000,
+                  })
+                } else {
+                  // Show error notification with retry suggestion
+                  toast({
+                    title: "Analysis completed with errors",
+                    description: "The analysis encountered issues. You might want to try again with a different approach.",
+                    variant: "destructive",
+                    duration: 8000,
+                  })
+                }
                 
                 setCurrentReport(prevReport => {
                   if (!prevReport) return prevReport
                   
                   return {
                     ...prevReport,
-                    status: 'completed',
+                    status: isSuccessful ? 'completed' : 'failed',
                     endTime: new Date().toISOString(),
                     deep_questions: data.analysis?.deep_questions || data.deep_questions || '',
                     deep_plan: data.analysis?.deep_plan || data.deep_plan || '',
@@ -386,10 +448,14 @@ export default function DeepAnalysisSidebar({
                   }
                 })
                 
-                completeAnalysis()
+                if (isSuccessful) {
+                  completeAnalysis()
+                } else {
+                  failAnalysis()
+                }
                 
-                // Deduct credits for successful deep analysis (only for paid users)
-                if (session) {
+                // Only deduct credits for successful deep analysis (only for paid users)
+                if (session && isSuccessful) {
                   try {
                     const deepAnalysisCost = CreditConfig.getDeepAnalysisCost()
                     
@@ -442,11 +508,13 @@ export default function DeepAnalysisSidebar({
                 const storedReport: StoredReport = {
                   id: reportId,
                   goal: goal.trim(),
-                  status: 'completed',
+                  status: isSuccessful ? 'completed' : 'failed',
                   startTime: newReport.startTime,
                   endTime: new Date().toISOString(),
-                  html_report: data.html_report,
-                  summary: (data.analysis?.final_conclusion || data.final_conclusion || 'Analysis completed').substring(0, 200) + '...',
+                  html_report: isSuccessful ? data.html_report : '',
+                  summary: isSuccessful 
+                    ? (data.analysis?.final_conclusion || data.final_conclusion || 'Analysis completed').substring(0, 200) + '...'
+                    : 'Analysis failed due to errors. You might want to try again.',
                   deep_questions: data.analysis?.deep_questions || '',
                   deep_plan: data.analysis?.deep_plan || '',
                   summaries: data.analysis?.summaries || [],
@@ -459,8 +527,8 @@ export default function DeepAnalysisSidebar({
                 // Store in local state
                 setStoredReports(prev => [storedReport, ...prev])
                 
-                // Also save to backend if user is logged in
-                if (session?.user) {
+                // Also save to backend if user is logged in and analysis was successful
+                if (session?.user && isSuccessful) {
                   try {
                     // Extract user ID from session
                     let userId = '';
@@ -486,6 +554,13 @@ export default function DeepAnalysisSidebar({
                         final_conclusion: storedReport.final_conclusion,
                         html_report: storedReport.html_report,
                         report_summary: storedReport.summary,
+                        // Credit and error tracking
+                        credits_consumed: isSuccessful ? CreditConfig.getDeepAnalysisCost() : 0,
+                        error_message: isSuccessful ? null : 'Analysis completed with errors',
+                        model_provider: '', // Default provider
+                        model_name: '', // Default model
+                        total_tokens_used: 0, // Could be enhanced to track actual tokens
+                        estimated_cost: 0.0 // Could be enhanced to track actual cost
                       };
                       
                       const response = await fetch(`${API_URL}/deep_analysis/reports`, {
@@ -511,12 +586,32 @@ export default function DeepAnalysisSidebar({
             } else if (data.type === 'final_result') {
               markAllStepsCompleted()
               
+              // Check if the analysis completed successfully without errors
+              const isSuccessful = isSuccessfulCompletion(data)
+              
+              if (isSuccessful) {
+                // Show success notification
+                toast({
+                  title: "Deep Analysis Complete! 🎉",
+                  description: "Your analysis report is ready for download.",
+                  duration: 5000,
+                })
+              } else {
+                // Show error notification with retry suggestion
+                toast({
+                  title: "Analysis completed with errors",
+                  description: "The analysis encountered issues. You might want to try again with a different approach.",
+                  variant: "destructive",
+                  duration: 8000,
+                })
+              }
+              
               setCurrentReport(prevReport => {
                 if (!prevReport) return prevReport
                 
                 return {
                   ...prevReport,
-                  status: 'completed',
+                  status: isSuccessful ? 'completed' : 'failed',
                   endTime: new Date().toISOString(),
                   deep_questions: data.deep_questions || '',
                   deep_plan: data.deep_plan || '',
@@ -530,10 +625,14 @@ export default function DeepAnalysisSidebar({
                 }
               })
               
-              completeAnalysis()
+              if (isSuccessful) {
+                completeAnalysis()
+              } else {
+                failAnalysis()
+              }
               
-              // Deduct credits for successful deep analysis (only for paid users)
-              if (session) {
+              // Only deduct credits for successful deep analysis (only for paid users)
+              if (session && isSuccessful) {
                 try {
                   const deepAnalysisCost = CreditConfig.getDeepAnalysisCost()
                   
@@ -586,11 +685,13 @@ export default function DeepAnalysisSidebar({
               const storedReport: StoredReport = {
                 id: reportId,
                 goal: goal.trim(),
-                status: 'completed',
+                status: isSuccessful ? 'completed' : 'failed',
                 startTime: newReport.startTime,
                 endTime: new Date().toISOString(),
-                html_report: data.html_report,
-                summary: (data.final_conclusion || 'Analysis completed').substring(0, 200) + '...',
+                html_report: isSuccessful ? data.html_report : '',
+                summary: isSuccessful 
+                  ? (data.final_conclusion || 'Analysis completed').substring(0, 200) + '...'
+                  : 'Analysis failed due to errors. You might want to try again.',
                 deep_questions: data.deep_questions || '',
                 deep_plan: data.deep_plan || '',
                 summaries: data.summaries || [],
@@ -603,8 +704,8 @@ export default function DeepAnalysisSidebar({
               // Store in local state
               setStoredReports(prev => [storedReport, ...prev])
               
-              // Also save to backend if user is logged in
-              if (session?.user) {
+              // Also save to backend if user is logged in and analysis was successful
+              if (session?.user && isSuccessful) {
                 try {
                   // Extract user ID from session
                   let userId = '';
@@ -630,6 +731,13 @@ export default function DeepAnalysisSidebar({
                       final_conclusion: storedReport.final_conclusion,
                       html_report: storedReport.html_report,
                       report_summary: storedReport.summary,
+                      // Credit and error tracking
+                      credits_consumed: isSuccessful ? CreditConfig.getDeepAnalysisCost() : 0,
+                      error_message: isSuccessful ? null : 'Analysis completed with errors',
+                      model_provider: 'anthropic', 
+                      model_name: 'claude-sonnet-4-20250514',
+                      total_tokens_used: 0, 
+                      estimated_cost: 0.0
                     };
                     
                     const response = await fetch(`${API_URL}/deep_analysis/reports`, {
@@ -654,11 +762,16 @@ export default function DeepAnalysisSidebar({
             } else if (data.type === 'error' || data.error) {
               console.error('Analysis error:', data.error || data.message)
               
+              const errorMessage = data.error || data.message || "An error occurred during analysis."
+              const isKnownErrorType = isKnownError(errorMessage)
+              
               toast({
                 title: "Analysis Failed",
-                description: data.error || data.message || "An error occurred during analysis.",
+                description: isKnownErrorType 
+                  ? "Analysis failed due to service limitations. You might want to try again later or with a simpler request."
+                  : errorMessage,
                 variant: "destructive",
-                duration: 5000,
+                duration: 8000,
               })
               
               setCurrentReport(prev => prev ? {
@@ -686,6 +799,62 @@ export default function DeepAnalysisSidebar({
               }
               
               setStoredReports(prev => [failedReport, ...prev])
+              
+              // Save failed report to backend if user is logged in
+              if (session?.user) {
+                try {
+                  // Extract user ID from session
+                  let userId = '';
+                  if ((session.user as any).sub) {
+                    userId = (session.user as any).sub;
+                  } else if ((session.user as any).id) {
+                    userId = (session.user as any).id;
+                  }
+                  
+                  if (userId) {
+                    // Create the failed report in the backend
+                    const backendReport = {
+                      report_uuid: reportId,
+                      user_id: parseInt(userId),
+                      goal: failedReport.goal,
+                      status: 'failed',
+                      deep_questions: '',
+                      deep_plan: '',
+                      summaries: [],
+                      analysis_code: '',
+                      plotly_figures: [],
+                      synthesis: [],
+                      final_conclusion: '',
+                      html_report: '',
+                      report_summary: failedReport.summary,
+                      // Credit and error tracking
+                      credits_consumed: 0, // No credits charged for failed analyses
+                      error_message: data.error || data.message || 'Analysis failed',
+                      model_provider: '',
+                      model_name: '',
+                      total_tokens_used: 0,
+                      estimated_cost: 0.0
+                    };
+                    
+                    const response = await fetch(`${API_URL}/deep_analysis/reports`, {
+                      method: 'POST',
+                      headers: {
+                        'Content-Type': 'application/json',
+                      },
+                      body: JSON.stringify(backendReport),
+                    });
+                    
+                    if (!response.ok) {
+                      console.error('Failed to save failed report to backend:', await response.text());
+                    } else {
+                      console.log('Failed report saved to backend successfully');
+                    }
+                  }
+                } catch (error) {
+                  console.error('Error saving failed report to backend:', error);
+                  // Continue even if saving to backend fails
+                }
+              }
             }
             
           } catch (parseError) {
@@ -706,11 +875,13 @@ export default function DeepAnalysisSidebar({
     } catch (error) {
       console.error('Analysis failed:', error)
       
+      const errorMessage = error instanceof Error ? error.message : "Network error occurred during analysis."
+      
       toast({
         title: "Analysis Failed",
-        description: error instanceof Error ? error.message : "Network error occurred during analysis.",
+        description: "A network or connection error occurred. Please check your internet connection and try again.",
         variant: "destructive",
-        duration: 5000,
+        duration: 8000,
       })
       
       setCurrentReport(prev => prev ? {
@@ -738,6 +909,62 @@ export default function DeepAnalysisSidebar({
       }
       
       setStoredReports(prev => [failedReport, ...prev])
+      
+      // Save failed report to backend if user is logged in
+      if (session?.user) {
+        try {
+          // Extract user ID from session
+          let userId = '';
+          if ((session.user as any).sub) {
+            userId = (session.user as any).sub;
+          } else if ((session.user as any).id) {
+            userId = (session.user as any).id;
+          }
+          
+          if (userId) {
+            // Create the failed report in the backend
+            const backendReport = {
+              report_uuid: reportId,
+              user_id: parseInt(userId),
+              goal: failedReport.goal,
+              status: 'failed',
+              deep_questions: '',
+              deep_plan: '',
+              summaries: [],
+              analysis_code: '',
+              plotly_figures: [],
+              synthesis: [],
+              final_conclusion: '',
+              html_report: '',
+              report_summary: failedReport.summary,
+              // Credit and error tracking
+              credits_consumed: 0, // No credits charged for failed analyses
+              error_message: errorMessage,
+              model_provider: '',
+              model_name: '',
+              total_tokens_used: 0,
+              estimated_cost: 0.0
+            };
+            
+            const response = await fetch(`${API_URL}/deep_analysis/reports`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify(backendReport),
+            });
+            
+            if (!response.ok) {
+              console.error('Failed to save failed report to backend:', await response.text());
+            } else {
+              console.log('Network error report saved to backend successfully');
+            }
+          }
+        } catch (backendError) {
+          console.error('Error saving network error report to backend:', backendError);
+          // Continue even if saving to backend fails
+        }
+      }
     }
   }
 
@@ -1001,7 +1228,7 @@ export default function DeepAnalysisSidebar({
           animate={{ x: 0 }}
           exit={{ x: '100%' }}
           transition={{ type: 'tween', duration: 0.3 }}
-          className="fixed top-0 right-0 h-full bg-white shadow-2xl z-50 flex flex-col border-l border-gray-200 w-96"
+          className="fixed top-0 right-0 h-full bg-white shadow-2xl z-50 flex flex-col border-l border-gray-200 w-96 overflow-hidden"
         >
       {/* Header */}
       <div className="flex items-center justify-between p-3 border-b border-gray-200 bg-gray-50 flex-shrink-0">
@@ -1042,7 +1269,7 @@ export default function DeepAnalysisSidebar({
               <TabsTrigger value="history" className="text-xs">History</TabsTrigger>
             </TabsList>
 
-            <TabsContent value="new" className="flex-1 min-h-0">
+            <TabsContent value="new" className="flex-1 min-h-0 overflow-hidden">
               <NewAnalysisForm
                 goal={goal}
                 setGoal={setGoal}
@@ -1053,7 +1280,7 @@ export default function DeepAnalysisSidebar({
               />
             </TabsContent>
 
-            <TabsContent value="current" className="flex-1 min-h-0">
+            <TabsContent value="current" className="flex-1 min-h-0 overflow-hidden">
               <CurrentAnalysisView
                 currentReport={currentReport}
                 refreshTrigger={refreshTrigger}
@@ -1062,7 +1289,7 @@ export default function DeepAnalysisSidebar({
               />
             </TabsContent>
 
-            <TabsContent value="history" className="flex-1 min-h-0">
+            <TabsContent value="history" className="flex-1 min-h-0 overflow-hidden">
               <HistoryView
                 storedReports={storedReports}
                 selectedHistoryReport={selectedHistoryReport}
@@ -1083,8 +1310,8 @@ export default function DeepAnalysisSidebar({
       <Dialog open={showPremiumUpgradeModal} onOpenChange={setShowPremiumUpgradeModal}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Crown className="w-5 h-5 text-yellow-500" />
+            <DialogTitle className="flex items-center gap-2 text-lg">
+              <Crown className="w-6 h-6 text-yellow-500" />
               Deep Analysis - Premium Feature
             </DialogTitle>
           </DialogHeader>
@@ -1092,19 +1319,19 @@ export default function DeepAnalysisSidebar({
             <div className="flex items-center gap-3 p-4 bg-gradient-to-r from-red-50 to-orange-50 rounded-lg border border-[#FF7F7F]/20">
               <Lock className="w-6 h-6 text-[#FF7F7F]" />
               <div>
-                <h4 className="font-medium text-gray-900">Upgrade Required</h4>
-                <p className="text-sm text-gray-600">
-                  Deep Analysis is a premium feature that provides a comprehensive research report examining your data from every possible angle, uncovering hidden patterns and relationships.
+                <h4 className="font-semibold text-gray-900 text-base">Upgrade Required</h4>
+                <p className="text-base text-gray-700 mt-1">
+                  You need to upgrade to the standard tier to use this. Here is a <a href="https://firebird-technologies.github.io/" className="text-[#FF7F7F] hover:underline underline" target="_blank" rel="noopener noreferrer">sample report</a>.
                 </p>
               </div>
             </div>
             
-            <div className="space-y-2">
-              <h5 className="font-medium text-gray-900">What you'll get:</h5>
-              <ul className="text-sm text-gray-600 space-y-1 ml-4">
-                <li>• Advanced statistical analysis</li>
-                <li>• Detailed visualizations and insights</li>
-                <li>• Comprehensive research report</li>
+            <div className="space-y-3">
+              <h5 className="font-semibold text-gray-900 text-base">What it can do:</h5>
+              <ul className="text-base text-gray-700 space-y-2 ml-4">
+                <li>• Asks deeper, smarter questions.</li>
+                <li>• Builds a strategic plan and delegates with precision.</li>
+                <li>• Synthesizes everything into a clear conclusion.</li>
               </ul>
             </div>
             <div className="flex gap-3 pt-4">
