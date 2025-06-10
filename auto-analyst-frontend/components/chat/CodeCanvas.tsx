@@ -840,12 +840,27 @@ const CodeCanvas: React.FC<CodeCanvasProps> = ({
     // Show success toast
     toast({
       title: "Code fixed",
-      description: "AI has fixed your code. Run it to see if the fix works.",
+      description: "AI has fixed your code. Auto-running to verify the fix...",
       variant: "default",
       duration: 3000,
     });
     
     setIsFixingCode(false);
+    
+    // Auto-run the fixed code after a short delay to ensure state is updated
+    setTimeout(() => {
+      const fixedEntry = updatedEntries[entryIndex];
+      if (fixedEntry && fixedEntry.language === "python") {
+        console.log("Auto-running fixed code for entry:", codeId);
+        executeCode(codeId, fixedCode, fixedEntry.language);
+        
+        toast({
+          title: "Running fixed code",
+          description: "Automatically testing the fixed code...",
+          duration: 2000,
+        });
+      }
+    }, 500);
   };
 
   // Handle insufficient credits
