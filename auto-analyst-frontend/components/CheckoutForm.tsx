@@ -112,7 +112,7 @@ export default function CheckoutForm({ planName, amount, interval, clientSecret 
               Payment Successful!
             </div>
           ) : (
-            `Pay $${amount}`
+            `Proceed to Payment`
           )}
         </Button>
         
