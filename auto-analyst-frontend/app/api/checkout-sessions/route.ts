@@ -14,12 +14,11 @@ export async function POST(request: NextRequest) {
   try {
     // Check if Stripe is initialized
     if (!stripe) {
-      console.error('Stripe is not initialized - missing API key')
       return NextResponse.json({ error: 'Stripe configuration error' }, { status: 500 })
     }
     
     const body = await request.json()
-    const { priceId, userId, planName, interval } = body
+    const { priceId, userId, planName, interval, promoCode } = body
     
     if (!priceId || !planName || !interval) {
       return NextResponse.json({ message: 'Price ID and plan details are required' }, { status: 400 })
@@ -50,8 +49,45 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ message: 'Unable to create or retrieve customer' }, { status: 400 })
     }
 
-    // Create a subscription with the provided price ID
-    const subscription = await stripe.subscriptions.create({
+    // Validate promo code if provided
+    let couponId = null
+    if (promoCode) {
+      try {
+        // First try to find a promotion code
+        const promotionCodes = await stripe.promotionCodes.list({
+          code: promoCode,
+          active: true,
+          limit: 1,
+        })
+
+        if (promotionCodes.data.length > 0) {
+          const promotionCode = promotionCodes.data[0]
+          
+          // Check if promotion code is valid and not expired
+          if (promotionCode.active && 
+              (!promotionCode.expires_at || promotionCode.expires_at > Math.floor(Date.now() / 1000))) {
+            couponId = promotionCode.coupon.id
+          } else {
+            return NextResponse.json({ message: 'Promo code has expired or is no longer active' }, { status: 400 })
+          }
+        } else {
+          // If no promotion code found, try direct coupon lookup
+          try {
+            const coupon = await stripe.coupons.retrieve(promoCode)
+            if (coupon.valid) {
+              couponId = coupon.id
+            }
+          } catch (couponError) {
+            return NextResponse.json({ message: 'Invalid promo code' }, { status: 400 })
+          }
+        }
+      } catch (error) {
+        return NextResponse.json({ message: 'Error validating promo code' }, { status: 400 })
+      }
+    }
+
+    // Prepare subscription creation parameters
+    const subscriptionParams: Stripe.SubscriptionCreateParams = {
       customer: customerId,
       items: [{ price: priceId }],
       payment_behavior: 'default_incomplete',
@@ -61,8 +97,17 @@ export async function POST(request: NextRequest) {
         userId: userId || 'anonymous',
         planName,
         interval,
+        ...(promoCode && { promoCode }),
       },
-    })
+    }
+
+    // Apply coupon if valid promo code was found
+    if (couponId) {
+      subscriptionParams.coupon = couponId
+    }
+
+    // Create a subscription with the provided price ID and optional coupon
+    const subscription = await stripe.subscriptions.create(subscriptionParams)
 
     // Get the client secret from the payment intent
     // @ts-ignore - We know this exists because we expanded it
@@ -70,10 +115,11 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ 
       clientSecret,
-      subscriptionId: subscription.id 
+      subscriptionId: subscription.id,
+      discountApplied: !!couponId,
+      ...(couponId && { couponId })
     })
   } catch (error) {
-    console.error('Stripe error:', error)
     const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred'
     return NextResponse.json({ message: `Stripe error: ${errorMessage}` }, { status: 500 })
   }

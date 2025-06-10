@@ -15,7 +15,6 @@ export async function POST(request: NextRequest) {
   try {
     // Check if Stripe is initialized
     if (!stripe) {
-      console.error('Stripe is not initialized - missing API key')
       return NextResponse.json({ error: 'Stripe configuration error' }, { status: 500 })
     }
     
@@ -33,7 +32,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'You must be logged in to subscribe' }, { status: 401 })
     }
 
-    // Create a checkout session with the specified price
+    // Create a checkout session with the specified price and enable promotion codes
     const checkoutSession = await stripe.checkout.sessions.create({
       mode: 'subscription',
       payment_method_types: ['card'],
@@ -43,6 +42,8 @@ export async function POST(request: NextRequest) {
           quantity: 1,
         },
       ],
+      // Enable promotion codes for customer entry
+      allow_promotion_codes: true,
       // Use metadata to store user ID for webhooks
       metadata: {
         userId: userId || session.user.id,
@@ -57,7 +58,6 @@ export async function POST(request: NextRequest) {
       id: checkoutSession.id,
     })
   } catch (error: any) {
-    console.error('Stripe checkout error:', error)
     return NextResponse.json({ 
       error: error.message || 'Something went wrong with the checkout process' 
     }, { status: 500 })

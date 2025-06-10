@@ -172,7 +172,7 @@ const CodeFixButton: React.FC<CodeFixButtonProps> = ({
         
         toast({
           title: "Code fixed",
-          description: "AI has fixed your code. Run it to see if the fix works.",
+          description: "AI has fixed your code. Auto-running to verify the fix...",
           variant: "default",
           duration: 3000,
         })
@@ -317,7 +317,7 @@ const CodeFixButton: React.FC<CodeFixButtonProps> = ({
             transition={{ duration: 0.2 }}
             className="text-xs font-medium whitespace-nowrap text-red-500 overflow-hidden"
           >
-            {isFreeFix ? `Fix error with AI (${3 - fixCount} free left)` : "Fix error with AI (1 credit)"}
+            {isFreeFix ? `Fix & auto-run (${3 - fixCount} free left)` : "Fix & auto-run (1 credit)"}
           </motion.span>
           
           <div className="flex items-center">
@@ -379,14 +379,14 @@ const CodeFixButton: React.FC<CodeFixButtonProps> = ({
         <TooltipContent side="bottom" className="px-3 py-1.5">
           {isFreeFix ? (
             <div className="space-y-1">
-              <p className="text-sm font-medium">Fix code error</p>
+              <p className="text-sm font-medium">Fix & auto-run code</p>
               <p className="text-xs text-gray-500">
                 {3 - fixCount} free {3 - fixCount === 1 ? 'fix' : 'fixes'} remaining
               </p>
             </div>
           ) : (
             <div className="space-y-1">
-              <p className="text-sm font-medium">Fix code error</p>
+              <p className="text-sm font-medium">Fix & auto-run code</p>
               <p className="text-xs text-amber-500 flex items-center">
                 <CreditCard className="h-3 w-3 mr-1" /> Uses 1 credit per fix
               </p>

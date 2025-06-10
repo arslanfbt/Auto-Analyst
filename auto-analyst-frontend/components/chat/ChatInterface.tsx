@@ -14,7 +14,7 @@ import FreeTrialOverlay from "./FreeTrialOverlay"
 import { useChatHistoryStore } from "@/lib/store/chatHistoryStore"
 import { useCookieConsentStore } from "@/lib/store/cookieConsentStore"
 import { useRouter } from "next/navigation"
-import { AwardIcon, User, Menu } from "lucide-react"
+import { AwardIcon, User, Menu, MessageSquare } from "lucide-react"
 import { useSessionStore } from '@/lib/store/sessionStore'
 import API_URL from '@/config/api'
 import { useCredits } from '@/lib/contexts/credit-context'
@@ -41,6 +41,7 @@ import { getDisplayName } from '@/lib/model-registry'
 import { useUserSubscriptionStore } from '@/lib/store/userSubscriptionStore'
 import { hasFeatureAccess } from '@/lib/features/feature-access'
 import { toast } from "@/components/ui/use-toast"
+import FeedbackPopup from './FeedbackPopup'
 
 interface PlotlyMessage {
   type: "plotly"
@@ -111,6 +112,7 @@ const ChatInterface: React.FC = () => {
   const [isNewLoginSession, setIsNewLoginSession] = useState(false);
   const [chatNameGenerated, setChatNameGenerated] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
+  const [showFeedbackPopup, setShowFeedbackPopup] = useState(false);
   const { subscription, fetchSubscription, setSubscription } = useUserSubscriptionStore();
 
   useEffect(() => {
@@ -1533,6 +1535,16 @@ const ChatInterface: React.FC = () => {
 
           {/* Show credit balance and user profile */}
           <div className="flex items-center gap-3">
+            {/* Feedback button */}
+            <button
+              onClick={() => setShowFeedbackPopup(true)}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-sm text-gray-600 hover:text-[#FF7F7F] hover:bg-[#FF7F7F]/5 rounded-lg transition-all duration-200"
+              title="Send Feedback"
+            >
+              <MessageSquare className="w-4 h-4" />
+              <span className="hidden sm:inline">Feedback</span>
+            </button>
+            
             {/* Display current model */}
             {(session || isAdmin) && (
               <div 
@@ -1644,6 +1656,12 @@ const ChatInterface: React.FC = () => {
       <OnboardingTooltip 
         isOpen={showOnboarding} 
         onClose={() => setShowOnboarding(false)} 
+      />
+      
+      {/* Feedback Popup */}
+      <FeedbackPopup 
+        isOpen={showFeedbackPopup}
+        onClose={() => setShowFeedbackPopup(false)}
       />
     </div>
   )

@@ -208,7 +208,7 @@ const SettingsPopup: React.FC<SettingsPopupProps> = ({ isOpen, onClose, initialS
             </select>
           </div>
           
-          <div className="flex items-center gap-2">
+          {/* <div className="flex items-center gap-2">
             <input
               type="checkbox"
               id="useCustomAPI"
@@ -219,7 +219,7 @@ const SettingsPopup: React.FC<SettingsPopupProps> = ({ isOpen, onClose, initialS
             <label htmlFor="useCustomAPI" className="text-sm font-medium text-gray-700">
               Use custom API key
             </label>
-          </div>
+          </div> */}
 
           {useCustomAPI && (
             <div>

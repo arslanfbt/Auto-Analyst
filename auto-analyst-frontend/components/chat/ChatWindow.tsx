@@ -693,6 +693,74 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
     }
   }, [])
 
+  // Execute code function for auto-run after fixes
+  const executeCodeFromChatWindow = useCallback(async (entryId: string, code: string, language: string) => {
+    // Only execute Python code for now
+    if (language !== 'python') {
+      toast({
+        title: "Unsupported language",
+        description: `${language} code execution is not supported yet.`,
+        variant: "destructive"
+      })
+      return
+    }
+    
+    // Find the code entry in our list
+    const entryIndex = codeEntries.findIndex(entry => entry.id === entryId)
+    if (entryIndex === -1) {
+      toast({
+        title: "Error",
+        description: "Code entry not found",
+        variant: "destructive"
+      })
+      return
+    }
+    
+    const codeEntry = codeEntries[entryIndex]
+    const messageId = codeEntry.messageIndex
+    
+    try {
+      // Set the message ID in the session first so the backend knows which message this code belongs to
+      if (messageId) {
+        try {
+          console.log(`Setting message_id in backend: ${messageId}`);
+          await axios.post(`${API_URL}/set-message-info`, {
+            message_id: messageId
+          }, {
+            headers: {
+              ...(sessionId && { 'X-Session-ID': sessionId }),
+            },
+          });
+        } catch (error) {
+          console.error("Error setting message ID:", error);
+        }
+      }
+      
+      // Now execute the code with the associated message ID
+      const response = await axios.post(`${API_URL}/code/execute`, {
+        code: code.trim(),
+        session_id: sessionId,
+        message_id: messageId
+      }, {
+        headers: {
+          ...(sessionId && { 'X-Session-ID': sessionId }),
+        },
+      })
+      
+      console.log("Code execution response:", response.data);
+      
+      // Pass execution result to handleCodeCanvasExecute
+      handleCodeCanvasExecute(entryId, response.data);
+      
+    } catch (error) {
+      console.error("Error executing code:", error)
+      const errorMessage = error instanceof Error ? error.message : "Failed to execute code";
+      
+      // Pass error to handleCodeCanvasExecute
+      handleCodeCanvasExecute(entryId, { error: errorMessage });
+    }
+  }, [codeEntries, sessionId, handleCodeCanvasExecute, toast]);
+
   // Handle fix complete
   const handleFixComplete = useCallback((codeId: string, fixedCode: string) => {
     // Increment the fix count
@@ -739,6 +807,20 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
       
       // Make sure canvas is visible
       setHiddenCanvas(false)
+      
+      // Auto-run the fixed code after a short delay to ensure state is updated
+      setTimeout(() => {
+        if (codeEntry.language === "python") {
+          console.log("Auto-running fixed code for entry:", codeId);
+          executeCodeFromChatWindow(codeId, fixedCode, codeEntry.language);
+          
+          toast({
+            title: "Running fixed code",
+            description: "Automatically testing the fixed code...",
+            duration: 2000,
+          });
+        }
+      }, 500);
     }
 
     // Reset fixing state
@@ -746,11 +828,11 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
     
     // Show a toast to guide the user
     toast({
-      title: "Code fixed",
-      description: "The code has been fixed and is ready to run in the code canvas.",
-      duration: 5000,
+      title: "Code fixed and testing",
+      description: "The code has been fixed and is being automatically tested.",
+      duration: 3000,
     })
-  }, [codeEntries, handleCodeCanvasExecute, codeCanvasOpen, toast]);
+  }, [codeEntries, handleCodeCanvasExecute, codeCanvasOpen, toast, executeCodeFromChatWindow]);
 
   // Add a handleOpenCanvasForFix function to ChatWindow which passes the error message to CodeCanvas
   const handleOpenCanvasForFix = useCallback((errorMessage: string, codeId: string) => {
@@ -1379,7 +1461,6 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
     // Get outputs for this specific message
     const relevantOutputs = codeOutputs[actualMessageId] || [];
     
-    console.log(`Rendering outputs for message index ${messageIndex}, actual ID ${actualMessageId}:`, relevantOutputs);
     
     if (relevantOutputs.length === 0) return null;
     
