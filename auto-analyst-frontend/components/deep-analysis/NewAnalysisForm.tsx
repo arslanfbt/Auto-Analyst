@@ -37,7 +37,7 @@ export default function NewAnalysisForm({
             onChange={(e) => setGoal(e.target.value)}
             disabled={isAnalysisRunning}
             rows={3}
-            className="resize-none text-xs"
+            className="resize-none text-xs overflow-y-auto"
           />
         </div>
         
