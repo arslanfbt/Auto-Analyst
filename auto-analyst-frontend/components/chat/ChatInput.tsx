@@ -26,7 +26,6 @@ import Link from 'next/link'
 import DatasetResetPopup from './DatasetResetPopup'
 import ReactMarkdown from 'react-markdown'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import FeedbackPopup from "./FeedbackPopup"
 import logger from '@/lib/utils/logger'
 import {
   Select,
@@ -211,7 +210,6 @@ const ChatInput = forwardRef<
   // Replace session flag with a set of chat IDs that have shown the popup
   const popupShownForChatIdsRef = useRef<Set<number>>(new Set());
   const [descriptionTab, setDescriptionTab] = useState<"edit" | "preview">("edit")
-  const [showFeedbackPopup, setShowFeedbackPopup] = useState(false)
   // Add state for error notification
   const [errorNotification, setErrorNotification] = useState<{ message: string, details?: string } | null>(null);
   // Add timeout ref to manage error notification cleanup
@@ -2000,13 +1998,7 @@ const ChatInput = forwardRef<
                   </button>
                 )}
                 
-                <button
-                  onClick={() => setShowFeedbackPopup(true)}
-                  className="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-gray-600 bg-gray-50 border border-gray-200 rounded-md hover:bg-gray-100 transition-colors"
-                >
-                  <MessageSquare className="w-4 h-4" />
-                  Send Feedback
-                </button>
+
                 
                 <DeepAnalysisButton
                   onClick={() => {
@@ -2394,12 +2386,6 @@ const ChatInput = forwardRef<
           </div>
         </DialogContent>
       </Dialog>
-
-      {/* Feedback Popup */}
-      <FeedbackPopup 
-        isOpen={showFeedbackPopup}
-        onClose={() => setShowFeedbackPopup(false)}
-      />
 
       {/* Dataset Reset Popup */}
       <DatasetResetPopup
