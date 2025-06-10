@@ -906,7 +906,7 @@ class deep_analysis_module(dspy.Module):
             
             try:
                 # Create the LM instance that will be used
-                thread_lm = dspy.LM("anthropic/claude-4-sonnet-20250514", api_key=anthropic_key, max_tokens=17000)
+                thread_lm = dspy.LM("anthropic/claude-sonnet-4-20250514", api_key=anthropic_key, max_tokens=17000)
                 
                 logger.log_message("Starting code generation...")
                 start_time = datetime.datetime.now()

@@ -8,6 +8,7 @@ import AgentsSection from "./AgentsSection"
 import ConnectorsSection from "./ConnectorsSection"
 import MissionSection from "./MissionSection"
 import Footer from "./Footer"
+import StatsTicker from "./StatsTicker"
 import { Button } from "../ui/button"
 import CookieConsent from "./CookieConsent"
 import { useState, useEffect } from "react"
@@ -97,6 +98,9 @@ export default function LandingPage() {
       
       <div className="pt-4 sm:pt-0"> {/* Add padding to account for fixed navbar on mobile */}
         <HeroSection />
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8">
+          <StatsTicker />
+        </div>
         <WhyAutoAnalystSection />
         <AgentsSection />
         <FeaturesSection />
