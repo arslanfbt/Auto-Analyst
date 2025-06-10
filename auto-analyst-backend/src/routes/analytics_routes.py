@@ -13,7 +13,7 @@ from sqlalchemy import case, desc, func
 from sqlalchemy.orm import Session
 
 from src.db.init_db import get_db, get_session
-from src.db.schemas.models import ModelUsage, CodeExecution, Message, MessageFeedback
+from src.db.schemas.models import ModelUsage, CodeExecution, Message, MessageFeedback, User
 from src.managers.chat_manager import ChatManager
 
 from typing import Any, Dict, List, Optional
@@ -1613,3 +1613,36 @@ async def get_detailed_feedback(
         "limit": limit,
         "feedback": detailed_feedback
     }
+
+@router.get("/public/ticker")
+async def get_public_ticker_data(db: Session = Depends(get_db)):
+    """
+    Get public ticker data for the landing page showing overall platform statistics.
+    This endpoint is public and doesn't require authentication.
+    """
+    try:
+        # Get total number of users (signups)
+        total_signups = db.query(func.count(func.distinct(User.user_id))).scalar() or 0
+        
+        # Get total tokens used across all model usage
+        total_tokens = db.query(func.sum(ModelUsage.total_tokens)).scalar() or 0
+        
+        # Get total requests made
+        total_requests = db.query(func.count(ModelUsage.usage_id)).scalar() or 0
+        
+        # Return the ticker data
+        return {
+            "total_signups": total_signups,
+            "total_tokens": int(total_tokens),
+            "total_requests": total_requests,
+            "last_updated": datetime.now(UTC).isoformat()
+        }
+    except Exception as e:
+        logger.log_message(f"Error retrieving public ticker data: {str(e)}", logging.ERROR)
+        # Return default values in case of error
+        return {
+            "total_signups": 0,
+            "total_tokens": 0,
+            "total_requests": 0,
+            "last_updated": datetime.now(UTC).isoformat()
+        }

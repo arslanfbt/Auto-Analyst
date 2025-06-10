@@ -44,8 +44,8 @@ export default function AnalysisStep({ step, refreshTrigger }: AnalysisStepProps
 
   const getStepDisplayName = (stepName: string) => {
     const stepNames: Record<string, string> = {
-      'initialization': 'Planning',
-      'questions': 'Analysis',
+      'initialization': 'Initialization',
+      'questions': 'Questions',
       'planning': 'Planning',
       'analysis': 'Analysis',
       'synthesis': 'Synthesis',
