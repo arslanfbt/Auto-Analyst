@@ -36,6 +36,8 @@ import {
 } from "@/components/ui/select"
 // Deep Analysis imports
 import { DeepAnalysisSidebar, DeepAnalysisButton } from '../deep-analysis'
+// Custom Agents imports
+import { CustomAgentsSidebar, CustomAgentsButton } from '../custom-agents'
 import CommandSuggestions from './CommandSuggestions'
 import { useUserSubscriptionStore } from '@/lib/store/userSubscriptionStore'
 import { useFeatureAccess } from '@/lib/hooks/useFeatureAccess'
@@ -223,6 +225,10 @@ const ChatInput = forwardRef<
   const { state: deepAnalysisState } = useDeepAnalysis()
   const [showDeepAnalysisSidebar, setShowDeepAnalysisSidebar] = useState(false)
   const [shouldForceExpanded, setShouldForceExpanded] = useState(false)
+  
+  // Custom Agents states
+  const [showCustomAgentsSidebar, setShowCustomAgentsSidebar] = useState(false)
+  const [shouldForceExpandedCustomAgents, setShouldForceExpandedCustomAgents] = useState(false)
   const [showCommandSuggestions, setShowCommandSuggestions] = useState(false)
   const [commandQuery, setCommandQuery] = useState('')
   
@@ -998,6 +1004,13 @@ const ChatInput = forwardRef<
       setMessage('')
       // Reset force expanded after a brief moment
       setTimeout(() => setShouldForceExpanded(false), 100)
+    } else if (command.id === 'custom-agents') {
+      // Show custom agents sidebar in expanded state
+      setShouldForceExpandedCustomAgents(true)
+      setShowCustomAgentsSidebar(true)
+      setMessage('')
+      // Reset force expanded after a brief moment
+      setTimeout(() => setShouldForceExpandedCustomAgents(false), 100)
     } else {
       // For other commands, replace the "/" with the command
       setMessage(`${command.name} `)
@@ -1999,6 +2012,17 @@ const ChatInput = forwardRef<
                 )}
                 
 
+                <CustomAgentsButton
+                    onClick={() => {
+                      setShouldForceExpandedCustomAgents(true)
+                      setShowCustomAgentsSidebar(true)
+                      // Reset force expanded after a brief moment
+                      setTimeout(() => setShouldForceExpandedCustomAgents(false), 100)
+                    }}
+                    userProfile={subscription}
+                    showLabel={true}
+                    size="sm"
+                  />
                 
                 <DeepAnalysisButton
                   onClick={() => {
@@ -2012,6 +2036,7 @@ const ChatInput = forwardRef<
                   size="sm"
                   isRunning={deepAnalysisState.isRunning}
                 />
+                
               </div>
 
               {/* Credit exhaustion message with reset date */}
@@ -2475,6 +2500,14 @@ const ChatInput = forwardRef<
         sessionId={sessionId || undefined}
         userId={userId}
         forceExpanded={shouldForceExpanded}
+      />
+      
+      {/* Custom Agents Sidebar */}
+      <CustomAgentsSidebar
+        isOpen={showCustomAgentsSidebar}
+        onClose={() => setShowCustomAgentsSidebar(false)}
+        userId={userId}
+        forceExpanded={shouldForceExpandedCustomAgents}
       />
     </>
   )

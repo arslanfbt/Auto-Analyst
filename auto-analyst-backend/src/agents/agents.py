@@ -8,6 +8,127 @@ load_dotenv()
 
 logger = Logger("agents", see_time=True, console_log=False)
 
+# === CUSTOM AGENT FUNCTIONALITY ===
+def create_custom_agent_signature(agent_name, description, prompt_template):
+    """
+    Dynamically creates a dspy.Signature class for custom agents.
+    
+    Args:
+        agent_name: Name of the custom agent (e.g., 'pytorch_agent')
+        description: Short description for agent selection
+        prompt_template: Main prompt/instructions for agent behavior
+    
+    Returns:
+        A dspy.Signature class with the custom prompt and standard input/output fields
+    """
+    
+    # Standard input/output fields that all agents must have
+    class_attributes = {
+        '__doc__': prompt_template,  # The custom prompt becomes the docstring
+        'dataset': dspy.InputField(desc="Available datasets loaded in the system, use this df, columns set df as copy of df"),
+        'goal': dspy.InputField(desc="The user defined goal"),
+        'plan_instructions': dspy.InputField(desc="Agent-level instructions about what to create and receive"),
+        'code': dspy.OutputField(desc="Generated Python code for the analysis"),
+        'summary': dspy.OutputField(desc="Explanation of what was done and why")
+    }
+    
+    # Create the dynamic signature class
+    CustomAgentSignature = type(agent_name, (dspy.Signature,), class_attributes)
+    return CustomAgentSignature
+
+def load_custom_agents_from_db(user_id, db_session):
+    """
+    Load custom agents for a specific user from the database.
+    
+    Args:
+        user_id: ID of the user
+        db_session: Database session
+    
+    Returns:
+        Dict of custom agent signatures keyed by agent name
+    """
+    try:
+        from src.db.schemas.models import CustomAgent
+        
+        # Query active custom agents for the user
+        custom_agents = db_session.query(CustomAgent).filter(
+            CustomAgent.user_id == user_id,
+            CustomAgent.is_active == True
+        ).all()
+        
+        agent_signatures = {}
+        for agent in custom_agents:
+            # Create dynamic signature for each custom agent
+            signature = create_custom_agent_signature(
+                agent.agent_name,
+                agent.description,
+                agent.prompt_template
+            )
+            agent_signatures[agent.agent_name] = signature
+            
+        return agent_signatures
+        
+    except Exception as e:
+        logger.log_message(f"Error loading custom agents for user {user_id}: {str(e)}", level=logging.ERROR)
+        return {}
+
+def get_custom_agent_description(agent_name, custom_agents_descriptions):
+    """
+    Get description for a custom agent.
+    
+    Args:
+        agent_name: Name of the custom agent
+        custom_agents_descriptions: Dict of custom agent descriptions
+    
+    Returns:
+        Description string or default message
+    """
+    return custom_agents_descriptions.get(agent_name.lower(), "Custom agent - no description available")
+
+def save_custom_agent_to_db(user_id, agent_name, display_name, description, prompt_template, db_session):
+    """
+    Save a new custom agent to the database.
+    
+    Args:
+        user_id: ID of the user creating the agent
+        agent_name: Unique name for the agent (e.g., 'pytorch_agent')
+        display_name: User-friendly display name
+        description: Short description for agent selection
+        prompt_template: Main prompt/instructions for agent behavior
+        db_session: Database session
+    
+    Returns:
+        Tuple (success: bool, message: str, agent_id: int or None)
+    """
+    try:
+        from src.db.schemas.models import CustomAgent
+        from sqlalchemy.exc import IntegrityError
+        
+        # Create new custom agent
+        new_agent = CustomAgent(
+            user_id=user_id,
+            agent_name=agent_name.lower().strip(),
+            display_name=display_name,
+            description=description,
+            prompt_template=prompt_template,
+            is_active=True,
+            usage_count=0
+        )
+        
+        db_session.add(new_agent)
+        db_session.commit()
+        
+        return True, "Custom agent created successfully", new_agent.agent_id
+        
+    except IntegrityError:
+        db_session.rollback()
+        return False, f"Agent name '{agent_name}' already exists for this user", None
+    except Exception as e:
+        db_session.rollback()
+        logger.log_message(f"Error saving custom agent: {str(e)}", level=logging.ERROR)
+        return False, f"Error creating custom agent: {str(e)}", None
+
+# === END CUSTOM AGENT FUNCTIONALITY ===
 
 AGENTS_WITH_DESCRIPTION = {
     "preprocessing_agent": "Cleans and prepares a DataFrame using Pandas and NumPy—handles missing values, detects column types, and converts date strings to datetime.",
@@ -992,17 +1113,71 @@ class auto_analyst_ind(dspy.Module):
 class auto_analyst(dspy.Module):
     """Main analyst module that coordinates multiple agents using a planner"""
     
-    def __init__(self, agents, retrievers):
+    def __init__(self, agents, retrievers, user_id=None, db_session=None):
         # Initialize agent modules and retrievers
         self.agents = {}
         self.agent_inputs = {}
         self.agent_desc = []
+        self.custom_agents_descriptions = {}
         
+        # Load standard agents
         for i, a in enumerate(agents):
             name = a.__pydantic_core_schema__['schema']['model_name']
             self.agents[name] = dspy.asyncify(dspy.ChainOfThought(a))
             self.agent_inputs[name] = {x.strip() for x in str(agents[i].__pydantic_core_schema__['cls']).split('->')[0].split('(')[1].split(',')}
             self.agent_desc.append({name: get_agent_description(name)})
+
+        # Load custom agents if user_id and db_session are provided
+        if user_id and db_session:
+            try:
+                custom_agent_signatures = load_custom_agents_from_db(user_id, db_session)
+                
+                for agent_name, signature in custom_agent_signatures.items():
+                    # Add custom agent to agents dict
+                    self.agents[agent_name] = dspy.asyncify(dspy.ChainOfThought(signature))
+                    
+                    # Extract input fields from signature (same as standard agents)
+                    try:
+                        # Get input fields from the signature
+                        input_fields = set()
+                        for field_name, field in signature.__annotations__.items():
+                            if hasattr(field, '__origin__') and field.__origin__ is dspy.InputField:
+                                input_fields.add(field_name)
+                            elif isinstance(field, dspy.InputField):
+                                input_fields.add(field_name)
+                        
+                        # If we can't extract fields this way, use the default set
+                        if not input_fields:
+                            input_fields = {'dataset', 'goal', 'plan_instructions'}
+                            
+                        self.agent_inputs[agent_name] = input_fields
+                    except:
+                        # Fallback to standard input fields
+                        self.agent_inputs[agent_name] = {'dataset', 'goal', 'plan_instructions'}
+                    
+                    # Store custom agent description
+                    try:
+                        from src.db.schemas.models import CustomAgent
+                        agent_record = db_session.query(CustomAgent).filter(
+                            CustomAgent.agent_name == agent_name,
+                            CustomAgent.user_id == user_id
+                        ).first()
+                        
+                        if agent_record:
+                            self.custom_agents_descriptions[agent_name] = agent_record.description
+                            self.agent_desc.append({agent_name: agent_record.description})
+                        else:
+                            self.custom_agents_descriptions[agent_name] = f"Custom agent: {agent_name}"
+                            self.agent_desc.append({agent_name: f"Custom agent: {agent_name}"})
+                    except Exception as desc_error:
+                        logger.log_message(f"Error getting description for custom agent {agent_name}: {str(desc_error)}", level=logging.WARNING)
+                        self.custom_agents_descriptions[agent_name] = f"Custom agent: {agent_name}"
+                        self.agent_desc.append({agent_name: f"Custom agent: {agent_name}"})
+                        
+                logger.log_message(f"Loaded {len(custom_agent_signatures)} custom agents for user {user_id}", level=logging.INFO)
+                
+            except Exception as e:
+                logger.log_message(f"Error loading custom agents for user {user_id}: {str(e)}", level=logging.ERROR)
 
         self.agents['basic_qa_agent'] = dspy.asyncify(dspy.Predict("goal->answer")) 
         self.agent_inputs['basic_qa_agent'] = {"goal"}

@@ -42,6 +42,7 @@ from src.routes.code_routes import router as code_router
 from src.routes.feedback_routes import router as feedback_router
 from src.routes.session_routes import router as session_router, get_session_id_dependency
 from src.routes.deep_analysis_routes import router as deep_analysis_router
+from src.routes.custom_agents_routes import router as custom_agents_router
 from src.schemas.query_schemas import QueryRequest
 from src.utils.logger import Logger
 
@@ -421,7 +422,7 @@ async def chat_with_agent(
         if session_state["current_df"] is None:
             raise HTTPException(status_code=400, detail=RESPONSE_ERROR_NO_DATASET)
 
-        _validate_agent_name(agent_name)
+        _validate_agent_name(agent_name, session_state)
         
         # Record start time for timing
         start_time = time.time()
@@ -429,29 +430,81 @@ async def chat_with_agent(
         # Get chat context and prepare query
         enhanced_query = _prepare_query_with_context(request.query, session_state)
         
-        # Initialize agent
+        # Initialize agent - handle both standard and custom agents
         if "," in agent_name:
-            agent_list = [AVAILABLE_AGENTS[agent.strip()] for agent in agent_name.split(",")]
-            agent = auto_analyst_ind(agents=agent_list, retrievers=session_state["retrievers"])
-        else:
-            agent = auto_analyst_ind(agents=[AVAILABLE_AGENTS[agent_name]], retrievers=session_state["retrievers"])
-        
-        # Execute agent with timeout
-        try:
-            # Get session-specific model
-            session_lm = get_session_lm(session_state)
+            # Multiple agents case
+            agent_list = [agent.strip() for agent in agent_name.split(",")]
             
-            # Use session-specific model for this request
-            with dspy.context(lm=session_lm):
-                response = await asyncio.wait_for(
-                    agent.forward(enhanced_query, agent_name),
-                    timeout=REQUEST_TIMEOUT_SECONDS
-                )
+            # Check if any are custom agents
+            has_custom_agents = any(not _is_standard_agent(agent) for agent in agent_list)
+            
+            if has_custom_agents:
+                # Use session AI system for mixed or custom agent execution
+                ai_system = session_state["ai_system"]
+                session_lm = get_session_lm(session_state)
+                with dspy.context(lm=session_lm):
+                    response = await asyncio.wait_for(
+                        _execute_custom_agents(ai_system, agent_list, enhanced_query),
+                        timeout=REQUEST_TIMEOUT_SECONDS
+                    )
+            else:
+                # All standard agents - use auto_analyst_ind
+                standard_agent_sigs = [AVAILABLE_AGENTS[agent] for agent in agent_list]
+                agent = auto_analyst_ind(agents=standard_agent_sigs, retrievers=session_state["retrievers"])
+                session_lm = get_session_lm(session_state)
+                with dspy.context(lm=session_lm):
+                    response = await asyncio.wait_for(
+                        agent.forward(enhanced_query, ",".join(agent_list)),
+                        timeout=REQUEST_TIMEOUT_SECONDS
+                    )
+        else:
+            # Single agent case
+            if _is_standard_agent(agent_name):
+                # Standard agent - use auto_analyst_ind
+                agent = auto_analyst_ind(agents=[AVAILABLE_AGENTS[agent_name]], retrievers=session_state["retrievers"])
+                session_lm = get_session_lm(session_state)
+                with dspy.context(lm=session_lm):
+                    response = await asyncio.wait_for(
+                        agent.forward(enhanced_query, agent_name),
+                        timeout=REQUEST_TIMEOUT_SECONDS
+                    )
+            else:
+                # Custom agent - use session AI system
+                ai_system = session_state["ai_system"]
+                session_lm = get_session_lm(session_state)
+                with dspy.context(lm=session_lm):
+                    response = await asyncio.wait_for(
+                        _execute_custom_agents(ai_system, [agent_name], enhanced_query),
+                        timeout=REQUEST_TIMEOUT_SECONDS
+                    )
+        
+        # Handle timeouts and errors (for both standard and custom agents)
+        if 'response' not in locals():
+            try:
+                # Get session-specific model
+                session_lm = get_session_lm(session_state)
+                
+                # Use session-specific model for this request
+                with dspy.context(lm=session_lm):
+                    response = await asyncio.wait_for(
+                        agent.forward(enhanced_query, agent_name),
+                        timeout=REQUEST_TIMEOUT_SECONDS
+                    )
+            except asyncio.TimeoutError:
+                logger.log_message(f"Agent execution timed out for {agent_name}", level=logging.WARNING)
+                raise HTTPException(status_code=504, detail="Request timed out. Please try a simpler query.")
+            except Exception as agent_error:
+                logger.log_message(f"Agent execution failed: {str(agent_error)}", level=logging.ERROR)
+                raise HTTPException(status_code=500, detail="Failed to process query. Please try again.")
+        
+        # Handle timeouts and errors specifically for custom agent execution 
+        try:
+            pass  # Response already set above with proper timeout handling
         except asyncio.TimeoutError:
-            logger.log_message(f"Agent execution timed out for {agent_name}", level=logging.WARNING)
+            logger.log_message(f"Custom agent execution timed out for {agent_name}", level=logging.WARNING)
             raise HTTPException(status_code=504, detail="Request timed out. Please try a simpler query.")
         except Exception as agent_error:
-            logger.log_message(f"Agent execution failed: {str(agent_error)}", level=logging.ERROR)
+            logger.log_message(f"Custom agent execution failed: {str(agent_error)}", level=logging.ERROR)
             raise HTTPException(status_code=500, detail="Failed to process query. Please try again.")
         
         formatted_response = format_response_to_markdown(response, agent_name, session_state["current_df"])
@@ -554,24 +607,115 @@ def _update_session_from_query_params(request_obj: Request, session_state: dict)
             )
 
 
-def _validate_agent_name(agent_name: str):
-    """Validate that the requested agent(s) exist"""
+def _validate_agent_name(agent_name: str, session_state: dict = None):
+    """Validate that the requested agent(s) exist in either standard agents or user's custom agents"""
     if "," in agent_name:
         agent_list = [agent.strip() for agent in agent_name.split(",")]
         for agent in agent_list:
-            if agent not in AVAILABLE_AGENTS:
-                available = list(AVAILABLE_AGENTS.keys())
+            if not _is_agent_available(agent, session_state):
+                available_agents = _get_available_agents_list(session_state)
                 raise HTTPException(
                     status_code=404, 
-                    detail=f"Agent '{agent}' not found. Available agents: {available}"
+                    detail=f"Agent '{agent}' not found. Available agents: {available_agents}"
                 )
-    elif agent_name not in AVAILABLE_AGENTS:
-        available = list(AVAILABLE_AGENTS.keys())
+    elif not _is_agent_available(agent_name, session_state):
+        available_agents = _get_available_agents_list(session_state)
         raise HTTPException(
             status_code=404, 
-            detail=f"Agent '{agent_name}' not found. Available agents: {available}"
+            detail=f"Agent '{agent_name}' not found. Available agents: {available_agents}"
         )
 
+def _is_agent_available(agent_name: str, session_state: dict = None) -> bool:
+    """Check if agent is available in either standard agents or user's custom agents"""
+    # Check standard agents
+    if agent_name in AVAILABLE_AGENTS:
+        return True
+    
+    # Check custom agents if session has an AI system with custom agents
+    if session_state and "ai_system" in session_state:
+        ai_system = session_state["ai_system"]
+        if hasattr(ai_system, 'agents') and agent_name in ai_system.agents:
+            return True
+    
+    return False
+
+def _get_available_agents_list(session_state: dict = None) -> list:
+    """Get list of all available agents (standard + custom)"""
+    available = list(AVAILABLE_AGENTS.keys())
+    
+    # Add custom agents if available
+    if session_state and "ai_system" in session_state:
+        ai_system = session_state["ai_system"]
+        if hasattr(ai_system, 'agents'):
+            custom_agents = [name for name in ai_system.agents.keys() 
+                           if name not in AVAILABLE_AGENTS and name != 'basic_qa_agent']
+            available.extend(custom_agents)
+    
+    return available
+
+def _is_standard_agent(agent_name: str) -> bool:
+    """Check if agent is a standard agent (not custom)"""
+    return agent_name in AVAILABLE_AGENTS
+
+async def _execute_custom_agents(ai_system, agent_names: list, query: str):
+    """Execute custom agents using the session's AI system"""
+    try:
+        # For custom agents, we need to use the AI system's execute_agent method
+        if len(agent_names) == 1:
+            # Single custom agent
+            agent_name = agent_names[0]
+            
+            # Prepare inputs for the custom agent (similar to auto_analyst_ind)
+            dict_ = {}
+            dict_['dataset'] = ai_system.dataset.retrieve(query)[0].text
+            dict_['styling_index'] = ai_system.styling_index.retrieve(query)[0].text
+            dict_['hint'] = []
+            dict_['goal'] = query
+            dict_['Agent_desc'] = str(ai_system.agent_desc)
+
+            # Get input fields for this agent
+            if agent_name in ai_system.agent_inputs:
+                inputs = {x: dict_[x] for x in ai_system.agent_inputs[agent_name] if x in dict_}
+                inputs['hint'] = str(dict_['hint']).replace('[','').replace(']','')
+                
+                # Execute the custom agent
+                result = await ai_system.execute_agent(agent_name, inputs)
+                return {agent_name: result}
+            else:
+                return {"error": f"Agent '{agent_name}' input configuration not found"}
+        else:
+            # Multiple agents - execute sequentially
+            results = {}
+            for agent_name in agent_names:
+                single_result = await _execute_custom_agents(ai_system, [agent_name], query)
+                results.update(single_result)
+            return results
+            
+    except Exception as e:
+        return {"error": f"Error executing custom agents: {str(e)}"}
+
+def _get_agent_signatures_for_execution(agent_names: list, session_state: dict):
+    """Get agent signatures for execution, including custom agents"""
+    agent_signatures = []
+    
+    for agent_name in agent_names:
+        if agent_name in AVAILABLE_AGENTS:
+            # Standard agent
+            agent_signatures.append(AVAILABLE_AGENTS[agent_name])
+        elif session_state and "ai_system" in session_state:
+            # Check for custom agent in the session's AI system
+            ai_system = session_state["ai_system"]
+            if hasattr(ai_system, 'agents') and agent_name in ai_system.agents:
+                # For custom agents, we need to use the signature from the AI system
+                # But since auto_analyst_ind expects signatures, not compiled agents,
+                # we need a different approach
+                continue
+            else:
+                raise HTTPException(status_code=404, detail=f"Agent '{agent_name}' not found")
+        else:
+            raise HTTPException(status_code=404, detail=f"Agent '{agent_name}' not found")
+    
+    return agent_signatures
 
 def _prepare_query_with_context(query: str, session_state: dict) -> str:
     """Prepare the query with chat context from previous messages"""
@@ -835,9 +979,18 @@ async def _execute_plan_with_timeout(ai_system, enhanced_query, plan_response):
 
 # Add an endpoint to list available agents
 @app.get("/agents", response_model=dict)
-async def list_agents():
+async def list_agents(request: Request, session_id: str = Depends(get_session_id_dependency)):
+    session_state = app.state.get_session_state(session_id)
+    
+    # Get user-specific agent list including custom agents
+    available_agents_list = _get_available_agents_list(session_state)
+    standard_agents = list(AVAILABLE_AGENTS.keys())
+    custom_agents = [agent for agent in available_agents_list if agent not in standard_agents]
+    
     return {
-        "available_agents": list(AVAILABLE_AGENTS.keys()),
+        "available_agents": available_agents_list,
+        "standard_agents": standard_agents,
+        "custom_agents": custom_agents,
         "planner_agents": list(PLANNER_AGENTS.keys()),
         "deep_analysis": {
             "available": True,
@@ -1308,6 +1461,7 @@ app.include_router(code_router)
 app.include_router(session_router)
 app.include_router(feedback_router)
 app.include_router(deep_analysis_router)
+app.include_router(custom_agents_router)
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
