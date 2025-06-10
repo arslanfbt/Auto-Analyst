@@ -13,7 +13,40 @@ from src.agents.agents import code_edit, code_fix
 from src.db.schemas.models import CodeExecution
 from src.db.init_db import get_session
 import dspy
+import textwrap
 import os
+
+def clean_print_statements(code_block):
+    """
+    This function cleans up any `print()` statements that might contain unwanted `\n` characters.
+    It ensures print statements are properly formatted without unnecessary newlines.
+    """
+    # This regex targets print statements, even if they have newlines inside
+    return re.sub(r'print\((.*?)(\\n.*?)(.*?)\)', r'print(\1\3)', code_block, flags=re.DOTALL)
+
+
+def remove_main_block(code):
+    # Match the __main__ block
+    pattern = r'(?m)^if\s+__name__\s*==\s*["\']__main__["\']\s*:\s*\n((?:\s+.*\n?)*)'
+    
+    match = re.search(pattern, code)
+    if match:
+        main_block = match.group(1)
+        
+        # Dedent the code block inside __main__
+        dedented_block = textwrap.dedent(main_block)
+        
+        # Remove \n from any print statements in the block (also handling multiline print cases)
+        dedented_block = clean_print_statements(dedented_block)
+        # Replace the block in the code
+        cleaned_code = re.sub(pattern, dedented_block, code)
+        
+        # Optional: Remove leading newlines if any
+        cleaned_code = cleaned_code.strip()
+        
+        return cleaned_code
+    return code
+
 # Initialize router
 router = APIRouter(
     prefix="/code",
@@ -24,6 +57,61 @@ router = APIRouter(
 # Initialize logger
 logger = Logger("code_routes", see_time=True, console_log=False)
 try_logger = Logger("try_code_routes", see_time=True, console_log=False)
+
+
+def score_code(args, code):
+    """
+    Simple code scorer that checks if code runs successfully.
+    
+    Args:
+        args: Arguments (unused but required for dspy.Refine)
+        code: Code object with combined_code attribute
+        
+    Returns:
+        int: Score (0=error, 1=success)
+    """
+    code_text = code.fixed_code
+    try:
+        # Fix try statement syntax
+        code_text = code_text.replace('try\n', 'try:\n')
+        code_text = code_text.replace('```python', '').replace('```', '')
+        
+        # Remove code patterns that would make the code unrunnable
+        invalid_patterns = [
+            '```', '\\n', '\\t', '\\r'
+        ]
+        
+        for pattern in invalid_patterns:
+            if pattern in code_text:
+                code_text = code_text.replace(pattern, '')
+
+        # Remove .show() method calls to prevent blocking
+        cleaned_code = re.sub(r"plt\.show\(\).*?(\n|$)", '', code_text)
+        cleaned_code = re.sub(r'\.show\([^)]*\)', '', cleaned_code)
+            
+        cleaned_code = remove_main_block(cleaned_code)
+        
+        # Execute code in a new namespace
+        local_vars = {}
+        exec(cleaned_code, globals(), local_vars)
+        
+        # If we get here, code executed successfully
+        return 1
+    
+    except Exception as e:
+        return 0
+   
+
+refine_fixer = dspy.Refine(
+    module=dspy.ChainOfThought(code_fix), 
+    N=3,
+    threshold=1.0,
+    reward_fn=score_code, 
+    fail_count=3
+)
+
+
+
 # Request body model
 class CodeExecuteRequest(BaseModel):
     code: str
@@ -218,9 +306,9 @@ def extract_relevant_error_section(error_message: str) -> str:
     # If the error is short enough, return as is
     return error_message
 
-def fix_code_with_dspy(code: str, error: str, dataset_context: str = ""):
+async def fix_code_with_dspy(code: str, error: str, dataset_context: str = ""):
     """
-    Fix code with errors by identifying faulty blocks and fixing them individually
+    Fix code with errors by identifying faulty blocks and fixing them individually using async refine
     
     Args:
         code (str): The code containing errors
@@ -230,30 +318,47 @@ def fix_code_with_dspy(code: str, error: str, dataset_context: str = ""):
     Returns:
         str: The fixed code
     """
-    # gemini = dspy.LM("gemini/gemini-2.5-pro-preview-03-25", api_key = os.environ['GEMINI_API_KEY'], max_tokens=5000)
-    claude = dspy.LM("anthropic/claude-3-5-sonnet-latest", api_key = os.environ['ANTHROPIC_API_KEY'], max_tokens=5000)
+    import asyncio
+    
+    # Check if we have valid API key
+    anthropic_key = os.environ.get('ANTHROPIC_API_KEY')
+    if not anthropic_key:
+        raise ValueError("ANTHROPIC_API_KEY environment variable is not set")
+    
     # Find the blocks with errors
     faulty_blocks = identify_error_blocks(code, error)
+    
     if not faulty_blocks:
-        # If no specific errors found, fix the entire code
-        with dspy.context(lm=claude):
-            code_fixer = dspy.ChainOfThought(code_fix)
-            result = code_fixer(
-                dataset_context=str(dataset_context) or "",
-                faulty_code=str(code) or "",
-                error=str(error) or "",
-            )
+        # If no specific errors found, fix the entire code using refine
+        try:
+            # Create the LM instance that will be used
+            thread_lm = dspy.LM("anthropic/claude-3-5-sonnet-latest", api_key=anthropic_key, max_tokens=5000)
+            
+            # Define the blocking function to run in thread
+            def run_refine_fixer():
+                with dspy.context(lm=thread_lm):
+                    return refine_fixer(
+                        dataset_context=str(dataset_context) or "",
+                        faulty_code=str(code) or "",
+                        error=str(error) or "",
+                    )
+            
+            # Use asyncio.to_thread for better async integration
+            result = await asyncio.to_thread(run_refine_fixer)
             return result.fixed_code
+            
+        except Exception as e:
+            logger.log_message(f"Error during refine code fixing: {str(e)}", level=logging.ERROR)
+            raise e
     
     # Start with the original code
     result_code = code.replace("```python", "").replace("```", "")
     
-    # Fix each faulty block separatelyw
-    with dspy.context(lm=claude):
-        code_fixer = dspy.ChainOfThought(code_fix)
+    # Fix each faulty block separately using async refine
+    try:
+        thread_lm = dspy.LM("anthropic/claude-3-5-sonnet-latest", api_key=anthropic_key, max_tokens=5000)
         
         for agent_name, block_code, specific_error in faulty_blocks:
-            
             try:
                 # Extract inner code between the markers
                 inner_code_match = re.search(r'#\s+\w+\s+code\s+start\s*\n([\s\S]*?)#\s+\w+\s+code\s+end', block_code)
@@ -289,12 +394,17 @@ def fix_code_with_dspy(code: str, error: str, dataset_context: str = ""):
                     if problem_section:
                         error_msg = f"{error_msg}\n\nProblem at: {problem_section.group(1).strip()}"
                 
-                # Fix only the inner code
-                result = code_fixer(
-                    dataset_context=str(dataset_context) or "",
-                    faulty_code=str(inner_code) or "",
-                    error=str(error_msg) or "",
-                )   
+                # Define the blocking function to run in thread for this specific block
+                def run_block_fixer():
+                    with dspy.context(lm=thread_lm):
+                        return refine_fixer(
+                            dataset_context=str(dataset_context) or "",
+                            faulty_code=str(inner_code) or "",
+                            error=str(error_msg) or "",
+                        )
+                
+                # Use asyncio.to_thread for better async integration
+                result = await asyncio.to_thread(run_block_fixer)
                 
                 # Ensure the fixed code is properly stripped and doesn't include markers
                 fixed_inner_code = result.fixed_code.strip()
@@ -314,6 +424,10 @@ def fix_code_with_dspy(code: str, error: str, dataset_context: str = ""):
                 # Log the error but continue with other blocks
                 logger.log_message(f"Error fixing {agent_name} block: {str(e)}", level=logging.ERROR)
                 continue
+    
+    except Exception as e:
+        logger.log_message(f"Error during async code fixing: {str(e)}", level=logging.ERROR)
+        raise e
     
     return result_code
 
@@ -646,7 +760,7 @@ async def fix_code(
         
         try:
             # Use the code_fix agent to fix the code, with dataset context
-            fixed_code = fix_code_with_dspy(
+            fixed_code = await fix_code_with_dspy(
                 request_data.code, 
                 request_data.error,
                 dataset_context
