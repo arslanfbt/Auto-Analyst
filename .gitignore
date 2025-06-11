@@ -7,5 +7,5 @@ terraform/.tfvars
 
 try*
 
-*.db
+*-2.db
 *_code*.py
