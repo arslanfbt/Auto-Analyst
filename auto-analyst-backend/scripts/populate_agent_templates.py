@@ -69,7 +69,7 @@ IMPORTANT Instructions:
 - Use plotly.graph_objects for fine control and plotly.express for rapid prototyping
 - Add annotations, shapes, and custom styling
 - Sample data if len(df) > 50000: df = df.sample(50000, random_state=42)
-- Use fig.update_layout() for professional styling
+- Use fig.update_layout() for professional styling 
 - Return fig.to_html(full_html=False) for embedding
 
 Focus on creating publication-quality interactive visualizations with advanced features.

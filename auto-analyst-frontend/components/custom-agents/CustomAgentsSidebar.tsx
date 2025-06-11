@@ -14,7 +14,7 @@ import {
 import { Badge } from '../ui/badge'
 import API_URL from '@/config/api'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs'
-import { CustomAgent, CustomAgentCreate, CustomAgentList } from './types'
+import { CustomAgent, CustomAgentCreate, CustomAgentList, TemplatesByCategory, TemplateAgent } from './types'
 import { useSession } from 'next-auth/react'
 import { useUserSubscriptionStore } from '@/lib/store/userSubscriptionStore'
 import { useFeatureAccess } from '@/lib/hooks/useFeatureAccess'
@@ -52,9 +52,9 @@ export default function CustomAgentsSidebar({
 
   const [activeTab, setActiveTab] = useState<'create' | 'list' | 'details' | 'templates' | 'template-details'>('list')
   const [customAgents, setCustomAgents] = useState<CustomAgentList[]>([])
-  const [templateAgents, setTemplateAgents] = useState<any[]>([])
+  const [templateAgents, setTemplateAgents] = useState<TemplatesByCategory[]>([])
   const [selectedAgent, setSelectedAgent] = useState<CustomAgent | null>(null)
-  const [selectedTemplate, setSelectedTemplate] = useState<any | null>(null)
+  const [selectedTemplate, setSelectedTemplate] = useState<TemplateAgent | null>(null)
   const [refreshTrigger, setRefreshTrigger] = useState(0)
   const { data: session } = useSession()
   const { subscription } = useUserSubscriptionStore()
@@ -164,10 +164,12 @@ export default function CustomAgentsSidebar({
         return true
       } else {
         const error = await response.text()
+        const errorDetail = JSON.parse(error).detail || "Failed to create custom agent"
         toast({
           title: "Creation Failed",
-          description: error || "Failed to create custom agent",
+          description: errorDetail,
           variant: "destructive",
+          duration: 5000,
         })
         return false
       }
@@ -297,7 +299,7 @@ export default function CustomAgentsSidebar({
   }
 
   // Handle selecting a template for details
-  const handleSelectTemplate = (template: any) => {
+  const handleSelectTemplate = (template: TemplateAgent) => {
     setSelectedTemplate(template)
     setActiveTab('template-details')
   }
@@ -313,7 +315,7 @@ export default function CustomAgentsSidebar({
   }
 
   // Handle quick clone from template list
-  const handleQuickCloneTemplate = async (template: any) => {
+  const handleQuickCloneTemplate = async (template: TemplateAgent) => {
     if (!customAgentsAccess.hasAccess) {
       setShowPremiumUpgradeModal(true)
       return
@@ -331,6 +333,7 @@ export default function CustomAgentsSidebar({
       toast({
         title: "Template Cloned! 🎉",
         description: `${template.display_name} has been cloned to your custom agents`,
+        duration: 3000,
       })
     }
   }
@@ -352,6 +355,151 @@ export default function CustomAgentsSidebar({
       return false
     }
   }
+
+  // Track custom agent usage
+  const trackAgentUsage = async (agentId: number): Promise<void> => {
+    const currentUserId = getUserId()
+    if (!currentUserId) return
+
+    try {
+      const response = await fetch(`${API_URL}/custom_agents/${agentId}/increment_usage?user_id=${currentUserId}`, {
+        method: 'POST',
+      })
+      
+      if (response.ok) {
+        const result = await response.json()
+        console.log(`Agent usage tracked: ${result.usage_count}`)
+        // Update local state to reflect new usage count
+        setCustomAgents(prev => prev.map(agent => 
+          agent.agent_id === agentId 
+            ? { ...agent, usage_count: result.usage_count }
+            : agent
+        ))
+        if (selectedAgent?.agent_id === agentId) {
+          setSelectedAgent(prev => prev ? { ...prev, usage_count: result.usage_count } : null)
+        }
+      } else {
+        console.error('Failed to track agent usage:', await response.text())
+      }
+    } catch (error) {
+      console.error('Error tracking agent usage:', error)
+    }
+  }
+
+  // Track template usage
+  const trackTemplateUsage = async (templateId: number): Promise<void> => {
+    try {
+      const response = await fetch(`${API_URL}/custom_agents/templates/${templateId}/increment_usage`, {
+        method: 'POST',
+      })
+      
+      if (response.ok) {
+        const result = await response.json()
+        console.log(`Template usage tracked: ${result.usage_count}`)
+        // Update local state to reflect new usage count
+        setTemplateAgents(prev => prev.map(category => ({
+          ...category,
+          templates: category.templates.map(template =>
+            template.agent_id === templateId
+              ? { ...template, usage_count: result.usage_count }
+              : template
+          )
+        })))
+      } else {
+        console.error('Failed to track template usage:', await response.text())
+      }
+    } catch (error) {
+      console.error('Error tracking template usage:', error)
+    }
+  }
+
+  // Toggle agent active status
+  const toggleAgentActiveStatus = async (agentId: number): Promise<boolean> => {
+    const currentUserId = getUserId()
+    if (!currentUserId) return false
+
+    try {
+      const response = await fetch(`${API_URL}/custom_agents/${agentId}/toggle_active?user_id=${currentUserId}`, {
+        method: 'POST',
+      })
+
+      if (response.ok) {
+        const result = await response.json()
+        toast({
+          title: result.is_active ? "Agent Activated" : "Agent Deactivated",
+          description: result.message,
+          duration: 3000,
+        })
+        
+        // Update local state
+        setCustomAgents(prev => prev.map(agent => 
+          agent.agent_id === agentId 
+            ? { ...agent, is_active: result.is_active }
+            : agent
+        ))
+        
+        // Update selected agent if it's the same one
+        if (selectedAgent?.agent_id === agentId) {
+          setSelectedAgent(prev => prev ? { ...prev, is_active: result.is_active } : null)
+        }
+        
+        // Notify other components that custom agents have been updated
+        window.dispatchEvent(new CustomEvent('custom-agents-updated'))
+        
+        return true
+      } else {
+        const error = await response.json()
+        toast({
+          title: "Toggle Failed",
+          description: error.detail || "Failed to toggle agent status",
+          variant: "destructive",
+          duration: 3000,
+        })
+        return false
+      }
+    } catch (error) {
+      console.error('Error toggling agent status:', error)
+      toast({
+        title: "Error",
+        description: "An unexpected error occurred",
+        variant: "destructive",
+        duration: 3000,
+      })
+      return false
+    }
+  }
+
+  // Get active agents count
+  const getActiveAgentsCount = async (): Promise<{ active_count: number; max_allowed: number; can_activate_more: boolean } | null> => {
+    const currentUserId = getUserId()
+    if (!currentUserId) return null
+
+    try {
+      const response = await fetch(`${API_URL}/custom_agents/active_count/${currentUserId}`)
+      if (response.ok) {
+        return await response.json()
+      } else {
+        console.error('Failed to get active agents count:', await response.text())
+        return null
+      }
+    } catch (error) {
+      console.error('Error getting active agents count:', error)
+      return null
+    }
+  }
+
+  // Expose tracking functions globally for the auto_analyst to use
+  React.useEffect(() => {
+    // Make tracking functions available globally
+    ;(window as any).trackCustomAgentUsage = trackAgentUsage
+    ;(window as any).trackTemplateUsage = trackTemplateUsage
+
+    // Cleanup
+    return () => {
+      delete (window as any).trackCustomAgentUsage
+      delete (window as any).trackTemplateUsage
+    }
+  }, [])
 
   if (!isOpen) return null
 
@@ -431,6 +579,8 @@ export default function CustomAgentsSidebar({
                     agents={customAgents}
                     onSelectAgent={handleSelectAgent}
                     onDeleteAgent={handleDeleteAgent}
+                    onToggleActive={toggleAgentActiveStatus}
+                    getActiveCount={getActiveAgentsCount}
                     refreshTrigger={refreshTrigger}
                   />
                 </TabsContent>
@@ -467,6 +617,7 @@ export default function CustomAgentsSidebar({
                     agent={selectedAgent}
                     onUpdateAgent={handleUpdateAgent}
                     onDeleteAgent={handleDeleteAgent}
+                    onToggleActive={toggleAgentActiveStatus}
                     onBack={() => setActiveTab('list')}
                   />
                 </TabsContent>
@@ -501,9 +652,8 @@ export default function CustomAgentsSidebar({
               <ul className="text-base text-gray-700 space-y-2 ml-4">
                 <li>• Browse and use professional agent templates across multiple categories.</li>
                 <li>• Clone templates to create your own custom agents.</li>
-                <li>• Create specialized agents for different tasks (e.g., pytorch_agent, data_cleaning_agent).</li>
+                <li>• Create specialized agents for different tasks.</li>
                 <li>• Define custom prompts and behavior for your agents.</li>
-                <li>• Use your agents with @agent_name mentions in chat.</li>
               </ul>
             </div>
             <div className="flex gap-3 pt-4">

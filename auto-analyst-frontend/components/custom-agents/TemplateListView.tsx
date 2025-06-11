@@ -2,29 +2,15 @@
 
 import React from 'react'
 import { motion } from 'framer-motion'
-import { Bot, Lock, Copy } from 'lucide-react'
+import { Bot, Lock, Copy, TrendingUp } from 'lucide-react'
 import { Badge } from '../ui/badge'
 import { Button } from '../ui/button'
-
-interface Template {
-  agent_id: number
-  agent_name: string
-  display_name: string
-  description: string
-  prompt_template: string
-  template_category: string
-  is_premium_only: boolean
-}
-
-interface TemplateCategory {
-  category: string
-  templates: Template[]
-}
+import { TemplateAgent, TemplatesByCategory } from './types'
 
 interface TemplateListViewProps {
-  templateCategories: TemplateCategory[]
-  onSelectTemplate: (template: Template) => void
-  onCloneTemplate: (template: Template) => void
+  templateCategories: TemplatesByCategory[]
+  onSelectTemplate: (template: TemplateAgent) => void
+  onCloneTemplate: (template: TemplateAgent) => void
   hasAccess: boolean
   onUpgradePrompt: () => void
 }
@@ -91,8 +77,14 @@ export default function TemplateListView({
                       <p className="text-xs text-gray-600 mt-1 line-clamp-2">
                         {template.description}
                       </p>
-                      <div className="text-xs text-gray-500 mt-2">
-                        @{template.agent_name}
+                      <div className="flex items-center justify-between mt-2">
+                        <div className="text-xs text-gray-500">
+                          @{template.agent_name}
+                        </div>
+                        <div className="flex items-center gap-1 text-xs text-gray-500">
+                          <TrendingUp className="w-3 h-3" />
+                          <span>{template.usage_count} uses</span>
+                        </div>
                       </div>
                     </div>
                     <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">

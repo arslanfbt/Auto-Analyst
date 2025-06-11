@@ -1,4 +1,5 @@
 import logging
+import os
 from fastapi import APIRouter, Depends, HTTPException, Query, Body
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
@@ -9,6 +10,8 @@ from sqlalchemy.exc import IntegrityError
 from src.db.init_db import session_factory
 from src.db.schemas.models import CustomAgent, User
 from src.utils.logger import Logger
+import dspy
+from src.agents.agents import custom_agent_instruction_generator
 
 # Initialize logger with console logging disabled
 logger = Logger("custom_agents_routes", see_time=True, console_log=False)
@@ -54,6 +57,7 @@ class TemplateAgentResponse(BaseModel):
     agent_name: str
     display_name: Optional[str]
     description: str
+    prompt_template: str
     template_category: str
     is_premium_only: bool
     is_active: bool
@@ -63,6 +67,15 @@ class TemplateAgentResponse(BaseModel):
 class TemplatesByCategory(BaseModel):
     category: str
     templates: List[TemplateAgentResponse]
+
+class AgentInstructionRequest(BaseModel):
+    category: str = Field(..., description="The category of the agent: 'Visualization', 'Modelling', or 'Data Manipulation'")
+    user_requirements: str = Field(..., min_length=10, max_length=2000, description="User's description of what they want the agent to do")
+
+class AgentInstructionResponse(BaseModel):
+    agent_instructions: str
+    category: str
+    user_requirements: str
 
 # Routes
 @router.post("/", response_model=CustomAgentResponse)
@@ -111,7 +124,7 @@ async def create_custom_agent(agent: CustomAgentCreate, user_id: int = Query(...
             
         except IntegrityError:
             session.rollback()
-            raise HTTPException(status_code=400, detail=f"Agent name '{agent.agent_name}' already exists for this user")
+            raise HTTPException(status_code=400, detail=f"Agent name '{agent.agent_name}' already exists, please choose a different name")
         except Exception as e:
             session.rollback()
             logger.log_message(f"Error creating custom agent: {str(e)}", level=logging.ERROR)
@@ -327,6 +340,90 @@ async def increment_usage_count(agent_id: int, user_id: int = Query(...)):
         logger.log_message(f"Error incrementing usage count: {str(e)}", level=logging.ERROR)
         raise HTTPException(status_code=500, detail=f"Failed to increment usage count: {str(e)}")
 
+@router.post("/{agent_id}/toggle_active")
+async def toggle_agent_active_status(agent_id: int, user_id: int = Query(...)):
+    """Toggle active status for a custom agent with 10-agent limit"""
+    try:
+        session = session_factory()
+        
+        try:
+            agent = session.query(CustomAgent).filter(
+                CustomAgent.agent_id == agent_id,
+                CustomAgent.user_id == user_id,
+                CustomAgent.is_template == False
+            ).first()
+            
+            if not agent:
+                raise HTTPException(status_code=404, detail=f"Custom agent with ID {agent_id} not found")
+            
+            # If trying to activate an agent, check the 10-agent limit
+            if not agent.is_active:
+                # Count currently active custom agents for this user
+                active_count = session.query(CustomAgent).filter(
+                    CustomAgent.user_id == user_id,
+                    CustomAgent.is_active == True,
+                    CustomAgent.is_template == False
+                ).count()
+                
+                if active_count >= 10:
+                    raise HTTPException(
+                        status_code=400, 
+                        detail="You can have at most 10 active custom agents. Please deactivate some agents first."
+                    )
+            
+            # Toggle the active status
+            agent.is_active = not agent.is_active
+            agent.updated_at = datetime.now(UTC)
+            session.commit()
+            
+            status_text = "activated" if agent.is_active else "deactivated"
+            logger.log_message(f"Agent {agent_id} {status_text} for user {user_id}", level=logging.INFO)
+            
+            return {
+                "message": f"Agent {status_text} successfully",
+                "is_active": agent.is_active,
+                "agent_id": agent.agent_id
+            }
+            
+        except Exception as e:
+            session.rollback()
+            logger.log_message(f"Error toggling agent status: {str(e)}", level=logging.ERROR)
+            raise HTTPException(status_code=500, detail=f"Failed to toggle agent status: {str(e)}")
+        finally:
+            session.close()
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.log_message(f"Error toggling agent status: {str(e)}", level=logging.ERROR)
+        raise HTTPException(status_code=500, detail=f"Failed to toggle agent status: {str(e)}")
+
+@router.get("/active_count/{user_id}")
+async def get_active_agents_count(user_id: int):
+    """Get count of active custom agents for a user"""
+    try:
+        session = session_factory()
+        
+        try:
+            active_count = session.query(CustomAgent).filter(
+                CustomAgent.user_id == user_id,
+                CustomAgent.is_active == True,
+                CustomAgent.is_template == False
+            ).count()
+            
+            return {
+                "active_count": active_count,
+                "max_allowed": 10,
+                "can_activate_more": active_count < 10
+            }
+            
+        finally:
+            session.close()
+            
+    except Exception as e:
+        logger.log_message(f"Error getting active agents count: {str(e)}", level=logging.ERROR)
+        raise HTTPException(status_code=500, detail=f"Failed to get active agents count: {str(e)}")
+
 @router.get("/validate_name/{agent_name}")
 async def validate_agent_name(agent_name: str, user_id: int = Query(...)):
     """Check if an agent name is available for a user"""
@@ -379,6 +476,7 @@ async def get_template_agents():
                     agent_name=template.agent_name,
                     display_name=template.display_name,
                     description=template.description,
+                    prompt_template=template.prompt_template,
                     template_category=template.template_category,
                     is_premium_only=template.is_premium_only,
                     is_active=template.is_active,
@@ -419,6 +517,7 @@ async def get_template_agent(template_id: int):
                 agent_name=template.agent_name,
                 display_name=template.display_name,
                 description=template.description,
+                prompt_template=template.prompt_template,
                 template_category=template.template_category,
                 is_premium_only=template.is_premium_only,
                 is_active=template.is_active,
@@ -463,7 +562,7 @@ async def copy_template_to_user(template_id: int, user_id: int = Query(...), age
             ).first()
             
             if existing_agent:
-                raise HTTPException(status_code=400, detail=f"Agent name '{agent_name}' already exists for this user")
+                raise HTTPException(status_code=400, detail=f"Agent name '{agent_name}' already exists, please choose a different name")
             
             # Create new custom agent from template
             now = datetime.now(UTC)
@@ -506,7 +605,7 @@ async def copy_template_to_user(template_id: int, user_id: int = Query(...), age
             
         except IntegrityError:
             session.rollback()
-            raise HTTPException(status_code=400, detail=f"Agent name '{agent_name}' already exists for this user")
+            raise HTTPException(status_code=400, detail=f"Agent name '{agent_name}' already exists, please choose a different name")
         except Exception as e:
             session.rollback()
             logger.log_message(f"Error copying template to user: {str(e)}", level=logging.ERROR)
@@ -518,4 +617,81 @@ async def copy_template_to_user(template_id: int, user_id: int = Query(...), age
         raise
     except Exception as e:
         logger.log_message(f"Error copying template to user: {str(e)}", level=logging.ERROR)
-        raise HTTPException(status_code=500, detail=f"Failed to copy template: {str(e)}") 
+        raise HTTPException(status_code=500, detail=f"Failed to copy template: {str(e)}")
+
+@router.post("/templates/{template_id}/increment_usage")
+async def increment_template_usage_count(template_id: int):
+    """Increment usage count for a template agent"""
+    try:
+        session = session_factory()
+        
+        try:
+            template = session.query(CustomAgent).filter(
+                CustomAgent.agent_id == template_id,
+                CustomAgent.is_template == True
+            ).first()
+            
+            if not template:
+                raise HTTPException(status_code=404, detail=f"Template agent with ID {template_id} not found")
+                
+            template.usage_count += 1
+            template.updated_at = datetime.now(UTC)
+            session.commit()
+            
+            logger.log_message(f"Incremented template usage count for template {template_id} (now: {template.usage_count})", level=logging.INFO)
+            
+            return {"message": "Template usage count incremented", "usage_count": template.usage_count}
+            
+        except Exception as e:
+            session.rollback()
+            logger.log_message(f"Error incrementing template usage count: {str(e)}", level=logging.ERROR)
+            raise HTTPException(status_code=500, detail=f"Failed to increment template usage count: {str(e)}")
+        finally:
+            session.close()
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.log_message(f"Error incrementing template usage count: {str(e)}", level=logging.ERROR)
+        raise HTTPException(status_code=500, detail=f"Failed to increment template usage count: {str(e)}")
+
+@router.post("/generate_instructions", response_model=AgentInstructionResponse)
+async def generate_agent_instructions(request: AgentInstructionRequest):
+    """Generate agent instructions using the custom_agent_instruction_generator"""
+    try:        
+        # Validate category
+        valid_categories = ["Visualization", "Modelling", "Data Manipulation"]
+        if request.category not in valid_categories:
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Invalid category. Must be one of: {', '.join(valid_categories)}"
+            )
+        
+        default_lm = dspy.LM(
+            model="openai/gpt-4o-mini",
+            api_key=os.getenv("OPENAI_API_KEY"),
+            temperature=0.7,
+            max_tokens=7000
+        )
+        
+        instruction_generator = dspy.ChainOfThought(custom_agent_instruction_generator)
+        
+        with dspy.context(lm=default_lm):
+            result = instruction_generator(
+                category=request.category,
+                user_requirements=request.user_requirements
+            )
+        
+        logger.log_message(f"Generated agent instructions for category: {request.category}", level=logging.INFO)
+        
+        return AgentInstructionResponse(
+            agent_instructions=result.agent_instructions,
+            category=request.category,
+            user_requirements=request.user_requirements
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.log_message(f"Error generating agent instructions: {str(e)}", level=logging.ERROR)
+        raise HTTPException(status_code=500, detail=f"Failed to generate agent instructions: {str(e)}") 

@@ -2,27 +2,17 @@
 
 import React, { useState } from 'react'
 import { motion } from 'framer-motion'
-import { ArrowLeft, Copy, Bot, Lock, Crown } from 'lucide-react'
+import { ArrowLeft, Copy, Bot, Lock, Crown, TrendingUp } from 'lucide-react'
 import { Badge } from '../ui/badge'
 import { Button } from '../ui/button'
 import { Textarea } from '../ui/textarea'
 import { Input } from '../ui/input'
 import { Label } from '../ui/label'
 import { useToast } from '../ui/use-toast'
-
-interface Template {
-  agent_id: number
-  agent_name: string
-  display_name: string
-  description: string
-  prompt_template: string
-  template_category: string
-  is_premium_only: boolean
-  created_at?: string
-}
+import { TemplateAgent } from './types'
 
 interface TemplateDetailViewProps {
-  template: Template | null
+  template: TemplateAgent | null
   onBack: () => void
   onCloneTemplate: (templateData: {
     agent_name: string
@@ -84,6 +74,7 @@ export default function TemplateDetailView({
         toast({
           title: "Template Cloned! 🎉",
           description: "Template has been cloned to your custom agents",
+          duration: 3000,
         })
         onBack()
       }
@@ -135,9 +126,13 @@ export default function TemplateDetailView({
           <div>
             <h3 className="font-semibold text-base text-gray-900">{template.display_name}</h3>
             <p className="text-sm text-gray-600 mt-1">{template.description}</p>
-            <div className="flex items-center gap-2 mt-2">
+            <div className="flex items-center gap-2 mt-2 flex-wrap">
               <Badge variant="secondary" className="text-xs">{template.template_category}</Badge>
               <span className="text-xs text-gray-500">@{template.agent_name}</span>
+              <div className="flex items-center gap-1 text-xs text-gray-500">
+                <TrendingUp className="w-3 h-3" />
+                <span>{template.usage_count} uses</span>
+              </div>
             </div>
           </div>
 

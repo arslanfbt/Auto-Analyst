@@ -448,10 +448,11 @@ async def chat_with_agent(
                         _execute_custom_agents(ai_system, agent_list, enhanced_query),
                         timeout=REQUEST_TIMEOUT_SECONDS
                     )
-        else:
+            else:
                 # All standard agents - use auto_analyst_ind
                 standard_agent_sigs = [AVAILABLE_AGENTS[agent] for agent in agent_list]
-                agent = auto_analyst_ind(agents=standard_agent_sigs, retrievers=session_state["retrievers"])
+                user_id = session_state.get("user_id")
+                agent = auto_analyst_ind(agents=standard_agent_sigs, retrievers=session_state["retrievers"], user_id=user_id)
                 session_lm = get_session_lm(session_state)
                 with dspy.context(lm=session_lm):
                     response = await asyncio.wait_for(
@@ -463,13 +464,14 @@ async def chat_with_agent(
             logger.log_message(f"Single agent case: {agent_name}", level=logging.INFO)
             if _is_standard_agent(agent_name):
                 # Standard agent - use auto_analyst_ind
-            agent = auto_analyst_ind(agents=[AVAILABLE_AGENTS[agent_name]], retrievers=session_state["retrievers"])
-            session_lm = get_session_lm(session_state)
-            with dspy.context(lm=session_lm):
-                response = await asyncio.wait_for(
-                    agent.forward(enhanced_query, agent_name),
-                    timeout=REQUEST_TIMEOUT_SECONDS
-                )
+                user_id = session_state.get("user_id")
+                agent = auto_analyst_ind(agents=[AVAILABLE_AGENTS[agent_name]], retrievers=session_state["retrievers"], user_id=user_id)
+                session_lm = get_session_lm(session_state)
+                with dspy.context(lm=session_lm):
+                    response = await asyncio.wait_for(
+                        agent.forward(enhanced_query, agent_name),
+                        timeout=REQUEST_TIMEOUT_SECONDS
+                    )
             else:
                 # Custom agent - use session AI system
                 logger.log_message(f"Custom agent case: {agent_name}", level=logging.INFO)
@@ -675,29 +677,6 @@ async def _execute_custom_agents(ai_system, agent_names: list, query: str):
     except Exception as e:
         logger.log_message(f"Error in _execute_custom_agents: {str(e)}", level=logging.ERROR)
         return {"error": f"Error executing custom agents: {str(e)}"}
-
-def _get_agent_signatures_for_execution(agent_names: list, session_state: dict):
-    """Get agent signatures for execution, including custom agents"""
-    agent_signatures = []
-    
-    for agent_name in agent_names:
-        if agent_name in AVAILABLE_AGENTS:
-            # Standard agent
-            agent_signatures.append(AVAILABLE_AGENTS[agent_name])
-        elif session_state and "ai_system" in session_state:
-            # Check for custom agent in the session's AI system
-            ai_system = session_state["ai_system"]
-            if hasattr(ai_system, 'agents') and agent_name in ai_system.agents:
-                # For custom agents, we need to use the signature from the AI system
-                # But since auto_analyst_ind expects signatures, not compiled agents,
-                # we need a different approach
-                continue
-            else:
-                raise HTTPException(status_code=404, detail=f"Agent '{agent_name}' not found")
-        else:
-            raise HTTPException(status_code=404, detail=f"Agent '{agent_name}' not found")
-    
-    return agent_signatures
 
 def _prepare_query_with_context(query: str, session_state: dict) -> str:
     """Prepare the query with chat context from previous messages"""

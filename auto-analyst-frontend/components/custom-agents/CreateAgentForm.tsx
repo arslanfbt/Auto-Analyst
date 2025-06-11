@@ -7,13 +7,22 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { AlertCircle, CheckCircle, ArrowRight, ArrowLeft, Sparkles } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { AlertCircle, CheckCircle, ArrowRight, ArrowLeft, Sparkles, Wand2, Loader2 } from 'lucide-react';
 import { CustomAgentCreate, AgentFormStep } from './types';
 import { debounce } from 'lodash';
+import API_URL from '@/config/api';
 
 interface CreateAgentFormProps {
   onCreateAgent: (agent: CustomAgentCreate) => Promise<boolean>;
   onValidateAgentName: (name: string) => Promise<boolean>;
+}
+
+interface InstructionGeneratorState {
+  category: string;
+  requirements: string;
+  isGenerating: boolean;
+  showGenerator: boolean;
 }
 
 export default function CreateAgentForm({ onCreateAgent, onValidateAgentName }: CreateAgentFormProps) {
@@ -36,6 +45,48 @@ export default function CreateAgentForm({ onCreateAgent, onValidateAgentName }: 
   });
   
   const [isSubmitting, setIsSubmitting] = useState(false);
+  
+  const [instructionGenerator, setInstructionGenerator] = useState<InstructionGeneratorState>({
+    category: '',
+    requirements: '',
+    isGenerating: false,
+    showGenerator: false
+  });
+
+  // Generate instructions using the backend API
+  const generateInstructions = async () => {
+    if (!instructionGenerator.category || !instructionGenerator.requirements) {
+      return;
+    }
+
+    setInstructionGenerator(prev => ({ ...prev, isGenerating: true }));
+
+    try {
+      const response = await fetch(`${API_URL}/custom_agents/generate_instructions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          category: instructionGenerator.category,
+          user_requirements: instructionGenerator.requirements
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to generate instructions: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      setFormData(prev => ({ ...prev, prompt_template: data.agent_instructions }));
+      setInstructionGenerator(prev => ({ ...prev, showGenerator: false }));
+    } catch (error) {
+      console.error('Error generating instructions:', error);
+      // TODO: Show error toast
+    } finally {
+      setInstructionGenerator(prev => ({ ...prev, isGenerating: false }));
+    }
+  };
 
   // Debounced name validation
   const validateName = useCallback(
@@ -132,6 +183,12 @@ export default function CreateAgentForm({ onCreateAgent, onValidateAgentName }: 
         });
         setCurrentStep('name');
         setNameValidation({ isValid: false, isChecking: false, message: '' });
+        setInstructionGenerator({
+          category: '',
+          requirements: '',
+          isGenerating: false,
+          showGenerator: false
+        });
       }
     } finally {
       setIsSubmitting(false);
@@ -224,6 +281,107 @@ export default function CreateAgentForm({ onCreateAgent, onValidateAgentName }: 
       case 'prompt':
         return (
           <div className="space-y-4">
+            {/* AI Instruction Generator */}
+            <div className="bg-gradient-to-r from-red-50 to-orange-50 p-3 rounded-lg border border-[#FF7F7F]/30 mb-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Wand2 className="w-4 h-4 text-[#FF7F7F]" />
+                  <h4 className="text-sm font-medium text-gray-800">AI Instruction Generator</h4>
+                </div>
+                {!instructionGenerator.showGenerator ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setInstructionGenerator(prev => ({ ...prev, showGenerator: true }))}
+                    className="text-[#FF7F7F] border-[#FF7F7F]/50 hover:bg-[#FF7F7F]/10"
+                  >
+                    <Sparkles className="w-4 h-4 mr-1" />
+                    Generate
+                  </Button>
+                ) : (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setInstructionGenerator(prev => ({ ...prev, showGenerator: false }))}
+                    className="text-gray-500 hover:text-gray-700"
+                  >
+                    Cancel
+                  </Button>
+                )}
+              </div>
+              {!instructionGenerator.showGenerator && (
+                <p className="text-xs text-gray-600 mt-1">
+                  Let AI help you create professional agent instructions
+                </p>
+              )}
+              
+              {/* Expanded Generator Form */}
+              {instructionGenerator.showGenerator && (
+                <div className="mt-3 space-y-3 border-t border-[#FF7F7F]/20 pt-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <Label htmlFor="category" className="text-xs">Category *</Label>
+                      <Select
+                        value={instructionGenerator.category}
+                        onValueChange={(value) => setInstructionGenerator(prev => ({ ...prev, category: value }))}
+                      >
+                        <SelectTrigger className="mt-1 h-8 text-sm">
+                          <SelectValue placeholder="Select category" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="Visualization">Visualization</SelectItem>
+                          <SelectItem value="Modelling">Modelling</SelectItem>
+                          <SelectItem value="Data Manipulation">Data Manipulation</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="flex items-end">
+                      <Button
+                        type="button"
+                        onClick={generateInstructions}
+                        disabled={
+                          !instructionGenerator.category || 
+                          instructionGenerator.requirements.length < 10 || 
+                          instructionGenerator.isGenerating
+                        }
+                        size="sm"
+                        className="bg-gradient-to-r from-[#FF7F7F] to-[#FF6666] hover:from-[#FF6666] hover:to-[#E55555] text-white h-8"
+                      >
+                        {instructionGenerator.isGenerating ? (
+                          <>
+                            <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                            Generating...
+                          </>
+                        ) : (
+                          <>
+                            <Sparkles className="w-3 h-3 mr-1" />
+                            Generate
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                  
+                  <div>
+                    <Label htmlFor="requirements" className="text-xs">What should your agent do? *</Label>
+                    <Textarea
+                      id="requirements"
+                      placeholder="e.g., Create time series plots with trend analysis, Build classification models, Clean CSV data..."
+                      value={instructionGenerator.requirements}
+                      onChange={(e) => setInstructionGenerator(prev => ({ ...prev, requirements: e.target.value }))}
+                      className="mt-1 min-h-[60px] text-sm"
+                      maxLength={2000}
+                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                      {instructionGenerator.requirements.length}/2000 (min: 10)
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+            
             <div>
               <Label htmlFor="prompt_template">Agent Instructions *</Label>
               <Textarea
@@ -320,7 +478,7 @@ export default function CreateAgentForm({ onCreateAgent, onValidateAgentName }: 
         </div>
         <div className="w-full bg-gray-200 rounded-full h-2">
           <div
-                            className="bg-[#FF7F7F] h-2 rounded-full transition-all duration-300"
+            className="bg-[#FF7F7F] h-2 rounded-full transition-all duration-300"
             style={{ width: `${((currentStepIndex + 1) / steps.length) * 100}%` }}
           />
         </div>
@@ -346,7 +504,7 @@ export default function CreateAgentForm({ onCreateAgent, onValidateAgentName }: 
           <Button
             onClick={handleSubmit}
             disabled={isSubmitting}
-                          className="bg-gradient-to-r from-[#FF7F7F] to-[#FF6666] hover:from-[#FF6666] hover:to-[#E55555] text-white"
+            className="bg-gradient-to-r from-[#FF7F7F] to-[#FF6666] hover:from-[#FF6666] hover:to-[#E55555] text-white"
           >
             {isSubmitting ? (
               <>Creating...</>
@@ -361,6 +519,7 @@ export default function CreateAgentForm({ onCreateAgent, onValidateAgentName }: 
           <Button
             onClick={handleNext}
             disabled={!canProceedFromStep(currentStep)}
+            className="bg-gradient-to-r from-[#FF7F7F] to-[#FF6666] hover:from-[#FF6666] hover:to-[#E55555] text-white"
           >
             Next
             <ArrowRight className="w-4 h-4 ml-2" />

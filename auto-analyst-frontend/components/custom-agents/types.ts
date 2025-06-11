@@ -40,4 +40,22 @@ export interface AgentValidationResponse {
   message: string
 }
 
+export interface TemplateAgent {
+  agent_id: number
+  agent_name: string
+  display_name: string
+  description: string
+  prompt_template: string
+  template_category: string
+  is_premium_only: boolean
+  is_active: boolean
+  usage_count: number
+  created_at: string
+}
+
+export interface TemplatesByCategory {
+  category: string
+  templates: TemplateAgent[]
+}
+
 export type AgentFormStep = 'name' | 'description' | 'prompt' | 'review' 
