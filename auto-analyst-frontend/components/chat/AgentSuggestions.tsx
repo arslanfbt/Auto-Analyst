@@ -4,11 +4,14 @@ import React, { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useSession } from 'next-auth/react'
 import API_URL from '@/config/api'
+import { useUserSubscriptionStore } from '@/lib/store/userSubscriptionStore'
+import { useFeatureAccess } from '@/lib/hooks/useFeatureAccess'
 
 interface AgentSuggestion {
   name: string
   description: string
   isCustom?: boolean
+  isTemplate?: boolean
 }
 
 interface AgentSuggestionsProps {
@@ -30,6 +33,8 @@ export default function AgentSuggestions({
   const [filteredAgents, setFilteredAgents] = useState<AgentSuggestion[]>([])
   const [selectedIndex, setSelectedIndex] = useState(-1)
   const { data: session } = useSession()
+  const { subscription } = useUserSubscriptionStore()
+  const customAgentsAccess = useFeatureAccess('CUSTOM_AGENTS', subscription)
   const containerRef = useRef<HTMLDivElement>(null)
 
   // Standard agents
@@ -92,8 +97,16 @@ export default function AgentSuggestions({
           })
         }
         
-        // Add custom agents
-        if (data.custom_agents && data.custom_agents.length > 0) {
+        // Add template agents (only for users with custom agents access)
+        if (data.template_agents && data.template_agents.length > 0 && customAgentsAccess.hasAccess) {
+          console.log('fetchAllAgents - found template agents, fetching details...');
+          const templateAgents = await fetchTemplateAgents()
+          console.log('fetchAllAgents - template agent details:', templateAgents);
+          allAgents.push(...templateAgents)
+        }
+        
+        // Add custom agents (only for users with custom agents access)
+        if (data.custom_agents && data.custom_agents.length > 0 && customAgentsAccess.hasAccess) {
           console.log('fetchAllAgents - found custom agents, fetching details...');
           // Fetch custom agent details
           const customAgents = await fetchCustomAgents()
@@ -143,6 +156,41 @@ export default function AgentSuggestions({
     return []
   }
 
+  // Fetch template agents
+  const fetchTemplateAgents = async (): Promise<AgentSuggestion[]> => {
+    try {
+      const templatesUrl = `${API_URL}/custom_agents/templates/`
+      console.log('fetchTemplateAgents - templatesUrl:', templatesUrl);
+      const response = await fetch(templatesUrl)
+      
+      if (response.ok) {
+        const templateCategories = await response.json()
+        console.log('fetchTemplateAgents - template categories:', templateCategories);
+        const allTemplates: AgentSuggestion[] = []
+        
+        // Flatten all templates from all categories
+        templateCategories.forEach((category: any) => {
+          if (category.templates) {
+            const mappedTemplates = category.templates.map((template: any) => ({
+              name: template.agent_name,
+              description: template.description,
+              isTemplate: true
+            }))
+            allTemplates.push(...mappedTemplates)
+          }
+        })
+        
+        console.log('fetchTemplateAgents - all templates:', allTemplates);
+        return allTemplates
+      } else {
+        console.error('Failed to fetch template agents:', response.status, await response.text())
+      }
+    } catch (error) {
+      console.error('Error fetching template agents:', error)
+    }
+    return []
+  }
+
   // Load all agents on component mount
   useEffect(() => {
     const loadAgents = async () => {
@@ -150,7 +198,7 @@ export default function AgentSuggestions({
       setAgents(allAgents)
     }
     loadAgents()
-  }, [session, userId])
+  }, [session, userId, customAgentsAccess.hasAccess])
 
   // Add event listener to refresh agents when custom agents are created/updated
   useEffect(() => {
@@ -168,7 +216,7 @@ export default function AgentSuggestions({
     return () => {
       window.removeEventListener('custom-agents-updated', handleRefreshAgents)
     }
-  }, [session, userId])
+  }, [session, userId, customAgentsAccess.hasAccess])
 
   // Filter agents based on current typing
   useEffect(() => {
@@ -297,11 +345,18 @@ export default function AgentSuggestions({
           >
             <div className="flex items-center justify-between">
               <div className="font-medium text-gray-900">{agent.name}</div>
-              {agent.isCustom && (
-                <span className="text-xs px-2 py-1 bg-purple-100 text-purple-700 rounded-full">
-                  Custom
-                </span>
-              )}
+              <div className="flex gap-1">
+                {agent.isTemplate && (
+                  <span className="text-xs px-2 py-1 bg-blue-100 text-blue-700 rounded-full">
+                    Template
+                  </span>
+                )}
+                {agent.isCustom && (
+                  <span className="text-xs px-2 py-1 bg-purple-100 text-purple-700 rounded-full">
+                    Custom
+                  </span>
+                )}
+              </div>
             </div>
             <div className="text-sm text-gray-500">{agent.description}</div>
           </div>

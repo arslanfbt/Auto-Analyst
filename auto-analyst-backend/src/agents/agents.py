@@ -36,13 +36,14 @@ def create_custom_agent_signature(agent_name, description, prompt_template):
     CustomAgentSignature = type(agent_name, (dspy.Signature,), class_attributes)
     return CustomAgentSignature
 
-def load_custom_agents_from_db(user_id, db_session):
+def load_custom_agents_from_db(user_id, db_session, include_templates=True):
     """
-    Load custom agents for a specific user from the database.
+    Load custom agents for a specific user from the database, optionally including templates.
     
     Args:
         user_id: ID of the user
         db_session: Database session
+        include_templates: Whether to include template agents that are available to all users
     
     Returns:
         Dict of custom agent signatures keyed by agent name
@@ -50,22 +51,41 @@ def load_custom_agents_from_db(user_id, db_session):
     try:
         from src.db.schemas.models import CustomAgent
         
-        # Query active custom agents for the user
-        custom_agents = db_session.query(CustomAgent).filter(
-            CustomAgent.user_id == user_id,
-            CustomAgent.is_active == True
-        ).all()
-        
         agent_signatures = {}
-        for agent in custom_agents:
-            # Create dynamic signature for each custom agent
-            signature = create_custom_agent_signature(
-                agent.agent_name,
-                agent.description,
-                agent.prompt_template
-            )
-            agent_signatures[agent.agent_name] = signature
+        
+        # Query active custom agents for the user
+        if user_id:
+            custom_agents = db_session.query(CustomAgent).filter(
+                CustomAgent.user_id == user_id,
+                CustomAgent.is_active == True,
+                CustomAgent.is_template == False  # Only user-created agents
+            ).all()
             
+            for agent in custom_agents:
+                # Create dynamic signature for each custom agent
+                signature = create_custom_agent_signature(
+                    agent.agent_name,
+                    agent.description,
+                    agent.prompt_template
+                )
+                agent_signatures[agent.agent_name] = signature
+        
+        # Also include template agents if requested
+        if include_templates:
+            template_agents = db_session.query(CustomAgent).filter(
+                CustomAgent.is_template == True,
+                CustomAgent.is_active == True
+            ).all()
+            
+            for template in template_agents:
+                # Create dynamic signature for each template agent
+                signature = create_custom_agent_signature(
+                    template.agent_name,
+                    template.description,
+                    template.prompt_template
+                )
+                agent_signatures[template.agent_name] = signature
+                
         return agent_signatures
         
     except Exception as e:
@@ -1126,7 +1146,7 @@ class auto_analyst(dspy.Module):
         # Load custom agents if user_id and db_session are provided
         if user_id and db_session:
             try:
-                custom_agent_signatures = load_custom_agents_from_db(user_id, db_session)
+                custom_agent_signatures = load_custom_agents_from_db(user_id, db_session, include_templates=True)
                 
                 for agent_name, signature in custom_agent_signatures.items():
                     # Add custom agent to agents dict
@@ -1138,14 +1158,29 @@ class auto_analyst(dspy.Module):
                     # Store custom agent description
                     try:
                         from src.db.schemas.models import CustomAgent
+                        
+                        # First try to find as user agent
                         agent_record = db_session.query(CustomAgent).filter(
                             CustomAgent.agent_name == agent_name,
-                            CustomAgent.user_id == user_id
+                            CustomAgent.user_id == user_id,
+                            CustomAgent.is_template == False
                         ).first()
                         
+                        # If not found, try to find as template
+                        if not agent_record:
+                            agent_record = db_session.query(CustomAgent).filter(
+                                CustomAgent.agent_name == agent_name,
+                                CustomAgent.is_template == True
+                            ).first()
+                        
                         if agent_record:
-                            self.custom_agents_descriptions[agent_name] = agent_record.description
-                            self.agent_desc.append({agent_name: agent_record.description})
+                            description = agent_record.description
+                            if agent_record.is_template:
+                                # Add prefix for template agents
+                                description = f"Template: {description}"
+                            
+                            self.custom_agents_descriptions[agent_name] = description
+                            self.agent_desc.append({agent_name: description})
                         else:
                             self.custom_agents_descriptions[agent_name] = f"Custom agent: {agent_name}"
                             self.agent_desc.append({agent_name: f"Custom agent: {agent_name}"})
@@ -1154,7 +1189,7 @@ class auto_analyst(dspy.Module):
                         self.custom_agents_descriptions[agent_name] = f"Custom agent: {agent_name}"
                         self.agent_desc.append({agent_name: f"Custom agent: {agent_name}"})
                         
-                logger.log_message(f"Loaded {custom_agent_signatures} custom agents for user {user_id}", level=logging.INFO)
+                logger.log_message(f"Loaded {len(custom_agent_signatures)} custom agents (including templates) for user {user_id}", level=logging.INFO)
                 
             except Exception as e:
                 logger.log_message(f"Error loading custom agents for user {user_id}: {str(e)}", level=logging.ERROR)

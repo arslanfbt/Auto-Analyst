@@ -49,6 +49,21 @@ class CustomAgentListResponse(BaseModel):
     usage_count: int
     created_at: datetime
 
+class TemplateAgentResponse(BaseModel):
+    agent_id: int
+    agent_name: str
+    display_name: Optional[str]
+    description: str
+    template_category: str
+    is_premium_only: bool
+    is_active: bool
+    usage_count: int
+    created_at: datetime
+
+class TemplatesByCategory(BaseModel):
+    category: str
+    templates: List[TemplateAgentResponse]
+
 # Routes
 @router.post("/", response_model=CustomAgentResponse)
 async def create_custom_agent(agent: CustomAgentCreate, user_id: int = Query(...)):
@@ -337,4 +352,170 @@ async def validate_agent_name(agent_name: str, user_id: int = Query(...)):
             
     except Exception as e:
         logger.log_message(f"Error validating agent name: {str(e)}", level=logging.ERROR)
-        raise HTTPException(status_code=500, detail=f"Failed to validate agent name: {str(e)}") 
+        raise HTTPException(status_code=500, detail=f"Failed to validate agent name: {str(e)}")
+
+# Template endpoints
+@router.get("/templates/", response_model=List[TemplatesByCategory])
+async def get_template_agents():
+    """Get all template agents organized by category"""
+    try:
+        session = session_factory()
+        
+        try:
+            templates = session.query(CustomAgent).filter(
+                CustomAgent.is_template == True,
+                CustomAgent.is_active == True
+            ).order_by(CustomAgent.template_category, CustomAgent.agent_name).all()
+            
+            # Group templates by category
+            categories = {}
+            for template in templates:
+                category = template.template_category or "Other"
+                if category not in categories:
+                    categories[category] = []
+                
+                categories[category].append(TemplateAgentResponse(
+                    agent_id=template.agent_id,
+                    agent_name=template.agent_name,
+                    display_name=template.display_name,
+                    description=template.description,
+                    template_category=template.template_category,
+                    is_premium_only=template.is_premium_only,
+                    is_active=template.is_active,
+                    usage_count=template.usage_count,
+                    created_at=template.created_at
+                ))
+            
+            # Convert to list of category objects
+            result = [TemplatesByCategory(category=category, templates=templates) 
+                     for category, templates in categories.items()]
+            
+            return result
+            
+        finally:
+            session.close()
+            
+    except Exception as e:
+        logger.log_message(f"Error retrieving template agents: {str(e)}", level=logging.ERROR)
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve template agents: {str(e)}")
+
+@router.get("/templates/{template_id}", response_model=TemplateAgentResponse)
+async def get_template_agent(template_id: int):
+    """Get a specific template agent by ID"""
+    try:
+        session = session_factory()
+        
+        try:
+            template = session.query(CustomAgent).filter(
+                CustomAgent.agent_id == template_id,
+                CustomAgent.is_template == True
+            ).first()
+            
+            if not template:
+                raise HTTPException(status_code=404, detail=f"Template agent with ID {template_id} not found")
+                
+            return TemplateAgentResponse(
+                agent_id=template.agent_id,
+                agent_name=template.agent_name,
+                display_name=template.display_name,
+                description=template.description,
+                template_category=template.template_category,
+                is_premium_only=template.is_premium_only,
+                is_active=template.is_active,
+                usage_count=template.usage_count,
+                created_at=template.created_at
+            )
+            
+        finally:
+            session.close()
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.log_message(f"Error retrieving template agent: {str(e)}", level=logging.ERROR)
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve template agent: {str(e)}")
+
+@router.post("/templates/{template_id}/copy", response_model=CustomAgentResponse)
+async def copy_template_to_user(template_id: int, user_id: int = Query(...), agent_name: str = Query(...)):
+    """Copy a template agent to a user's custom agents"""
+    try:
+        session = session_factory()
+        
+        try:
+            # Validate user exists
+            user = session.query(User).filter(User.user_id == user_id).first()
+            if not user:
+                raise HTTPException(status_code=404, detail="User not found")
+            
+            # Get template agent
+            template = session.query(CustomAgent).filter(
+                CustomAgent.agent_id == template_id,
+                CustomAgent.is_template == True
+            ).first()
+            
+            if not template:
+                raise HTTPException(status_code=404, detail=f"Template agent with ID {template_id} not found")
+            
+            # Check if agent name already exists for user
+            existing_agent = session.query(CustomAgent).filter(
+                CustomAgent.user_id == user_id,
+                CustomAgent.agent_name == agent_name.lower().strip()
+            ).first()
+            
+            if existing_agent:
+                raise HTTPException(status_code=400, detail=f"Agent name '{agent_name}' already exists for this user")
+            
+            # Create new custom agent from template
+            now = datetime.now(UTC)
+            new_agent = CustomAgent(
+                user_id=user_id,
+                agent_name=agent_name.lower().strip(),
+                display_name=template.display_name,
+                description=template.description,
+                prompt_template=template.prompt_template,
+                is_template=False,  # This is a user agent, not a template
+                template_category=None,  # User agents don't have template categories
+                is_premium_only=False,  # User agents are not premium-restricted
+                is_active=True,
+                usage_count=0,
+                created_at=now,
+                updated_at=now
+            )
+            
+            session.add(new_agent)
+            session.commit()
+            session.refresh(new_agent)
+            
+            # Increment template usage count
+            template.usage_count += 1
+            session.commit()
+            
+            logger.log_message(f"Copied template '{template.agent_name}' to user {user_id} as '{agent_name}'", level=logging.INFO)
+            
+            return CustomAgentResponse(
+                agent_id=new_agent.agent_id,
+                agent_name=new_agent.agent_name,
+                display_name=new_agent.display_name,
+                description=new_agent.description,
+                prompt_template=new_agent.prompt_template,
+                is_active=new_agent.is_active,
+                usage_count=new_agent.usage_count,
+                created_at=new_agent.created_at,
+                updated_at=new_agent.updated_at
+            )
+            
+        except IntegrityError:
+            session.rollback()
+            raise HTTPException(status_code=400, detail=f"Agent name '{agent_name}' already exists for this user")
+        except Exception as e:
+            session.rollback()
+            logger.log_message(f"Error copying template to user: {str(e)}", level=logging.ERROR)
+            raise HTTPException(status_code=500, detail=f"Failed to copy template: {str(e)}")
+        finally:
+            session.close()
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.log_message(f"Error copying template to user: {str(e)}", level=logging.ERROR)
+        raise HTTPException(status_code=500, detail=f"Failed to copy template: {str(e)}") 

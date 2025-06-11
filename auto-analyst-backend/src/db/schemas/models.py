@@ -174,17 +174,22 @@ class DeepAnalysisReport(Base):
     user = relationship("User", back_populates="deep_analysis_reports")
     
 class CustomAgent(Base):
-    """Stores custom agents created by premium users."""
+    """Stores custom agents created by premium users and system templates."""
     __tablename__ = 'custom_agents'
     
     agent_id = Column(Integer, primary_key=True, autoincrement=True)
-    user_id = Column(Integer, ForeignKey('users.user_id', ondelete="CASCADE"), nullable=False)
+    user_id = Column(Integer, ForeignKey('users.user_id', ondelete="CASCADE"), nullable=True)  # Nullable for templates
     
     # Agent definition
     agent_name = Column(String(100), nullable=False)  # e.g., 'pytorch_agent', 'deep_learning_agent'
     display_name = Column(String(200), nullable=True)  # User-friendly display name
     description = Column(Text, nullable=False)  # Short description for agent selection
     prompt_template = Column(Text, nullable=False)  # Main prompt/instructions for agent behavior
+    
+    # Template fields
+    is_template = Column(Boolean, default=False)  # True for system templates, False for user agents
+    template_category = Column(String(50), nullable=True)  # 'Visualization', 'Modelling', 'Data Manipulation'
+    is_premium_only = Column(Boolean, default=False)  # True if template requires premium subscription
     
     # Status and metadata
     is_active = Column(Boolean, default=True)

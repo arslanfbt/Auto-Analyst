@@ -25,6 +25,8 @@ import { useToast } from '../ui/use-toast'
 import CreateAgentForm from './CreateAgentForm'
 import AgentListView from './AgentListView'
 import AgentDetailView from './AgentDetailView'
+import TemplateListView from './TemplateListView'
+import TemplateDetailView from './TemplateDetailView'
 
 interface CustomAgentsSidebarProps {
   isOpen: boolean
@@ -48,9 +50,11 @@ export default function CustomAgentsSidebar({
     }
   }, [forceExpanded, isOpen])
 
-  const [activeTab, setActiveTab] = useState<'create' | 'list' | 'details'>('list')
+  const [activeTab, setActiveTab] = useState<'create' | 'list' | 'details' | 'templates' | 'template-details'>('list')
   const [customAgents, setCustomAgents] = useState<CustomAgentList[]>([])
+  const [templateAgents, setTemplateAgents] = useState<any[]>([])
   const [selectedAgent, setSelectedAgent] = useState<CustomAgent | null>(null)
+  const [selectedTemplate, setSelectedTemplate] = useState<any | null>(null)
   const [refreshTrigger, setRefreshTrigger] = useState(0)
   const { data: session } = useSession()
   const { subscription } = useUserSubscriptionStore()
@@ -98,10 +102,29 @@ export default function CustomAgentsSidebar({
     }
   }
 
+  // Load template agents
+  const loadTemplateAgents = async () => {
+    try {
+      const response = await fetch(`${API_URL}/custom_agents/templates/`)
+      if (response.ok) {
+        const templateCategories = await response.json()
+        console.log('Template categories:', templateCategories)
+        setTemplateAgents(templateCategories)
+      } else {
+        console.error('Failed to load template agents:', await response.text())
+      }
+    } catch (error) {
+      console.error('Error loading template agents:', error)
+    }
+  }
+
   // Load agents when component mounts or user changes
   useEffect(() => {
+    // Only load custom agents if user has access
     if (customAgentsAccess.hasAccess) {
       loadCustomAgents()
+      // Only load templates if user has paid access (templates are part of custom agents feature)
+      loadTemplateAgents()
     }
   }, [refreshTrigger, customAgentsAccess.hasAccess, session])
 
@@ -273,6 +296,45 @@ export default function CustomAgentsSidebar({
     }
   }
 
+  // Handle selecting a template for details
+  const handleSelectTemplate = (template: any) => {
+    setSelectedTemplate(template)
+    setActiveTab('template-details')
+  }
+
+  // Handle cloning a template
+  const handleCloneTemplate = async (templateData: {
+    agent_name: string
+    display_name: string
+    description: string
+    prompt_template: string
+  }): Promise<boolean> => {
+    return await handleCreateAgent(templateData)
+  }
+
+  // Handle quick clone from template list
+  const handleQuickCloneTemplate = async (template: any) => {
+    if (!customAgentsAccess.hasAccess) {
+      setShowPremiumUpgradeModal(true)
+      return
+    }
+
+    const cloneData = {
+      agent_name: `${template.agent_name}_copy`,
+      display_name: `${template.display_name} (Copy)`,
+      description: template.description,
+      prompt_template: template.prompt_template
+    }
+
+    const success = await handleCreateAgent(cloneData)
+    if (success) {
+      toast({
+        title: "Template Cloned! 🎉",
+        description: `${template.display_name} has been cloned to your custom agents`,
+      })
+    }
+  }
+
   // Validate agent name availability
   const validateAgentName = async (agentName: string): Promise<boolean> => {
     const currentUserId = getUserId()
@@ -352,8 +414,9 @@ export default function CustomAgentsSidebar({
           {!isCollapsed && (
             <>
               <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as any)} className="flex-1 flex flex-col min-h-0">
-                <TabsList className="grid w-full grid-cols-3 bg-gray-100 mx-3 mt-3 mb-2 flex-shrink-0">
+                <TabsList className="grid w-full grid-cols-4 bg-gray-100 mx-3 mt-3 mb-2 flex-shrink-0">
                   <TabsTrigger value="list" className="text-xs">My Agents</TabsTrigger>
+                  <TabsTrigger value="templates" className="text-xs">Templates</TabsTrigger>
                   <TabsTrigger value="create" className="text-xs">Create New</TabsTrigger>
                   <TabsTrigger value="details" className="text-xs">
                     Details
@@ -369,6 +432,26 @@ export default function CustomAgentsSidebar({
                     onSelectAgent={handleSelectAgent}
                     onDeleteAgent={handleDeleteAgent}
                     refreshTrigger={refreshTrigger}
+                  />
+                </TabsContent>
+
+                <TabsContent value="templates" className="flex-1 min-h-0 overflow-hidden">
+                  <TemplateListView
+                    templateCategories={templateAgents}
+                    onSelectTemplate={handleSelectTemplate}
+                    onCloneTemplate={handleQuickCloneTemplate}
+                    hasAccess={customAgentsAccess.hasAccess}
+                    onUpgradePrompt={() => setShowPremiumUpgradeModal(true)}
+                  />
+                </TabsContent>
+
+                <TabsContent value="template-details" className="flex-1 min-h-0 overflow-hidden">
+                  <TemplateDetailView
+                    template={selectedTemplate}
+                    onBack={() => setActiveTab('templates')}
+                    onCloneTemplate={handleCloneTemplate}
+                    hasAccess={customAgentsAccess.hasAccess}
+                    onUpgradePrompt={() => setShowPremiumUpgradeModal(true)}
                   />
                 </TabsContent>
 
@@ -416,6 +499,8 @@ export default function CustomAgentsSidebar({
             <div className="space-y-3">
               <h5 className="font-semibold text-gray-900 text-base">What you can do:</h5>
               <ul className="text-base text-gray-700 space-y-2 ml-4">
+                <li>• Browse and use professional agent templates across multiple categories.</li>
+                <li>• Clone templates to create your own custom agents.</li>
                 <li>• Create specialized agents for different tasks (e.g., pytorch_agent, data_cleaning_agent).</li>
                 <li>• Define custom prompts and behavior for your agents.</li>
                 <li>• Use your agents with @agent_name mentions in chat.</li>

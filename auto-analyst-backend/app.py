@@ -982,14 +982,42 @@ async def list_agents(request: Request, session_id: str = Depends(get_session_id
     standard_agents = list(AVAILABLE_AGENTS.keys())
     planner_agents = list(PLANNER_AGENTS.keys())
     
-    # Custom agents are those that are not standard agents and not planner agents
+    # Get template agents from database
+    template_agents = []
+    try:
+        from src.db.init_db import session_factory
+        from src.db.schemas.models import CustomAgent
+        
+        db_session = session_factory()
+        try:
+            templates = db_session.query(CustomAgent).filter(
+                CustomAgent.is_template == True,
+                CustomAgent.is_active == True,
+                CustomAgent.user_id == None  # System templates
+            ).all()
+            
+            template_agents = [template.agent_name for template in templates]
+            logger.log_message(f"Found {len(template_agents)} template agents", level=logging.INFO)
+            
+        finally:
+            db_session.close()
+    except Exception as e:
+        logger.log_message(f"Error fetching template agents: {str(e)}", level=logging.ERROR)
+    
+    # Custom agents are user-created agents (not standard, not planner, not template)
     custom_agents = [agent for agent in available_agents_list 
-                    if agent not in standard_agents and agent not in planner_agents]
+                    if agent not in standard_agents and agent not in planner_agents and agent not in template_agents]
+    
+    # Add template agents to available agents list if they're not already there
+    for template_agent in template_agents:
+        if template_agent not in available_agents_list:
+            available_agents_list.append(template_agent)
     
     return {
         "available_agents": available_agents_list,
         "standard_agents": standard_agents,
         "custom_agents": custom_agents,
+        "template_agents": template_agents, 
         "planner_agents": planner_agents,
         "deep_analysis": {
             "available": True,
