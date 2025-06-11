@@ -215,6 +215,15 @@ const ChatInterface: React.FC = () => {
       };
       
       createOrGetUser();
+    } else if (!session && mounted) {
+      // Handle admin/testing case with adminUserId from localStorage
+      const adminId = localStorage.getItem('adminUserId');
+      if (adminId) {
+        const adminUserId = parseInt(adminId);
+        setUserId(adminUserId);
+        setIsAdmin(true);
+        fetchChatHistories(adminUserId);
+      }
     }
   }, [session, mounted]);
 

@@ -81,15 +81,15 @@ export const FEATURES: Record<string, Feature> = {
   },
 
   CUSTOM_AGENTS: {
-    id: 'custom_agents',
+    id: 'CUSTOM_AGENTS',
     name: 'Custom Agents',
     description: 'Create and deploy custom AI agents for specific tasks',
     accessLevel: 'paid',
-    status: 'coming_soon',
+    status: 'available',
     category: FEATURE_CATEGORIES.AGENTS,
     icon: '🤖',
     requiredTier: ['standard', 'enterprise'],
-    comingSoonEta: 'Q2 2025',
+    betaAccess: true,
   },
 
   // Enterprise Features

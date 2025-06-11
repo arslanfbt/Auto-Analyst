@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine, Column, Integer, String, ForeignKey, DateTime, Text, Float, Boolean, JSON
+from sqlalchemy import create_engine, Column, Integer, String, ForeignKey, DateTime, Text, Float, Boolean, JSON, UniqueConstraint
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
 from datetime import datetime, UTC
@@ -18,6 +18,7 @@ class User(Base):
     chats = relationship("Chat", back_populates="user", cascade="all, delete-orphan")
     usage_records = relationship("ModelUsage", back_populates="user")
     deep_analysis_reports = relationship("DeepAnalysisReport", back_populates="user", cascade="all, delete-orphan")
+    custom_agents = relationship("CustomAgent", back_populates="user", cascade="all, delete-orphan")
 
 # Define the Chats table
 class Chat(Base):
@@ -171,5 +172,39 @@ class DeepAnalysisReport(Base):
     
     # Relationships
     user = relationship("User", back_populates="deep_analysis_reports")
+    
+class CustomAgent(Base):
+    """Stores custom agents created by premium users and system templates."""
+    __tablename__ = 'custom_agents'
+    
+    agent_id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey('users.user_id', ondelete="CASCADE"), nullable=True)  # Nullable for templates
+    
+    # Agent definition
+    agent_name = Column(String(100), nullable=False)  # e.g., 'pytorch_agent', 'deep_learning_agent'
+    display_name = Column(String(200), nullable=True)  # User-friendly display name
+    description = Column(Text, nullable=False)  # Short description for agent selection
+    prompt_template = Column(Text, nullable=False)  # Main prompt/instructions for agent behavior
+    
+    # Template fields
+    is_template = Column(Boolean, default=False)  # True for system templates, False for user agents
+    template_category = Column(String(50), nullable=True)  # 'Visualization', 'Modelling', 'Data Manipulation'
+    is_premium_only = Column(Boolean, default=False)  # True if template requires premium subscription
+    
+    # Status and metadata
+    is_active = Column(Boolean, default=True)
+    usage_count = Column(Integer, default=0)  # Track how many times agent has been used
+    
+    # Timestamps
+    created_at = Column(DateTime, default=lambda: datetime.now(UTC))
+    updated_at = Column(DateTime, default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC))
+    
+    # Relationships
+    user = relationship("User", back_populates="custom_agents")
+    
+    # Constraints
+    __table_args__ = (
+        UniqueConstraint('user_id', 'agent_name', name='unique_user_agent_name'),
+    )
     
     

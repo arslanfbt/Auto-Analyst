@@ -8,6 +8,147 @@ load_dotenv()
 
 logger = Logger("agents", see_time=True, console_log=False)
 
+# === CUSTOM AGENT FUNCTIONALITY ===
+def create_custom_agent_signature(agent_name, description, prompt_template):
+    """
+    Dynamically creates a dspy.Signature class for custom agents.
+    
+    Args:
+        agent_name: Name of the custom agent (e.g., 'pytorch_agent')
+        description: Short description for agent selection
+        prompt_template: Main prompt/instructions for agent behavior
+    
+    Returns:
+        A dspy.Signature class with the custom prompt and standard input/output fields
+    """
+    
+    # Standard input/output fields that match standard agents (like data_viz_agent)
+    class_attributes = {
+        '__doc__': prompt_template,  # The custom prompt becomes the docstring
+        'goal': dspy.InputField(desc="User-defined goal which includes information about data and task they want to perform"),
+        'dataset': dspy.InputField(desc="Provides information about the data in the data frame. Only use column names and dataframe_name as in this context"),
+        'styling_index': dspy.InputField(desc='Provides instructions on how to style outputs and formatting'),
+        'code': dspy.OutputField(desc="Generated Python code for the analysis"),
+        'summary': dspy.OutputField(desc="A concise bullet-point summary of what was done and key results")
+    }
+    
+    # Create the dynamic signature class
+    CustomAgentSignature = type(agent_name, (dspy.Signature,), class_attributes)
+    return CustomAgentSignature
+
+def load_custom_agents_from_db(user_id, db_session, include_templates=True):
+    """
+    Load custom agents for a specific user from the database, optionally including templates.
+    
+    Args:
+        user_id: ID of the user
+        db_session: Database session
+        include_templates: Whether to include template agents that are available to all users
+    
+    Returns:
+        Dict of custom agent signatures keyed by agent name
+    """
+    try:
+        from src.db.schemas.models import CustomAgent
+        
+        agent_signatures = {}
+        
+        # Query active custom agents for the user
+        if user_id:
+            custom_agents = db_session.query(CustomAgent).filter(
+                CustomAgent.user_id == user_id,
+                CustomAgent.is_active == True,
+                CustomAgent.is_template == False  # Only user-created agents
+            ).all()
+            
+            for agent in custom_agents:
+                # Create dynamic signature for each custom agent
+                signature = create_custom_agent_signature(
+                    agent.agent_name,
+                    agent.description,
+                    agent.prompt_template
+                )
+                agent_signatures[agent.agent_name] = signature
+        
+        # Also include template agents if requested
+        if include_templates:
+            template_agents = db_session.query(CustomAgent).filter(
+                CustomAgent.is_template == True,
+                CustomAgent.is_active == True
+            ).all()
+            
+            for template in template_agents:
+                # Create dynamic signature for each template agent
+                signature = create_custom_agent_signature(
+                    template.agent_name,
+                    template.description,
+                    template.prompt_template
+                )
+                agent_signatures[template.agent_name] = signature
+                
+        return agent_signatures
+        
+    except Exception as e:
+        logger.log_message(f"Error loading custom agents for user {user_id}: {str(e)}", level=logging.ERROR)
+        return {}
+
+def get_custom_agent_description(agent_name, custom_agents_descriptions):
+    """
+    Get description for a custom agent.
+    
+    Args:
+        agent_name: Name of the custom agent
+        custom_agents_descriptions: Dict of custom agent descriptions
+    
+    Returns:
+        Description string or default message
+    """
+    return custom_agents_descriptions.get(agent_name.lower(), "Custom agent - no description available")
+
+def save_custom_agent_to_db(user_id, agent_name, display_name, description, prompt_template, db_session):
+    """
+    Save a new custom agent to the database.
+    
+    Args:
+        user_id: ID of the user creating the agent
+        agent_name: Unique name for the agent (e.g., 'pytorch_agent')
+        display_name: User-friendly display name
+        description: Short description for agent selection
+        prompt_template: Main prompt/instructions for agent behavior
+        db_session: Database session
+    
+    Returns:
+        Tuple (success: bool, message: str, agent_id: int or None)
+    """
+    try:
+        from src.db.schemas.models import CustomAgent
+        from sqlalchemy.exc import IntegrityError
+        
+        # Create new custom agent
+        new_agent = CustomAgent(
+            user_id=user_id,
+            agent_name=agent_name.lower().strip(),
+            display_name=display_name,
+            description=description,
+            prompt_template=prompt_template,
+            is_active=True,
+            usage_count=0
+        )
+        
+        db_session.add(new_agent)
+        db_session.commit()
+        
+        return True, "Custom agent created successfully", new_agent.agent_id
+        
+    except IntegrityError:
+        db_session.rollback()
+        return False, f"Agent name '{agent_name}' already exists, please choose a different name", None
+    except Exception as e:
+        db_session.rollback()
+        logger.log_message(f"Error saving custom agent: {str(e)}", level=logging.ERROR)
+        return False, f"Error creating custom agent: {str(e)}", None
+
+# === END CUSTOM AGENT FUNCTIONALITY ===
 
 AGENTS_WITH_DESCRIPTION = {
     "preprocessing_agent": "Cleans and prepares a DataFrame using Pandas and NumPy—handles missing values, detects column types, and converts date strings to datetime.",
@@ -88,6 +229,82 @@ TECHNICAL CONSIDERATIONS FOR ANALYSIS:
     description = dspy.OutputField(desc="A comprehensive dataset description with business context and technical guidance for analysis agents.")
 
 
+class custom_agent_instruction_generator(dspy.Signature):
+    """You are an AI agent instruction generator that creates comprehensive, professional prompts for custom data analysis agents.
+    
+    Your task is to take a user's requirements and generate a detailed agent instruction that follows the same structure and quality as the default system agents (preprocessing_agent, statistical_analytics_agent, sk_learn_agent, data_viz_agent).
+    
+    Key requirements for generated instructions:
+    1. **Professional Structure**: Use clear sections with headers and bullet points
+    2. **Input/Output Specification**: Clearly define what the agent receives and produces
+    3. **Technical Guidelines**: Include specific library recommendations and best practices
+    4. **Error Handling**: Include instructions for handling common issues
+    5. **Code Quality**: Emphasize clean, reproducible, and well-documented code
+    6. **Standardized Outputs**: Ensure consistent format with 'code' and 'summary' outputs
+    
+    Structure your instructions as follows:
+    - Brief role definition and purpose
+    - Input specifications and expectations
+    - Core responsibilities and tasks
+    - Technical requirements and best practices
+    - Library and methodology recommendations
+    - Error handling and edge cases
+    - Output format requirements
+    - Example code patterns (if relevant)
+    
+    Categories and their focus areas:
+    
+    **Visualization**: 
+    - Emphasize Plotly for interactive charts
+    - Include styling and layout best practices
+    - Focus on chart type selection based on data
+    - Performance optimization for large datasets
+    - Color schemes and accessibility
+    
+    **Modelling**:
+    - Cover model selection and evaluation
+    - Include cross-validation and metrics
+    - Emphasize feature engineering and preprocessing
+    - Handle different problem types (classification, regression, clustering)
+    - Include hyperparameter tuning guidance
+    
+    **Data Manipulation**:
+    - Focus on Pandas and NumPy operations
+    - Include data cleaning and transformation
+    - Handle missing values and outliers
+    - Emphasize data type conversions
+    - Include aggregation and reshaping operations
+    
+    Make instructions generic enough to handle various tasks within the category while being specific enough to provide clear guidance.
+    Always include the standard output format: 'code' (Python code) and 'summary' (bullet-point explanation).
+    
+    Example instruction structure:
+    '''
+    You are a [specific role] agent specializing in [category focus]. Your task is to [main purpose]...
+    
+    **Input Requirements:**
+    - dataset: [description]
+    - goal: [description]
+    - [other inputs as needed]
+    
+    **Core Responsibilities:**
+    1. [Primary task]
+    2. [Secondary task]
+    3. [Additional requirements]
+    
+    **Technical Guidelines:**
+    - Use [recommended libraries]
+    - Follow [best practices]
+    - Handle [common issues]
+    
+    **Output Requirements:**
+    - code: [code specification]
+    - summary: [summary specification]
+    '''
+    """
+    category = dspy.InputField(desc="The category of the custom agent: 'Visualization', 'Modelling', or 'Data Manipulation'")
+    user_requirements = dspy.InputField(desc="User's description of what they want the agent to do, including specific tasks, methods, or focus areas")
+    agent_instructions = dspy.OutputField(desc="Complete, professional agent instructions following the structure and quality of default system agents, ready to be used as a custom agent prompt")
 
 class advanced_query_planner(dspy.Signature):
     """
@@ -102,7 +319,7 @@ You are a advanced data analytics planner agent. Your task is to generate the mo
 3. **Instructions**: For each agent, define:
    * **create**: output variables and their purpose
    * **use**: input variables and their role
-   * **instruction**: concise explanation of the agent’s function and relevance to the goal
+   * **instruction**: concise explanation of the agent's function and relevance to the goal
 4. **Clarity**: Keep instructions precise; avoid intermediate steps unless necessary; ensure each agent has a distinct, relevant role.
 ### **Output Format**:
 Example: 1 agent use
@@ -467,18 +684,14 @@ def statistical_model(X, y, goal, period=None):
         if goal == 'regression':
             formula = 'y ~ ' + ' + '.join([f'C({col})' if X[col].dtype.name == 'category' else col for col in X.columns])
             model = sm.OLS(y.astype(float), X.astype(float)).fit()
-            regression_model = model.summary()  # Specify as per CREATE instructions
-            return regression_model
-        
+            return model.summary()
         elif goal == 'seasonal_decompose':
             if period is None:
                 raise ValueError("Period must be specified for seasonal decomposition")
             decomposition = sm.tsa.seasonal_decompose(y, period=period)
-            seasonal_decomposition = decomposition  # Specify as per CREATE instructions
-            return seasonal_decomposition
-        
+            return decomposition
         else:
-            raise ValueError("Unknown goal specified.")
+            raise ValueError("Unknown goal specified. Please provide a valid goal.")
         
     except Exception as e:
         return f"An error occurred: {e}"
@@ -499,7 +712,7 @@ def statistical_model(X, y, goal, period=None):
     plan_instructions = dspy.InputField(desc="Instructions on variables to create and receive for statistical modeling")
     
     code = dspy.OutputField(desc="Python code for statistical modeling using statsmodels")
-    summary = dspy.OutputField(desc="Explanation of statistical analysis steps")
+    summary = dspy.OutputField(desc="A concise bullet-point summary of the statistical analysis performed and key findings")
     
     
 
@@ -887,7 +1100,7 @@ Make your edits precise, minimal, and faithful to the user's instructions, using
 class auto_analyst_ind(dspy.Module):
     """Handles individual agent execution when explicitly specified in query"""
     
-    def __init__(self, agents, retrievers):
+    def __init__(self, agents, retrievers, user_id=None):
         # Initialize agent modules and retrievers
         self.agents = {}
         self.agent_inputs = {}
@@ -906,12 +1119,71 @@ class auto_analyst_ind(dspy.Module):
         self.styling_index = retrievers['style_index'].as_retriever(similarity_top_k=1)
         # self.code_combiner_agent = dspy.ChainOfThought(code_combiner_agent)
         
+        # Store user_id for usage tracking
+        self.user_id = user_id
     
+    async def _track_agent_usage(self, agent_name):
+        """Track usage for custom agents and templates"""
+        try:
+            # Skip tracking for standard agents
+            if agent_name in ['preprocessing_agent', 'statistical_analytics_agent', 'sk_learn_agent', 'data_viz_agent', 'basic_qa_agent']:
+                return
+            
+            # Only track if we have user_id (custom/template agents)
+            if not self.user_id:
+                return
+                
+            from src.db.init_db import session_factory
+            from src.db.schemas.models import CustomAgent
+            from datetime import datetime, UTC
+            
+            # Create database session
+            session = session_factory()
+            try:
+                # First try to find as user's custom agent
+                agent = session.query(CustomAgent).filter(
+                    CustomAgent.agent_name == agent_name,
+                    CustomAgent.user_id == self.user_id,
+                    CustomAgent.is_template == False
+                ).first()
+                
+                # If not found, try to find as template
+                if not agent:
+                    agent = session.query(CustomAgent).filter(
+                        CustomAgent.agent_name == agent_name,
+                        CustomAgent.is_template == True
+                    ).first()
+                
+                # Update usage count if agent found
+                if agent:
+                    agent.usage_count += 1
+                    agent.updated_at = datetime.now(UTC)
+                    session.commit()
+                    
+                    agent_type = "template" if agent.is_template else "custom"
+                    logger.log_message(
+                        f"Incremented usage count for {agent_type} agent '{agent_name}' (now: {agent.usage_count})", 
+                        level=logging.INFO
+                    )
+                
+            except Exception as e:
+                session.rollback()
+                logger.log_message(f"Error tracking usage for agent {agent_name}: {str(e)}", level=logging.ERROR)
+            finally:
+                session.close()
+                
+        except Exception as e:
+            logger.log_message(f"Error in _track_agent_usage for {agent_name}: {str(e)}", level=logging.ERROR)
+        
     async def execute_agent(self, specified_agent, inputs):
         """Execute agent and generate memory summary in parallel"""
         try:
             # Execute main agent
             agent_result = await self.agents[specified_agent.strip()](**inputs)
+            
+            # Track usage for custom agents and templates
+            await self._track_agent_usage(specified_agent.strip())
+            
             return specified_agent.strip(), dict(agent_result)
             
         except Exception as e:
@@ -992,17 +1264,70 @@ class auto_analyst_ind(dspy.Module):
 class auto_analyst(dspy.Module):
     """Main analyst module that coordinates multiple agents using a planner"""
     
-    def __init__(self, agents, retrievers):
+    def __init__(self, agents, retrievers, user_id=None, db_session=None):
         # Initialize agent modules and retrievers
         self.agents = {}
         self.agent_inputs = {}
         self.agent_desc = []
+        self.custom_agents_descriptions = {}
         
+        # Load standard agents
         for i, a in enumerate(agents):
             name = a.__pydantic_core_schema__['schema']['model_name']
             self.agents[name] = dspy.asyncify(dspy.ChainOfThought(a))
             self.agent_inputs[name] = {x.strip() for x in str(agents[i].__pydantic_core_schema__['cls']).split('->')[0].split('(')[1].split(',')}
             self.agent_desc.append({name: get_agent_description(name)})
+
+        # Load custom agents if user_id and db_session are provided
+        if user_id and db_session:
+            try:
+                custom_agent_signatures = load_custom_agents_from_db(user_id, db_session, include_templates=True)
+                
+                for agent_name, signature in custom_agent_signatures.items():
+                    # Add custom agent to agents dict
+                    self.agents[agent_name] = dspy.asyncify(dspy.ChainOfThought(signature))
+                    
+                    # Extract input fields from signature - custom agents use standard fields like data_viz_agent
+                    self.agent_inputs[agent_name] = {'goal', 'dataset', 'styling_index'}
+                    
+                    # Store custom agent description
+                    try:
+                        from src.db.schemas.models import CustomAgent
+                        
+                        # First try to find as user agent
+                        agent_record = db_session.query(CustomAgent).filter(
+                            CustomAgent.agent_name == agent_name,
+                            CustomAgent.user_id == user_id,
+                            CustomAgent.is_template == False
+                        ).first()
+                        
+                        # If not found, try to find as template
+                        if not agent_record:
+                            agent_record = db_session.query(CustomAgent).filter(
+                                CustomAgent.agent_name == agent_name,
+                                CustomAgent.is_template == True
+                            ).first()
+                        
+                        if agent_record:
+                            description = agent_record.description
+                            if agent_record.is_template:
+                                # Add prefix for template agents
+                                description = f"Template: {description}"
+                            
+                            self.custom_agents_descriptions[agent_name] = description
+                            self.agent_desc.append({agent_name: description})
+                        else:
+                            self.custom_agents_descriptions[agent_name] = f"Custom agent: {agent_name}"
+                            self.agent_desc.append({agent_name: f"Custom agent: {agent_name}"})
+                    except Exception as desc_error:
+                        logger.log_message(f"Error getting description for custom agent {agent_name}: {str(desc_error)}", level=logging.WARNING)
+                        self.custom_agents_descriptions[agent_name] = f"Custom agent: {agent_name}"
+                        self.agent_desc.append({agent_name: f"Custom agent: {agent_name}"})
+                        
+                logger.log_message(f"Loaded {len(custom_agent_signatures)} custom agents (including templates) for user {user_id}", level=logging.INFO)
+                
+            except Exception as e:
+                logger.log_message(f"Error loading custom agents for user {user_id}: {str(e)}", level=logging.ERROR)
 
         self.agents['basic_qa_agent'] = dspy.asyncify(dspy.Predict("goal->answer")) 
         self.agent_inputs['basic_qa_agent'] = {"goal"}
@@ -1019,11 +1344,71 @@ class auto_analyst(dspy.Module):
         # Initialize retrievers
         self.dataset = retrievers['dataframe_index'].as_retriever(k=1)
         self.styling_index = retrievers['style_index'].as_retriever(similarity_top_k=1)
+        
+        # Store user_id for usage tracking
+        self.user_id = user_id
+
+    async def _track_agent_usage(self, agent_name):
+        """Track usage for custom agents and templates"""
+        try:
+            # Skip tracking for standard agents
+            if agent_name in ['preprocessing_agent', 'statistical_analytics_agent', 'sk_learn_agent', 'data_viz_agent', 'basic_qa_agent']:
+                return
+            
+            # Only track if we have user_id (custom/template agents)
+            if not self.user_id:
+                return
+                
+            from src.db.init_db import session_factory
+            from src.db.schemas.models import CustomAgent
+            from datetime import datetime, UTC
+            
+            # Create database session
+            session = session_factory()
+            try:
+                # First try to find as user's custom agent
+                agent = session.query(CustomAgent).filter(
+                    CustomAgent.agent_name == agent_name,
+                    CustomAgent.user_id == self.user_id,
+                    CustomAgent.is_template == False
+                ).first()
+                
+                # If not found, try to find as template
+                if not agent:
+                    agent = session.query(CustomAgent).filter(
+                        CustomAgent.agent_name == agent_name,
+                        CustomAgent.is_template == True
+                    ).first()
+                
+                # Update usage count if agent found
+                if agent:
+                    agent.usage_count += 1
+                    agent.updated_at = datetime.now(UTC)
+                    session.commit()
+                    
+                    agent_type = "template" if agent.is_template else "custom"
+                    logger.log_message(
+                        f"Incremented usage count for {agent_type} agent '{agent_name}' (now: {agent.usage_count})", 
+                        level=logging.INFO
+                    )
+                
+            except Exception as e:
+                session.rollback()
+                logger.log_message(f"Error tracking usage for agent {agent_name}: {str(e)}", level=logging.ERROR)
+            finally:
+                session.close()
+                
+        except Exception as e:
+            logger.log_message(f"Error in _track_agent_usage for {agent_name}: {str(e)}", level=logging.ERROR)
 
     async def execute_agent(self, agent_name, inputs):
         """Execute a single agent with given inputs"""
         try:
             result = await self.agents[agent_name.strip()](**inputs)
+            
+            # Track usage for custom agents and templates
+            await self._track_agent_usage(agent_name.strip())
+            
             return agent_name.strip(), dict(result)
         except Exception as e:
             return agent_name.strip(), {"error": str(e)}
@@ -1038,7 +1423,6 @@ class auto_analyst(dspy.Module):
         
         module_return = await self.planner(goal=dict_['goal'], dataset=dict_['dataset'], Agent_desc=dict_['Agent_desc'])
         plan_dict = dict(module_return['plan'])
-        logger.log_message(f"Plan: {plan_dict}", level=logging.INFO)
         if 'complexity' in module_return:
             complexity = module_return['complexity']
         else:
@@ -1122,7 +1506,6 @@ class auto_analyst(dspy.Module):
                 
                 inputs["plan_instructions"] = str(formatted_instructions)
             
-            logger.log_message(f"Inputs: {inputs}", level=logging.INFO)
             
             # Create async task directly from the asyncified agent
             task = self.execute_agent(agent_name, inputs)
