@@ -642,7 +642,7 @@ export default function CustomAgentsSidebar({
               <div>
                 <h4 className="font-semibold text-gray-900 text-base">Upgrade Required</h4>
                 <p className="text-base text-gray-700 mt-1">
-                  You need to upgrade to the standard tier to use this. Create specialized AI agents for your workflows.
+                  You need to upgrade to the standard tier to use this. Create specialized AI agents for your use cases.
                 </p>
               </div>
             </div>
