@@ -4,7 +4,6 @@
 import React, { useState, useEffect, useRef, forwardRef, useImperativeHandle } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { Send, Paperclip, X, Square, Loader2, CheckCircle2, XCircle, Eye, CreditCard, Edit, FileText, MessageSquare, AlertTriangle, ChevronDown } from 'lucide-react'
-import AgentHint from './AgentHint'
 import { Button } from "../ui/button"
 import { Textarea } from "../ui/textarea"
 import { useCookieConsentStore } from "@/lib/store/cookieConsentStore"
@@ -39,6 +38,7 @@ import { DeepAnalysisSidebar, DeepAnalysisButton } from '../deep-analysis'
 // Custom Agents imports
 import { CustomAgentsSidebar, CustomAgentsButton } from '../custom-agents'
 import CommandSuggestions from './CommandSuggestions'
+import AgentSuggestions from './AgentSuggestions'
 import { useUserSubscriptionStore } from '@/lib/store/userSubscriptionStore'
 import { useFeatureAccess } from '@/lib/hooks/useFeatureAccess'
 import { UserSubscription } from '@/lib/features/feature-access'
@@ -191,8 +191,6 @@ const ChatInput = forwardRef<
   const fileInputRef = React.useRef<HTMLInputElement>(null)
   const [showHint, setShowHint] = useState(false)
   const [input, setInput] = useState('')
-  const [agentSuggestions, setAgentSuggestions] = useState<AgentSuggestion[]>([])
-  const [showSuggestions, setShowSuggestions] = useState(false)
   const [cursorPosition, setCursorPosition] = useState(0)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const { data: session } = useSession()
@@ -236,12 +234,6 @@ const ChatInput = forwardRef<
   const { subscription } = useUserSubscriptionStore()
   const deepAnalysisAccess = useFeatureAccess('DEEP_ANALYSIS', subscription)
   
-  // Debug logging to verify the subscription store and feature access
-  React.useEffect(() => {
-    console.log('Subscription from store:', subscription)
-    console.log('Deep analysis access result:', deepAnalysisAccess)
-  }, [subscription, deepAnalysisAccess])
-
   // Expose handlePreviewDefaultDataset to parent
   useImperativeHandle(ref, () => ({
     handlePreviewDefaultDataset,
@@ -887,62 +879,7 @@ const ChatInput = forwardRef<
     }
   }
 
-  useEffect(() => {
-    // Don't show agent suggestions when command suggestions are active
-    if (message.startsWith('/')) {
-      setShowSuggestions(false)
-      return
-    }
-    
-    const agents: AgentSuggestion[] = [
-      { name: "data_viz_agent", description: "Specializes in data visualization" },
-      { name: "sk_learn_agent", description: "Handles machine learning tasks" },
-      { name: "statistical_analytics_agent", description: "Performs statistical analysis" },
-      { name: "preprocessing_agent", description: "Handles data preprocessing tasks" },
-    ]
-
-    // Find all @ symbol positions in the message
-    const atPositions: number[] = [];
-    let pos = -1;
-    while ((pos = message.indexOf('@', pos + 1)) !== -1) {
-      atPositions.push(pos);
-    }
-
-    // Find the @ position closest to the cursor that's being typed
-    let activeAtPos = -1;
-    for (const pos of atPositions) {
-      // Check if the cursor is within or at the end of an agent mention
-      const textAfterAt = message.slice(pos + 1);
-      const spaceAfterAt = textAfterAt.indexOf(' ');
-      const endOfMention = spaceAfterAt !== -1 ? pos + 1 + spaceAfterAt : message.length;
-      
-      if (cursorPosition >= pos + 1 && cursorPosition <= endOfMention) {
-        activeAtPos = pos;
-        break;
-      }
-    }
-
-    if (activeAtPos !== -1) {
-      // Get the text being typed for the agent name
-      const textAfterAt = message.slice(activeAtPos + 1);
-      const spaceIndex = textAfterAt.indexOf(' ');
-      const typedText = spaceIndex !== -1 
-        ? message.slice(activeAtPos + 1, activeAtPos + 1 + spaceIndex) 
-        : textAfterAt;
-      
-      // Only show suggestions if we're actively typing an agent name
-      if (typedText && !typedText.includes(' ')) {
-        const filtered = agents.filter(agent => 
-          agent.name.toLowerCase().includes(typedText.toLowerCase())
-        )
-        setAgentSuggestions(filtered)
-        setShowSuggestions(filtered.length > 0)
-        return
-      }
-    }
-    
-    setShowSuggestions(false)
-  }, [message, cursorPosition])
+  // Agent suggestions logic is now handled by the AgentSuggestions component
 
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const value = e.target.value
@@ -953,8 +890,6 @@ const ChatInput = forwardRef<
     if (value.startsWith('/') && !value.includes('@')) {
       setCommandQuery(value)
       setShowCommandSuggestions(true)
-      // Hide agent suggestions when showing commands
-      setShowSuggestions(false)
     } else {
       setShowCommandSuggestions(false)
       setCommandQuery('')
@@ -966,7 +901,7 @@ const ChatInput = forwardRef<
     }
   }
 
-  const handleSuggestionClick = (agentName: string) => {
+  const handleAgentSelect = (agentName: string) => {
     const beforeCursor = message.slice(0, cursorPosition)
     const afterCursor = message.slice(cursorPosition)
     const lastAtIndex = beforeCursor.lastIndexOf('@')
@@ -988,8 +923,6 @@ const ChatInput = forwardRef<
           inputRef.current.setSelectionRange(newCursorPos, newCursorPos)
         }
       }, 0)
-      
-      setShowSuggestions(false)
     }
   }
 
@@ -2104,25 +2037,13 @@ const ChatInput = forwardRef<
                       />
                       
                       {/* Agent Suggestions */}
-                      {showSuggestions && (
-                        <motion.div
-                          initial={{ opacity: 0, y: 10 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          exit={{ opacity: 0, y: 10 }}
-                          className="absolute bottom-full left-0 mb-2 w-full max-h-40 overflow-y-auto bg-white rounded-lg shadow-lg"
-                        >
-                          {agentSuggestions.map((agent) => (
-                            <div
-                              key={agent.name}
-                              onClick={() => handleSuggestionClick(agent.name)}
-                              className="px-4 py-2 hover:bg-gray-100 cursor-pointer"
-                            >
-                              <div className="font-medium">{agent.name}</div>
-                              <div className="text-sm text-gray-500">{agent.description}</div>
-                            </div>
-                          ))}
-                        </motion.div>
-                      )}
+                      <AgentSuggestions
+                        message={message}
+                        cursorPosition={cursorPosition}
+                        onSuggestionSelect={handleAgentSelect}
+                        isVisible={!showCommandSuggestions && message.includes('@')}
+                        userId={userId}
+                      />
                     </AnimatePresence>
                     <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
                       <input 

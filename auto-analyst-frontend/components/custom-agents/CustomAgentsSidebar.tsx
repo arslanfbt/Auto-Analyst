@@ -86,7 +86,7 @@ export default function CustomAgentsSidebar({
     if (!currentUserId) return
 
     try {
-      const response = await fetch(`${API_URL}/custom_agents?user_id=${currentUserId}`)
+      const response = await fetch(`${API_URL}/custom_agents/?user_id=${currentUserId}`)
       if (response.ok) {
         const agents = await response.json()
         setCustomAgents(agents)
@@ -118,7 +118,7 @@ export default function CustomAgentsSidebar({
     }
 
     try {
-      const response = await fetch(`${API_URL}/custom_agents?user_id=${currentUserId}`, {
+      const response = await fetch(`${API_URL}/custom_agents/?user_id=${currentUserId}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -134,6 +134,10 @@ export default function CustomAgentsSidebar({
         })
         forceUpdate()
         setActiveTab('list')
+        
+        // Notify other components that custom agents have been updated
+        window.dispatchEvent(new CustomEvent('custom-agents-updated'))
+        
         return true
       } else {
         const error = await response.text()
@@ -194,6 +198,10 @@ export default function CustomAgentsSidebar({
           setSelectedAgent(null)
           setActiveTab('list')
         }
+        
+        // Notify other components that custom agents have been updated
+        window.dispatchEvent(new CustomEvent('custom-agents-updated'))
+        
         return true
       } else {
         const error = await response.text()
@@ -238,6 +246,10 @@ export default function CustomAgentsSidebar({
           duration: 3000,
         })
         forceUpdate()
+        
+        // Notify other components that custom agents have been updated
+        window.dispatchEvent(new CustomEvent('custom-agents-updated'))
+        
         return true
       } else {
         const error = await response.text()

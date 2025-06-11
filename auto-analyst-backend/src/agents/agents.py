@@ -22,14 +22,14 @@ def create_custom_agent_signature(agent_name, description, prompt_template):
         A dspy.Signature class with the custom prompt and standard input/output fields
     """
     
-    # Standard input/output fields that all agents must have
+    # Standard input/output fields that match standard agents (like data_viz_agent)
     class_attributes = {
         '__doc__': prompt_template,  # The custom prompt becomes the docstring
-        'dataset': dspy.InputField(desc="Available datasets loaded in the system, use this df, columns set df as copy of df"),
-        'goal': dspy.InputField(desc="The user defined goal"),
-        'plan_instructions': dspy.InputField(desc="Agent-level instructions about what to create and receive"),
+        'goal': dspy.InputField(desc="User-defined goal which includes information about data and task they want to perform"),
+        'dataset': dspy.InputField(desc="Provides information about the data in the data frame. Only use column names and dataframe_name as in this context"),
+        'styling_index': dspy.InputField(desc='Provides instructions on how to style outputs and formatting'),
         'code': dspy.OutputField(desc="Generated Python code for the analysis"),
-        'summary': dspy.OutputField(desc="Explanation of what was done and why")
+        'summary': dspy.OutputField(desc="A concise bullet-point summary of what was done and key results")
     }
     
     # Create the dynamic signature class
@@ -223,7 +223,7 @@ You are a advanced data analytics planner agent. Your task is to generate the mo
 3. **Instructions**: For each agent, define:
    * **create**: output variables and their purpose
    * **use**: input variables and their role
-   * **instruction**: concise explanation of the agent’s function and relevance to the goal
+   * **instruction**: concise explanation of the agent's function and relevance to the goal
 4. **Clarity**: Keep instructions precise; avoid intermediate steps unless necessary; ensure each agent has a distinct, relevant role.
 ### **Output Format**:
 Example: 1 agent use
@@ -588,18 +588,14 @@ def statistical_model(X, y, goal, period=None):
         if goal == 'regression':
             formula = 'y ~ ' + ' + '.join([f'C({col})' if X[col].dtype.name == 'category' else col for col in X.columns])
             model = sm.OLS(y.astype(float), X.astype(float)).fit()
-            regression_model = model.summary()  # Specify as per CREATE instructions
-            return regression_model
-        
+            return model.summary()
         elif goal == 'seasonal_decompose':
             if period is None:
                 raise ValueError("Period must be specified for seasonal decomposition")
             decomposition = sm.tsa.seasonal_decompose(y, period=period)
-            seasonal_decomposition = decomposition  # Specify as per CREATE instructions
-            return seasonal_decomposition
-        
+            return decomposition
         else:
-            raise ValueError("Unknown goal specified.")
+            raise ValueError("Unknown goal specified. Please provide a valid goal.")
         
     except Exception as e:
         return f"An error occurred: {e}"
@@ -620,7 +616,7 @@ def statistical_model(X, y, goal, period=None):
     plan_instructions = dspy.InputField(desc="Instructions on variables to create and receive for statistical modeling")
     
     code = dspy.OutputField(desc="Python code for statistical modeling using statsmodels")
-    summary = dspy.OutputField(desc="Explanation of statistical analysis steps")
+    summary = dspy.OutputField(desc="A concise bullet-point summary of the statistical analysis performed and key findings")
     
     
 
@@ -1136,24 +1132,8 @@ class auto_analyst(dspy.Module):
                     # Add custom agent to agents dict
                     self.agents[agent_name] = dspy.asyncify(dspy.ChainOfThought(signature))
                     
-                    # Extract input fields from signature (same as standard agents)
-                    try:
-                        # Get input fields from the signature
-                        input_fields = set()
-                        for field_name, field in signature.__annotations__.items():
-                            if hasattr(field, '__origin__') and field.__origin__ is dspy.InputField:
-                                input_fields.add(field_name)
-                            elif isinstance(field, dspy.InputField):
-                                input_fields.add(field_name)
-                        
-                        # If we can't extract fields this way, use the default set
-                        if not input_fields:
-                            input_fields = {'dataset', 'goal', 'plan_instructions'}
-                            
-                        self.agent_inputs[agent_name] = input_fields
-                    except:
-                        # Fallback to standard input fields
-                        self.agent_inputs[agent_name] = {'dataset', 'goal', 'plan_instructions'}
+                    # Extract input fields from signature - custom agents use standard fields like data_viz_agent
+                    self.agent_inputs[agent_name] = {'goal', 'dataset', 'styling_index'}
                     
                     # Store custom agent description
                     try:
@@ -1174,7 +1154,7 @@ class auto_analyst(dspy.Module):
                         self.custom_agents_descriptions[agent_name] = f"Custom agent: {agent_name}"
                         self.agent_desc.append({agent_name: f"Custom agent: {agent_name}"})
                         
-                logger.log_message(f"Loaded {len(custom_agent_signatures)} custom agents for user {user_id}", level=logging.INFO)
+                logger.log_message(f"Loaded {custom_agent_signatures} custom agents for user {user_id}", level=logging.INFO)
                 
             except Exception as e:
                 logger.log_message(f"Error loading custom agents for user {user_id}: {str(e)}", level=logging.ERROR)
@@ -1213,7 +1193,6 @@ class auto_analyst(dspy.Module):
         
         module_return = await self.planner(goal=dict_['goal'], dataset=dict_['dataset'], Agent_desc=dict_['Agent_desc'])
         plan_dict = dict(module_return['plan'])
-        logger.log_message(f"Plan: {plan_dict}", level=logging.INFO)
         if 'complexity' in module_return:
             complexity = module_return['complexity']
         else:
@@ -1297,7 +1276,6 @@ class auto_analyst(dspy.Module):
                 
                 inputs["plan_instructions"] = str(formatted_instructions)
             
-            logger.log_message(f"Inputs: {inputs}", level=logging.INFO)
             
             # Create async task directly from the asyncified agent
             task = self.execute_agent(agent_name, inputs)
