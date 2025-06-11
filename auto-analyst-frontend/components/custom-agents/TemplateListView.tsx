@@ -80,7 +80,11 @@ export default function TemplateListView({
           <span className="font-medium text-sm">Agent Templates</span>
         </div>
         <p className="text-xs text-gray-600 mb-3">
-          Professional templates you can use immediately. {!hasAccess && 'Upgrade to Premium to use these agents.'}
+          {hasAccess ? (
+            "Professional templates you can use immediately. Clone any template to create your own custom version."
+          ) : (
+            "Browse professional templates to see what's possible. Upgrade to Premium to clone and use these agents."
+          )}
         </p>
         
         {/* Search Input */}
@@ -176,7 +180,18 @@ export default function TemplateListView({
                               Clone
                             </Button>
                           ) : (
-                            <Lock className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="text-xs h-7 px-2 text-gray-500 cursor-not-allowed"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                onUpgradePrompt()
+                              }}
+                            >
+                              <Lock className="w-3 h-3 mr-1" />
+                              Upgrade
+                            </Button>
                           )}
                         </div>
                       </div>

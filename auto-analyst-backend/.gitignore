@@ -11,8 +11,6 @@ venv/
 
 try*
 
-chat_database_temp.db
-
 logs/
 
 updated_code.py
@@ -27,7 +25,7 @@ migrations/
 alembic.ini
 
 
-*.db
+*-2.db
 
 schema*.md
 

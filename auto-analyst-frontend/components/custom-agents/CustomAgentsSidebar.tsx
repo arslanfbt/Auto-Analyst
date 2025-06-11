@@ -120,11 +120,12 @@ export default function CustomAgentsSidebar({
 
   // Load agents when component mounts or user changes
   useEffect(() => {
+    // Load templates for all users (free users can browse but not use)
+    loadTemplateAgents()
+    
     // Only load custom agents if user has access
     if (customAgentsAccess.hasAccess) {
       loadCustomAgents()
-      // Only load templates if user has paid access (templates are part of custom agents feature)
-      loadTemplateAgents()
     }
   }, [refreshTrigger, customAgentsAccess.hasAccess, session])
 
@@ -562,10 +563,12 @@ export default function CustomAgentsSidebar({
           {!isCollapsed && (
             <>
               <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as any)} className="flex-1 flex flex-col min-h-0">
-                <TabsList className="grid w-full grid-cols-4 bg-gray-100 mx-3 mt-3 mb-2 flex-shrink-0">
+                <TabsList className={`grid w-full ${customAgentsAccess.hasAccess ? 'grid-cols-4' : 'grid-cols-3'} bg-gray-100 mx-3 mt-3 mb-2 flex-shrink-0`}>
                   <TabsTrigger value="list" className="text-xs">My Agents</TabsTrigger>
                   <TabsTrigger value="templates" className="text-xs">Templates</TabsTrigger>
-                  <TabsTrigger value="create" className="text-xs">Create New</TabsTrigger>
+                  {customAgentsAccess.hasAccess && (
+                    <TabsTrigger value="create" className="text-xs">Create New</TabsTrigger>
+                  )}
                   <TabsTrigger value="details" className="text-xs">
                     Details
                     {selectedAgent && (
@@ -575,14 +578,33 @@ export default function CustomAgentsSidebar({
                 </TabsList>
 
                 <TabsContent value="list" className="flex-1 min-h-0 overflow-hidden">
-                  <AgentListView
-                    agents={customAgents}
-                    onSelectAgent={handleSelectAgent}
-                    onDeleteAgent={handleDeleteAgent}
-                    onToggleActive={toggleAgentActiveStatus}
-                    getActiveCount={getActiveAgentsCount}
-                    refreshTrigger={refreshTrigger}
-                  />
+                  {customAgentsAccess.hasAccess ? (
+                    <AgentListView
+                      agents={customAgents}
+                      onSelectAgent={handleSelectAgent}
+                      onDeleteAgent={handleDeleteAgent}
+                      onToggleActive={toggleAgentActiveStatus}
+                      getActiveCount={getActiveAgentsCount}
+                      refreshTrigger={refreshTrigger}
+                    />
+                  ) : (
+                    <div className="p-4 h-full flex flex-col items-center justify-center text-center">
+                      <div className="max-w-sm">
+                        <Lock className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                        <h3 className="text-lg font-semibold text-gray-700 mb-2">Custom Agents - Premium Feature</h3>
+                        <p className="text-gray-500 text-sm mb-6">
+                          Create and manage your own specialized AI agents with custom instructions and behaviors.
+                        </p>
+                        <Button
+                          onClick={() => setShowPremiumUpgradeModal(true)}
+                          className="bg-gradient-to-r from-[#FF7F7F] to-[#FF6666] hover:from-[#FF6666] hover:to-[#E55555] text-white"
+                        >
+                          <Crown className="w-4 h-4 mr-2" />
+                          Upgrade to Premium
+                        </Button>
+                      </div>
+                    </div>
+                  )}
                 </TabsContent>
 
                 <TabsContent value="templates" className="flex-1 min-h-0 overflow-hidden">
@@ -606,10 +628,29 @@ export default function CustomAgentsSidebar({
                 </TabsContent>
 
                 <TabsContent value="create" className="flex-1 min-h-0 overflow-hidden">
-                  <CreateAgentForm
-                    onCreateAgent={handleCreateAgent}
-                    onValidateAgentName={validateAgentName}
-                  />
+                  {customAgentsAccess.hasAccess ? (
+                    <CreateAgentForm
+                      onCreateAgent={handleCreateAgent}
+                      onValidateAgentName={validateAgentName}
+                    />
+                  ) : (
+                    <div className="p-4 h-full flex flex-col items-center justify-center text-center">
+                      <div className="max-w-sm">
+                        <Lock className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                        <h3 className="text-lg font-semibold text-gray-700 mb-2">Create Agents - Premium Only</h3>
+                        <p className="text-gray-500 text-sm mb-6">
+                          Upgrade to create custom agents with AI-powered instruction generation.
+                        </p>
+                        <Button
+                          onClick={() => setShowPremiumUpgradeModal(true)}
+                          className="bg-gradient-to-r from-[#FF7F7F] to-[#FF6666] hover:from-[#FF6666] hover:to-[#E55555] text-white"
+                        >
+                          <Crown className="w-4 h-4 mr-2" />
+                          Upgrade to Premium
+                        </Button>
+                      </div>
+                    </div>
+                  )}
                 </TabsContent>
 
                 <TabsContent value="details" className="flex-1 min-h-0 overflow-hidden">
