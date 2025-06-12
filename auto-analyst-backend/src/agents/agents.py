@@ -131,7 +131,7 @@ def load_user_enabled_templates_for_planner_from_db(user_id, db_session):
                 )
                 agent_signatures[template.template_name] = signature
                 
-        logger.log_message(f"Loaded {len(agent_signatures)} templates for planner for user {user_id}", level=logging.INFO)
+        logger.log_message(f"Loaded {len(agent_signatures)} templates for planner", level=logging.DEBUG)
         return agent_signatures
         
     except Exception as e:
@@ -1240,7 +1240,7 @@ class auto_analyst_ind(dspy.Module):
                     # Add description
                     self.agent_desc.append(f"Template: {template_name}")
                         
-                logger.log_message(f"Loaded {len(template_signatures)} templates for direct access", level=logging.INFO)
+                logger.log_message(f"Loaded {len(template_signatures)} templates for direct access", level=logging.DEBUG)
                 
             except Exception as e:
                 logger.log_message(f"Error loading templates for direct access: {str(e)}", level=logging.ERROR)
@@ -1459,7 +1459,7 @@ class auto_analyst(dspy.Module):
                         logger.log_message(f"Error getting description for template {template_name}: {str(desc_error)}", level=logging.WARNING)
                         self.agent_desc.append({template_name: f"Template: {template_name}"})
                         
-                logger.log_message(f"Loaded {len(template_signatures)} enabled template agents for user {user_id}", level=logging.INFO)
+                logger.log_message(f"Loaded {len(template_signatures)} enabled templates for planner", level=logging.DEBUG)
                 
             except Exception as e:
                 logger.log_message(f"Error loading template agents for user {user_id}: {str(e)}", level=logging.ERROR)
@@ -1680,3 +1680,4 @@ class auto_analyst(dspy.Module):
         except Exception as e:
             logger.log_message(f"Error in task execution: {str(e)}", level=logging.ERROR)
             yield "error", {}, {"error": str(e)}
+

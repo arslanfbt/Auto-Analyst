@@ -42,7 +42,6 @@ from src.routes.code_routes import router as code_router
 from src.routes.feedback_routes import router as feedback_router
 from src.routes.session_routes import router as session_router, get_session_id_dependency
 from src.routes.deep_analysis_routes import router as deep_analysis_router
-from src.routes.custom_agents_routes import router as custom_agents_router
 from src.routes.templates_routes import router as templates_router
 from src.schemas.query_schemas import QueryRequest
 from src.utils.logger import Logger
@@ -492,7 +491,7 @@ async def chat_with_agent(
                     db_session.close()
             elif _is_template_agent(agent_name):
                 # Template agent - use auto_analyst_ind with empty agents list (templates loaded in init)
-                logger.log_message(f"Template agent case: {agent_name}", level=logging.INFO)
+                logger.log_message(f"Template agent case: {agent_name}", level=logging.DEBUG)
                 user_id = session_state.get("user_id")
                 
                 # Create database session for template loading
@@ -1042,7 +1041,7 @@ async def list_agents(request: Request, session_id: str = Depends(get_session_id
             ).all()
             
             template_agents = [template.template_name for template in templates]
-            logger.log_message(f"Found {len(template_agents)} template agents", level=logging.INFO)
+            logger.log_message(f"Found {len(template_agents)} template agents", level=logging.DEBUG)
             
         finally:
             db_session.close()
@@ -1533,7 +1532,6 @@ app.include_router(code_router)
 app.include_router(session_router)
 app.include_router(feedback_router)
 app.include_router(deep_analysis_router)
-app.include_router(custom_agents_router)
 app.include_router(templates_router)
 
 if __name__ == "__main__":
