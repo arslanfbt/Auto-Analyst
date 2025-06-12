@@ -316,7 +316,7 @@ This dataset appears clean with consistent formatting and no missing values, mak
                         user_id=user_id,
                         db_session=db_session
                     )
-                    logger.log_message(f"Created AI system with custom agents for user {user_id}", level=logging.INFO)
+                    logger.log_message(f"Created AI system for user {user_id}", level=logging.INFO)
                     return ai_system
                 finally:
                     db_session.close()
@@ -368,7 +368,7 @@ This dataset appears clean with consistent formatting and no missing values, mak
             session_retrievers = self._sessions[session_id]["retrievers"]
             user_ai_system = self.create_ai_system_for_user(session_retrievers, user_id)
             self._sessions[session_id]["ai_system"] = user_ai_system
-            logger.log_message(f"Updated AI system for session {session_id} with user {user_id} custom agents", level=logging.INFO)
+            logger.log_message(f"Updated AI system for session {session_id} with user {user_id}", level=logging.INFO)
         except Exception as e:
             logger.log_message(f"Error updating AI system for user {user_id}: {str(e)}", level=logging.ERROR)
             # Continue with existing AI system if update fails

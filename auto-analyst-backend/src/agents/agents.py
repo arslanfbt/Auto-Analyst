@@ -36,117 +36,229 @@ def create_custom_agent_signature(agent_name, description, prompt_template):
     CustomAgentSignature = type(agent_name, (dspy.Signature,), class_attributes)
     return CustomAgentSignature
 
-def load_custom_agents_from_db(user_id, db_session, include_templates=True):
+def load_user_enabled_templates_from_db(user_id, db_session):
     """
-    Load custom agents for a specific user from the database, optionally including templates.
+    Load template agents that are enabled for a specific user from the database.
+    All templates are enabled by default unless explicitly disabled by user preference.
     
     Args:
         user_id: ID of the user
         db_session: Database session
-        include_templates: Whether to include template agents that are available to all users
     
     Returns:
-        Dict of custom agent signatures keyed by agent name
+        Dict of template agent signatures keyed by template name
     """
     try:
-        from src.db.schemas.models import CustomAgent
+        from src.db.schemas.models import AgentTemplate, UserTemplatePreference
         
         agent_signatures = {}
         
-        # Query active custom agents for the user
-        if user_id:
-            custom_agents = db_session.query(CustomAgent).filter(
-                CustomAgent.user_id == user_id,
-                CustomAgent.is_active == True,
-                CustomAgent.is_template == False  # Only user-created agents
-            ).all()
-            
-            for agent in custom_agents:
-                # Create dynamic signature for each custom agent
-                signature = create_custom_agent_signature(
-                    agent.agent_name,
-                    agent.description,
-                    agent.prompt_template
-                )
-                agent_signatures[agent.agent_name] = signature
+        if not user_id:
+            return agent_signatures
         
-        # Also include template agents if requested
-        if include_templates:
-            template_agents = db_session.query(CustomAgent).filter(
-                CustomAgent.is_template == True,
-                CustomAgent.is_active == True
-            ).all()
+        # Get all active templates
+        all_templates = db_session.query(AgentTemplate).filter(
+            AgentTemplate.is_active == True
+        ).all()
+        
+        for template in all_templates:
+            # Check if user has explicitly disabled this template
+            preference = db_session.query(UserTemplatePreference).filter(
+                UserTemplatePreference.user_id == user_id,
+                UserTemplatePreference.template_id == template.template_id
+            ).first()
             
-            for template in template_agents:
-                # Create dynamic signature for each template agent
+            # Template is disabled by default unless explicitly enabled
+            # Only enabled if preference record exists and is_enabled=True
+            is_enabled = preference.is_enabled if preference else False
+            
+            if is_enabled:
+                # Create dynamic signature for each enabled template
                 signature = create_custom_agent_signature(
-                    template.agent_name,
+                    template.template_name,
                     template.description,
                     template.prompt_template
                 )
-                agent_signatures[template.agent_name] = signature
+                agent_signatures[template.template_name] = signature
                 
         return agent_signatures
         
     except Exception as e:
-        logger.log_message(f"Error loading custom agents for user {user_id}: {str(e)}", level=logging.ERROR)
+        logger.log_message(f"Error loading user enabled templates for user {user_id}: {str(e)}", level=logging.ERROR)
         return {}
 
-def get_custom_agent_description(agent_name, custom_agents_descriptions):
+def load_user_enabled_templates_for_planner_from_db(user_id, db_session):
     """
-    Get description for a custom agent.
+    Load template agents that are enabled for planner use (max 10, prioritized by usage).
     
     Args:
-        agent_name: Name of the custom agent
-        custom_agents_descriptions: Dict of custom agent descriptions
-    
-    Returns:
-        Description string or default message
-    """
-    return custom_agents_descriptions.get(agent_name.lower(), "Custom agent - no description available")
-
-def save_custom_agent_to_db(user_id, agent_name, display_name, description, prompt_template, db_session):
-    """
-    Save a new custom agent to the database.
-    
-    Args:
-        user_id: ID of the user creating the agent
-        agent_name: Unique name for the agent (e.g., 'pytorch_agent')
-        display_name: User-friendly display name
-        description: Short description for agent selection
-        prompt_template: Main prompt/instructions for agent behavior
+        user_id: ID of the user
         db_session: Database session
     
     Returns:
-        Tuple (success: bool, message: str, agent_id: int or None)
+        Dict of template agent signatures keyed by template name (max 10)
     """
     try:
-        from src.db.schemas.models import CustomAgent
-        from sqlalchemy.exc import IntegrityError
+        from src.db.schemas.models import AgentTemplate, UserTemplatePreference
         
-        # Create new custom agent
-        new_agent = CustomAgent(
-            user_id=user_id,
-            agent_name=agent_name.lower().strip(),
-            display_name=display_name,
-            description=description,
-            prompt_template=prompt_template,
-            is_active=True,
-            usage_count=0
-        )
+        agent_signatures = {}
         
-        db_session.add(new_agent)
+        if not user_id:
+            return agent_signatures
+        
+        # Get enabled templates ordered by usage (most used first) and limit to 10
+        enabled_preferences = db_session.query(UserTemplatePreference).filter(
+            UserTemplatePreference.user_id == user_id,
+            UserTemplatePreference.is_enabled == True
+        ).order_by(
+            UserTemplatePreference.usage_count.desc(),
+            UserTemplatePreference.last_used_at.desc()
+        ).limit(10).all()
+        
+        for preference in enabled_preferences:
+            # Get template details
+            template = db_session.query(AgentTemplate).filter(
+                AgentTemplate.template_id == preference.template_id,
+                AgentTemplate.is_active == True
+            ).first()
+            
+            if template:
+                # Create dynamic signature for each enabled template
+                signature = create_custom_agent_signature(
+                    template.template_name,
+                    template.description,
+                    template.prompt_template
+                )
+                agent_signatures[template.template_name] = signature
+                
+        logger.log_message(f"Loaded {len(agent_signatures)} templates for planner for user {user_id}", level=logging.INFO)
+        return agent_signatures
+        
+    except Exception as e:
+        logger.log_message(f"Error loading planner templates for user {user_id}: {str(e)}", level=logging.ERROR)
+        return {}
+
+def get_all_available_templates(db_session):
+    """
+    Get all available agent templates from the database.
+    
+    Args:
+        db_session: Database session
+    
+    Returns:
+        List of agent template records
+    """
+    try:
+        from src.db.schemas.models import AgentTemplate
+        
+        templates = db_session.query(AgentTemplate).filter(
+            AgentTemplate.is_active == True
+        ).all()
+        
+        return templates
+        
+    except Exception as e:
+        logger.log_message(f"Error getting all available templates: {str(e)}", level=logging.ERROR)
+        return []
+
+def toggle_user_template_preference(user_id, template_id, is_enabled, db_session):
+    """
+    Toggle a user's template preference (enable/disable).
+    
+    Args:
+        user_id: ID of the user
+        template_id: ID of the template
+        is_enabled: Whether to enable or disable the template
+        db_session: Database session
+    
+    Returns:
+        Tuple (success: bool, message: str)
+    """
+    try:
+        from src.db.schemas.models import UserTemplatePreference, AgentTemplate
+        from datetime import datetime, UTC
+        
+        # Verify template exists and is active
+        template = db_session.query(AgentTemplate).filter(
+            AgentTemplate.template_id == template_id,
+            AgentTemplate.is_active == True
+        ).first()
+        
+        if not template:
+            return False, "Template not found or inactive"
+        
+        # Check if preference record exists
+        preference = db_session.query(UserTemplatePreference).filter(
+            UserTemplatePreference.user_id == user_id,
+            UserTemplatePreference.template_id == template_id
+        ).first()
+        
+        if preference:
+            # Update existing preference
+            preference.is_enabled = is_enabled
+            preference.updated_at = datetime.now(UTC)
+        else:
+            # Create new preference record
+            preference = UserTemplatePreference(
+                user_id=user_id,
+                template_id=template_id,
+                is_enabled=is_enabled,
+                usage_count=0,
+                created_at=datetime.now(UTC),
+                updated_at=datetime.now(UTC)
+            )
+            db_session.add(preference)
+        
         db_session.commit()
         
-        return True, "Custom agent created successfully", new_agent.agent_id
+        action = "enabled" if is_enabled else "disabled"
+        return True, f"Template '{template.template_name}' {action} successfully"
         
-    except IntegrityError:
-        db_session.rollback()
-        return False, f"Agent name '{agent_name}' already exists, please choose a different name", None
     except Exception as e:
         db_session.rollback()
-        logger.log_message(f"Error saving custom agent: {str(e)}", level=logging.ERROR)
-        return False, f"Error creating custom agent: {str(e)}", None
+        logger.log_message(f"Error toggling template preference: {str(e)}", level=logging.ERROR)
+        return False, f"Error updating template preference: {str(e)}"
+
+
+
+def load_all_available_templates_from_db(db_session):
+    """
+    Load ALL available template agents from the database for direct access.
+    This allows users to use any template via @template_name regardless of preferences.
+    
+    Args:
+        db_session: Database session
+    
+    Returns:
+        Dict of template agent signatures keyed by template name
+    """
+    try:
+        from src.db.schemas.models import AgentTemplate
+        
+        agent_signatures = {}
+        
+        # Get all active templates
+        all_templates = db_session.query(AgentTemplate).filter(
+            AgentTemplate.is_active == True
+        ).all()
+        
+        for template in all_templates:
+            # Create dynamic signature for all active templates
+            signature = create_custom_agent_signature(
+                template.template_name,
+                template.description,
+                template.prompt_template
+            )
+            agent_signatures[template.template_name] = signature
+                
+        logger.log_message(f"Loaded {len(agent_signatures)} templates", level=logging.INFO)
+        return agent_signatures
+        
+    except Exception as e:
+        logger.log_message(f"Error loading all available templates: {str(e)}", level=logging.ERROR)
+        return {}
+
+
 
 # === END CUSTOM AGENT FUNCTIONALITY ===
 
@@ -1100,7 +1212,7 @@ Make your edits precise, minimal, and faithful to the user's instructions, using
 class auto_analyst_ind(dspy.Module):
     """Handles individual agent execution when explicitly specified in query"""
     
-    def __init__(self, agents, retrievers, user_id=None):
+    def __init__(self, agents, retrievers, user_id=None, db_session=None):
         # Initialize agent modules and retrievers
         self.agents = {}
         self.agent_inputs = {}
@@ -1112,6 +1224,26 @@ class auto_analyst_ind(dspy.Module):
             self.agents[name] = dspy.asyncify(dspy.ChainOfThoughtWithHint(a))
             self.agent_inputs[name] = {x.strip() for x in str(agents[i].__pydantic_core_schema__['cls']).split('->')[0].split('(')[1].split(',')}
             self.agent_desc.append(get_agent_description(name))
+
+        # Load ALL available template agents for direct access (regardless of user preferences)
+        if db_session:
+            try:
+                template_signatures = load_all_available_templates_from_db(db_session)
+                
+                for template_name, signature in template_signatures.items():
+                    # Add template agent to agents dict
+                    self.agents[template_name] = dspy.asyncify(dspy.ChainOfThoughtWithHint(signature))
+                    
+                    # Extract input fields from signature - templates use standard fields
+                    self.agent_inputs[template_name] = {'goal', 'dataset', 'styling_index', 'hint'}
+                    
+                    # Add description
+                    self.agent_desc.append(f"Template: {template_name}")
+                        
+                logger.log_message(f"Loaded {len(template_signatures)} templates for direct access", level=logging.INFO)
+                
+            except Exception as e:
+                logger.log_message(f"Error loading templates for direct access: {str(e)}", level=logging.ERROR)
             
         # Initialize components
         # self.memory_summarize_agent = dspy.ChainOfThought(m.memory_summarize_agent)
@@ -1123,58 +1255,71 @@ class auto_analyst_ind(dspy.Module):
         self.user_id = user_id
     
     async def _track_agent_usage(self, agent_name):
-        """Track usage for custom agents and templates"""
+        """Track usage for template agents"""
         try:
             # Skip tracking for standard agents
             if agent_name in ['preprocessing_agent', 'statistical_analytics_agent', 'sk_learn_agent', 'data_viz_agent', 'basic_qa_agent']:
                 return
             
-            # Only track if we have user_id (custom/template agents)
+            # Only track if we have user_id (template agents)
             if not self.user_id:
                 return
                 
             from src.db.init_db import session_factory
-            from src.db.schemas.models import CustomAgent
+            from src.db.schemas.models import AgentTemplate, UserTemplatePreference
             from datetime import datetime, UTC
             
             # Create database session
             session = session_factory()
             try:
-                # First try to find as user's custom agent
-                agent = session.query(CustomAgent).filter(
-                    CustomAgent.agent_name == agent_name,
-                    CustomAgent.user_id == self.user_id,
-                    CustomAgent.is_template == False
+                # Find the template
+                template = session.query(AgentTemplate).filter(
+                    AgentTemplate.template_name == agent_name
                 ).first()
                 
-                # If not found, try to find as template
-                if not agent:
-                    agent = session.query(CustomAgent).filter(
-                        CustomAgent.agent_name == agent_name,
-                        CustomAgent.is_template == True
-                    ).first()
+                if not template:
+                    logger.log_message(f"Template '{agent_name}' not found for usage tracking", level=logging.WARNING)
+                    return
                 
-                # Update usage count if agent found
-                if agent:
-                    agent.usage_count += 1
-                    agent.updated_at = datetime.now(UTC)
-                    session.commit()
-                    
-                    agent_type = "template" if agent.is_template else "custom"
-                    logger.log_message(
-                        f"Incremented usage count for {agent_type} agent '{agent_name}' (now: {agent.usage_count})", 
-                        level=logging.INFO
+                # Find or create user template preference record
+                preference = session.query(UserTemplatePreference).filter(
+                    UserTemplatePreference.user_id == self.user_id,
+                    UserTemplatePreference.template_id == template.template_id
+                ).first()
+                
+                if not preference:
+                    # Create new preference record (disabled by default)
+                    preference = UserTemplatePreference(
+                        user_id=self.user_id,
+                        template_id=template.template_id,
+                        is_enabled=False,  # Disabled by default
+                        usage_count=0,
+                        last_used_at=None,
+                        created_at=datetime.now(UTC),
+                        updated_at=datetime.now(UTC)
                     )
+                    session.add(preference)
+                
+                # Update usage tracking
+                preference.usage_count += 1
+                preference.last_used_at = datetime.now(UTC)
+                preference.updated_at = datetime.now(UTC)
+                session.commit()
+                
+                logger.log_message(
+                    f"Tracked usage for template '{agent_name}' (count: {preference.usage_count})", 
+                    level=logging.DEBUG
+                )
                 
             except Exception as e:
                 session.rollback()
-                logger.log_message(f"Error tracking usage for agent {agent_name}: {str(e)}", level=logging.ERROR)
+                logger.log_message(f"Error tracking usage for template {agent_name}: {str(e)}", level=logging.ERROR)
             finally:
                 session.close()
                 
         except Exception as e:
             logger.log_message(f"Error in _track_agent_usage for {agent_name}: {str(e)}", level=logging.ERROR)
-        
+    
     async def execute_agent(self, specified_agent, inputs):
         """Execute agent and generate memory summary in parallel"""
         try:
@@ -1211,6 +1356,10 @@ class auto_analyst_ind(dspy.Module):
             
             # Execute agent
             result = await self.agents[specified_agent.strip()](**inputs)
+            
+            # Track usage for template agents
+            await self._track_agent_usage(specified_agent.strip())
+            
             output_dict = {specified_agent.strip(): dict(result)}
 
             if "error" in output_dict:
@@ -1250,6 +1399,9 @@ class auto_analyst_ind(dspy.Module):
                 agent_dict = dict(agent_result)
                 results[agent_name] = agent_dict
                 
+                # Track usage for template agents
+                await self._track_agent_usage(agent_name)
+                
                 # Collect code for later combination
                 if 'code' in agent_dict:
                     code_list.append(agent_dict['code'])
@@ -1269,7 +1421,6 @@ class auto_analyst(dspy.Module):
         self.agents = {}
         self.agent_inputs = {}
         self.agent_desc = []
-        self.custom_agents_descriptions = {}
         
         # Load standard agents
         for i, a in enumerate(agents):
@@ -1278,56 +1429,40 @@ class auto_analyst(dspy.Module):
             self.agent_inputs[name] = {x.strip() for x in str(agents[i].__pydantic_core_schema__['cls']).split('->')[0].split('(')[1].split(',')}
             self.agent_desc.append({name: get_agent_description(name)})
 
-        # Load custom agents if user_id and db_session are provided
+        # Load user-enabled template agents if user_id and db_session are provided
         if user_id and db_session:
             try:
-                custom_agent_signatures = load_custom_agents_from_db(user_id, db_session, include_templates=True)
+                template_signatures = load_user_enabled_templates_for_planner_from_db(user_id, db_session)
                 
-                for agent_name, signature in custom_agent_signatures.items():
-                    # Add custom agent to agents dict
-                    self.agents[agent_name] = dspy.asyncify(dspy.ChainOfThought(signature))
+                for template_name, signature in template_signatures.items():
+                    # Add template agent to agents dict
+                    self.agents[template_name] = dspy.asyncify(dspy.ChainOfThought(signature))
                     
-                    # Extract input fields from signature - custom agents use standard fields like data_viz_agent
-                    self.agent_inputs[agent_name] = {'goal', 'dataset', 'styling_index'}
+                    # Extract input fields from signature - templates use standard fields like data_viz_agent
+                    self.agent_inputs[template_name] = {'goal', 'dataset', 'styling_index'}
                     
-                    # Store custom agent description
+                    # Store template agent description
                     try:
-                        from src.db.schemas.models import CustomAgent
+                        from src.db.schemas.models import AgentTemplate
                         
-                        # First try to find as user agent
-                        agent_record = db_session.query(CustomAgent).filter(
-                            CustomAgent.agent_name == agent_name,
-                            CustomAgent.user_id == user_id,
-                            CustomAgent.is_template == False
+                        # Find template record
+                        template_record = db_session.query(AgentTemplate).filter(
+                            AgentTemplate.template_name == template_name
                         ).first()
                         
-                        # If not found, try to find as template
-                        if not agent_record:
-                            agent_record = db_session.query(CustomAgent).filter(
-                                CustomAgent.agent_name == agent_name,
-                                CustomAgent.is_template == True
-                            ).first()
-                        
-                        if agent_record:
-                            description = agent_record.description
-                            if agent_record.is_template:
-                                # Add prefix for template agents
-                                description = f"Template: {description}"
-                            
-                            self.custom_agents_descriptions[agent_name] = description
-                            self.agent_desc.append({agent_name: description})
+                        if template_record:
+                            description = f"Template: {template_record.description}"
+                            self.agent_desc.append({template_name: description})
                         else:
-                            self.custom_agents_descriptions[agent_name] = f"Custom agent: {agent_name}"
-                            self.agent_desc.append({agent_name: f"Custom agent: {agent_name}"})
+                            self.agent_desc.append({template_name: f"Template: {template_name}"})
                     except Exception as desc_error:
-                        logger.log_message(f"Error getting description for custom agent {agent_name}: {str(desc_error)}", level=logging.WARNING)
-                        self.custom_agents_descriptions[agent_name] = f"Custom agent: {agent_name}"
-                        self.agent_desc.append({agent_name: f"Custom agent: {agent_name}"})
+                        logger.log_message(f"Error getting description for template {template_name}: {str(desc_error)}", level=logging.WARNING)
+                        self.agent_desc.append({template_name: f"Template: {template_name}"})
                         
-                logger.log_message(f"Loaded {len(custom_agent_signatures)} custom agents (including templates) for user {user_id}", level=logging.INFO)
+                logger.log_message(f"Loaded {len(template_signatures)} enabled template agents for user {user_id}", level=logging.INFO)
                 
             except Exception as e:
-                logger.log_message(f"Error loading custom agents for user {user_id}: {str(e)}", level=logging.ERROR)
+                logger.log_message(f"Error loading template agents for user {user_id}: {str(e)}", level=logging.ERROR)
 
         self.agents['basic_qa_agent'] = dspy.asyncify(dspy.Predict("goal->answer")) 
         self.agent_inputs['basic_qa_agent'] = {"goal"}
@@ -1349,52 +1484,67 @@ class auto_analyst(dspy.Module):
         self.user_id = user_id
 
     async def _track_agent_usage(self, agent_name):
-        """Track usage for custom agents and templates"""
+        """Track usage for template agents"""
         try:
             # Skip tracking for standard agents
             if agent_name in ['preprocessing_agent', 'statistical_analytics_agent', 'sk_learn_agent', 'data_viz_agent', 'basic_qa_agent']:
                 return
             
-            # Only track if we have user_id (custom/template agents)
+            # Only track if we have user_id (template agents)
             if not self.user_id:
                 return
                 
             from src.db.init_db import session_factory
-            from src.db.schemas.models import CustomAgent
+            from src.db.schemas.models import AgentTemplate, UserTemplatePreference
             from datetime import datetime, UTC
             
             # Create database session
             session = session_factory()
             try:
-                # First try to find as user's custom agent
-                agent = session.query(CustomAgent).filter(
-                    CustomAgent.agent_name == agent_name,
-                    CustomAgent.user_id == self.user_id,
-                    CustomAgent.is_template == False
+                # Find the template
+                template = session.query(AgentTemplate).filter(
+                    AgentTemplate.template_name == agent_name
                 ).first()
                 
-                # If not found, try to find as template
-                if not agent:
-                    agent = session.query(CustomAgent).filter(
-                        CustomAgent.agent_name == agent_name,
-                        CustomAgent.is_template == True
-                    ).first()
+                if not template:
+                    logger.log_message(f"Template '{agent_name}' not found", level=logging.WARNING)
+                    return
                 
-                # Update usage count if agent found
-                if agent:
-                    agent.usage_count += 1
-                    agent.updated_at = datetime.now(UTC)
-                    session.commit()
-                    
-                    agent_type = "template" if agent.is_template else "custom"
-                    logger.log_message(
-                        f"Incremented usage count for {agent_type} agent '{agent_name}' (now: {agent.usage_count})", 
-                        level=logging.INFO
+                # Find or create user template preference record
+                preference = session.query(UserTemplatePreference).filter(
+                    UserTemplatePreference.user_id == self.user_id,
+                    UserTemplatePreference.template_id == template.template_id
+                ).first()
+                
+                if preference:
+                    # Update existing preference
+                    preference.usage_count += 1
+                    preference.last_used_at = datetime.now(UTC)
+                    preference.updated_at = datetime.now(UTC)
+                else:
+                    # Create new preference record when template is used directly (via @mention)
+                    # Direct usage doesn't auto-enable for planner but tracks usage
+                    preference = UserTemplatePreference(
+                        user_id=self.user_id,
+                        template_id=template.template_id,
+                        is_enabled=False,  # Default disabled for planner
+                        usage_count=1,
+                        last_used_at=datetime.now(UTC),
+                        created_at=datetime.now(UTC),
+                        updated_at=datetime.now(UTC)
                     )
+                    session.add(preference)
+                
+                session.commit()
+                
+                logger.log_message(
+                    f"Tracked usage for template '{agent_name}' for user {self.user_id} (count: {preference.usage_count})", 
+                    level=logging.DEBUG
+                )
                 
             except Exception as e:
                 session.rollback()
-                logger.log_message(f"Error tracking usage for agent {agent_name}: {str(e)}", level=logging.ERROR)
+                logger.log_message(f"Error tracking template usage for {agent_name}: {str(e)}", level=logging.ERROR)
             finally:
                 session.close()
                 
@@ -1530,4 +1680,3 @@ class auto_analyst(dspy.Module):
         except Exception as e:
             logger.log_message(f"Error in task execution: {str(e)}", level=logging.ERROR)
             yield "error", {}, {"error": str(e)}
-

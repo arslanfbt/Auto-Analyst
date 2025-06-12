@@ -2,7 +2,7 @@
 
 import React, { useState, useMemo } from 'react'
 import { motion } from 'framer-motion'
-import { Bot, Lock, Copy, TrendingUp, Search, X } from 'lucide-react'
+import { Bot, TrendingUp, Search, X, Eye } from 'lucide-react'
 import { Badge } from '../ui/badge'
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
@@ -12,17 +12,11 @@ import FeedbackPopup from '../chat/FeedbackPopup'
 interface TemplateListViewProps {
   templateCategories: TemplatesByCategory[]
   onSelectTemplate: (template: TemplateAgent) => void
-  onCloneTemplate: (template: TemplateAgent) => void
-  hasAccess: boolean
-  onUpgradePrompt: () => void
 }
 
 export default function TemplateListView({
   templateCategories,
-  onSelectTemplate,
-  onCloneTemplate,
-  hasAccess,
-  onUpgradePrompt
+  onSelectTemplate
 }: TemplateListViewProps) {
   const [searchQuery, setSearchQuery] = useState('')
   const [showFeedbackPopup, setShowFeedbackPopup] = useState(false)
@@ -80,11 +74,7 @@ export default function TemplateListView({
           <span className="font-medium text-sm">Agent Templates</span>
         </div>
         <p className="text-xs text-gray-600 mb-3">
-          {hasAccess ? (
-            "Professional templates you can use immediately. Clone any template to create your own custom version."
-          ) : (
-            "Browse professional templates to see what's possible. Upgrade to Premium to clone and use these agents."
-          )}
+          Browse professional AI agent templates to see what's possible with specialized agents.
         </p>
         
         {/* Search Input */}
@@ -151,6 +141,11 @@ export default function TemplateListView({
                             <Badge variant="outline" className="text-xs text-[#FF7F7F] border-[#FF7F7F]">
                               Template
                             </Badge>
+                            {template.is_premium_only && (
+                              <Badge variant="outline" className="text-xs text-amber-600 border-amber-600">
+                                Premium
+                              </Badge>
+                            )}
                           </div>
                           <p className="text-xs text-gray-600 mt-1 line-clamp-2">
                             {template.description}
@@ -166,33 +161,18 @@ export default function TemplateListView({
                           </div>
                         </div>
                         <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                          {hasAccess ? (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="text-xs h-7 px-2"
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                onCloneTemplate(template)
-                              }}
-                            >
-                              <Copy className="w-3 h-3 mr-1" />
-                              Clone
-                            </Button>
-                          ) : (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="text-xs h-7 px-2 text-gray-500 cursor-not-allowed"
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                onUpgradePrompt()
-                              }}
-                            >
-                              <Lock className="w-3 h-3 mr-1" />
-                              Upgrade
-                            </Button>
-                          )}
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="text-xs h-7 px-2"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              onSelectTemplate(template)
+                            }}
+                          >
+                            <Eye className="w-3 h-3 mr-1" />
+                            View
+                          </Button>
                         </div>
                       </div>
                     </motion.div>
@@ -202,48 +182,29 @@ export default function TemplateListView({
             ))}
           </div>
         ) : (
-          /* No Results - Show Request Template Option */
-          <div className="p-6 text-center">
-            <div className="max-w-sm mx-auto">
-              <Search className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-              <h3 className="text-lg font-semibold text-gray-700 mb-2">
-                No Templates Found
-              </h3>
-              <p className="text-sm text-gray-500 mb-6">
-                {searchQuery ? (
-                  <>We couldn't find any templates matching "<strong>{searchQuery}</strong>". </>
-                ) : (
-                  "No templates are currently available. "
-                )}
-                Let us know what kind of agent template you'd like to see!
+          <div className="flex-1 flex items-center justify-center p-6">
+            <div className="text-center text-gray-500">
+              <Search className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+              <h3 className="font-medium text-gray-900 mb-2">No templates found</h3>
+              <p className="text-sm mb-4">
+                We couldn't find any templates matching "{searchQuery}".
               </p>
-              
-              <div className="space-y-3">
+              <div className="space-y-2">
                 <Button
-                  onClick={handleRequestTemplate}
-                  className="bg-gradient-to-r from-[#FF7F7F] to-[#FF6666] hover:from-[#FF6666] hover:to-[#E55555] text-white w-full"
+                  variant="outline"
+                  size="sm"
+                  onClick={clearSearch}
+                  className="mr-2"
                 >
-                  Request Template
+                  Clear search
                 </Button>
-                
-                {searchQuery && (
-                  <Button
-                    variant="outline"
-                    onClick={clearSearch}
-                    className="w-full"
-                  >
-                    Clear Search
-                  </Button>
-                )}
-              </div>
-              
-              <div className="mt-6 p-4 bg-[#FF7F7F]/10 border border-[#FF7F7F]/30 rounded-lg text-left">
-                <h4 className="text-sm font-medium text-[#FF7F7F] mb-2">💡 Template Request Tips</h4>
-                <ul className="text-xs text-[#FF7F7F] space-y-1">
-                  <li>• Describe the type of analysis or task you need</li>
-                  <li>• Mention specific tools or libraries (e.g., Pandas)</li>
-                  <li>• Include your use case or domain (e.g., finance, marketing)</li>
-                </ul>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleRequestTemplate}
+                >
+                  Request a template
+                </Button>
               </div>
             </div>
           </div>
@@ -251,10 +212,12 @@ export default function TemplateListView({
       </div>
 
       {/* Feedback Popup */}
-      <FeedbackPopup
-        isOpen={showFeedbackPopup}
-        onClose={() => setShowFeedbackPopup(false)}
-      />
+      {showFeedbackPopup && (
+        <FeedbackPopup
+          isOpen={showFeedbackPopup}
+          onClose={() => setShowFeedbackPopup(false)}
+        />
+      )}
     </div>
   )
 } 

@@ -105,14 +105,7 @@ export default function AgentSuggestions({
           allAgents.push(...templateAgents)
         }
         
-        // Add custom agents (only for users with custom agents access)
-        if (data.custom_agents && data.custom_agents.length > 0 && customAgentsAccess.hasAccess) {
-          console.log('fetchAllAgents - found custom agents, fetching details...');
-          // Fetch custom agent details
-          const customAgents = await fetchCustomAgents()
-          console.log('fetchAllAgents - custom agent details:', customAgents);
-          allAgents.push(...customAgents)
-        }
+        // Custom agents are deprecated - using templates only
         
         console.log('fetchAllAgents - final allAgents:', allAgents);
         return allAgents
@@ -128,38 +121,12 @@ export default function AgentSuggestions({
     }
   }
 
-  // Fetch custom agents
-  const fetchCustomAgents = async (): Promise<AgentSuggestion[]> => {
-    const currentUserId = getUserId()
-    if (!currentUserId) {
-      return []
-    }
 
-    try {
-      const customAgentsUrl = `${API_URL}/custom_agents/?user_id=${currentUserId}`
-      const response = await fetch(customAgentsUrl)
-      
-      if (response.ok) {
-        const customAgents = await response.json()
-        const mappedAgents = customAgents.map((agent: any) => ({
-          name: agent.agent_name,
-          description: agent.description,
-          isCustom: true
-        }))
-        return mappedAgents
-      } else {
-        console.error('Failed to fetch custom agents:', response.status, await response.text())
-      }
-    } catch (error) {
-      console.error('Error fetching custom agents:', error)
-    }
-    return []
-  }
 
   // Fetch template agents
   const fetchTemplateAgents = async (): Promise<AgentSuggestion[]> => {
     try {
-      const templatesUrl = `${API_URL}/custom_agents/templates/`
+      const templatesUrl = `${API_URL}/templates/categories`
       console.log('fetchTemplateAgents - templatesUrl:', templatesUrl);
       const response = await fetch(templatesUrl)
       

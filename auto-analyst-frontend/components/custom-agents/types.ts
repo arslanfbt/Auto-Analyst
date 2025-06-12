@@ -1,45 +1,4 @@
-export interface CustomAgent {
-  agent_id: number
-  agent_name: string
-  display_name?: string
-  description: string
-  prompt_template: string
-  is_active: boolean
-  usage_count: number
-  created_at: string
-  updated_at: string
-}
-
-export interface CustomAgentCreate {
-  agent_name: string
-  display_name?: string
-  description: string
-  prompt_template: string
-}
-
-export interface CustomAgentUpdate {
-  display_name?: string
-  description?: string
-  prompt_template?: string
-  is_active?: boolean
-}
-
-export interface CustomAgentList {
-  agent_id: number
-  agent_name: string
-  display_name?: string
-  description: string
-  is_active: boolean
-  usage_count: number
-  created_at: string
-}
-
-export interface AgentValidationResponse {
-  agent_name: string
-  is_available: boolean
-  message: string
-}
-
+// Template-related types
 export interface TemplateAgent {
   agent_id: number
   agent_name: string
@@ -58,4 +17,19 @@ export interface TemplatesByCategory {
   templates: TemplateAgent[]
 }
 
-export type AgentFormStep = 'name' | 'description' | 'prompt' | 'review' 
+// Types for cloning templates to custom agents
+export interface CustomAgentCreate {
+  agent_name: string
+  display_name?: string
+  description: string
+  prompt_template: string
+}
+
+export interface AgentValidationResponse {
+  agent_name: string
+  is_available: boolean
+  message: string
+}
+
+// Tab types for navigation
+export type TemplateTabType = 'templates' | 'template-details' 

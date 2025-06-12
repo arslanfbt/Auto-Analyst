@@ -1,90 +1,22 @@
 "use client"
 
-import React, { useState } from 'react'
+import React from 'react'
 import { motion } from 'framer-motion'
-import { ArrowLeft, Copy, Bot, Lock, Crown, TrendingUp } from 'lucide-react'
+import { ArrowLeft, Bot, TrendingUp, Code, FileText } from 'lucide-react'
 import { Badge } from '../ui/badge'
 import { Button } from '../ui/button'
-import { Textarea } from '../ui/textarea'
-import { Input } from '../ui/input'
 import { Label } from '../ui/label'
-import { useToast } from '../ui/use-toast'
 import { TemplateAgent } from './types'
 
 interface TemplateDetailViewProps {
   template: TemplateAgent | null
   onBack: () => void
-  onCloneTemplate: (templateData: {
-    agent_name: string
-    display_name: string
-    description: string
-    prompt_template: string
-  }) => Promise<boolean>
-  hasAccess: boolean
-  onUpgradePrompt: () => void
 }
 
 export default function TemplateDetailView({
   template,
-  onBack,
-  onCloneTemplate,
-  hasAccess,
-  onUpgradePrompt
+  onBack
 }: TemplateDetailViewProps) {
-  const [isCloning, setIsCloning] = useState(false)
-  const [cloneData, setCloneData] = useState({
-    agent_name: '',
-    display_name: '',
-    description: '',
-    prompt_template: ''
-  })
-  const { toast } = useToast()
-
-  // Initialize clone data when template changes
-  React.useEffect(() => {
-    if (template) {
-      setCloneData({
-        agent_name: `${template.agent_name}_copy`,
-        display_name: `${template.display_name} (Copy)`,
-        description: template.description,
-        prompt_template: template.prompt_template
-      })
-    }
-  }, [template])
-
-  const handleClone = async () => {
-    if (!hasAccess) {
-      onUpgradePrompt()
-      return
-    }
-
-    if (!cloneData.agent_name.trim() || !cloneData.display_name.trim() || !cloneData.description.trim() || !cloneData.prompt_template.trim()) {
-      toast({
-        title: "Validation Error",
-        description: "All fields are required",
-        variant: "destructive",
-      })
-      return
-    }
-
-    setIsCloning(true)
-    try {
-      const success = await onCloneTemplate(cloneData)
-      if (success) {
-        toast({
-          title: "Template Cloned! 🎉",
-          description: "Template has been cloned to your custom agents",
-          duration: 3000,
-        })
-        onBack()
-      }
-    } catch (error) {
-      console.error('Error cloning template:', error)
-    } finally {
-      setIsCloning(false)
-    }
-  }
-
   if (!template) {
     return (
       <div className="h-full flex flex-col">
@@ -128,6 +60,11 @@ export default function TemplateDetailView({
             <p className="text-sm text-gray-600 mt-1">{template.description}</p>
             <div className="flex items-center gap-2 mt-2 flex-wrap">
               <Badge variant="secondary" className="text-xs">{template.template_category}</Badge>
+              {template.is_premium_only && (
+                <Badge variant="outline" className="text-xs text-amber-600 border-amber-600">
+                  Premium
+                </Badge>
+              )}
               <span className="text-xs text-gray-500">@{template.agent_name}</span>
               <div className="flex items-center gap-1 text-xs text-gray-500">
                 <TrendingUp className="w-3 h-3" />
@@ -136,120 +73,66 @@ export default function TemplateDetailView({
             </div>
           </div>
 
-          <div className="p-3 bg-gray-50 rounded-lg border">
-            <Label className="text-xs font-medium text-gray-700 mb-2 block">Template Prompt</Label>
-            <div className="text-sm text-gray-900 whitespace-pre-wrap bg-white p-3 rounded border max-h-40 overflow-y-auto">
-              {template.prompt_template}
+          {/* Template Prompt */}
+          <div className="border rounded-lg overflow-hidden">
+            <div className="bg-gray-50 px-3 py-2 border-b flex items-center gap-2">
+              <Code className="w-4 h-4 text-gray-600" />
+              <Label className="text-sm font-medium text-gray-700">Agent Prompt Template</Label>
+            </div>
+            <div className="p-3 bg-white">
+              <div className="text-sm text-gray-900 whitespace-pre-wrap font-mono text-xs leading-relaxed max-h-96 overflow-y-auto bg-gray-50 p-3 rounded border">
+                {template.prompt_template}
+              </div>
             </div>
           </div>
-        </div>
 
-        {/* Clone Section */}
-        <div className="border-t border-gray-200 pt-4">
-          <div className="flex items-center gap-2 mb-3">
-            <Copy className="w-4 h-4 text-[#FF7F7F]" />
-            <h4 className="font-medium text-sm">Clone Template</h4>
-            {!hasAccess && <Lock className="w-4 h-4 text-gray-400" />}
-          </div>
-
-          {!hasAccess ? (
-            <div className="p-4 bg-gradient-to-r from-red-50 to-orange-50 rounded-lg border border-[#FF7F7F]/20">
-              <div className="flex items-center gap-3">
-                <Crown className="w-5 h-5 text-[#FF7F7F]" />
-                <div>
-                  <h5 className="font-medium text-gray-900 text-sm">Premium Required</h5>
-                  <p className="text-sm text-gray-700 mt-1">
-                    Upgrade to clone and customize this template.
+          {/* Usage Information */}
+          <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+            <div className="flex items-start gap-3">
+              <FileText className="w-5 h-5 text-blue-600 mt-0.5" />
+              <div>
+                <h4 className="font-medium text-blue-900 text-sm mb-1">How to Use This Template</h4>
+                <div className="text-sm text-blue-800 space-y-2">
+                  <p>
+                    To use this agent template in your conversations, simply mention it with the @ symbol:
+                  </p>
+                  <div className="bg-white p-2 rounded border border-blue-300 font-mono text-xs">
+                    @{template.agent_name} [your request here]
+                  </div>
+                  <p className="text-xs text-blue-700">
+                    This template agent will handle your request according to its specialized prompt and capabilities.
                   </p>
                 </div>
               </div>
-              <Button
-                onClick={onUpgradePrompt}
-                className="w-full mt-3 bg-gradient-to-r from-[#FF7F7F] to-[#FF6666] hover:from-[#FF6666] hover:to-[#E55555] text-white"
-              >
-                <Crown className="w-4 h-4 mr-2" />
-                Upgrade Now
-              </Button>
             </div>
-          ) : (
-            <div className="space-y-3">
-              <div>
-                <Label htmlFor="clone-name" className="text-xs font-medium text-gray-700">
-                  Agent Name *
-                </Label>
-                <Input
-                  id="clone-name"
-                  value={cloneData.agent_name}
-                  onChange={(e) => setCloneData(prev => ({ ...prev, agent_name: e.target.value }))}
-                  placeholder="e.g., my_custom_agent"
-                  className="mt-1 text-sm"
-                />
-              </div>
+          </div>
 
-              <div>
-                <Label htmlFor="clone-display-name" className="text-xs font-medium text-gray-700">
-                  Display Name *
-                </Label>
-                <Input
-                  id="clone-display-name"
-                  value={cloneData.display_name}
-                  onChange={(e) => setCloneData(prev => ({ ...prev, display_name: e.target.value }))}
-                  placeholder="My Custom Agent"
-                  className="mt-1 text-sm"
-                />
+          {/* Template Metadata */}
+          <div className="bg-gray-50 p-3 rounded-lg border">
+            <h4 className="font-medium text-gray-900 text-sm mb-2">Template Information</h4>
+            <div className="space-y-1 text-xs text-gray-600">
+              <div className="flex justify-between">
+                <span>Agent Name:</span>
+                <span className="font-mono">{template.agent_name}</span>
               </div>
-
-              <div>
-                <Label htmlFor="clone-description" className="text-xs font-medium text-gray-700">
-                  Description *
-                </Label>
-                <Textarea
-                  id="clone-description"
-                  value={cloneData.description}
-                  onChange={(e) => setCloneData(prev => ({ ...prev, description: e.target.value }))}
-                  placeholder="Describe what this agent does..."
-                  className="mt-1 text-sm"
-                  rows={2}
-                />
+              <div className="flex justify-between">
+                <span>Category:</span>
+                <span>{template.template_category}</span>
               </div>
-
-              <div>
-                <Label htmlFor="clone-prompt" className="text-xs font-medium text-gray-700">
-                  Prompt Template *
-                </Label>
-                <Textarea
-                  id="clone-prompt"
-                  value={cloneData.prompt_template}
-                  onChange={(e) => setCloneData(prev => ({ ...prev, prompt_template: e.target.value }))}
-                  placeholder="Define the agent's behavior and instructions..."
-                  className="mt-1 text-sm"
-                  rows={6}
-                />
+              <div className="flex justify-between">
+                <span>Access Level:</span>
+                <span>{template.is_premium_only ? 'Premium Only' : 'All Users'}</span>
               </div>
-
-              <Button
-                onClick={handleClone}
-                disabled={isCloning}
-                className="w-full bg-[#FF7F7F] hover:bg-[#FF6666] text-white"
-              >
-                {isCloning ? (
-                  <>
-                    <motion.div
-                      animate={{ rotate: 360 }}
-                      transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-                      className="w-4 h-4 border-2 border-white border-t-transparent rounded-full mr-2"
-                    />
-                    Cloning...
-                  </>
-                ) : (
-                  <>
-                    <Copy className="w-4 h-4 mr-2" />
-                    Clone Template
-                  </>
-                )}
-              </Button>
+              <div className="flex justify-between">
+                <span>Total Usage:</span>
+                <span>{template.usage_count} times</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Created:</span>
+                <span>{new Date(template.created_at).toLocaleDateString()}</span>
+              </div>
             </div>
-          )}
+          </div>
         </div>
       </div>
     </div>

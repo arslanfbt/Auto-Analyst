@@ -43,6 +43,7 @@ from src.routes.feedback_routes import router as feedback_router
 from src.routes.session_routes import router as session_router, get_session_id_dependency
 from src.routes.deep_analysis_routes import router as deep_analysis_router
 from src.routes.custom_agents_routes import router as custom_agents_router
+from src.routes.templates_routes import router as templates_router
 from src.schemas.query_schemas import QueryRequest
 from src.utils.logger import Logger
 
@@ -400,7 +401,7 @@ app.add_middleware(
 RESPONSE_ERROR_INVALID_QUERY = "Please provide a valid query..."
 RESPONSE_ERROR_NO_DATASET = "No dataset is currently loaded. Please link a dataset before proceeding with your analysis."
 DEFAULT_TOKEN_RATIO = 1.5
-REQUEST_TIMEOUT_SECONDS = 60  # Timeout for LLM requests
+REQUEST_TIMEOUT_SECONDS = 120  # Timeout for LLM requests
 MAX_RECENT_MESSAGES = 3
 DB_BATCH_SIZE = 10  # For future batch DB operations
 
@@ -430,17 +431,20 @@ async def chat_with_agent(
         enhanced_query = _prepare_query_with_context(request.query, session_state)
         logger.log_message(f"Enhanced query: {enhanced_query}", level=logging.INFO)
         
-        # Initialize agent - handle both standard and custom agents
+        # Initialize agent - handle standard, template, and custom agents
         if "," in agent_name:
             # Multiple agents case
             agent_list = [agent.strip() for agent in agent_name.split(",")]
             
-            # Check if any are custom agents
-            has_custom_agents = any(not _is_standard_agent(agent) for agent in agent_list)
-            logger.log_message(f"Has custom agents: {has_custom_agents}", level=logging.INFO)
+            # Categorize agents
+            standard_agents = [agent for agent in agent_list if _is_standard_agent(agent)]
+            template_agents = [agent for agent in agent_list if _is_template_agent(agent)]
+            custom_agents = [agent for agent in agent_list if not _is_standard_agent(agent) and not _is_template_agent(agent)]
             
-            if has_custom_agents:
-                # Use session AI system for mixed or custom agent execution
+            logger.log_message(f"Agent routing - Standard: {len(standard_agents)}, Template: {len(template_agents)}, Custom: {len(custom_agents)}", level=logging.INFO)
+            
+            if custom_agents:
+                # If any custom agents, use session AI system for all
                 ai_system = session_state["ai_system"]
                 session_lm = get_session_lm(session_state)
                 with dspy.context(lm=session_lm):
@@ -449,29 +453,61 @@ async def chat_with_agent(
                         timeout=REQUEST_TIMEOUT_SECONDS
                     )
             else:
-                # All standard agents - use auto_analyst_ind
-                standard_agent_sigs = [AVAILABLE_AGENTS[agent] for agent in agent_list]
+                # All standard/template agents - use auto_analyst_ind
+                standard_agent_sigs = [AVAILABLE_AGENTS[agent] for agent in standard_agents]
                 user_id = session_state.get("user_id")
-                agent = auto_analyst_ind(agents=standard_agent_sigs, retrievers=session_state["retrievers"], user_id=user_id)
-                session_lm = get_session_lm(session_state)
-                with dspy.context(lm=session_lm):
-                    response = await asyncio.wait_for(
-                        agent.forward(enhanced_query, ",".join(agent_list)),
-                        timeout=REQUEST_TIMEOUT_SECONDS
-                    )
+                
+                # Create database session for template loading
+                from src.db.init_db import session_factory
+                db_session = session_factory()
+                try:
+                    agent = auto_analyst_ind(agents=standard_agent_sigs, retrievers=session_state["retrievers"], user_id=user_id, db_session=db_session)
+                    session_lm = get_session_lm(session_state)
+                    with dspy.context(lm=session_lm):
+                        response = await asyncio.wait_for(
+                            agent.forward(enhanced_query, ",".join(agent_list)),
+                            timeout=REQUEST_TIMEOUT_SECONDS
+                        )
+                finally:
+                    db_session.close()
         else:
             # Single agent case
             logger.log_message(f"Single agent case: {agent_name}", level=logging.INFO)
             if _is_standard_agent(agent_name):
                 # Standard agent - use auto_analyst_ind
                 user_id = session_state.get("user_id")
-                agent = auto_analyst_ind(agents=[AVAILABLE_AGENTS[agent_name]], retrievers=session_state["retrievers"], user_id=user_id)
-                session_lm = get_session_lm(session_state)
-                with dspy.context(lm=session_lm):
-                    response = await asyncio.wait_for(
-                        agent.forward(enhanced_query, agent_name),
-                        timeout=REQUEST_TIMEOUT_SECONDS
-                    )
+                
+                # Create database session for template loading
+                from src.db.init_db import session_factory
+                db_session = session_factory()
+                try:
+                    agent = auto_analyst_ind(agents=[AVAILABLE_AGENTS[agent_name]], retrievers=session_state["retrievers"], user_id=user_id, db_session=db_session)
+                    session_lm = get_session_lm(session_state)
+                    with dspy.context(lm=session_lm):
+                        response = await asyncio.wait_for(
+                            agent.forward(enhanced_query, agent_name),
+                            timeout=REQUEST_TIMEOUT_SECONDS
+                        )
+                finally:
+                    db_session.close()
+            elif _is_template_agent(agent_name):
+                # Template agent - use auto_analyst_ind with empty agents list (templates loaded in init)
+                logger.log_message(f"Template agent case: {agent_name}", level=logging.INFO)
+                user_id = session_state.get("user_id")
+                
+                # Create database session for template loading
+                from src.db.init_db import session_factory
+                db_session = session_factory()
+                try:
+                    agent = auto_analyst_ind(agents=[], retrievers=session_state["retrievers"], user_id=user_id, db_session=db_session)
+                    session_lm = get_session_lm(session_state)
+                    with dspy.context(lm=session_lm):
+                        response = await asyncio.wait_for(
+                            agent.forward(enhanced_query, agent_name),
+                            timeout=REQUEST_TIMEOUT_SECONDS
+                        )
+                finally:
+                    db_session.close()
             else:
                 # Custom agent - use session AI system
                 logger.log_message(f"Custom agent case: {agent_name}", level=logging.INFO)
@@ -606,10 +642,28 @@ def _validate_agent_name(agent_name: str, session_state: dict = None):
         )
 
 def _is_agent_available(agent_name: str, session_state: dict = None) -> bool:
-    """Check if agent is available in either standard agents or user's custom agents"""
+    """Check if agent is available in either standard agents, template agents, or user's custom agents"""
     # Check standard agents
     if agent_name in AVAILABLE_AGENTS:
         return True
+    
+    # Check template agents
+    try:
+        from src.db.init_db import session_factory
+        from src.db.schemas.models import AgentTemplate
+        
+        db_session = session_factory()
+        try:
+            template = db_session.query(AgentTemplate).filter(
+                AgentTemplate.template_name == agent_name,
+                AgentTemplate.is_active == True
+            ).first()
+            if template:
+                return True
+        finally:
+            db_session.close()
+    except Exception as e:
+        logger.log_message(f"Error checking template availability for {agent_name}: {str(e)}", level=logging.ERROR)
     
     # Check custom agents if session has an AI system with custom agents
     if session_state and "ai_system" in session_state:
@@ -634,8 +688,27 @@ def _get_available_agents_list(session_state: dict = None) -> list:
     return available
 
 def _is_standard_agent(agent_name: str) -> bool:
-    """Check if agent is a standard agent (not custom)"""
+    """Check if agent is a standard agent (not custom or template)"""
     return agent_name in AVAILABLE_AGENTS
+
+def _is_template_agent(agent_name: str) -> bool:
+    """Check if agent is a template agent"""
+    try:
+        from src.db.init_db import session_factory
+        from src.db.schemas.models import AgentTemplate
+        
+        db_session = session_factory()
+        try:
+            template = db_session.query(AgentTemplate).filter(
+                AgentTemplate.template_name == agent_name,
+                AgentTemplate.is_active == True
+            ).first()
+            return template is not None
+        finally:
+            db_session.close()
+    except Exception as e:
+        logger.log_message(f"Error checking if {agent_name} is template: {str(e)}", level=logging.ERROR)
+        return False
 
 async def _execute_custom_agents(ai_system, agent_names: list, query: str):
     """Execute custom agents using the session's AI system"""
@@ -644,8 +717,6 @@ async def _execute_custom_agents(ai_system, agent_names: list, query: str):
         if len(agent_names) == 1:
             # Single custom agent
             agent_name = agent_names[0]
-            logger.log_message(f"Executing custom agent: {agent_name}", level=logging.INFO)
-            
             # Prepare inputs for the custom agent (similar to standard agents like data_viz_agent)
             dict_ = {}
             dict_['dataset'] = ai_system.dataset.retrieve(query)[0].text
@@ -657,14 +728,11 @@ async def _execute_custom_agents(ai_system, agent_names: list, query: str):
             if agent_name in ai_system.agent_inputs:
                 inputs = {x: dict_[x] for x in ai_system.agent_inputs[agent_name] if x in dict_}
                 
-                logger.log_message(f"Inputs for {agent_name}: {list(inputs.keys())}", level=logging.INFO)
-                
                 # Execute the custom agent
                 agent_name_result, result_dict = await ai_system.execute_agent(agent_name, inputs)
-                logger.log_message(f"Custom agent result: {agent_name_result}, has keys: {list(result_dict.keys()) if isinstance(result_dict, dict) else 'not dict'}", level=logging.INFO)
                 return {agent_name_result: result_dict}
             else:
-                logger.log_message(f"Agent '{agent_name}' not found in ai_system.agent_inputs. Available: {list(ai_system.agent_inputs.keys())}", level=logging.ERROR)
+                logger.log_message(f"Agent '{agent_name}' not found in ai_system.agent_inputs", level=logging.ERROR)
                 return {"error": f"Agent '{agent_name}' input configuration not found"}
         else:
             # Multiple agents - execute sequentially
@@ -965,17 +1033,15 @@ async def list_agents(request: Request, session_id: str = Depends(get_session_id
     template_agents = []
     try:
         from src.db.init_db import session_factory
-        from src.db.schemas.models import CustomAgent
+        from src.db.schemas.models import AgentTemplate
         
         db_session = session_factory()
         try:
-            templates = db_session.query(CustomAgent).filter(
-                CustomAgent.is_template == True,
-                CustomAgent.is_active == True,
-                CustomAgent.user_id == None  # System templates
+            templates = db_session.query(AgentTemplate).filter(
+                AgentTemplate.is_active == True
             ).all()
             
-            template_agents = [template.agent_name for template in templates]
+            template_agents = [template.template_name for template in templates]
             logger.log_message(f"Found {len(template_agents)} template agents", level=logging.INFO)
             
         finally:
@@ -1468,6 +1534,7 @@ app.include_router(session_router)
 app.include_router(feedback_router)
 app.include_router(deep_analysis_router)
 app.include_router(custom_agents_router)
+app.include_router(templates_router)
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)

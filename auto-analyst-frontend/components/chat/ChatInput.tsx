@@ -36,7 +36,7 @@ import {
 // Deep Analysis imports
 import { DeepAnalysisSidebar, DeepAnalysisButton } from '../deep-analysis'
 // Custom Agents imports
-import { CustomAgentsSidebar, CustomAgentsButton } from '../custom-agents'
+import { TemplatesSidebar, TemplatesButton } from '../custom-agents'
 import CommandSuggestions from './CommandSuggestions'
 import AgentSuggestions from './AgentSuggestions'
 import { useUserSubscriptionStore } from '@/lib/store/userSubscriptionStore'
@@ -225,15 +225,15 @@ const ChatInput = forwardRef<
   const [shouldForceExpanded, setShouldForceExpanded] = useState(false)
   
   // Custom Agents states
-  const [showCustomAgentsSidebar, setShowCustomAgentsSidebar] = useState(false)
-  const [shouldForceExpandedCustomAgents, setShouldForceExpandedCustomAgents] = useState(false)
+  const [showTemplatesSidebar, setShowTemplatesSidebar] = useState(false)
+  const [shouldForceExpandedTemplates, setShouldForceExpandedTemplates] = useState(false)
   const [showCommandSuggestions, setShowCommandSuggestions] = useState(false)
   const [commandQuery, setCommandQuery] = useState('')
   
   // Get subscription from store instead of manual construction
   const { subscription } = useUserSubscriptionStore()
   const deepAnalysisAccess = useFeatureAccess('DEEP_ANALYSIS', subscription)
-  
+
   // Expose handlePreviewDefaultDataset to parent
   useImperativeHandle(ref, () => ({
     handlePreviewDefaultDataset,
@@ -939,11 +939,11 @@ const ChatInput = forwardRef<
       setTimeout(() => setShouldForceExpanded(false), 100)
     } else if (command.id === 'custom-agents') {
       // Show custom agents sidebar in expanded state
-      setShouldForceExpandedCustomAgents(true)
-      setShowCustomAgentsSidebar(true)
+      setShouldForceExpanded(true)
+      setShowTemplatesSidebar(true)
       setMessage('')
       // Reset force expanded after a brief moment
-      setTimeout(() => setShouldForceExpandedCustomAgents(false), 100)
+      setTimeout(() => setShouldForceExpanded(false), 100)
     } else {
       // For other commands, replace the "/" with the command
       setMessage(`${command.name} `)
@@ -1945,12 +1945,12 @@ const ChatInput = forwardRef<
                 )}
                 
 
-                <CustomAgentsButton
+                <TemplatesButton
                     onClick={() => {
-                      setShouldForceExpandedCustomAgents(true)
-                      setShowCustomAgentsSidebar(true)
+                      setShouldForceExpanded(true)
+                      setShowTemplatesSidebar(true)
                       // Reset force expanded after a brief moment
-                      setTimeout(() => setShouldForceExpandedCustomAgents(false), 100)
+                      setTimeout(() => setShouldForceExpanded(false), 100)
                     }}
                     userProfile={subscription}
                     showLabel={true}
@@ -2423,12 +2423,12 @@ const ChatInput = forwardRef<
         forceExpanded={shouldForceExpanded}
       />
       
-      {/* Custom Agents Sidebar */}
-      <CustomAgentsSidebar
-        isOpen={showCustomAgentsSidebar}
-        onClose={() => setShowCustomAgentsSidebar(false)}
+      {/* Templates Sidebar */}
+      <TemplatesSidebar
+        isOpen={showTemplatesSidebar}
+        onClose={() => setShowTemplatesSidebar(false)}
         userId={userId}
-        forceExpanded={shouldForceExpandedCustomAgents}
+        forceExpanded={shouldForceExpanded}
       />
     </>
   )
