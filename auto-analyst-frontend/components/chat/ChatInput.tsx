@@ -245,7 +245,6 @@ const ChatInput = forwardRef<
   useEffect(() => {
     const checkDisabledStatus = () => {
       const isDisabled = isInputDisabled();
-      // logger.log(`[ChatInput] Input disabled on mount: ${isDisabled}, isChatBlocked: ${isChatBlocked}`);
     };
     checkDisabledStatus();
   }, []);
@@ -276,7 +275,6 @@ const ChatInput = forwardRef<
   useEffect(() => {
     // When sessionId changes (switching chats), check for dataset info
     if (sessionId) {
-      logger.log('Session ID changed, checking dataset info:', sessionId);
       
       // First try to get session info to see if we have a custom dataset
       axios.get(`${PREVIEW_API_URL}/api/session-info`, {
@@ -287,7 +285,6 @@ const ChatInput = forwardRef<
       .then(infoResponse => {
         const { is_custom_dataset, dataset_name, dataset_description } = infoResponse.data;
         
-        logger.log('Session info response:', infoResponse.data);
         
         if (is_custom_dataset) {
           // If we have a custom dataset, check if we have local file info
@@ -323,7 +320,7 @@ const ChatInput = forwardRef<
                 setFilePreview({ headers, rows, name, description });
                 setDatasetDescription({ name, description });
                 
-                logger.log('Successfully restored dataset preview data');
+                
               })
               .catch(error => {
                 logger.error('Failed to get dataset preview:', error);
@@ -409,8 +406,6 @@ const ChatInput = forwardRef<
             }
           });
           
-          logger.log("Session info in ChatInput:", response.data);
-          
           // If we have a custom dataset on the server
           if (response.data && response.data.is_custom_dataset) {
             const customName = response.data.dataset_name || 'Custom Dataset';
@@ -436,8 +431,6 @@ const ChatInput = forwardRef<
               }
             } else if (!fileUpload && !hasLocalStorageFile) {
               // UI shows no custom dataset, but server has one, and no localStorage
-              // This is likely after a refresh - show the dataset reset popup
-              logger.log("UI shows no dataset, but server has custom dataset - showing reset dialog");
               
               // Create a mock File object just for display purposes
               const mockFile = new File([""], `${customName}.csv`, { type: 'text/csv' });
@@ -455,7 +448,6 @@ const ChatInput = forwardRef<
           } else if (fileUpload && fileUpload.status === 'success') {
             // The UI shows a custom dataset, but the server says we're using the default
             // This means there's a mismatch - the session was reset on the server side
-            logger.log("Dataset mismatch detected: UI shows custom dataset but server uses default");
             setDatasetMismatch(true);
             setShowDatasetResetPopup(true);
           } else {
@@ -520,15 +512,7 @@ const ChatInput = forwardRef<
       setErrorNotification(null);
       if (errorTimeoutRef.current) {
         clearTimeout(errorTimeoutRef.current);
-      }
-      
-      // Log file details for debugging
-      logger.log('Selected file:', {
-        name: file.name,
-        size: file.size,
-        type: file.type,
-        lastModified: file.lastModified
-      });
+      }      
       
       // Check file type before proceeding
       const isCSVByExtension = file.name.toLowerCase().endsWith('.csv');
@@ -671,7 +655,6 @@ const ChatInput = forwardRef<
                 'X-Session-ID': sessionId,
               },
             });
-            logger.log('Session reset before new file upload');
             
             // Reset the popup shown flags to ensure we show the popup for this new dataset state
             popupShownForChatIdsRef.current = new Set();
@@ -682,7 +665,6 @@ const ChatInput = forwardRef<
         }
 
         // Always do a fresh upload for new files
-        logger.log('Uploading new file and getting preview...', file.name, file.size, file.type);
         const formData = new FormData();
         formData.append('file', file);
         
@@ -698,15 +680,6 @@ const ChatInput = forwardRef<
         formData.append('name', tempName);
         formData.append('description', existingDescription);
         
-        logger.log('FormData prepared:', {
-          fileName: file.name,
-          fileSize: file.size,
-          fileType: file.type,
-          name: tempName,
-          description: existingDescription,
-          isNewDataset: isNewDataset
-        });
-        
         // Upload the file
         try {
           const uploadResponse = await axios.post(`${PREVIEW_API_URL}/upload_dataframe`, formData, {
@@ -717,7 +690,6 @@ const ChatInput = forwardRef<
             },
           });
           
-          logger.log('Upload response:', uploadResponse.data);
           const previewSessionId = uploadResponse.data.session_id || sessionId;
           
           // Capture the dataset upload ID if available
@@ -735,7 +707,6 @@ const ChatInput = forwardRef<
             },
           });
           
-          logger.log('Preview response:', previewResponse.data);
           
           // Extract all fields including name and description
           const { headers, rows, name, description } = previewResponse.data;
@@ -822,7 +793,6 @@ const ChatInput = forwardRef<
         }, 5000);
       }
     } else {
-      logger.log('Not a CSV file');
       // Set error notification with detailed information
       setErrorNotification({
         message: 'Invalid file format',
@@ -1011,7 +981,6 @@ const ChatInput = forwardRef<
             ...(sessionId && { 'X-Session-ID': sessionId }),
           },
         });
-        logger.log('Session forcefully reset to default dataset');
       } catch (resetError) {
         console.error('Failed to reset session for default dataset:', resetError);
         // Continue anyway
@@ -1051,7 +1020,6 @@ const ChatInput = forwardRef<
       setDatasetMismatch(false);
       setShowDatasetResetPopup(false);
       
-      logger.log("Default dataset preview loaded, upload state reset");
     } catch (error) {
       console.error('Failed to fetch dataset preview:', error);
     }
@@ -1081,7 +1049,6 @@ const ChatInput = forwardRef<
             ...(sessionId && { 'X-Session-ID': sessionId }),
           },
         });
-        logger.log('Session silently reset to default dataset');
       } catch (resetError) {
         console.error('Failed to silently reset session for default dataset:', resetError);
         // Continue anyway
@@ -1122,7 +1089,6 @@ const ChatInput = forwardRef<
       setDatasetMismatch(false);
       setShowDatasetResetPopup(false);
       
-      logger.log("Default dataset silently loaded, upload state reset");
     } catch (error) {
       console.error('Failed to silently load default dataset:', error);
     }
@@ -1149,23 +1115,12 @@ const ChatInput = forwardRef<
         clearTimeout(errorTimeoutRef.current);
       }
       
-      // Log the description we're about to use
-      logger.log('Using dataset description for upload:', datasetDescription.description);
       
       // Try to get the actual file from the file input ref first (most reliable source)
       const actualFile = fileInputRef.current?.files?.[0] || (fileUpload?.file || null);
       
       if (actualFile) {
-        // Log file details to console for debugging
-        logger.log("Upload file details:", {
-          name: actualFile.name,
-          size: actualFile.size,
-          type: actualFile.type,
-          lastModified: actualFile.lastModified,
-          description: datasetDescription.description,
-          isExcel: fileUpload?.isExcel,
-          selectedSheet: fileUpload?.selectedSheet
-        });
+        
         
         // Only check for mock files in specific cases when we know it was created programmatically
         // This avoids incorrectly flagging legitimate small files
@@ -1203,7 +1158,6 @@ const ChatInput = forwardRef<
                 'X-Session-ID': sessionId,
               },
             });
-            logger.log('Session reset before final upload');
             
             // Reset the popup shown flags for the new dataset state
             popupShownForChatIdsRef.current = new Set();
@@ -1231,15 +1185,6 @@ const ChatInput = forwardRef<
         if (isExcelFile && fileUpload?.selectedSheet) {
           formData.append('sheet_name', fileUpload.selectedSheet);
         }
-
-        logger.log('Final upload with description:', {
-          fileName: actualFile.name,
-          fileSize: actualFile.size,
-          name: datasetDescription.name,
-          description: finalDescription,
-          isExcel: isExcelFile,
-          selectedSheet: fileUpload?.selectedSheet
-        });
 
         try {
           // Use the appropriate endpoint based on file type
@@ -1386,7 +1331,6 @@ const ChatInput = forwardRef<
         
         const resetDate = new Date(creditResetDate);
         if (!isNaN(resetDate.getTime())) {
-          logger.log(`[ChatInput] Using actual reset date from Redis: ${resetDate.toISOString()}`);
           return resetDate.toLocaleDateString('en-US', { 
             year: 'numeric', 
             month: 'long', 
@@ -1458,7 +1402,6 @@ const ChatInput = forwardRef<
         
         // If we have a file input reference, clear it and trigger a click
         if (fileInputRef.current) {
-          logger.log("Clearing file input and requesting new selection");
           fileInputRef.current.value = "";
           
           // Close the dataset reset popup first
@@ -1473,7 +1416,6 @@ const ChatInput = forwardRef<
           }, 100);
         } else {
           // If we can't access the file input, show the preview dialog
-          logger.log("Showing preview dialog for file selection");
           setShowPreview(true);
           
           // Pre-fill the name from the file
@@ -1489,7 +1431,6 @@ const ChatInput = forwardRef<
       } else {
         // This is a real file, we can try to show the preview directly
         try {
-          logger.log("Showing preview for existing file");
           await handleFilePreview(fileUpload.file);
           
           // Close the dataset reset popup

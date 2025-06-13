@@ -428,7 +428,6 @@ async def chat_with_agent(
         
         # Get chat context and prepare query
         enhanced_query = _prepare_query_with_context(request.query, session_state)
-        logger.log_message(f"Enhanced query: {enhanced_query}", level=logging.INFO)
         
         # Initialize agent - handle standard, template, and custom agents
         if "," in agent_name:
@@ -440,7 +439,6 @@ async def chat_with_agent(
             template_agents = [agent for agent in agent_list if _is_template_agent(agent)]
             custom_agents = [agent for agent in agent_list if not _is_standard_agent(agent) and not _is_template_agent(agent)]
             
-            logger.log_message(f"Agent routing - Standard: {len(standard_agents)}, Template: {len(template_agents)}, Custom: {len(custom_agents)}", level=logging.INFO)
             
             if custom_agents:
                 # If any custom agents, use session AI system for all
@@ -471,7 +469,6 @@ async def chat_with_agent(
                     db_session.close()
         else:
             # Single agent case
-            logger.log_message(f"Single agent case: {agent_name}", level=logging.INFO)
             if _is_standard_agent(agent_name):
                 # Standard agent - use auto_analyst_ind
                 user_id = session_state.get("user_id")
@@ -491,7 +488,6 @@ async def chat_with_agent(
                     db_session.close()
             elif _is_template_agent(agent_name):
                 # Template agent - use auto_analyst_ind with empty agents list (templates loaded in init)
-                logger.log_message(f"Template agent case: {agent_name}", level=logging.DEBUG)
                 user_id = session_state.get("user_id")
                 
                 # Create database session for template loading
@@ -509,7 +505,6 @@ async def chat_with_agent(
                     db_session.close()
             else:
                 # Custom agent - use session AI system
-                logger.log_message(f"Custom agent case: {agent_name}", level=logging.INFO)
                 ai_system = session_state["ai_system"]
                 session_lm = get_session_lm(session_state)
                 with dspy.context(lm=session_lm):
@@ -519,7 +514,6 @@ async def chat_with_agent(
                     )
         
         formatted_response = format_response_to_markdown(response, agent_name, session_state["current_df"])
-        logger.log_message(f"Formatted response: {formatted_response}", level=logging.INFO)
         
         if formatted_response == RESPONSE_ERROR_INVALID_QUERY:
             return {
@@ -548,10 +542,8 @@ async def chat_with_agent(
         # Re-raise HTTP exceptions to preserve status codes
         raise
     except asyncio.TimeoutError:
-        logger.log_message(f"Agent execution timed out for {agent_name}", level=logging.WARNING)
         raise HTTPException(status_code=504, detail="Request timed out. Please try a simpler query.")
     except Exception as e:
-        logger.log_message(f"Unexpected error in chat_with_agent: {str(e)}", level=logging.ERROR)
         raise HTTPException(status_code=500, detail="An unexpected error occurred. Please try again later.")
     
     
@@ -593,7 +585,6 @@ async def chat_with_all(
         # Re-raise HTTP exceptions to preserve status codes
         raise
     except Exception as e:
-        logger.log_message(f"Unexpected error in chat_with_all: {str(e)}", level=logging.ERROR)
         raise HTTPException(status_code=500, detail="An unexpected error occurred. Please try again later.")
 
 
@@ -1019,7 +1010,6 @@ async def list_agents(request: Request, session_id: str = Depends(get_session_id
             app.state.set_session_user(session_id, user_id)
             # Refresh session state after user association
             session_state = app.state.get_session_state(session_id)
-            logger.log_message(f"Associated session {session_id} with user {user_id} for agent listing", level=logging.INFO)
         except (ValueError, TypeError):
             logger.log_message(f"Invalid user_id in agents endpoint: {user_id_param}", level=logging.WARNING)
     
@@ -1260,7 +1250,6 @@ async def _generate_deep_analysis_stream(session_state: dict, goal: str, session
                         if step == "completed":
                             if content:
                                 report.html_report = content
-                                logger.log_message(f"Storing HTML report in database, length: {len(content)}", level=logging.INFO)
                             else:
                                 logger.log_message("No HTML content provided for completed step", level=logging.WARNING)
                                 
@@ -1351,9 +1340,7 @@ async def _generate_deep_analysis_stream(session_state: dict, goal: str, session
                         # Generate HTML report using the original final_result with Figure objects
                         html_report = None
                         try:
-                            logger.log_message("Generating HTML report...", level=logging.INFO)
                             html_report = generate_html_report(final_result)
-                            logger.log_message(f"HTML report generated successfully, length: {len(html_report) if html_report else 0}", level=logging.INFO)
                         except Exception as e:
                             logger.log_message(f"Error generating HTML report: {str(e)}", level=logging.ERROR)
                             # Continue even if HTML generation fails
@@ -1497,10 +1484,8 @@ async def download_html_report(
                         report.html_report = html_report
                         report.updated_at = datetime.now(UTC)
                         db_session.commit()
-                        logger.log_message(f"Updated HTML report in database for UUID {report_uuid}", level=logging.INFO)
                 except Exception as e:
                     db_session.rollback()
-                    logger.log_message(f"Error storing HTML report in database: {str(e)}", level=logging.ERROR)
                 finally:
                     db_session.close()
             except Exception as e:
