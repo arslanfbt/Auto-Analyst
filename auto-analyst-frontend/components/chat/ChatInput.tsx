@@ -1945,7 +1945,7 @@ const ChatInput = forwardRef<
                 )}
                 
 
-                <TemplatesButton
+                {/* <TemplatesButton
                     onClick={() => {
                       setShouldForceExpanded(true)
                       setShowTemplatesSidebar(true)
@@ -1956,7 +1956,8 @@ const ChatInput = forwardRef<
                     showLabel={true}
                     size="sm"
                   />
-                
+                 */}
+
                 <DeepAnalysisButton
                   onClick={() => {
                     setShouldForceExpanded(true)
@@ -2424,12 +2425,12 @@ const ChatInput = forwardRef<
       />
       
       {/* Templates Sidebar */}
-      <TemplatesSidebar
+      {/* <TemplatesSidebar
         isOpen={showTemplatesSidebar}
         onClose={() => setShowTemplatesSidebar(false)}
         userId={userId}
         forceExpanded={shouldForceExpanded}
-      />
+      /> */}
     </>
   )
 })

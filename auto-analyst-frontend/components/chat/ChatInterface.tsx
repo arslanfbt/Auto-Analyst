@@ -1502,6 +1502,7 @@ const ChatInterface: React.FC = () => {
           onChatSelect={loadChat}
           isLoading={isLoadingHistory}
           onDeleteChat={handleChatDelete}
+          userId={userId || undefined}
         />
       )}
 

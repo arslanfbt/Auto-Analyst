@@ -14,6 +14,8 @@ import API_URL from '@/config/api'
 import { format } from 'date-fns'
 import { useModelSettings } from '@/lib/hooks/useModelSettings'
 import logger from '@/lib/utils/logger'
+import { TemplatesButton, TemplatesModal, useTemplates } from '@/components/custom-templates'
+import { useUserSubscriptionStore } from '@/lib/store/userSubscriptionStore'
 
 const PREVIEW_API_URL = API_URL;
 
@@ -31,9 +33,10 @@ interface SidebarProps {
   onChatSelect: (chatId: number) => void
   isLoading: boolean
   onDeleteChat: (chatId: number) => void
+  userId?: number | null
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, onNewChat, chatHistories = [], activeChatId, onChatSelect, isLoading, onDeleteChat }) => {
+const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, onNewChat, chatHistories = [], activeChatId, onChatSelect, isLoading, onDeleteChat, userId: userIdProp }) => {
   const { clearMessages } = useChatHistoryStore()
   const { data: session } = useSession()
   const router = useRouter()
@@ -43,6 +46,41 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, onNewChat, chatHisto
   const [isAdmin, setIsAdmin] = useState(false)
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [chatToDelete, setChatToDelete] = useState<number | null>(null);
+  const [isTemplatesModalOpen, setIsTemplatesModalOpen] = useState(false);
+  const { subscription } = useUserSubscriptionStore()
+  
+  // Get current user profile for templates
+  const userProfile = subscription || null
+  
+  // Handle userId properly for both regular users and admin testing
+  const getUserId = () => {
+    // First check if userId prop is provided (correct user-specific ID)
+    if (userIdProp) {
+      return userIdProp
+    }
+    
+    // Then check for admin testing user ID
+    const adminUserId = localStorage.getItem('adminUserId')
+    if (adminUserId) {
+      return parseInt(adminUserId)
+    }
+    
+    // Then check session user ID
+    if (session?.user?.id) {
+      return parseInt(session.user.id)
+    }
+    
+    // Default fallback
+    return 1 // Use 1 instead of 0 since user IDs start from 1
+  }
+  
+  const userId = getUserId()
+  
+  // Use templates hook for data management
+  const { templateCount, enabledCount } = useTemplates({ 
+    userId, 
+    enabled: isOpen && !!userId 
+  })
 
   useEffect(() => {
     setIsAdmin(localStorage.getItem('isAdmin') === 'true')
@@ -247,6 +285,16 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, onNewChat, chatHisto
             <span>New Chat</span>
           </button>
 
+          {/* Templates Section */}
+          <div className="mx-3 mb-3">
+            <TemplatesButton
+              onClick={() => setIsTemplatesModalOpen(true)}
+              userProfile={userProfile}
+              templateCount={templateCount}
+              enabledCount={enabledCount}
+            />
+          </div>
+
           {/* Chat History - more minimal with less padding */}
           <div className="flex-1 overflow-y-auto px-4 py-3 bg-gradient-to-b from-white to-gray-50/30">
             <div className="mb-2 px-1 flex items-center">
@@ -368,6 +416,13 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, onNewChat, chatHisto
           </motion.div>
         </div>
       )}
+      
+      {/* Templates Modal */}
+      <TemplatesModal
+        isOpen={isTemplatesModalOpen}
+        onClose={() => setIsTemplatesModalOpen(false)}
+        userId={userId}
+      />
     </>
   )
 }
