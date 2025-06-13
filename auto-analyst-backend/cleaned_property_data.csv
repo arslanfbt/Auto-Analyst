@@ -1,3 +1,0 @@
-price,area,bedrooms,bathrooms,stories,mainroad,guestroom,basement,hotwaterheating,airconditioning,parking,prefarea,furnishingstatus_semi-furnished,normalized_price,normalized_area
-13300000,7420,4,2,3,1,1,0,0,1,2,0,True,0.7071067811865476,-0.7071067811865476
-12250000,8960,4,4,4,1,0,1,1,1,3,1,False,-0.7071067811865476,0.7071067811865476

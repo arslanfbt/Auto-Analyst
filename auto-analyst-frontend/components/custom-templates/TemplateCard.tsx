@@ -1,7 +1,6 @@
 import React from 'react'
 import { motion } from 'framer-motion'
-import { Sparkles, Lock, TrendingUp } from 'lucide-react'
-import { Switch } from '../ui/switch'
+import { Sparkles, Lock, TrendingUp, Check } from 'lucide-react'
 import { Badge } from '../ui/badge'
 import { TemplateAgent, TemplatePreference } from './types'
 
@@ -24,9 +23,9 @@ export default function TemplateCard({
   // Premium-only templates are only toggleable by premium users (hasAccess = true for premium)
   const canToggle = hasAccess
 
-  const handleToggle = (checked: boolean) => {
+  const handleClick = () => {
     if (canToggle) {
-      onToggleChange(template.template_id, checked)
+      onToggleChange(template.template_id, !isEnabled)
     }
   }
 
@@ -106,15 +105,20 @@ export default function TemplateCard({
           </div>
         </div>
         
-        {/* Toggle switch */}
+        {/* Checkmark selector */}
         <div className="flex items-center gap-3">
           <div className="flex flex-col items-end gap-1">
-            <Switch
-              checked={isEnabled}
-              onCheckedChange={handleToggle}
+            <button
+              onClick={handleClick}
               disabled={!canToggle}
-              className={`data-[state=checked]:bg-[#FF7F7F] ${!canToggle ? 'opacity-50 cursor-not-allowed' : ''}`}
-            />
+              className={`w-6 h-6 rounded-md border-2 flex items-center justify-center transition-all duration-200 ${
+                isEnabled
+                  ? 'bg-[#FF7F7F] border-[#FF7F7F] text-white'
+                  : 'border-gray-300 hover:border-[#FF7F7F] bg-white'
+              } ${!canToggle ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:scale-105'}`}
+            >
+              {isEnabled && <Check className="w-4 h-4" />}
+            </button>
             <span className={`text-xs ${
               !canToggle 
                 ? 'text-gray-400'
