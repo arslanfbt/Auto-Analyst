@@ -49,27 +49,22 @@ export default function AgentSuggestions({
   const getUserId = (): number | null => {
     // Prioritize userId prop if provided
     if (userId !== undefined && userId !== null) {
-      console.log('AgentSuggestions - Using userId prop:', userId);
       return userId
     }
     
     if (session?.user?.id) {
-      console.log('AgentSuggestions - Using session user ID:', parseInt(session.user.id));
       return parseInt(session.user.id)
     }
     const adminId = localStorage.getItem('adminUserId')
     if (adminId) {
-      console.log('AgentSuggestions - Using adminUserId from localStorage:', parseInt(adminId));
       return parseInt(adminId)
     }
-    console.log('AgentSuggestions - No userId found');
     return null
   }
 
   // Fetch agents from the main agents endpoint (includes both standard and custom)
   const fetchAllAgents = async (): Promise<AgentSuggestion[]> => {
     const currentUserId = getUserId()
-    console.log('fetchAllAgents - currentUserId:', currentUserId);
     
     try {
       // Build URL with user_id if available
@@ -78,13 +73,10 @@ export default function AgentSuggestions({
         agentsUrl += `?user_id=${currentUserId}`
       }
       
-      console.log('fetchAllAgents - agentsUrl:', agentsUrl);
       const response = await fetch(agentsUrl)
-      console.log('fetchAllAgents - response status:', response.status);
       
       if (response.ok) {
         const data = await response.json()
-        console.log('fetchAllAgents - response data:', data);
         const allAgents: AgentSuggestion[] = []
         
         // Add standard agents
@@ -99,22 +91,12 @@ export default function AgentSuggestions({
         
         // Add template agents (only for users with custom agents access)
         if (data.template_agents && data.template_agents.length > 0 && customAgentsAccess.hasAccess) {
-          console.log('fetchAllAgents - found template agents, fetching details...');
           const templateAgents = await fetchTemplateAgents()
-          console.log('fetchAllAgents - template agent details:', templateAgents);
           allAgents.push(...templateAgents)
         }
         
-        // Add custom agents (only for users with custom agents access)
-        if (data.custom_agents && data.custom_agents.length > 0 && customAgentsAccess.hasAccess) {
-          console.log('fetchAllAgents - found custom agents, fetching details...');
-          // Fetch custom agent details
-          const customAgents = await fetchCustomAgents()
-          console.log('fetchAllAgents - custom agent details:', customAgents);
-          allAgents.push(...customAgents)
-        }
+        // Custom agents are deprecated - using templates only
         
-        console.log('fetchAllAgents - final allAgents:', allAgents);
         return allAgents
       } else {
         console.error('Failed to fetch agents:', response.status, await response.text())
@@ -128,44 +110,14 @@ export default function AgentSuggestions({
     }
   }
 
-  // Fetch custom agents
-  const fetchCustomAgents = async (): Promise<AgentSuggestion[]> => {
-    const currentUserId = getUserId()
-    if (!currentUserId) {
-      return []
-    }
-
-    try {
-      const customAgentsUrl = `${API_URL}/custom_agents/?user_id=${currentUserId}`
-      const response = await fetch(customAgentsUrl)
-      
-      if (response.ok) {
-        const customAgents = await response.json()
-        const mappedAgents = customAgents.map((agent: any) => ({
-          name: agent.agent_name,
-          description: agent.description,
-          isCustom: true
-        }))
-        return mappedAgents
-      } else {
-        console.error('Failed to fetch custom agents:', response.status, await response.text())
-      }
-    } catch (error) {
-      console.error('Error fetching custom agents:', error)
-    }
-    return []
-  }
-
   // Fetch template agents
   const fetchTemplateAgents = async (): Promise<AgentSuggestion[]> => {
     try {
-      const templatesUrl = `${API_URL}/custom_agents/templates/`
-      console.log('fetchTemplateAgents - templatesUrl:', templatesUrl);
+      const templatesUrl = `${API_URL}/templates/categories`
       const response = await fetch(templatesUrl)
       
       if (response.ok) {
         const templateCategories = await response.json()
-        console.log('fetchTemplateAgents - template categories:', templateCategories);
         const allTemplates: AgentSuggestion[] = []
         
         // Flatten all templates from all categories
@@ -180,7 +132,6 @@ export default function AgentSuggestions({
           }
         })
         
-        console.log('fetchTemplateAgents - all templates:', allTemplates);
         return allTemplates
       } else {
         console.error('Failed to fetch template agents:', response.status, await response.text())
@@ -198,24 +149,6 @@ export default function AgentSuggestions({
       setAgents(allAgents)
     }
     loadAgents()
-  }, [session, userId, customAgentsAccess.hasAccess])
-
-  // Add event listener to refresh agents when custom agents are created/updated
-  useEffect(() => {
-    const handleRefreshAgents = () => {
-      const loadAgents = async () => {
-        const allAgents = await fetchAllAgents()
-        setAgents(allAgents)
-      }
-      loadAgents()
-    }
-
-    // Listen for custom events that signal agent changes
-    window.addEventListener('custom-agents-updated', handleRefreshAgents)
-    
-    return () => {
-      window.removeEventListener('custom-agents-updated', handleRefreshAgents)
-    }
   }, [session, userId, customAgentsAccess.hasAccess])
 
   // Filter agents based on current typing
