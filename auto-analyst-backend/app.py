@@ -451,7 +451,7 @@ async def chat_with_agent(
                         _execute_custom_agents(ai_system, agent_list, enhanced_query),
                         timeout=REQUEST_TIMEOUT_SECONDS
                     )
-        else:
+            else:
                 # All standard/template agents - use auto_analyst_ind
                 standard_agent_sigs = [AVAILABLE_AGENTS[agent] for agent in standard_agents]
                 user_id = session_state.get("user_id")
@@ -459,9 +459,9 @@ async def chat_with_agent(
                 # Create database session for template loading
                 from src.db.init_db import session_factory
                 db_session = session_factory()
-        try:
+                try:
                     agent = auto_analyst_ind(agents=standard_agent_sigs, retrievers=session_state["retrievers"], user_id=user_id, db_session=db_session)
-            session_lm = get_session_lm(session_state)
+                    session_lm = get_session_lm(session_state)
                     with dspy.context(lm=session_lm):
                         response = await asyncio.wait_for(
                             agent.forward(enhanced_query, ",".join(agent_list)),
@@ -482,11 +482,11 @@ async def chat_with_agent(
                 try:
                     agent = auto_analyst_ind(agents=[AVAILABLE_AGENTS[agent_name]], retrievers=session_state["retrievers"], user_id=user_id, db_session=db_session)
                     session_lm = get_session_lm(session_state)
-            with dspy.context(lm=session_lm):
-                response = await asyncio.wait_for(
-                    agent.forward(enhanced_query, agent_name),
-                    timeout=REQUEST_TIMEOUT_SECONDS
-                )
+                    with dspy.context(lm=session_lm):
+                        response = await asyncio.wait_for(
+                            agent.forward(enhanced_query, agent_name),
+                            timeout=REQUEST_TIMEOUT_SECONDS
+                        )
                 finally:
                     db_session.close()
             elif _is_template_agent(agent_name):

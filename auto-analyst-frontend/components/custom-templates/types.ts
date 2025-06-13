@@ -6,6 +6,7 @@ export interface TemplateAgent {
   description: string
   prompt_template: string
   template_category: string
+  icon_url?: string
   is_premium_only: boolean
   is_active: boolean
   usage_count: number
@@ -18,6 +19,7 @@ export interface TemplatePreference {
   display_name: string
   description: string
   template_category: string
+  icon_url?: string
   is_premium_only: boolean
   is_enabled: boolean
   usage_count: number

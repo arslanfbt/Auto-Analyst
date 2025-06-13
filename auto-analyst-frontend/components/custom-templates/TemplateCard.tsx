@@ -49,6 +49,33 @@ export default function TemplateCard({
       <div className="flex items-start justify-between">
         <div className="flex-1 pr-4">
           <div className="flex items-center gap-2 mb-2">
+            {/* Template Icon */}
+            <div className="flex-shrink-0 w-5 h-5 flex items-center justify-center">
+              {template.icon_url ? (
+                <>
+                  <img 
+                    src={template.icon_url} 
+                    alt={`${template.template_name} icon`}
+                    className="w-5 h-5 object-contain"
+                    onError={(e) => {
+                      // Fallback to Sparkles icon if image fails to load
+                      const target = e.target as HTMLImageElement;
+                      target.style.display = 'none';
+                      const fallback = target.nextElementSibling as HTMLElement;
+                      if (fallback) {
+                        fallback.style.display = 'block';
+                      }
+                    }}
+                  />
+                  {/* Fallback icon - hidden by default when image exists */}
+                  <Sparkles className="w-4 h-4 text-[#FF7F7F]" style={{ display: 'none' }} />
+                </>
+              ) : (
+                // Show Sparkles icon if no icon_url
+                <Sparkles className="w-4 h-4 text-[#FF7F7F]" />
+              )}
+            </div>
+            
             <h3 className="font-medium text-gray-900 text-sm">{template.display_name}</h3>
             <div className="flex items-center gap-1">
               {template.is_premium_only && (

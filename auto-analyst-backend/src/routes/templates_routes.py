@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Body
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
 from datetime import datetime, UTC
-from sqlalchemy import desc
+from sqlalchemy import desc, func
 from sqlalchemy.exc import IntegrityError
 
 from src.db.init_db import session_factory
@@ -26,6 +26,7 @@ class TemplateResponse(BaseModel):
     description: str
     prompt_template: str
     template_category: Optional[str]
+    icon_url: Optional[str]
     is_premium_only: bool
     is_active: bool
     usage_count: int
@@ -38,6 +39,7 @@ class UserTemplatePreferenceResponse(BaseModel):
     display_name: Optional[str]
     description: str
     template_category: Optional[str]
+    icon_url: Optional[str]
     is_premium_only: bool
     is_enabled: bool
     usage_count: int
@@ -46,15 +48,58 @@ class UserTemplatePreferenceResponse(BaseModel):
 class ToggleTemplateRequest(BaseModel):
     is_enabled: bool = Field(..., description="Whether to enable or disable the template")
 
+def get_global_usage_counts(session, template_ids: List[int] = None) -> Dict[int, int]:
+    """
+    Calculate global usage counts for templates by summing usage_count across all users.
+    
+    Args:
+        session: Database session
+        template_ids: Optional list of template IDs to filter by. If None, gets all templates.
+    
+    Returns:
+        Dict mapping template_id to global usage count
+    """
+    try:
+        query = session.query(
+            UserTemplatePreference.template_id,
+            func.sum(UserTemplatePreference.usage_count).label('total_usage')
+        ).group_by(UserTemplatePreference.template_id)
+        
+        if template_ids:
+            query = query.filter(UserTemplatePreference.template_id.in_(template_ids))
+        
+        results = query.all()
+        
+        # Convert to dictionary, defaulting to 0 for templates with no usage
+        usage_dict = {template_id: int(total_usage or 0) for template_id, total_usage in results}
+        
+        # If specific template_ids were requested, ensure all are represented
+        if template_ids:
+            for template_id in template_ids:
+                if template_id not in usage_dict:
+                    usage_dict[template_id] = 0
+        
+        return usage_dict
+        
+    except Exception as e:
+        logger.log_message(f"Error calculating global usage counts: {str(e)}", level=logging.ERROR)
+        return {}
+
 # Routes
 @router.get("/", response_model=List[TemplateResponse])
 async def get_all_templates():
-    """Get all available agent templates"""
+    """Get all available agent templates with global usage statistics"""
     try:
         session = session_factory()
         
         try:
             templates = get_all_available_templates(session)
+            
+            # Get template IDs for usage calculation
+            template_ids = [template.template_id for template in templates]
+            
+            # Calculate global usage counts
+            global_usage = get_global_usage_counts(session, template_ids)
             
             return [TemplateResponse(
                 template_id=template.template_id,
@@ -63,9 +108,10 @@ async def get_all_templates():
                 description=template.description,
                 prompt_template=template.prompt_template,
                 template_category=template.category,
+                icon_url=template.icon_url,
                 is_premium_only=template.is_premium_only,
                 is_active=template.is_active,
-                usage_count=0,  # Templates don't track global usage count anymore
+                usage_count=global_usage.get(template.template_id, 0),  # Global usage count
                 created_at=template.created_at,
                 updated_at=template.updated_at
             ) for template in templates]
@@ -108,6 +154,7 @@ async def get_user_template_preferences(user_id: int):
                     display_name=template.display_name,
                     description=template.description,
                     template_category=template.category,
+                    icon_url=template.icon_url,
                     is_premium_only=template.is_premium_only,
                     is_enabled=preference.is_enabled if preference else False,  # Default to disabled
                     usage_count=preference.usage_count if preference else 0,
@@ -160,6 +207,7 @@ async def get_user_enabled_templates(user_id: int):
                         display_name=template.display_name,
                         description=template.description,
                         template_category=template.category,
+                        icon_url=template.icon_url,
                         is_premium_only=template.is_premium_only,
                         is_enabled=True,
                         usage_count=preference.usage_count if preference else 0,
@@ -213,6 +261,7 @@ async def get_user_enabled_templates_for_planner(user_id: int):
                         display_name=template.display_name,
                         description=template.description,
                         template_category=template.category,
+                        icon_url=template.icon_url,
                         is_premium_only=template.is_premium_only,
                         is_enabled=True,
                         usage_count=preference.usage_count,
@@ -337,7 +386,7 @@ async def bulk_toggle_template_preferences(user_id: int, request: dict):
 
 @router.get("/template/{template_id}", response_model=TemplateResponse)
 async def get_template(template_id: int):
-    """Get a specific template by ID"""
+    """Get a specific template by ID with global usage statistics"""
     try:
         session = session_factory()
         
@@ -348,6 +397,9 @@ async def get_template(template_id: int):
             
             if not template:
                 raise HTTPException(status_code=404, detail=f"Template with ID {template_id} not found")
+            
+            # Calculate global usage count for this template
+            global_usage = get_global_usage_counts(session, [template_id])
                 
             return TemplateResponse(
                 template_id=template.template_id,
@@ -356,9 +408,10 @@ async def get_template(template_id: int):
                 description=template.description,
                 prompt_template=template.prompt_template,
                 template_category=template.category,
+                icon_url=template.icon_url,
                 is_premium_only=template.is_premium_only,
                 is_active=template.is_active,
-                usage_count=0,  # Templates don't track global usage count anymore
+                usage_count=global_usage.get(template_id, 0),  # Global usage count
                 created_at=template.created_at,
                 updated_at=template.updated_at
             )
@@ -397,7 +450,7 @@ async def get_template_categories():
 
 @router.get("/categories")
 async def get_templates_by_categories():
-    """Get all templates grouped by category for frontend template browser"""
+    """Get all templates grouped by category for frontend template browser with global usage statistics"""
     try:
         session = session_factory()
         
@@ -406,6 +459,12 @@ async def get_templates_by_categories():
             templates = session.query(AgentTemplate).filter(
                 AgentTemplate.is_active == True
             ).order_by(AgentTemplate.category, AgentTemplate.template_name).all()
+            
+            # Get template IDs for usage calculation
+            template_ids = [template.template_id for template in templates]
+            
+            # Calculate global usage counts
+            global_usage = get_global_usage_counts(session, template_ids)
             
             # Group templates by category
             categories_dict = {}
@@ -421,9 +480,10 @@ async def get_templates_by_categories():
                     "description": template.description,
                     "prompt_template": template.prompt_template,
                     "template_category": template.category,
+                    "icon_url": template.icon_url,
                     "is_premium_only": template.is_premium_only,
                     "is_active": template.is_active,
-                    "usage_count": 0,  # Templates don't track global usage count anymore
+                    "usage_count": global_usage.get(template.template_id, 0),  # Global usage count
                     "created_at": template.created_at.isoformat() if template.created_at else None
                 })
             
@@ -446,7 +506,7 @@ async def get_templates_by_categories():
 
 @router.get("/category/{category}")
 async def get_templates_by_category(category: str):
-    """Get all templates in a specific category"""
+    """Get all templates in a specific category with global usage statistics"""
     try:
         session = session_factory()
         
@@ -456,6 +516,12 @@ async def get_templates_by_category(category: str):
                 AgentTemplate.category == category
             ).all()
             
+            # Get template IDs for usage calculation
+            template_ids = [template.template_id for template in templates]
+            
+            # Calculate global usage counts
+            global_usage = get_global_usage_counts(session, template_ids)
+            
             return [TemplateResponse(
                 template_id=template.template_id,
                 template_name=template.template_name,
@@ -463,9 +529,10 @@ async def get_templates_by_category(category: str):
                 description=template.description,
                 prompt_template=template.prompt_template,
                 template_category=template.category,
+                icon_url=template.icon_url,
                 is_premium_only=template.is_premium_only,
                 is_active=template.is_active,
-                usage_count=0,  # Templates don't track global usage count anymore
+                usage_count=global_usage.get(template.template_id, 0),  # Global usage count
                 created_at=template.created_at,
                 updated_at=template.updated_at
             ) for template in templates]

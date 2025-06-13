@@ -53,16 +53,21 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, onNewChat, chatHisto
   const userProfile = subscription || null
   
   // Handle userId properly for both regular users and admin testing
+  const [userId, setUserId] = useState<number>(1) // Default fallback
+  
   const getUserId = () => {
     // First check if userId prop is provided (correct user-specific ID)
     if (userIdProp) {
       return userIdProp
     }
     
-    // Then check for admin testing user ID
-    const adminUserId = localStorage.getItem('adminUserId')
-    if (adminUserId) {
-      return parseInt(adminUserId)
+    // Only access localStorage on client side
+    if (typeof window !== 'undefined') {
+      // Then check for admin testing user ID
+      const adminUserId = localStorage.getItem('adminUserId')
+      if (adminUserId) {
+        return parseInt(adminUserId)
+      }
     }
     
     // Then check session user ID
@@ -74,17 +79,24 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, onNewChat, chatHisto
     return 1 // Use 1 instead of 0 since user IDs start from 1
   }
   
-  const userId = getUserId()
+  // Update userId when dependencies change
+  useEffect(() => {
+    const newUserId = getUserId()
+    setUserId(newUserId)
+  }, [userIdProp, session?.user?.id])
+  
+  // Also check admin status on client side only
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      setIsAdmin(localStorage.getItem('isAdmin') === 'true')
+    }
+  }, [])
   
   // Use templates hook for data management
   const { templateCount, enabledCount } = useTemplates({ 
     userId, 
     enabled: isOpen && !!userId 
   })
-
-  useEffect(() => {
-    setIsAdmin(localStorage.getItem('isAdmin') === 'true')
-  }, [])
 
   const handleNewChat = async () => {
     if (sessionId) {
@@ -136,7 +148,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, onNewChat, chatHisto
   }
 
   const handleSignOut = async () => {
-    if (localStorage.getItem('isAdmin') === 'true') {
+    if (typeof window !== 'undefined' && localStorage.getItem('isAdmin') === 'true') {
       // Clear admin status
       localStorage.removeItem('isAdmin')
       // Redirect to home page

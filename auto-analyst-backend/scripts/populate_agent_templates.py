@@ -22,11 +22,12 @@ AGENT_TEMPLATES = {
             "template_name": "matplotlib_agent",
             "display_name": "Matplotlib Visualization Agent",
             "description": "Creates static publication-quality plots using matplotlib and seaborn",
+            "icon_url": "https://cdn.jsdelivr.net/gh/devicons/devicon/icons/matplotlib/matplotlib-original.svg",
             "prompt_template": """
 You are a matplotlib/seaborn visualization expert. Your task is to create high-quality static visualizations using matplotlib and seaborn libraries.
 
 IMPORTANT Instructions:
-- You must only use matplotlib, seaborn, and numpy/pandas for visualizations
+- You must only use matplotlib, seaborn, and numpy/polars for visualizations
 - Always use plt.style.use('seaborn-v0_8') or a clean style for better aesthetics
 - Include proper titles, axis labels, and legends
 - Use appropriate color palettes and consider accessibility
@@ -36,57 +37,58 @@ IMPORTANT Instructions:
 
 Focus on creating publication-ready static visualizations that are informative and aesthetically pleasing.
 """
-        }
-    ],
-    "Modelling": [
-        {
-            "template_name": "xgboost_agent",
-            "display_name": "XGBoost Machine Learning Agent",
-            "description": "Builds and optimizes XGBoost models for classification and regression tasks",
-            "prompt_template": """
-You are an XGBoost machine learning expert. Build, tune, and evaluate XGBoost models.
-
-IMPORTANT Instructions:
-- Use XGBoost for both classification and regression tasks
-- Implement proper train/validation/test splits
-- Perform hyperparameter tuning using GridSearchCV or RandomizedSearchCV
-- Handle categorical variables with proper encoding
-- Include feature importance analysis and visualization
-- Evaluate models with appropriate metrics (accuracy, precision, recall, F1, RMSE, MAE, etc.)
-- Use cross-validation for robust model evaluation
-- Plot training curves and validation curves
-- Provide model interpretation and feature importance insights
-
-Focus on building production-ready XGBoost models with proper evaluation and interpretation.
-"""
         },
         {
-            "template_name": "time_series_agent",
-            "display_name": "Time Series Forecasting Agent",
-            "description": "Specialized in time series analysis and forecasting using ARIMA, Prophet, LSTM",
+            "template_name": "seaborn_agent",
+            "display_name": "Seaborn Statistical Plots Agent",
+            "description": "Creates statistical visualizations and data exploration plots using seaborn",
+            "icon_url": "https://seaborn.pydata.org/_images/logo-mark-lightbg.svg",
             "prompt_template": """
-You are a time series forecasting expert. Analyze temporal data and create forecasting models.
+You are a seaborn statistical visualization expert. Your task is to create statistical plots and exploratory data visualizations.
 
 IMPORTANT Instructions:
-- Perform exploratory time series analysis (trend, seasonality, stationarity)
-- Use appropriate models: ARIMA, SARIMA, Prophet, LSTM, or ensemble methods
-- Test for stationarity using ADF test and apply differencing if needed
-- Decompose time series into trend, seasonal, and residual components
-- Create forecasts with confidence intervals
-- Evaluate forecasts using MAE, RMSE, MAPE metrics
-- Plot actual vs predicted values and residuals
-- Handle missing values and outliers appropriately
-- Consider multiple seasonalities and external factors
+- Focus on seaborn for statistical plotting (distributions, relationships, categorical data)
+- Use matplotlib as the backend for customization
+- Create informative statistical plots: histograms, box plots, violin plots, pair plots, heatmaps
+- Apply proper statistical annotations and significance testing where relevant
+- Use seaborn's built-in themes and color palettes for professional appearance
+- Include statistical summaries and insights in plot annotations
+- Handle categorical and numerical data appropriately
+- Always include proper legends, titles, and axis labels
 
-Focus on accurate time series forecasting with proper validation and uncertainty quantification.
+Focus on revealing statistical patterns and relationships in data through visualization.
 """
-        }
+        },
     ],
     "Data Manipulation": [
+        {
+            "template_name": "polars_agent",
+            "display_name": "Polars Data Processing Agent",
+            "description": "High-performance data manipulation and analysis using Polars",
+            "icon_url": "https://raw.githubusercontent.com/pola-rs/polars-static/master/logos/polars-logo-dark.svg",
+            "prompt_template": """
+You are a Polars data processing expert. Perform high-performance data manipulation and analysis using Polars.
+
+IMPORTANT Instructions:
+- Use Polars for fast, memory-efficient data processing
+- Leverage lazy evaluation with pl.scan_csv() and .lazy() for large datasets
+- Implement efficient data transformations using Polars expressions
+- Use Polars-specific methods for groupby, aggregations, and window functions
+- Handle various data types and perform type conversions appropriately
+- Optimize queries for performance using lazy evaluation and query optimization
+- Implement complex data reshaping (pivots, melts, joins)
+- Use Polars datetime functionality for time-based operations
+- Convert to pandas only when necessary for visualization or other libraries
+- Focus on performance and memory efficiency
+
+Focus on leveraging Polars' speed and efficiency for data processing tasks.
+"""
+        },
         {
             "template_name": "data_cleaning_agent",
             "display_name": "Data Cleaning Specialist Agent",
             "description": "Specialized in comprehensive data cleaning and quality assessment",
+            "icon_url": "https://cdn-icons-png.flaticon.com/512/2103/2103633.png",
             "prompt_template": """
 You are a data cleaning specialist. Perform comprehensive data quality assessment and cleaning.
 
@@ -109,6 +111,7 @@ Focus on delivering high-quality, analysis-ready datasets with comprehensive doc
             "template_name": "feature_engineering_agent",
             "display_name": "Feature Engineering Agent",
             "description": "Creates and transforms features for machine learning models",
+            "icon_url": "https://cdn-icons-png.flaticon.com/512/2103/2103658.png",
             "prompt_template": """
 You are a feature engineering expert. Create, transform, and select features for machine learning.
 
@@ -160,6 +163,7 @@ def populate_templates():
                     template_name=template_name,
                     display_name=template_data["display_name"],
                     description=template_data["description"],
+                    icon_url=template_data["icon_url"],
                     prompt_template=template_data["prompt_template"],
                     category=category,
                     is_premium_only=True,  # All templates require premium

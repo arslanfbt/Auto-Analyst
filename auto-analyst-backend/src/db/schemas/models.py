@@ -185,6 +185,9 @@ class AgentTemplate(Base):
     description = Column(Text, nullable=False)  # Short description for template selection
     prompt_template = Column(Text, nullable=False)  # Main prompt/instructions for agent behavior
     
+    # Template appearance
+    icon_url = Column(String(500), nullable=True)  # URL to template icon (CDN, data URL, or relative path)
+    
     # Template categorization
     category = Column(String(50), nullable=True)  # 'Visualization', 'Modelling', 'Data Manipulation'
     is_premium_only = Column(Boolean, default=False)  # True if template requires premium subscription

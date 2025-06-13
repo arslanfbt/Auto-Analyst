@@ -90,38 +90,47 @@ export default function TemplatesModal({
   const loadData = async () => {
     setLoading(true)
     try {
-      // Fetch user-specific template data which includes usage counts and preferences
-      const response = await fetch(`${API_URL}/templates/user/${userId}`)
+      // Fetch global template data with global usage counts
+      const [templatesResponse, preferencesResponse] = await Promise.all([
+        fetch(`${API_URL}/templates/`), // Global templates with global usage counts
+        fetch(`${API_URL}/templates/user/${userId}`) // User preferences with per-user usage
+      ])
 
-      if (response.ok) {
-        // The user endpoint returns UserTemplatePreferenceResponse which has all template data + usage
-        const userTemplateData = await response.json()
+      if (templatesResponse.ok) {
+        // Global templates with global usage counts
+        const globalTemplatesData = await templatesResponse.json()
         
-        // Convert UserTemplatePreferenceResponse to TemplateAgent format
-        const templatesData = userTemplateData.map((item: any) => ({
+        // Convert to TemplateAgent format with global usage counts
+        const templatesData = globalTemplatesData.map((item: any) => ({
           template_id: item.template_id,
           template_name: item.template_name,
           display_name: item.display_name,
           description: item.description,
-          prompt_template: '', // Not needed for display
+          prompt_template: item.prompt_template,
           template_category: item.template_category,
+          icon_url: item.icon_url,
           is_premium_only: item.is_premium_only,
-          is_active: true, // Only active templates are returned
-          usage_count: item.usage_count, // This will have the actual usage count
-          created_at: new Date().toISOString() // Not critical for display
+          is_active: item.is_active,
+          usage_count: item.usage_count, // Global usage count from /templates/ endpoint
+          created_at: item.created_at
         }))
         setTemplates(templatesData)
+      }
+
+      if (preferencesResponse.ok) {
+        // User preferences (enabled/disabled status and per-user usage)
+        const userPreferencesData = await preferencesResponse.json()
         
-        // Also use the same data for preferences
-        const preferencesData = userTemplateData.map((item: any) => ({
+        const preferencesData = userPreferencesData.map((item: any) => ({
           template_id: item.template_id,
           template_name: item.template_name,
           display_name: item.display_name,
           description: item.description,
           template_category: item.template_category,
+          icon_url: item.icon_url,
           is_premium_only: item.is_premium_only,
           is_enabled: item.is_enabled,
-          usage_count: item.usage_count,
+          usage_count: item.usage_count, // Keep user-specific usage for preferences if needed
           last_used_at: item.last_used_at
         }))
         setPreferences(preferencesData)
@@ -228,6 +237,7 @@ export default function TemplatesModal({
           display_name: template.display_name,
           description: template.description,
           template_category: template.template_category,
+          icon_url: template.icon_url,
           is_premium_only: template.is_premium_only,
           is_enabled: enabled,
           usage_count: template.usage_count || 0,
