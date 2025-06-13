@@ -35,8 +35,6 @@ import {
 } from "@/components/ui/select"
 // Deep Analysis imports
 import { DeepAnalysisSidebar, DeepAnalysisButton } from '../deep-analysis'
-// Custom Agents imports
-import { TemplatesSidebar, TemplatesButton } from '../custom-agents'
 import CommandSuggestions from './CommandSuggestions'
 import AgentSuggestions from './AgentSuggestions'
 import { useUserSubscriptionStore } from '@/lib/store/userSubscriptionStore'

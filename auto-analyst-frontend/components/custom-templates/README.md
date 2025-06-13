@@ -93,15 +93,6 @@ The templates system includes comprehensive premium feature support:
 - **Upgrade Prompts**: Encourages non-premium users to upgrade
 - **Feature Enforcement**: Prevents unauthorized access to premium features
 
-## Migration from custom-agents
-
-This system replaces the previous `custom-agents` template implementation with:
-
-1. **Better UX**: Integrated sidebar access instead of separate component
-2. **Unified Interface**: Single modal for all template operations
-3. **Improved State Management**: Custom hook for better data handling
-4. **Modern Design**: Consistent with current design system
-5. **Better Performance**: Optimized data loading and state updates
 
 ## Usage Examples
 

@@ -1,6 +1,0 @@
-export { default as TemplatesButton } from './TemplatesButton'
-export { default as TemplatesSidebar } from './TemplatesSidebar'
-export { default as TemplateListView } from './TemplateListView'
-export { default as TemplateDetailView } from './TemplateDetailView'
-export { default as TemplateManagementView } from './TemplateManagementView'
-export * from './types' 
