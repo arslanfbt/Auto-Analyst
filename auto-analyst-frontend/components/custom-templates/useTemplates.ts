@@ -86,7 +86,9 @@ export function useTemplates({ userId, enabled = true }: UseTemplatesProps): Use
         ))
         
         // Dispatch event for other components
-        window.dispatchEvent(new CustomEvent('template-preferences-updated'))
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('template-preferences-updated'))
+        }
         
         return true
       } else {
@@ -123,7 +125,9 @@ export function useTemplates({ userId, enabled = true }: UseTemplatesProps): Use
         }))
 
         // Dispatch event for other components
-        window.dispatchEvent(new CustomEvent('template-preferences-updated'))
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('template-preferences-updated'))
+        }
 
         const successful = result.results?.filter((r: any) => r.success).length || updates.length
         const failed = result.results?.filter((r: any) => !r.success).length || 0
@@ -159,6 +163,8 @@ export function useTemplates({ userId, enabled = true }: UseTemplatesProps): Use
 
   // Listen for external updates
   useEffect(() => {
+    if (typeof window === 'undefined') return
+
     const handleUpdate = () => {
       loadData()
     }

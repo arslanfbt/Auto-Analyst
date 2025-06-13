@@ -88,7 +88,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, onNewChat, chatHisto
   // Also check admin status on client side only
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      setIsAdmin(localStorage.getItem('isAdmin') === 'true')
+    setIsAdmin(localStorage.getItem('isAdmin') === 'true')
     }
   }, [])
   
