@@ -188,15 +188,23 @@ export default function AgentSuggestions({
         ? message.slice(activeAtPos + 1, activeAtPos + 1 + spaceIndex) 
         : textAfterAt
       
-      // Only show suggestions if we're actively typing an agent name
-      if (typedText && !typedText.includes(' ')) {
-        const filtered = agents.filter(agent => 
-          agent.name.toLowerCase().includes(typedText.toLowerCase())
-        )
-        setFilteredAgents(filtered)
-        setSelectedIndex(filtered.length > 0 ? 0 : -1)
+          // Show suggestions if we're actively typing an agent name or just typed @
+    if (!typedText.includes(' ')) {
+      // If no text after @, show all agents
+      if (typedText === '') {
+        setFilteredAgents(agents)
+        setSelectedIndex(agents.length > 0 ? 0 : -1)
         return
       }
+      
+      // If there's text after @, filter agents based on that text
+      const filtered = agents.filter(agent => 
+        agent.name.toLowerCase().includes(typedText.toLowerCase())
+      )
+      setFilteredAgents(filtered)
+      setSelectedIndex(filtered.length > 0 ? 0 : -1)
+      return
+    }
     }
     
     setFilteredAgents([])
@@ -223,6 +231,7 @@ export default function AgentSuggestions({
           break
         case 'Enter':
           e.preventDefault()
+          e.stopPropagation()
           if (selectedIndex >= 0 && selectedIndex < filteredAgents.length) {
             onSuggestionSelect(filteredAgents[selectedIndex].name)
           }

@@ -95,7 +95,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, onNewChat, chatHisto
   // Use templates hook for data management
   const { templateCount, enabledCount } = useTemplates({ 
     userId, 
-    enabled: isOpen && !!userId 
+    enabled: isOpen && !!userId && userId > 0 
   })
 
   const handleNewChat = async () => {
