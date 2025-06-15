@@ -1951,6 +1951,13 @@ const ChatInput = forwardRef<
                       onChange={handleInputChange}
                       onKeyDown={(e) => {
                         if (e.key === 'Enter' && !e.shiftKey) {
+                          // Check if agent suggestions are visible and should handle the Enter key
+                          const isAgentSuggestionsVisible = !showCommandSuggestions && message.includes('@');
+                          if (isAgentSuggestionsVisible) {
+                            // Don't handle Enter here, let AgentSuggestions component handle it
+                            // The AgentSuggestions component will preventDefault if it handles the event
+                            return;
+                          }
                           e.preventDefault()
                           handleSubmit(e)
                         }

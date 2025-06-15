@@ -22,7 +22,7 @@ AGENT_TEMPLATES = {
             "template_name": "matplotlib_agent",
             "display_name": "Matplotlib Visualization Agent",
             "description": "Creates static publication-quality plots using matplotlib and seaborn",
-            "icon_url": "https://cdn.jsdelivr.net/gh/devicons/devicon/icons/matplotlib/matplotlib-original.svg",
+            "icon_url": "/icons/templates/matplotlib.svg",
             "prompt_template": """
 You are a matplotlib/seaborn visualization expert. Your task is to create high-quality static visualizations using matplotlib and seaborn libraries.
 
@@ -42,7 +42,7 @@ Focus on creating publication-ready static visualizations that are informative a
             "template_name": "seaborn_agent",
             "display_name": "Seaborn Statistical Plots Agent",
             "description": "Creates statistical visualizations and data exploration plots using seaborn",
-            "icon_url": "https://seaborn.pydata.org/_images/logo-mark-lightbg.svg",
+            "icon_url": "/icons/templates/seaborn.svg",
             "prompt_template": """
 You are a seaborn statistical visualization expert. Your task is to create statistical plots and exploratory data visualizations.
 
@@ -65,7 +65,7 @@ Focus on revealing statistical patterns and relationships in data through visual
             "template_name": "polars_agent",
             "display_name": "Polars Data Processing Agent",
             "description": "High-performance data manipulation and analysis using Polars",
-            "icon_url": "https://raw.githubusercontent.com/pola-rs/polars-static/master/logos/polars-logo-dark.svg",
+            "icon_url": "/icons/templates/polars.svg",
             "prompt_template": """
 You are a Polars data processing expert. Perform high-performance data manipulation and analysis using Polars.
 
@@ -88,7 +88,7 @@ Focus on leveraging Polars' speed and efficiency for data processing tasks.
             "template_name": "data_cleaning_agent",
             "display_name": "Data Cleaning Specialist Agent",
             "description": "Specialized in comprehensive data cleaning and quality assessment",
-            "icon_url": "https://cdn-icons-png.flaticon.com/512/2103/2103633.png",
+            "icon_url": "/icons/templates/data-cleaning.png",
             "prompt_template": """
 You are a data cleaning specialist. Perform comprehensive data quality assessment and cleaning.
 
@@ -111,7 +111,7 @@ Focus on delivering high-quality, analysis-ready datasets with comprehensive doc
             "template_name": "feature_engineering_agent",
             "display_name": "Feature Engineering Agent",
             "description": "Creates and transforms features for machine learning models",
-            "icon_url": "https://cdn-icons-png.flaticon.com/512/2103/2103658.png",
+            "icon_url": "/icons/templates/feature-engineering.png",
             "prompt_template": """
 You are a feature engineering expert. Create, transform, and select features for machine learning.
 
