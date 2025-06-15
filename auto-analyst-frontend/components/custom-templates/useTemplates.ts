@@ -28,7 +28,7 @@ export function useTemplates({ userId, enabled = true }: UseTemplatesProps): Use
   const { toast } = useToast()
 
   const loadData = useCallback(async () => {
-    if (!enabled || !userId || userId <= 0) return
+    if (!enabled || !userId) return
 
     setLoading(true)
     setError(null)
@@ -56,15 +56,11 @@ export function useTemplates({ userId, enabled = true }: UseTemplatesProps): Use
       const errorMessage = err instanceof Error ? err.message : 'Failed to load data'
       setError(errorMessage)
       console.error('Error loading templates data:', err)
-      
-      // Only show toast if it's not a network/fetch error to avoid persistent error popups
-      if (!(err instanceof TypeError && err.message.includes('Failed to fetch'))) {
-        toast({
-          title: "Error",
-          description: errorMessage,
-          variant: "destructive",
-        })
-      }
+      toast({
+        title: "Error",
+        description: errorMessage,
+        variant: "destructive",
+      })
     } finally {
       setLoading(false)
     }
