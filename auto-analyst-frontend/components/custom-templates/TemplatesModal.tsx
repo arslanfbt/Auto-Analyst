@@ -90,7 +90,7 @@ export default function TemplatesModal({
       })
       
       setTemplates(templatesData)
-      setPreferences([]) // No preferences for free users
+        setPreferences([]) // No preferences for free users
       setChanges({})
     } catch (error) {
       console.error('Error loading templates:', error)
@@ -108,42 +108,30 @@ export default function TemplatesModal({
   const loadData = async () => {
     setLoading(true)
     try {
-      console.log('Loading templates data for modal...', { API_URL, userId })
-      
       // Fetch global template data with global usage counts
       const [templatesResponse, preferencesResponse] = await Promise.all([
         fetch(`${API_URL}/templates/`).catch(err => {
-          console.error('Templates fetch error:', err)
           throw new Error(`Templates endpoint failed: ${err.message}`)
         }), // Global templates with global usage counts
         fetch(`${API_URL}/templates/user/${userId}`).catch(err => {
-          console.error('Preferences fetch error:', err)
           throw new Error(`Preferences endpoint failed: ${err.message}`)
         }) // User preferences with per-user usage
       ])
 
-      console.log('Modal responses received:', { 
-        templatesStatus: templatesResponse.status,
-        preferencesStatus: preferencesResponse.status 
-      })
-
       // Check templates response
       if (!templatesResponse.ok) {
         const errorText = await templatesResponse.text()
-        console.error('Templates response error:', { status: templatesResponse.status, errorText })
         throw new Error(`Failed to load templates: ${templatesResponse.status} ${templatesResponse.statusText} - ${errorText}`)
       }
 
       // Check preferences response
       if (!preferencesResponse.ok) {
         const errorText = await preferencesResponse.text()
-        console.error('Preferences response error:', { status: preferencesResponse.status, errorText })
         throw new Error(`Failed to load preferences: ${preferencesResponse.status} ${preferencesResponse.statusText} - ${errorText}`)
       }
 
       // Parse templates response
       const globalTemplatesData = await templatesResponse.json().catch(err => {
-        console.error('Templates JSON parse error:', err)
         throw new Error(`Failed to parse templates response: ${err.message}`)
       })
       
@@ -165,7 +153,6 @@ export default function TemplatesModal({
 
       // Parse preferences response
       const userPreferencesData = await preferencesResponse.json().catch(err => {
-        console.error('Preferences JSON parse error:', err)
         throw new Error(`Failed to parse preferences response: ${err.message}`)
       })
       
@@ -182,11 +169,6 @@ export default function TemplatesModal({
         last_used_at: item.last_used_at
       }))
       setPreferences(preferencesData)
-
-      console.log('Modal data parsed successfully:', { 
-        templatesCount: templatesData.length,
-        preferencesCount: preferencesData.length 
-      })
 
       // Reset changes when loading data
       setChanges({})
