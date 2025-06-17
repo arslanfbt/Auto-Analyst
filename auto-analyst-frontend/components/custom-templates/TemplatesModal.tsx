@@ -64,21 +64,39 @@ export default function TemplatesModal({
   const loadTemplatesForFreeUsers = async () => {
     setLoading(true)
     try {
+      console.log('Loading templates for free users...', { API_URL })
+      
       // Fetch all templates (no user-specific data needed)
-      const response = await fetch(`${API_URL}/templates/`)
+      const response = await fetch(`${API_URL}/templates/`).catch(err => {
+        console.error('Free user templates fetch error:', err)
+        throw new Error(`Templates endpoint failed: ${err.message}`)
+      })
 
-      if (response.ok) {
-        const templatesData = await response.json()
-        setTemplates(templatesData)
-        setPreferences([]) // No preferences for free users
+      console.log('Free user templates response:', { status: response.status })
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        console.error('Free user templates response error:', { status: response.status, errorText })
+        throw new Error(`Failed to load templates: ${response.status} ${response.statusText} - ${errorText}`)
       }
 
+      const templatesData = await response.json().catch(err => {
+        console.error('Free user templates JSON parse error:', err)
+        throw new Error(`Failed to parse templates response: ${err.message}`)
+      })
+      
+      console.log('Free user templates data parsed successfully:', { 
+        templatesCount: templatesData.length 
+      })
+      
+      setTemplates(templatesData)
+      setPreferences([]) // No preferences for free users
       setChanges({})
     } catch (error) {
       console.error('Error loading templates:', error)
       toast({
         title: "Error",
-        description: "Failed to load agents",
+        description: error instanceof Error ? error.message : "Failed to load agents",
         variant: "destructive",
       })
     } finally {
@@ -90,51 +108,85 @@ export default function TemplatesModal({
   const loadData = async () => {
     setLoading(true)
     try {
+      console.log('Loading templates data for modal...', { API_URL, userId })
+      
       // Fetch global template data with global usage counts
       const [templatesResponse, preferencesResponse] = await Promise.all([
-        fetch(`${API_URL}/templates/`), // Global templates with global usage counts
-        fetch(`${API_URL}/templates/user/${userId}`) // User preferences with per-user usage
+        fetch(`${API_URL}/templates/`).catch(err => {
+          console.error('Templates fetch error:', err)
+          throw new Error(`Templates endpoint failed: ${err.message}`)
+        }), // Global templates with global usage counts
+        fetch(`${API_URL}/templates/user/${userId}`).catch(err => {
+          console.error('Preferences fetch error:', err)
+          throw new Error(`Preferences endpoint failed: ${err.message}`)
+        }) // User preferences with per-user usage
       ])
 
-      if (templatesResponse.ok) {
-        // Global templates with global usage counts
-        const globalTemplatesData = await templatesResponse.json()
-        
-        // Convert to TemplateAgent format with global usage counts
-        const templatesData = globalTemplatesData.map((item: any) => ({
-          template_id: item.template_id,
-          template_name: item.template_name,
-          display_name: item.display_name,
-          description: item.description,
-          prompt_template: item.prompt_template,
-          template_category: item.template_category,
-          icon_url: item.icon_url,
-          is_premium_only: item.is_premium_only,
-          is_active: item.is_active,
-          usage_count: item.usage_count, // Global usage count from /templates/ endpoint
-          created_at: item.created_at
-        }))
-        setTemplates(templatesData)
+      console.log('Modal responses received:', { 
+        templatesStatus: templatesResponse.status,
+        preferencesStatus: preferencesResponse.status 
+      })
+
+      // Check templates response
+      if (!templatesResponse.ok) {
+        const errorText = await templatesResponse.text()
+        console.error('Templates response error:', { status: templatesResponse.status, errorText })
+        throw new Error(`Failed to load templates: ${templatesResponse.status} ${templatesResponse.statusText} - ${errorText}`)
       }
 
-      if (preferencesResponse.ok) {
-        // User preferences (enabled/disabled status and per-user usage)
-        const userPreferencesData = await preferencesResponse.json()
-        
-        const preferencesData = userPreferencesData.map((item: any) => ({
-          template_id: item.template_id,
-          template_name: item.template_name,
-          display_name: item.display_name,
-          description: item.description,
-          template_category: item.template_category,
-          icon_url: item.icon_url,
-          is_premium_only: item.is_premium_only,
-          is_enabled: item.is_enabled,
-          usage_count: item.usage_count, // Keep user-specific usage for preferences if needed
-          last_used_at: item.last_used_at
-        }))
-        setPreferences(preferencesData)
+      // Check preferences response
+      if (!preferencesResponse.ok) {
+        const errorText = await preferencesResponse.text()
+        console.error('Preferences response error:', { status: preferencesResponse.status, errorText })
+        throw new Error(`Failed to load preferences: ${preferencesResponse.status} ${preferencesResponse.statusText} - ${errorText}`)
       }
+
+      // Parse templates response
+      const globalTemplatesData = await templatesResponse.json().catch(err => {
+        console.error('Templates JSON parse error:', err)
+        throw new Error(`Failed to parse templates response: ${err.message}`)
+      })
+      
+      // Convert to TemplateAgent format with global usage counts
+      const templatesData = globalTemplatesData.map((item: any) => ({
+        template_id: item.template_id,
+        template_name: item.template_name,
+        display_name: item.display_name,
+        description: item.description,
+        prompt_template: item.prompt_template,
+        template_category: item.template_category,
+        icon_url: item.icon_url,
+        is_premium_only: item.is_premium_only,
+        is_active: item.is_active,
+        usage_count: item.usage_count, // Global usage count from /templates/ endpoint
+        created_at: item.created_at
+      }))
+      setTemplates(templatesData)
+
+      // Parse preferences response
+      const userPreferencesData = await preferencesResponse.json().catch(err => {
+        console.error('Preferences JSON parse error:', err)
+        throw new Error(`Failed to parse preferences response: ${err.message}`)
+      })
+      
+      const preferencesData = userPreferencesData.map((item: any) => ({
+        template_id: item.template_id,
+        template_name: item.template_name,
+        display_name: item.display_name,
+        description: item.description,
+        template_category: item.template_category,
+        icon_url: item.icon_url,
+        is_premium_only: item.is_premium_only,
+        is_enabled: item.is_enabled,
+        usage_count: item.usage_count, // Keep user-specific usage for preferences if needed
+        last_used_at: item.last_used_at
+      }))
+      setPreferences(preferencesData)
+
+      console.log('Modal data parsed successfully:', { 
+        templatesCount: templatesData.length,
+        preferencesCount: preferencesData.length 
+      })
 
       // Reset changes when loading data
       setChanges({})
@@ -142,7 +194,7 @@ export default function TemplatesModal({
       console.error('Error loading data:', error)
       toast({
         title: "Error",
-        description: "Failed to load agents",
+        description: error instanceof Error ? error.message : "Failed to load agents",
         variant: "destructive",
       })
     } finally {
@@ -165,6 +217,27 @@ export default function TemplatesModal({
     return preferences.find(p => p.template_id === templateId)
   }
 
+  // Helper function to determine if a template should be enabled by default
+  const isDefaultEnabledTemplate = (templateName: string) => {
+    const defaultAgentNames = [
+      "preprocessing_agent",
+      "statistical_analytics_agent", 
+      "sk_learn_agent",
+      "data_viz_agent"
+    ]
+    return defaultAgentNames.includes(templateName)
+  }
+
+  // Helper function to get the effective enabled state for a template
+  const getTemplateEnabledState = (template: TemplateAgent) => {
+    const preference = getTemplatePreference(template.template_id)
+    const defaultEnabled = isDefaultEnabledTemplate(template.template_name)
+    
+    return changes[template.template_id] !== undefined 
+      ? changes[template.template_id] 
+      : preference?.is_enabled ?? defaultEnabled
+  }
+
   // Filter templates based on search, category, and status
   const filteredTemplates = useMemo(() => {
     let filtered = templates
@@ -183,11 +256,7 @@ export default function TemplatesModal({
 
     if (statusFilter !== 'all') {
       filtered = filtered.filter(template => {
-        const preference = getTemplatePreference(template.template_id)
-        const isEnabled = changes[template.template_id] !== undefined 
-          ? changes[template.template_id] 
-          : preference?.is_enabled || false
-        
+        const isEnabled = getTemplateEnabledState(template)
         return statusFilter === 'enabled' ? isEnabled : !isEnabled
       })
     }
@@ -294,18 +363,13 @@ export default function TemplatesModal({
   // Get template data for rendering
   const getTemplateData = (template: TemplateAgent) => {
     const preference = getTemplatePreference(template.template_id)
-    const isEnabled = changes[template.template_id] !== undefined 
-      ? changes[template.template_id] 
-      : preference?.is_enabled || false
+    const isEnabled = getTemplateEnabledState(template)
     
     return { preference, isEnabled }
   }
 
   const enabledCount = hasAccess 
-    ? preferences.filter(p => {
-        const hasChanges = changes[p.template_id] !== undefined
-        return hasChanges ? changes[p.template_id] : p.is_enabled
-      }).length
+    ? templates.filter(template => getTemplateEnabledState(template)).length
     : 0
 
   return (

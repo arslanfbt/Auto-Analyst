@@ -41,12 +41,15 @@ class UserTemplatePreferenceResponse(BaseModel):
     template_category: Optional[str]
     icon_url: Optional[str]
     is_premium_only: bool
+    is_active: bool
     is_enabled: bool
     usage_count: int
     last_used_at: Optional[datetime]
+    created_at: Optional[datetime]
+    updated_at: Optional[datetime]
 
-class ToggleTemplateRequest(BaseModel):
-    is_enabled: bool = Field(..., description="Whether to enable or disable the template")
+class TogglePreferenceRequest(BaseModel):
+    is_enabled: bool
 
 def get_global_usage_counts(session, template_ids: List[int] = None) -> Dict[int, int]:
     """
@@ -140,6 +143,14 @@ async def get_user_template_preferences(user_id: int):
                 AgentTemplate.is_active == True
             ).all()
             
+            # Get list of default agent names that should be enabled by default
+            default_agent_names = [
+                "preprocessing_agent",
+                "statistical_analytics_agent", 
+                "sk_learn_agent",
+                "data_viz_agent"
+            ]
+            
             result = []
             for template in templates:
                 # Get user preference for this template if it exists
@@ -147,6 +158,10 @@ async def get_user_template_preferences(user_id: int):
                     UserTemplatePreference.user_id == user_id,
                     UserTemplatePreference.template_id == template.template_id
                 ).first()
+                
+                # Determine if template should be enabled by default
+                is_default_agent = template.template_name in default_agent_names
+                default_enabled = is_default_agent  # Default agents enabled by default, others disabled
                 
                 result.append(UserTemplatePreferenceResponse(
                     template_id=template.template_id,
@@ -156,9 +171,12 @@ async def get_user_template_preferences(user_id: int):
                     template_category=template.category,
                     icon_url=template.icon_url,
                     is_premium_only=template.is_premium_only,
-                    is_enabled=preference.is_enabled if preference else False,  # Default to disabled
+                    is_active=template.is_active,
+                    is_enabled=preference.is_enabled if preference else default_enabled,  # Default agents enabled by default
                     usage_count=preference.usage_count if preference else 0,
-                    last_used_at=preference.last_used_at if preference else None
+                    last_used_at=preference.last_used_at if preference else None,
+                    created_at=preference.created_at if preference else None,
+                    updated_at=preference.updated_at if preference else None
                 ))
             
             return result
@@ -189,6 +207,14 @@ async def get_user_enabled_templates(user_id: int):
                 AgentTemplate.is_active == True
             ).all()
             
+            # Get list of default agent names that should be enabled by default
+            default_agent_names = [
+                "preprocessing_agent",
+                "statistical_analytics_agent", 
+                "sk_learn_agent",
+                "data_viz_agent"
+            ]
+            
             result = []
             for template in all_templates:
                 # Check if user has a preference record for this template
@@ -197,8 +223,12 @@ async def get_user_enabled_templates(user_id: int):
                     UserTemplatePreference.template_id == template.template_id
                 ).first()
                 
-                # Template is disabled by default unless explicitly enabled
-                is_enabled = preference.is_enabled if preference else False
+                # Determine if template should be enabled by default
+                is_default_agent = template.template_name in default_agent_names
+                default_enabled = is_default_agent  # Default agents enabled by default, others disabled
+                
+                # Template is enabled by default for default agents, disabled for others
+                is_enabled = preference.is_enabled if preference else default_enabled
                 
                 if is_enabled:
                     result.append(UserTemplatePreferenceResponse(
@@ -209,9 +239,12 @@ async def get_user_enabled_templates(user_id: int):
                         template_category=template.category,
                         icon_url=template.icon_url,
                         is_premium_only=template.is_premium_only,
+                        is_active=template.is_active,
                         is_enabled=True,
                         usage_count=preference.usage_count if preference else 0,
-                        last_used_at=preference.last_used_at if preference else None
+                        last_used_at=preference.last_used_at if preference else None,
+                        created_at=preference.created_at if preference else None,
+                        updated_at=preference.updated_at if preference else None
                     ))
             
             return result
@@ -237,36 +270,66 @@ async def get_user_enabled_templates_for_planner(user_id: int):
             if not user:
                 raise HTTPException(status_code=404, detail="User not found")
             
-            # Get enabled templates ordered by usage (most used first) and limit to 10
-            enabled_preferences = session.query(UserTemplatePreference).filter(
-                UserTemplatePreference.user_id == user_id,
-                UserTemplatePreference.is_enabled == True
-            ).order_by(
-                UserTemplatePreference.usage_count.desc(),
-                UserTemplatePreference.last_used_at.desc()
-            ).limit(10).all()
+            # Get list of default agent names that should be enabled by default
+            default_agent_names = [
+                "preprocessing_agent",
+                "statistical_analytics_agent", 
+                "sk_learn_agent",
+                "data_viz_agent"
+            ]
             
-            result = []
-            for preference in enabled_preferences:
-                # Get template details
-                template = session.query(AgentTemplate).filter(
-                    AgentTemplate.template_id == preference.template_id,
-                    AgentTemplate.is_active == True
+            # Get all active templates
+            all_templates = session.query(AgentTemplate).filter(
+                AgentTemplate.is_active == True
+            ).all()
+            
+            enabled_templates = []
+            for template in all_templates:
+                # Check if user has a preference record for this template
+                preference = session.query(UserTemplatePreference).filter(
+                    UserTemplatePreference.user_id == user_id,
+                    UserTemplatePreference.template_id == template.template_id
                 ).first()
                 
-                if template:
-                    result.append(UserTemplatePreferenceResponse(
-                        template_id=template.template_id,
-                        template_name=template.template_name,
-                        display_name=template.display_name,
-                        description=template.description,
-                        template_category=template.category,
-                        icon_url=template.icon_url,
-                        is_premium_only=template.is_premium_only,
-                        is_enabled=True,
-                        usage_count=preference.usage_count,
-                        last_used_at=preference.last_used_at
-                    ))
+                # Determine if template should be enabled by default
+                is_default_agent = template.template_name in default_agent_names
+                default_enabled = is_default_agent  # Default agents enabled by default, others disabled
+                
+                # Template is enabled by default for default agents, disabled for others
+                is_enabled = preference.is_enabled if preference else default_enabled
+                
+                if is_enabled:
+                    enabled_templates.append({
+                        'template': template,
+                        'preference': preference,
+                        'usage_count': preference.usage_count if preference else 0,
+                        'last_used_at': preference.last_used_at if preference else None
+                    })
+            
+            # Sort by usage (most used first) and limit to 10
+            enabled_templates.sort(key=lambda x: (x['usage_count'], x['last_used_at'] or datetime.min.replace(tzinfo=UTC)), reverse=True)
+            enabled_templates = enabled_templates[:10]
+            
+            result = []
+            for item in enabled_templates:
+                template = item['template']
+                preference = item['preference']
+                
+                result.append(UserTemplatePreferenceResponse(
+                    template_id=template.template_id,
+                    template_name=template.template_name,
+                    display_name=template.display_name,
+                    description=template.description,
+                    template_category=template.category,
+                    icon_url=template.icon_url,
+                    is_premium_only=template.is_premium_only,
+                    is_active=template.is_active,
+                    is_enabled=True,
+                    usage_count=preference.usage_count if preference else 0,
+                    last_used_at=preference.last_used_at if preference else None,
+                    created_at=preference.created_at if preference else None,
+                    updated_at=preference.updated_at if preference else None
+                ))
             
             logger.log_message(f"Retrieved {len(result)} enabled templates for planner for user {user_id}", level=logging.INFO)
             return result
@@ -281,7 +344,7 @@ async def get_user_enabled_templates_for_planner(user_id: int):
         raise HTTPException(status_code=500, detail=f"Failed to retrieve planner templates: {str(e)}")
 
 @router.post("/user/{user_id}/template/{template_id}/toggle")
-async def toggle_template_preference(user_id: int, template_id: int, request: ToggleTemplateRequest):
+async def toggle_template_preference(user_id: int, template_id: int, request: TogglePreferenceRequest):
     """Toggle a user's template preference (enable/disable for planner use)"""
     try:
         session = session_factory()
