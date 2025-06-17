@@ -70,6 +70,59 @@ except Exception as e:
     # Don't exit on database connectivity issues - let app try to start
 }
 
+# Function to populate agents and templates for development (SQLite only)
+populate_agents_templates() {
+    echo "🔧 Checking if agents/templates need to be populated..."
+    python -c "
+try:
+    from src.db.init_db import DATABASE_URL
+    from src.db.schemas.models import AgentTemplate
+    from src.db.init_db import session_factory
+    
+    # Check database type
+    if DATABASE_URL.startswith('sqlite'):
+        print('🔍 SQLite database detected - checking template population')
+        
+        session = session_factory()
+        try:
+            template_count = session.query(AgentTemplate).count()
+            
+            if template_count == 0:
+                print('📋 No templates found - populating agents and templates...')
+                session.close()
+                exit(1)  # Signal that population is needed
+            else:
+                print(f'✅ Found {template_count} templates - population not needed')
+                session.close()
+                exit(0)  # Signal that population is not needed
+        except Exception as e:
+            print(f'⚠️  Error checking templates: {e}')
+            print('📋 Will attempt to populate anyway')
+            session.close()
+            exit(1)  # Signal that population is needed
+    else:
+        print('🔍 PostgreSQL/RDS detected - skipping auto-population')
+        exit(0)  # Signal that population is not needed
+        
+except Exception as e:
+    print(f'❌ Error during template check: {e}')
+    exit(0)  # Don't fail startup, just skip population
+"
+    
+    # Check if population is needed (exit code 1 means yes)
+    if [ $? -eq 1 ]; then
+        echo "🚀 Running agent/template population for SQLite..."
+        python scripts/populate_agent_templates.py auto
+        
+        if [ $? -eq 0 ]; then
+            echo "✅ Agent/template population completed successfully"
+        else
+            echo "⚠️  Agent/template population had issues, but continuing..."
+            echo "📋 You may need to populate templates manually"
+        fi
+    fi
+}
+
 # Main startup sequence
 echo "🔧 Initializing production environment..."
 
@@ -81,6 +134,9 @@ init_production_database
 
 # Test database connectivity (non-failing)
 verify_database_connectivity
+
+# Populate agents and templates for development (SQLite only)
+populate_agents_templates
 
 echo "🎯 Starting FastAPI application..."
 echo "🌐 Application will be available on port 7860"

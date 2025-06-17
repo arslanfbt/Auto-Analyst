@@ -14,6 +14,8 @@ COPY --chown=user . /app
 # Make entrypoint script executable
 USER root
 RUN chmod +x /app/entrypoint.sh
+# Make populate script executable
+RUN chmod +x /app/scripts/populate_agent_templates.py
 USER user
 
 # Use the entrypoint script instead of directly running uvicorn

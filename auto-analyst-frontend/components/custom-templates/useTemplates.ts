@@ -34,24 +34,57 @@ export function useTemplates({ userId, enabled = true }: UseTemplatesProps): Use
     setError(null)
     
     try {
+      console.log('Loading templates data...', { API_URL, userId })
+      
       const [templatesResponse, preferencesResponse] = await Promise.all([
-        fetch(`${API_URL}/templates`),
-        fetch(`${API_URL}/templates/user/${userId}`)
+        fetch(`${API_URL}/templates/`).catch(err => {
+          console.error('Templates fetch error:', err)
+          throw new Error(`Templates endpoint failed: ${err.message}`)
+        }),
+        fetch(`${API_URL}/templates/user/${userId}`).catch(err => {
+          console.error('Preferences fetch error:', err)
+          throw new Error(`Preferences endpoint failed: ${err.message}`)
+        })
       ])
 
-      if (templatesResponse.ok) {
-        const templatesData = await templatesResponse.json()
-        setTemplates(templatesData)
-      } else {
-        throw new Error('Failed to load templates')
+      console.log('Responses received:', { 
+        templatesStatus: templatesResponse.status,
+        preferencesStatus: preferencesResponse.status 
+      })
+
+      // Check templates response
+      if (!templatesResponse.ok) {
+        const errorText = await templatesResponse.text()
+        console.error('Templates response error:', { status: templatesResponse.status, errorText })
+        throw new Error(`Failed to load templates: ${templatesResponse.status} ${templatesResponse.statusText} - ${errorText}`)
       }
 
-      if (preferencesResponse.ok) {
-        const preferencesData = await preferencesResponse.json()
-        setPreferences(preferencesData)
-      } else {
-        throw new Error('Failed to load preferences')
+      // Check preferences response  
+      if (!preferencesResponse.ok) {
+        const errorText = await preferencesResponse.text()
+        console.error('Preferences response error:', { status: preferencesResponse.status, errorText })
+        throw new Error(`Failed to load preferences: ${preferencesResponse.status} ${preferencesResponse.statusText} - ${errorText}`)
       }
+
+      // Parse responses
+      const templatesData = await templatesResponse.json().catch(err => {
+        console.error('Templates JSON parse error:', err)
+        throw new Error(`Failed to parse templates response: ${err.message}`)
+      })
+      
+      const preferencesData = await preferencesResponse.json().catch(err => {
+        console.error('Preferences JSON parse error:', err)
+        throw new Error(`Failed to parse preferences response: ${err.message}`)
+      })
+      
+      console.log('Data parsed successfully:', { 
+        templatesCount: templatesData.length,
+        preferencesCount: preferencesData.length 
+      })
+      
+      setTemplates(templatesData)
+      setPreferences(preferencesData)
+      
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to load data'
       setError(errorMessage)
