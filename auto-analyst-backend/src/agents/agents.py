@@ -1150,7 +1150,7 @@ class auto_analyst_ind(dspy.Module):
                 if agent_name == 'data_viz_agent':
                     self.agent_inputs[agent_name] = {'goal', 'dataset', 'styling_index', 'plan_instructions'}
                 else:
-                    self.agent_inputs[agent_name] = {'dataset', 'goal', 'plan_instructions'}
+                    self.agent_inputs[agent_name] = {'goal', 'dataset', 'plan_instructions'}
                 
                 # Get description from database
                 self.agent_desc.append({agent_name: get_agent_description(agent_name)})
@@ -1173,8 +1173,19 @@ class auto_analyst_ind(dspy.Module):
                     # Add template agent to agents dict
                     self.agents[template_name] = dspy.asyncify(dspy.ChainOfThought(signature))
                     
-                    # Extract input fields from signature - templates use standard fields like data_viz_agent
-                    self.agent_inputs[template_name] = {'goal', 'dataset', 'styling_index'}
+                    # Determine if this is a visualization agent based on name
+                    is_viz_agent = (template_name == 'data_viz_agent' or 
+                                  'viz' in template_name.lower() or 
+                                  'visual' in template_name.lower() or 
+                                  'plot' in template_name.lower() or 
+                                  'chart' in template_name.lower() or
+                                  'matplotlib' in template_name.lower())
+                    
+                    # Set input fields based on agent type
+                    if is_viz_agent:
+                        self.agent_inputs[template_name] = {'goal', 'dataset', 'styling_index', 'plan_instructions'}
+                    else:
+                        self.agent_inputs[template_name] = {'goal', 'dataset', 'plan_instructions'}
                     
                     # Store template agent description
                     try:
@@ -1291,39 +1302,112 @@ class auto_analyst_ind(dspy.Module):
             return specified_agent.strip(), {"error": str(e)}
 
     async def forward(self, query, specified_agent):
+        logger.log_message(f"[DEBUG] auto_analyst_ind.forward called with query: '{query[:100]}...', agent: '{specified_agent}'", level=logging.DEBUG)
+        
         try:
             # If specified_agent contains multiple agents separated by commas
             # This is for handling multiple @agent mentions in one query
             if "," in specified_agent:
+                logger.log_message(f"[DEBUG] Multiple agents detected in auto_analyst_ind", level=logging.DEBUG)
                 agent_list = [agent.strip() for agent in specified_agent.split(",")]
                 return await self.execute_multiple_agents(query, agent_list)
             
+            logger.log_message(f"[DEBUG] Processing single agent: '{specified_agent}'", level=logging.DEBUG)
+            
             # Process query with specified agent (single agent case)
             dict_ = {}
+            logger.log_message(f"[DEBUG] Retrieving dataset info", level=logging.DEBUG)
             dict_['dataset'] = self.dataset.retrieve(query)[0].text
+            logger.log_message(f"[DEBUG] Dataset retrieved, length: {len(dict_['dataset'])}", level=logging.DEBUG)
+            
+            logger.log_message(f"[DEBUG] Retrieving styling index", level=logging.DEBUG)
             dict_['styling_index'] = self.styling_index.retrieve(query)[0].text
+            logger.log_message(f"[DEBUG] Styling index retrieved, length: {len(dict_['styling_index'])}", level=logging.DEBUG)
+            
             dict_['hint'] = []
             dict_['goal'] = query
             dict_['Agent_desc'] = str(self.agent_desc)
+            
+            logger.log_message(f"[DEBUG] Checking if agent '{specified_agent.strip()}' exists in agent_inputs", level=logging.DEBUG)
+            logger.log_message(f"[DEBUG] Available agent_inputs keys: {list(self.agent_inputs.keys())}", level=logging.DEBUG)
+            
+            if specified_agent.strip() not in self.agent_inputs:
+                logger.log_message(f"[ERROR] Agent '{specified_agent.strip()}' not found in agent_inputs", level=logging.ERROR)
+                return {"response": f"Agent '{specified_agent.strip()}' not found in agent inputs"}
 
             # Prepare inputs
-            inputs = {x:dict_[x] for x in self.agent_inputs[specified_agent.strip()]}
-            inputs['hint'] = str(dict_['hint']).replace('[','').replace(']','')
+            logger.log_message(f"[DEBUG] Preparing inputs for agent '{specified_agent.strip()}'", level=logging.DEBUG)
+            logger.log_message(f"[DEBUG] Required inputs for agent: {self.agent_inputs[specified_agent.strip()]}", level=logging.DEBUG)
+            
+            # Create inputs that match exactly what the agent expects
+            inputs = {}
+            required_fields = self.agent_inputs[specified_agent.strip()]
+            
+            for field in required_fields:
+                if field == 'goal':
+                    inputs['goal'] = query
+                elif field == 'dataset':
+                    inputs['dataset'] = dict_['dataset']
+                elif field == 'styling_index':
+                    inputs['styling_index'] = dict_['styling_index']
+                elif field == 'plan_instructions':
+                    inputs['plan_instructions'] = ""  # Empty for individual agent use
+                elif field == 'hint':
+                    inputs['hint'] = ""  # Empty string for hint
+                else:
+                    # For any other fields, try to get from dict_ if available
+                    if field in dict_:
+                        inputs[field] = dict_[field]
+                    else:
+                        logger.log_message(f"[WARNING] Field '{field}' required by agent but not available in dict_", level=logging.WARNING)
+                        inputs[field] = ""  # Provide empty string as fallback
+            
+            logger.log_message(f"[DEBUG] Final inputs prepared: {list(inputs.keys())}", level=logging.DEBUG)
+            logger.log_message(f"[DEBUG] Inputs match required fields: {set(inputs.keys()) == required_fields}", level=logging.DEBUG)
+            
+            logger.log_message(f"[DEBUG] Checking if agent '{specified_agent.strip()}' exists in agents dict", level=logging.DEBUG)
+            logger.log_message(f"[DEBUG] Available agents: {list(self.agents.keys())}", level=logging.DEBUG)
+            
+            if specified_agent.strip() not in self.agents:
+                logger.log_message(f"[ERROR] Agent '{specified_agent.strip()}' not found in agents dict", level=logging.ERROR)
+                return {"response": f"Agent '{specified_agent.strip()}' not found in agents"}
             
             # Execute agent
+            logger.log_message(f"[DEBUG] About to execute agent '{specified_agent.strip()}'", level=logging.DEBUG)
             result = await self.agents[specified_agent.strip()](**inputs)
+            logger.log_message(f"[DEBUG] Agent execution completed. Result type: {type(result)}", level=logging.DEBUG)
+            logger.log_message(f"[DEBUG] Agent result content: {str(result)[:200]}...", level=logging.DEBUG)
             
             # Track usage for template agents
+            logger.log_message(f"[DEBUG] Tracking usage for agent", level=logging.DEBUG)
             await self._track_agent_usage(specified_agent.strip())
             
-            output_dict = {specified_agent.strip(): dict(result)}
+            logger.log_message(f"[DEBUG] Converting result to dict", level=logging.DEBUG)
+            try:
+                result_dict = dict(result)
+                logger.log_message(f"[DEBUG] Result converted to dict successfully. Keys: {list(result_dict.keys())}", level=logging.DEBUG)
+            except Exception as dict_error:
+                logger.log_message(f"[ERROR] Failed to convert result to dict: {str(dict_error)}", level=logging.ERROR)
+                logger.log_message(f"[ERROR] Result type that failed conversion: {type(result)}", level=logging.ERROR)
+                return {"response": f"Error converting agent result to dict: {str(dict_error)}"}
+            
+            logger.log_message(f"[DEBUG] Creating output dict", level=logging.DEBUG)
+            output_dict = {specified_agent.strip(): result_dict}
+            logger.log_message(f"[DEBUG] Output dict created successfully", level=logging.DEBUG)
 
-            if "error" in output_dict:
-                return {"response": f"Error executing agent: {output_dict['error']}"}
+            # Check for errors in the agent's response (not in the outer dict)
+            logger.log_message(f"[DEBUG] Checking for errors in agent response", level=logging.DEBUG)
+            if "error" in result_dict:
+                logger.log_message(f"[DEBUG] Error found in agent response: {result_dict['error']}", level=logging.DEBUG)
+                return {"response": f"Error executing agent: {result_dict['error']}"}
 
+            logger.log_message(f"[DEBUG] auto_analyst_ind.forward completed successfully", level=logging.DEBUG)
             return output_dict
 
         except Exception as e:
+            logger.log_message(f"[ERROR] Exception in auto_analyst_ind.forward: {str(e)}", level=logging.ERROR)
+            import traceback
+            logger.log_message(f"[ERROR] Full traceback: {traceback.format_exc()}", level=logging.ERROR)
             return {"response": f"This is the error from the system: {str(e)}"}
     
     async def execute_multiple_agents(self, query, agent_list):
@@ -1347,8 +1431,33 @@ class auto_analyst_ind(dspy.Module):
                     continue
                 
                 # Prepare inputs for this agent
-                inputs = {x:dict_[x] for x in self.agent_inputs[agent_name] if x in dict_}
-                inputs['hint'] = str(dict_['hint']).replace('[','').replace(']','')
+                logger.log_message(f"[DEBUG] Preparing inputs for agent '{agent_name}'", level=logging.DEBUG)
+                logger.log_message(f"[DEBUG] Required inputs for agent: {self.agent_inputs[agent_name]}", level=logging.DEBUG)
+                
+                # Create inputs that match exactly what the agent expects
+                inputs = {}
+                required_fields = self.agent_inputs[agent_name]
+                
+                for field in required_fields:
+                    if field == 'goal':
+                        inputs['goal'] = query
+                    elif field == 'dataset':
+                        inputs['dataset'] = dict_['dataset']
+                    elif field == 'styling_index':
+                        inputs['styling_index'] = dict_['styling_index']
+                    elif field == 'plan_instructions':
+                        inputs['plan_instructions'] = ""  # Empty for individual agent use
+                    elif field == 'hint':
+                        inputs['hint'] = ""  # Empty string for hint
+                    else:
+                        # For any other fields, try to get from dict_ if available
+                        if field in dict_:
+                            inputs[field] = dict_[field]
+                        else:
+                            logger.log_message(f"[WARNING] Field '{field}' required by agent but not available in dict_", level=logging.WARNING)
+                
+                logger.log_message(f"[DEBUG] Final inputs prepared for '{agent_name}': {list(inputs.keys())}", level=logging.DEBUG)
+                logger.log_message(f"[DEBUG] Inputs match required fields: {set(inputs.keys()) == required_fields}", level=logging.DEBUG)
                 
                 # Execute agent
                 agent_result = await self.agents[agent_name](**inputs)
@@ -1380,57 +1489,93 @@ class auto_analyst(dspy.Module):
         
         logger.log_message(f"Initializing auto_analyst for user_id: {user_id}", level=logging.INFO)
         
-        # If no hardcoded agents provided, load all agents from database using preference system
-        if not agents:
-            logger.log_message("No hardcoded agents provided, loading from database with preferences", level=logging.INFO)
-            
-            if user_id and db_session:
-                try:
-                    # Load user-enabled agents (both default and template) for planner use
-                    template_signatures = load_user_enabled_templates_for_planner_from_db(user_id, db_session)
-                    logger.log_message(f"Loaded {len(template_signatures)} enabled agents from preferences", level=logging.INFO)
+        # Load user-enabled template agents if user_id and db_session are provided
+        if user_id and db_session:
+            try:
+                # For individual use, load all available templates (not just planner-enabled ones)
+                template_signatures = load_user_enabled_templates_from_db(user_id, db_session)
+                
+                for template_name, signature in template_signatures.items():
+                    # Skip if this is a core agent - we'll load it separately
+                    if template_name in ['preprocessing_agent', 'statistical_analytics_agent', 'sk_learn_agent', 'data_viz_agent']:
+                        continue
+                        
+                    # Add template agent to agents dict
+                    self.agents[template_name] = dspy.asyncify(dspy.ChainOfThought(signature))
                     
-                    for template_name, signature in template_signatures.items():
-                        # Add agent to agents dict
-                        self.agents[template_name] = dspy.asyncify(dspy.ChainOfThought(signature))
+                    # Determine if this is a visualization agent based on name
+                    is_viz_agent = ('viz' in template_name.lower() or 
+                                  'visual' in template_name.lower() or 
+                                  'plot' in template_name.lower() or 
+                                  'chart' in template_name.lower() or
+                                  'matplotlib' in template_name.lower())
+                    
+                    # Set input fields based on agent type
+                    if is_viz_agent:
+                        self.agent_inputs[template_name] = {'goal', 'dataset', 'styling_index', 'plan_instructions'}
+                    else:
+                        self.agent_inputs[template_name] = {'goal', 'dataset', 'plan_instructions'}
+                    
+                    # Store template agent description
+                    try:
+                        from src.db.schemas.models import AgentTemplate
                         
-                        # Set input fields based on agent type
-                        is_viz_agent = (template_name == 'data_viz_agent' or 
-                                      'viz' in template_name.lower() or 
-                                      'visual' in template_name.lower() or 
-                                      'plot' in template_name.lower() or 
-                                      'chart' in template_name.lower() or
-                                      'matplotlib' in template_name.lower())
+                        # Find template record
+                        template_record = db_session.query(AgentTemplate).filter(
+                            AgentTemplate.template_name == template_name
+                        ).first()
                         
-                        if is_viz_agent:
-                            self.agent_inputs[template_name] = {'goal', 'dataset', 'styling_index', 'plan_instructions'}
+                        if template_record:
+                            description = f"Template: {template_record.description}"
+                            self.agent_desc.append({template_name: description})
                         else:
-                            self.agent_inputs[template_name] = {'dataset', 'goal', 'plan_instructions'}
+                            self.agent_desc.append({template_name: f"Template: {template_name}"})
+                    except Exception as desc_error:
+                        logger.log_message(f"Error getting description for template {template_name}: {str(desc_error)}", level=logging.WARNING)
+                        self.agent_desc.append({template_name: f"Template: {template_name}"})
                         
-                        # Get description from database
-                        self.agent_desc.append({template_name: get_agent_description(template_name)})
-                        logger.log_message(f"Added agent: {template_name}", level=logging.DEBUG)
-                        
-                    logger.log_message(f"Successfully loaded {len(template_signatures)} agents for planner", level=logging.INFO)
-                    
-                except Exception as e:
-                    logger.log_message(f"Error loading agents from preferences: {str(e)}", level=logging.ERROR)
-                    # Fallback: load default agents without preferences
-                    self._load_default_agents_fallback()
-            else:
-                logger.log_message("No user_id or db_session provided, loading default agents", level=logging.WARNING)
-                # Fallback: load default agents without preferences
-                self._load_default_agents_fallback()
+                logger.log_message(f"Loaded {len([t for t in template_signatures.keys() if t not in ['preprocessing_agent', 'statistical_analytics_agent', 'sk_learn_agent', 'data_viz_agent']])} custom templates for individual use", level=logging.DEBUG)
+                
+            except Exception as e:
+                logger.log_message(f"Error loading template agents for user {user_id}: {str(e)}", level=logging.ERROR)
+
+        # Load core agents (always load these, regardless of template preferences)
+        if not agents:
+            # Load the 4 core agents from database
+            core_agent_names = ['preprocessing_agent', 'statistical_analytics_agent', 'sk_learn_agent', 'data_viz_agent']
+            
+            for agent_name in core_agent_names:
+                # Get the agent signature class
+                if agent_name == 'preprocessing_agent':
+                    agent_signature = preprocessing_agent
+                elif agent_name == 'statistical_analytics_agent':
+                    agent_signature = statistical_analytics_agent
+                elif agent_name == 'sk_learn_agent':
+                    agent_signature = sk_learn_agent
+                elif agent_name == 'data_viz_agent':
+                    agent_signature = data_viz_agent
+                
+                # Add to agents dict
+                self.agents[agent_name] = dspy.asyncify(dspy.ChainOfThought(agent_signature))
+                
+                # Set input fields based on signature
+                if agent_name == 'data_viz_agent':
+                    self.agent_inputs[agent_name] = {'goal', 'dataset', 'styling_index', 'plan_instructions'}
+                else:
+                    self.agent_inputs[agent_name] = {'goal', 'dataset', 'plan_instructions'}
+                
+                # Get description from database
+                self.agent_desc.append({agent_name: get_agent_description(agent_name)})
+                logger.log_message(f"Loaded core agent: {agent_name} with inputs: {self.agent_inputs[agent_name]}", level=logging.DEBUG)
         else:
             # Load standard agents from provided list (legacy support)
-            logger.log_message(f"Loading {len(agents)} hardcoded agents", level=logging.INFO)
-        for i, a in enumerate(agents):
-            name = a.__pydantic_core_schema__['schema']['model_name']
-            self.agents[name] = dspy.asyncify(dspy.ChainOfThought(a))
-            self.agent_inputs[name] = {x.strip() for x in str(agents[i].__pydantic_core_schema__['cls']).split('->')[0].split('(')[1].split(',')}
-            self.agent_desc.append({name: get_agent_description(name)})
+            for i, a in enumerate(agents):
+                name = a.__pydantic_core_schema__['schema']['model_name']
+                self.agents[name] = dspy.asyncify(dspy.ChainOfThought(a))
+                self.agent_inputs[name] = {x.strip() for x in str(agents[i].__pydantic_core_schema__['cls']).split('->')[0].split('(')[1].split(',')}
+                logger.log_message(f"Added agent: {name}, inputs: {self.agent_inputs[name]}", level=logging.DEBUG)
+                self.agent_desc.append({name: get_agent_description(name)})
 
-        # Always add basic QA agent
         self.agents['basic_qa_agent'] = dspy.asyncify(dspy.Predict("goal->answer")) 
         self.agent_inputs['basic_qa_agent'] = {"goal"}
         self.agent_desc.append({'basic_qa_agent':"Answers queries unrelated to data & also that include links, poison or attempts to attack the system"})
@@ -1477,7 +1622,7 @@ class auto_analyst(dspy.Module):
             if agent_name == 'data_viz_agent':
                 self.agent_inputs[agent_name] = {'goal', 'dataset', 'styling_index', 'plan_instructions'}
             else:
-                self.agent_inputs[agent_name] = {'dataset', 'goal', 'plan_instructions'}
+                self.agent_inputs[agent_name] = {'goal', 'dataset', 'plan_instructions'}
             
             # Get description from database
             self.agent_desc.append({agent_name: get_agent_description(agent_name)})
@@ -1583,14 +1728,14 @@ class auto_analyst(dspy.Module):
         try:
             module_return = await self.planner(goal=dict_['goal'], dataset=dict_['dataset'], Agent_desc=dict_['Agent_desc'])
                     
-                plan_dict = dict(module_return['plan'])
-                if 'complexity' in module_return:
-                    complexity = module_return['complexity']
-                else:
-                    complexity = 'basic'
-                plan_dict['complexity'] = complexity
+            plan_dict = dict(module_return['plan'])
+            if 'complexity' in module_return:
+                complexity = module_return['complexity']
+            else:
+                complexity = 'basic'
+            plan_dict['complexity'] = complexity
 
-                return plan_dict
+            return plan_dict
             
         except Exception as e:
             logger.log_message(f"Error in get_plan: {str(e)}", level=logging.ERROR)

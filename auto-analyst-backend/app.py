@@ -466,25 +466,34 @@ async def chat_with_agent(
     session_id: str = Depends(get_session_id_dependency)
 ):
     session_state = app.state.get_session_state(session_id)
+    logger.log_message(f"[DEBUG] chat_with_agent called with agent: '{agent_name}', query: '{request.query[:100]}...'", level=logging.DEBUG)
     
     try:
         # Extract and validate query parameters
+        logger.log_message(f"[DEBUG] Updating session from query params", level=logging.DEBUG)
         _update_session_from_query_params(request_obj, session_state)
+        logger.log_message(f"[DEBUG] Session state after query params: user_id={session_state.get('user_id')}, chat_id={session_state.get('chat_id')}", level=logging.DEBUG)
         
         # Validate dataset and agent name
         if session_state["current_df"] is None:
+            logger.log_message(f"[DEBUG] No dataset loaded", level=logging.DEBUG)
             raise HTTPException(status_code=400, detail=RESPONSE_ERROR_NO_DATASET)
 
+        logger.log_message(f"[DEBUG] About to validate agent name: '{agent_name}'", level=logging.DEBUG)
         _validate_agent_name(agent_name, session_state)
+        logger.log_message(f"[DEBUG] Agent validation completed successfully", level=logging.DEBUG)
         
         # Record start time for timing
         start_time = time.time()
         
         # Get chat context and prepare query
+        logger.log_message(f"[DEBUG] Preparing query with context", level=logging.DEBUG)
         enhanced_query = _prepare_query_with_context(request.query, session_state)
+        logger.log_message(f"[DEBUG] Enhanced query length: {len(enhanced_query)}", level=logging.DEBUG)
         
         # Initialize agent - handle standard, template, and custom agents
         if "," in agent_name:
+            logger.log_message(f"[DEBUG] Processing multiple agents: {agent_name}", level=logging.DEBUG)
             # Multiple agents case
             agent_list = [agent.strip() for agent in agent_name.split(",")]
             
@@ -493,67 +502,84 @@ async def chat_with_agent(
             template_agents = [agent for agent in agent_list if _is_template_agent(agent)]
             custom_agents = [agent for agent in agent_list if not _is_standard_agent(agent) and not _is_template_agent(agent)]
             
+            logger.log_message(f"[DEBUG] Agent categorization - standard: {standard_agents}, template: {template_agents}, custom: {custom_agents}", level=logging.DEBUG)
             
             if custom_agents:
                 # If any custom agents, use session AI system for all
                 ai_system = session_state["ai_system"]
                 session_lm = get_session_lm(session_state)
+                logger.log_message(f"[DEBUG] Using custom agent execution path", level=logging.DEBUG)
                 with dspy.context(lm=session_lm):
                     response = await asyncio.wait_for(
                         _execute_custom_agents(ai_system, agent_list, enhanced_query),
                         timeout=REQUEST_TIMEOUT_SECONDS
                     )
+                    logger.log_message(f"[DEBUG] Custom agents response type: {type(response)}, keys: {list(response.keys()) if isinstance(response, dict) else 'not a dict'}", level=logging.DEBUG)
             else:
                 # All standard/template agents - use auto_analyst_ind which loads from DB
                 user_id = session_state.get("user_id")
+                logger.log_message(f"[DEBUG] Using auto_analyst_ind for multiple standard/template agents with user_id: {user_id}", level=logging.DEBUG)
         
                 # Create database session for agent loading
                 from src.db.init_db import session_factory
                 db_session = session_factory()
                 try:
                     # auto_analyst_ind will load all agents from database
+                    logger.log_message(f"[DEBUG] Creating auto_analyst_ind instance", level=logging.DEBUG)
                     agent = auto_analyst_ind(agents=[], retrievers=session_state["retrievers"], user_id=user_id, db_session=db_session)
                     session_lm = get_session_lm(session_state)
+                    logger.log_message(f"[DEBUG] About to call agent.forward with query and agent list", level=logging.DEBUG)
                     with dspy.context(lm=session_lm):
                         response = await asyncio.wait_for(
                             agent.forward(enhanced_query, ",".join(agent_list)),
                             timeout=REQUEST_TIMEOUT_SECONDS
                         )
+                        logger.log_message(f"[DEBUG] auto_analyst_ind response type: {type(response)}, content: {str(response)[:200]}...", level=logging.DEBUG)
                 finally:
                     db_session.close()
         else:
+            logger.log_message(f"[DEBUG] Processing single agent: {agent_name}", level=logging.DEBUG)
             # Single agent case
             if _is_standard_agent(agent_name) or _is_template_agent(agent_name):
                 # Standard or template agent - use auto_analyst_ind which loads from DB
                 user_id = session_state.get("user_id")
+                logger.log_message(f"[DEBUG] Using auto_analyst_ind for single standard/template agent '{agent_name}' with user_id: {user_id}", level=logging.DEBUG)
                 
                 # Create database session for agent loading
                 from src.db.init_db import session_factory
                 db_session = session_factory()
                 try:
                     # auto_analyst_ind will load all agents from database
+                    logger.log_message(f"[DEBUG] Creating auto_analyst_ind instance for single agent", level=logging.DEBUG)
                     agent = auto_analyst_ind(agents=[], retrievers=session_state["retrievers"], user_id=user_id, db_session=db_session)
                     session_lm = get_session_lm(session_state)
+                    logger.log_message(f"[DEBUG] About to call agent.forward for single agent '{agent_name}'", level=logging.DEBUG)
                     with dspy.context(lm=session_lm):
                         response = await asyncio.wait_for(
                             agent.forward(enhanced_query, agent_name),
                             timeout=REQUEST_TIMEOUT_SECONDS
                         )
+                        logger.log_message(f"[DEBUG] Single agent response type: {type(response)}, content: {str(response)[:200]}...", level=logging.DEBUG)
                 finally:
                     db_session.close()
             else:
                 # Custom agent - use session AI system
                 ai_system = session_state["ai_system"]
                 session_lm = get_session_lm(session_state)
+                logger.log_message(f"[DEBUG] Using custom agent execution for '{agent_name}'", level=logging.DEBUG)
                 with dspy.context(lm=session_lm):
                     response = await asyncio.wait_for(
                         _execute_custom_agents(ai_system, [agent_name], enhanced_query),
                         timeout=REQUEST_TIMEOUT_SECONDS
                     )
+                    logger.log_message(f"[DEBUG] Custom single agent response type: {type(response)}, content: {str(response)[:200]}...", level=logging.DEBUG)
         
+        logger.log_message(f"[DEBUG] About to format response to markdown. Response type: {type(response)}", level=logging.DEBUG)
         formatted_response = format_response_to_markdown(response, agent_name, session_state["current_df"])
+        logger.log_message(f"[DEBUG] Formatted response type: {type(formatted_response)}, length: {len(str(formatted_response))}", level=logging.DEBUG)
         
         if formatted_response == RESPONSE_ERROR_INVALID_QUERY:
+            logger.log_message(f"[DEBUG] Response was invalid query error", level=logging.DEBUG)
             return {
                 "agent_name": agent_name,
                 "query": request.query,
@@ -563,6 +589,7 @@ async def chat_with_agent(
         
         # Track usage statistics
         if session_state.get("user_id"):
+            logger.log_message(f"[DEBUG] Tracking model usage", level=logging.DEBUG)
             _track_model_usage(
                 session_state=session_state,
                 enhanced_query=enhanced_query,
@@ -570,6 +597,7 @@ async def chat_with_agent(
                 processing_time_ms=int((time.time() - start_time) * 1000)
             )
         
+        logger.log_message(f"[DEBUG] chat_with_agent completed successfully", level=logging.DEBUG)
         return {
             "agent_name": agent_name,
             "query": request.query,  # Return original query without context
@@ -578,13 +606,19 @@ async def chat_with_agent(
         }
     except HTTPException:
         # Re-raise HTTP exceptions to preserve status codes
+        logger.log_message(f"[DEBUG] HTTPException caught and re-raised", level=logging.DEBUG)
         raise
     except asyncio.TimeoutError:
+        logger.log_message(f"[ERROR] Timeout error in chat_with_agent", level=logging.ERROR)
         raise HTTPException(status_code=504, detail="Request timed out. Please try a simpler query.")
     except Exception as e:
+        logger.log_message(f"[ERROR] Unexpected error in chat_with_agent: {str(e)}", level=logging.ERROR)
+        logger.log_message(f"[ERROR] Exception type: {type(e)}, traceback: {str(e)}", level=logging.ERROR)
+        import traceback
+        logger.log_message(f"[ERROR] Full traceback: {traceback.format_exc()}", level=logging.ERROR)
         raise HTTPException(status_code=500, detail="An unexpected error occurred. Please try again later.")
-    
-    
+
+
 @app.post("/chat", response_model=dict)
 async def chat_with_all(
     request: QueryRequest,
@@ -653,24 +687,35 @@ def _update_session_from_query_params(request_obj: Request, session_state: dict)
 
 def _validate_agent_name(agent_name: str, session_state: dict = None):
     """Validate that the agent name(s) are available"""
+    logger.log_message(f"[DEBUG] Validating agent name: '{agent_name}'", level=logging.DEBUG)
+    
     if "," in agent_name:
         # Multiple agents
         agent_list = [agent.strip() for agent in agent_name.split(",")]
+        logger.log_message(f"[DEBUG] Multiple agents detected: {agent_list}", level=logging.DEBUG)
         for agent in agent_list:
-            if not _is_agent_available(agent, session_state):
+            is_available = _is_agent_available(agent, session_state)
+            logger.log_message(f"[DEBUG] Agent '{agent}' availability: {is_available}", level=logging.DEBUG)
+            if not is_available:
                 available_agents = _get_available_agents_list(session_state)
+                logger.log_message(f"[DEBUG] Agent '{agent}' not found. Available: {available_agents}", level=logging.DEBUG)
                 raise HTTPException(
                     status_code=400, 
                     detail=f"Agent '{agent}' not found. Available agents: {available_agents}"
                 )
     else:
         # Single agent
-        if not _is_agent_available(agent_name, session_state):
+        is_available = _is_agent_available(agent_name, session_state)
+        logger.log_message(f"[DEBUG] Single agent '{agent_name}' availability: {is_available}", level=logging.DEBUG)
+        if not is_available:
             available_agents = _get_available_agents_list(session_state)
-        raise HTTPException(
+            logger.log_message(f"[DEBUG] Agent '{agent_name}' not found. Available: {available_agents}", level=logging.DEBUG)
+            raise HTTPException(
                 status_code=400, 
                 detail=f"Agent '{agent_name}' not found. Available agents: {available_agents}"
-        )
+            )
+    
+    logger.log_message(f"[DEBUG] Agent validation passed for: '{agent_name}'", level=logging.DEBUG)
 
 def _is_agent_available(agent_name: str, session_state: dict = None) -> bool:
     """Check if an agent is available (standard, template, or custom)"""
