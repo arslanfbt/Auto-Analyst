@@ -493,6 +493,7 @@ async def chat_with_agent(
             template_agents = [agent for agent in agent_list if _is_template_agent(agent)]
             custom_agents = [agent for agent in agent_list if not _is_standard_agent(agent) and not _is_template_agent(agent)]
             
+            
             if custom_agents:
                 # If any custom agents, use session AI system for all
                 ai_system = session_state["ai_system"]
@@ -666,10 +667,10 @@ def _validate_agent_name(agent_name: str, session_state: dict = None):
         # Single agent
         if not _is_agent_available(agent_name, session_state):
             available_agents = _get_available_agents_list(session_state)
-            raise HTTPException(
+        raise HTTPException(
                 status_code=400, 
                 detail=f"Agent '{agent_name}' not found. Available agents: {available_agents}"
-            )
+        )
 
 def _is_agent_available(agent_name: str, session_state: dict = None) -> bool:
     """Check if an agent is available (standard, template, or custom)"""

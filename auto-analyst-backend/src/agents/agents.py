@@ -708,6 +708,10 @@ class planner_module(dspy.Module):
         logger.log_message(f"Final planner output: {output}", level=logging.INFO)
         return output
 
+
+
+
+
 class preprocessing_agent(dspy.Signature):
     """
 You are a preprocessing agent that can work both individually and in multi-agent data analytics systems.
@@ -1156,6 +1160,7 @@ class auto_analyst_ind(dspy.Module):
                 name = a.__pydantic_core_schema__['schema']['model_name']
                 self.agents[name] = dspy.asyncify(dspy.ChainOfThought(a))
                 self.agent_inputs[name] = {x.strip() for x in str(agents[i].__pydantic_core_schema__['cls']).split('->')[0].split('(')[1].split(',')}
+                logger.log_message(f"Added agent: {name}, inputs: {self.agent_inputs[name]}", level=logging.DEBUG)
                 self.agent_desc.append({name: get_agent_description(name)})
 
         # Load user-enabled template agents if user_id and db_session are provided
@@ -1577,15 +1582,15 @@ class auto_analyst(dspy.Module):
         
         try:
             module_return = await self.planner(goal=dict_['goal'], dataset=dict_['dataset'], Agent_desc=dict_['Agent_desc'])
-                
-            plan_dict = dict(module_return['plan'])
-            if 'complexity' in module_return:
-                complexity = module_return['complexity']
-            else:
-                complexity = 'basic'
-            plan_dict['complexity'] = complexity
+                    
+                plan_dict = dict(module_return['plan'])
+                if 'complexity' in module_return:
+                    complexity = module_return['complexity']
+                else:
+                    complexity = 'basic'
+                plan_dict['complexity'] = complexity
 
-            return plan_dict
+                return plan_dict
             
         except Exception as e:
             logger.log_message(f"Error in get_plan: {str(e)}", level=logging.ERROR)
