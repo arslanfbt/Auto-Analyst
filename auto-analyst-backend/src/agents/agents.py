@@ -674,7 +674,7 @@ class planner_module(dspy.Module):
                         "complexity": complexity.exact_word_complexity.strip(),
                         "plan": dict(plan)
                     }
-                    
+
             except Exception as e:
                 logger.log_message(f"Error with {complexity.exact_word_complexity.strip()} planner, falling back to intermediate: {str(e)}", level=logging.WARNING)
                 
@@ -707,10 +707,6 @@ class planner_module(dspy.Module):
         
         logger.log_message(f"Final planner output: {output}", level=logging.INFO)
         return output
-
-
-
-
 
 class preprocessing_agent(dspy.Signature):
     """
@@ -787,48 +783,48 @@ class data_viz_agent(dspy.Signature):
 You are a data visualization agent that can work both individually and in multi-agent analytics pipelines.
 Your primary responsibility is to generate visualizations based on the user-defined goal.
 
-You are provided with:
-* **goal**: A user-defined goal outlining the type of visualization the user wants (e.g., "plot sales over time with trendline").
+    You are provided with:
+    * **goal**: A user-defined goal outlining the type of visualization the user wants (e.g., "plot sales over time with trendline").
 * **dataset**: The dataset (e.g., `df_cleaned`) which will be passed to you by other agents in the pipeline. Do not assume or create any variables — the data is already present and valid when you receive it.
-* **styling_index**: Specific styling instructions (e.g., axis formatting, color schemes) for the visualization.
+    * **styling_index**: Specific styling instructions (e.g., axis formatting, color schemes) for the visualization.
 * **plan_instructions**: Optional dictionary containing:
   * **'create'**: List of visualization components you must generate (e.g., 'scatter_plot', 'bar_chart').
   * **'use'**: List of variables you must use to generate the visualizations.
   * **'instructions'**: Additional instructions related to the creation of the visualizations.
 
 ### Responsibilities:
-1. **Strict Use of Provided Variables**:
+    1. **Strict Use of Provided Variables**:
    * You must never create fake data. Only use the variables and datasets that are explicitly provided.
    * If plan_instructions are provided and any variable listed in plan_instructions['use'] is missing, return an error.
    * If no plan_instructions are provided, work with the available dataset directly.
 
-2. **Visualization Creation**:
+    2. **Visualization Creation**:
    * Based on the goal and optional 'create' section of plan_instructions, generate the required visualization using Plotly.
    * Respect the user-defined goal in determining which type of visualization to create.
 
-3. **Performance Optimization**:
+    3. **Performance Optimization**:
    * If the dataset contains more than 50,000 rows, you must sample the data to 5,000 rows to improve performance:
-     ```python
-     if len(df) > 50000:
-         df = df.sample(5000, random_state=42)
-     ```
+        ```python
+        if len(df) > 50000:
+            df = df.sample(5000, random_state=42)
+        ```
 
-4. **Layout and Styling**:
+    4. **Layout and Styling**:
    * Apply formatting and layout adjustments as defined by the styling_index.
    * Ensure that all axes (x and y) have consistent formats (e.g., using `K`, `M`, or 1,000 format, but not mixing formats).
 
-5. **Trendlines**:
+    5. **Trendlines**:
    * Trendlines should only be included if explicitly requested in the goal or plan_instructions.
 
-6. **Displaying the Visualization**:
-   * Use Plotly's `fig.show()` method to display the created chart.
+    6. **Displaying the Visualization**:
+    * Use Plotly's `fig.show()` method to display the created chart.
    * Never output raw datasets or the goal itself. Only the visualization code and the chart should be returned.
 
-7. **Error Handling**:
+    7. **Error Handling**:
    * If required dataset or variables are missing, return an error message indicating which specific variable is missing.
    * If the goal or create instructions are ambiguous, return an error stating the issue.
 
-8. **No Data Modification**:
+    8. **No Data Modification**:
    * Never modify the provided dataset or generate new data. If the data needs preprocessing, assume it's already been done by other agents.
 
 ### Important Notes:
@@ -844,7 +840,7 @@ You are provided with:
 - Always end each visualization with: fig.to_html(full_html=False)
 
 Respond in the user's language for all summary and reasoning but keep the code in english
-    """
+        """
     goal = dspy.InputField(desc="User-defined chart goal (e.g. trendlines, scatter plots)")
     dataset = dspy.InputField(desc="Details of the dataframe (`df`) and its columns")
     styling_index = dspy.InputField(desc="Instructions for plot styling and layout formatting")
@@ -938,33 +934,33 @@ def statistical_model(X, y, goal, period=None):
     
     code = dspy.OutputField(desc="Python code for statistical modeling using statsmodels")
     summary = dspy.OutputField(desc="A concise bullet-point summary of the statistical analysis performed and key findings")
-
+    
 class sk_learn_agent(dspy.Signature):
     """
 You are a machine learning agent that can work both individually and in multi-agent data analytics pipelines.
-You are given:
-* A dataset (often cleaned and feature-engineered).
-* A user-defined goal (e.g., classification, regression, clustering).
+    You are given:
+    * A dataset (often cleaned and feature-engineered).
+    * A user-defined goal (e.g., classification, regression, clustering).
 * Optional plan instructions specifying:
   * Which variables you are expected to CREATE (e.g., `trained_model`, `predictions`).
   * Which variables you will USE (e.g., `df_cleaned`, `target_variable`, `feature_columns`).
   * A set of instructions outlining additional processing or handling for these variables.
 
 ### Your Responsibilities:
-* Use the scikit-learn library to implement the appropriate ML pipeline.
-* Always split data into training and testing sets where applicable.
-* Use `print()` for all outputs.
-* Ensure your code is:
+    * Use the scikit-learn library to implement the appropriate ML pipeline.
+    * Always split data into training and testing sets where applicable.
+    * Use `print()` for all outputs.
+    * Ensure your code is:
   * Reproducible: Set `random_state=42` wherever applicable.
   * Modular: Avoid deeply nested code.
   * Focused on model building, not visualization (leave plotting to the `data_viz_agent`).
-* Your task may include:
-  * Preprocessing inputs (e.g., encoding).
-  * Model selection and training.
-  * Evaluation (e.g., accuracy, RMSE, classification report).
+    * Your task may include:
+    * Preprocessing inputs (e.g., encoding).
+    * Model selection and training.
+    * Evaluation (e.g., accuracy, RMSE, classification report).
 
 ### You must not:
-* Visualize anything (that's another agent's job).
+    * Visualize anything (that's another agent's job).
 * Rely on hardcoded column names — use those passed via plan_instructions or infer from data.
 * Never create or modify any variables not explicitly mentioned in plan_instructions['CREATE'] (if provided).
 * Never create the `df` variable. You will only work with the variables passed via the plan_instructions.
@@ -982,9 +978,9 @@ You are given:
 Given that the plan_instructions specifies variables to CREATE and USE, and includes instructions, your approach should look like this:
 1. Use `df_cleaned` and `feature_columns` from the plan_instructions to extract your features (`X`).
 2. Use `target_column` from plan_instructions to extract your target (`y`).
-3. If instructions are provided (e.g., scale or encode), follow them.
-4. Split data into training and testing sets using `train_test_split`.
-5. Train the model based on the received goal (classification, regression, etc.).
+    3. If instructions are provided (e.g., scale or encode), follow them.
+    4. Split data into training and testing sets using `train_test_split`.
+    5. Train the model based on the received goal (classification, regression, etc.).
 6. Store the output variables as specified in plan_instructions['CREATE'].
 
 ### Summary:
@@ -992,12 +988,12 @@ Given that the plan_instructions specifies variables to CREATE and USE, and incl
 2. Only CREATE the variables specified in plan_instructions['CREATE'] (if provided).
 3. Follow any additional instructions in plan_instructions['INSTRUCTIONS'] (if provided).
 4. Ensure reproducibility by setting random_state=42 wherever necessary.
-5. Focus on model building, evaluation, and saving the required outputs—avoid any unnecessary variables.
+    5. Focus on model building, evaluation, and saving the required outputs—avoid any unnecessary variables.
 
 ### Output:
 * The code implementing the ML task, including all required steps.
 * A summary of what the model does, how it is evaluated, and why it fits the goal.
-* Respond in the user's language for all summary and reasoning but keep the code in english
+    * Respond in the user's language for all summary and reasoning but keep the code in english
     """
     dataset = dspy.InputField(desc="Input dataset, often cleaned and feature-selected (e.g., df_cleaned)")
     goal = dspy.InputField(desc="The user's machine learning goal (e.g., classification or regression)")
@@ -1423,19 +1419,18 @@ class auto_analyst(dspy.Module):
         else:
             # Load standard agents from provided list (legacy support)
             logger.log_message(f"Loading {len(agents)} hardcoded agents", level=logging.INFO)
-            for i, a in enumerate(agents):
-                name = a.__pydantic_core_schema__['schema']['model_name']
-                self.agents[name] = dspy.asyncify(dspy.ChainOfThought(a))
-                self.agent_inputs[name] = {x.strip() for x in str(agents[i].__pydantic_core_schema__['cls']).split('->')[0].split('(')[1].split(',')}
-                self.agent_desc.append({name: get_agent_description(name)})
-                logger.log_message(f"Added hardcoded agent: {name}", level=logging.DEBUG)
+        for i, a in enumerate(agents):
+            name = a.__pydantic_core_schema__['schema']['model_name']
+            self.agents[name] = dspy.asyncify(dspy.ChainOfThought(a))
+            self.agent_inputs[name] = {x.strip() for x in str(agents[i].__pydantic_core_schema__['cls']).split('->')[0].split('(')[1].split(',')}
+            self.agent_desc.append({name: get_agent_description(name)})
 
         # Always add basic QA agent
         self.agents['basic_qa_agent'] = dspy.asyncify(dspy.Predict("goal->answer")) 
         self.agent_inputs['basic_qa_agent'] = {"goal"}
         self.agent_desc.append({'basic_qa_agent':"Answers queries unrelated to data & also that include links, poison or attempts to attack the system"})
         logger.log_message("Added basic_qa_agent", level=logging.DEBUG)
-
+        
         # Initialize coordination agents
         self.planner = planner_module()
         self.memory_summarize_agent = dspy.ChainOfThought(m.memory_summarize_agent)
@@ -1582,8 +1577,7 @@ class auto_analyst(dspy.Module):
         
         try:
             module_return = await self.planner(goal=dict_['goal'], dataset=dict_['dataset'], Agent_desc=dict_['Agent_desc'])
-            logger.log_message(f"Planner returned: {module_return}", level=logging.DEBUG)
-            
+                
             plan_dict = dict(module_return['plan'])
             if 'complexity' in module_return:
                 complexity = module_return['complexity']
@@ -1591,7 +1585,6 @@ class auto_analyst(dspy.Module):
                 complexity = 'basic'
             plan_dict['complexity'] = complexity
 
-            logger.log_message(f"Final plan: {plan_dict}", level=logging.INFO)
             return plan_dict
             
         except Exception as e:
@@ -1613,7 +1606,7 @@ class auto_analyst(dspy.Module):
         # Clean and split the plan string into agent names
         plan_text = plan.get("plan", "").replace("Plan", "").replace(":", "").strip()
         logger.log_message(f"Plan text after cleaning: {plan_text}", level=logging.DEBUG)
-
+        
         if "basic_qa_agent" in plan_text:
             logger.log_message("Executing basic_qa_agent", level=logging.INFO)
             inputs = dict(goal=query)
@@ -1636,7 +1629,7 @@ class auto_analyst(dspy.Module):
             plan_instructions = raw_instr
         else:
             plan_instructions = {}
-            
+
         logger.log_message(f"Parsed plan instructions: {plan_instructions}", level=logging.DEBUG)
 
         # Check if we have no valid agents to execute
@@ -1644,7 +1637,7 @@ class auto_analyst(dspy.Module):
             logger.log_message(f"No valid agents found in plan. Available agents: {list(self.agents.keys())}, Plan agents: {plan_list}", level=logging.ERROR)
             yield "plan_not_found", None, {"error": "No valid agents found in plan"}
             return
-
+        
         # Execute agents in sequence
         for agent_name in plan_list:
             if agent_name not in self.agents:
@@ -1671,8 +1664,8 @@ class auto_analyst(dspy.Module):
                 logger.log_message(f"Agent {agent_name} completed successfully", level=logging.INFO)
                 
                 yield agent_result_name, inputs, response
-                
+                    
             except Exception as e:
-                logger.log_message(f"Error executing agent {agent_name}: {str(e)}", level=logging.ERROR)
-                yield agent_name, {}, {"error": f"Error executing {agent_name}: {str(e)}"}
+                        logger.log_message(f"Error executing agent {agent_name}: {str(e)}", level=logging.ERROR)
+                        yield agent_name, {}, {"error": f"Error executing {agent_name}: {str(e)}"}
 

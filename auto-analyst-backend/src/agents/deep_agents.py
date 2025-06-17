@@ -799,7 +799,8 @@ class deep_analysis_module(dspy.Module):
                 
                 if not all(key in self.agents for key in keys):
                     raise ValueError(f"Invalid agent key(s) in plan instructions. Available agents: {list(self.agents.keys())}")
-                    
+                logger.log_message(f"Plan instructions: {plan_instructions}", logging.INFO)
+                logger.log_message(f"Keys: {keys}", logging.INFO)
             except (ValueError, SyntaxError, json.JSONDecodeError) as e:
                 try:
                     deep_plan = await self.deep_plan_fixer(plan_instructions=deep_plan.plan_instructions)
@@ -807,6 +808,8 @@ class deep_analysis_module(dspy.Module):
                     if not isinstance(plan_instructions, dict):
                         plan_instructions = json.loads(deep_plan.fixed_plan)
                     keys = [key for key in plan_instructions.keys()]
+                    logger.log_message(f"Plan instructions fixed: {plan_instructions}", logging.INFO)
+                    logger.log_message(f"Keys: {keys}", logging.INFO)
                 except (ValueError, SyntaxError, json.JSONDecodeError) as e:
                     logger.log_message(f"Error parsing plan instructions: {e}", logging.ERROR)
                     raise e
@@ -842,9 +845,8 @@ class deep_analysis_module(dspy.Module):
                 )
                 for key in keys
             ]
-
             tasks = [self.agents[key](**q) for q, key in zip(queries, keys)]
-            
+                        
             # Await all tasks to complete
             summaries = []
             codes = []

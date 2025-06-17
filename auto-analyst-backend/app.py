@@ -320,11 +320,13 @@ class AppState:
         current_analyzer = session_state.get('deep_analyzer')
         analyzer_user_id = session_state.get('deep_analyzer_user_id')
         
+        logger.log_message(f"Deep analyzer check - session: {session_id}, current_user: {user_id}, analyzer_user: {analyzer_user_id}, has_analyzer: {current_analyzer is not None}", level=logging.INFO)
+        
         if (not current_analyzer or 
             analyzer_user_id != user_id or 
             not hasattr(session_state, 'deep_analyzer')):
             
-            logger.log_message(f"Creating/recreating deep analyzer for session {session_id}, user_id: {user_id}", level=logging.INFO)
+            logger.log_message(f"Creating/recreating deep analyzer for session {session_id}, user_id: {user_id} (reason: analyzer_exists={current_analyzer is not None}, user_match={analyzer_user_id == user_id})", level=logging.INFO)
             
             # Load user-enabled agents from database using preference system
             from src.db.init_db import session_factory
@@ -336,6 +338,17 @@ class AppState:
                 if user_id:
                     enabled_agents_dict = load_user_enabled_templates_for_planner_from_db(user_id, db_session)
                     logger.log_message(f"Deep analyzer loaded {len(enabled_agents_dict)} enabled agents for user {user_id}: {list(enabled_agents_dict.keys())}", level=logging.INFO)
+                    
+                    if not enabled_agents_dict:
+                        logger.log_message(f"WARNING: No enabled agents found for user {user_id}, falling back to defaults", level=logging.WARNING)
+                        # Fallback to default agents if no enabled agents
+                        from src.agents.agents import preprocessing_agent, statistical_analytics_agent, sk_learn_agent, data_viz_agent
+                        enabled_agents_dict = {
+                            "preprocessing_agent": preprocessing_agent,
+                            "statistical_analytics_agent": statistical_analytics_agent,
+                            "sk_learn_agent": sk_learn_agent,
+                            "data_viz_agent": data_viz_agent
+                        }
                 else:
                     # Fallback to default agents if no user_id
                     logger.log_message("No user_id in session, loading default agents for deep analysis", level=logging.WARNING)
@@ -356,7 +369,7 @@ class AppState:
                     # Get agent description from database
                     deep_agents_desc[agent_name] = get_agent_description(agent_name)
                 
-                logger.log_message(f"Deep analyzer initialized with agents: {list(deep_agents.keys())}", level=logging.INFO)
+                logger.log_message(f"Deep analyzer initialized with {len(deep_agents)} agents: {list(deep_agents.keys())}", level=logging.INFO)
                 
             except Exception as e:
                 logger.log_message(f"Error loading agents for deep analysis: {str(e)}", level=logging.ERROR)
@@ -369,11 +382,14 @@ class AppState:
                     "data_viz_agent": dspy.asyncify(dspy.ChainOfThought(data_viz_agent))
                 }
                 deep_agents_desc = {name: get_agent_description(name) for name in deep_agents.keys()}
+                logger.log_message(f"Using fallback agents: {list(deep_agents.keys())}", level=logging.WARNING)
             finally:
                 db_session.close()
             
             session_state['deep_analyzer'] = deep_analysis_module(agents=deep_agents, agents_desc=deep_agents_desc)
             session_state['deep_analyzer_user_id'] = user_id  # Track which user this analyzer was created for
+        else:
+            logger.log_message(f"Using existing deep analyzer for session {session_id}, user_id: {user_id}", level=logging.INFO)
         
         return session_state['deep_analyzer']
 
@@ -476,7 +492,6 @@ async def chat_with_agent(
             standard_agents = [agent for agent in agent_list if _is_standard_agent(agent)]
             template_agents = [agent for agent in agent_list if _is_template_agent(agent)]
             custom_agents = [agent for agent in agent_list if not _is_standard_agent(agent) and not _is_template_agent(agent)]
-            
             
             if custom_agents:
                 # If any custom agents, use session AI system for all
@@ -651,10 +666,10 @@ def _validate_agent_name(agent_name: str, session_state: dict = None):
         # Single agent
         if not _is_agent_available(agent_name, session_state):
             available_agents = _get_available_agents_list(session_state)
-        raise HTTPException(
+            raise HTTPException(
                 status_code=400, 
                 detail=f"Agent '{agent_name}' not found. Available agents: {available_agents}"
-        )
+            )
 
 def _is_agent_available(agent_name: str, session_state: dict = None) -> bool:
     """Check if an agent is available (standard, template, or custom)"""
@@ -1060,11 +1075,11 @@ async def list_agents(request: Request, session_id: str = Depends(get_session_id
                 available_agents_list.append(template_agent)
         
         return {
-                    "available_agents": available_agents_list,
-                    "standard_agents": standard_agents,
-                    "template_agents": template_agents,
-                    "custom_agents": custom_agents
-                }
+            "available_agents": available_agents_list,
+            "standard_agents": standard_agents,
+            "template_agents": template_agents,
+            "custom_agents": custom_agents
+        }
     except Exception as e:
         logger.log_message(f"Error getting agents list: {str(e)}", level=logging.ERROR)
         raise HTTPException(status_code=500, detail=f"Error getting agents list: {str(e)}")
@@ -1562,6 +1577,25 @@ async def debug_deep_analysis_agents(session_id: str = Depends(get_session_id_de
             "session_id": session_id,
             "user_id": user_id
         }
+
+@app.post("/debug/clear_deep_analyzer")
+async def clear_deep_analyzer_cache(session_id: str = Depends(get_session_id_dependency)):
+    """Debug endpoint to clear the deep analyzer cache and force reload"""
+    session_state = app.state.get_session_state(session_id)
+    
+    # Clear the cached deep analyzer
+    if 'deep_analyzer' in session_state:
+        del session_state['deep_analyzer']
+    if 'deep_analyzer_user_id' in session_state:
+        del session_state['deep_analyzer_user_id']
+    
+    logger.log_message(f"Cleared deep analyzer cache for session {session_id}", level=logging.INFO)
+    
+    return {
+        "message": "Deep analyzer cache cleared",
+        "session_id": session_id,
+        "user_id": session_state.get("user_id")
+    }
 
 # In the section where routers are included, add the session_router
 app.include_router(chat_router)
