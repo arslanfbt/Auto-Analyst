@@ -12,6 +12,7 @@ interface AgentSuggestion {
   description: string
   isCustom?: boolean
   isTemplate?: boolean
+  isPremium?: boolean
 }
 
 interface AgentSuggestionsProps {
@@ -20,6 +21,7 @@ interface AgentSuggestionsProps {
   onSuggestionSelect: (agentName: string) => void
   isVisible: boolean
   userId?: number | null
+  onStateChange?: (hasSelection: boolean) => void
 }
 
 export default function AgentSuggestions({
@@ -27,7 +29,8 @@ export default function AgentSuggestions({
   cursorPosition,
   onSuggestionSelect,
   isVisible,
-  userId
+  userId,
+  onStateChange
 }: AgentSuggestionsProps) {
   const [agents, setAgents] = useState<AgentSuggestion[]>([])
   const [filteredAgents, setFilteredAgents] = useState<AgentSuggestion[]>([])
@@ -79,15 +82,15 @@ export default function AgentSuggestions({
         const data = await response.json()
         const allAgents: AgentSuggestion[] = []
         
-        // Add standard agents
-        if (data.standard_agents) {
-          data.standard_agents.forEach((agentName: string) => {
-            const standardAgent = standardAgents.find(agent => agent.name === agentName)
-            if (standardAgent) {
-              allAgents.push(standardAgent)
-            }
-          })
-        }
+        // // Add standard agents
+        // if (data.standard_agents) {
+        //   data.standard_agents.forEach((agentName: string) => {
+        //     const standardAgent = standardAgents.find(agent => agent.name === agentName)
+        //     if (standardAgent) {
+        //       allAgents.push(standardAgent)
+        //     }
+        //   })
+        // }
         
         // Add template agents (only for users with custom agents access)
         if (data.template_agents && data.template_agents.length > 0 && customAgentsAccess.hasAccess) {
@@ -119,14 +122,15 @@ export default function AgentSuggestions({
       if (response.ok) {
         const templateCategories = await response.json()
         const allTemplates: AgentSuggestion[] = []
-        
+        console.log("templateCategories", templateCategories)
         // Flatten all templates from all categories
         templateCategories.forEach((category: any) => {
           if (category.templates) {
             const mappedTemplates = category.templates.map((template: any) => ({
               name: template.agent_name,
               description: template.description,
-              isTemplate: true
+              // isTemplate: true,
+              isPremium: template.is_premium_only
             }))
             allTemplates.push(...mappedTemplates)
           }
@@ -188,28 +192,34 @@ export default function AgentSuggestions({
         ? message.slice(activeAtPos + 1, activeAtPos + 1 + spaceIndex) 
         : textAfterAt
       
-          // Show suggestions if we're actively typing an agent name or just typed @
-    if (!typedText.includes(' ')) {
-      // If no text after @, show all agents
-      if (typedText === '') {
-        setFilteredAgents(agents)
-        setSelectedIndex(agents.length > 0 ? 0 : -1)
+      // Show suggestions if we're actively typing an agent name or just typed @
+      if (!typedText.includes(' ')) {
+        // If no text after @, show all agents
+        if (typedText === '') {
+          setFilteredAgents(agents)
+          setSelectedIndex(agents.length > 0 ? 0 : -1)
+          return
+        }
+        
+        // If there's text after @, filter agents that START WITH the typed text (autocomplete-style)
+        const filtered = agents.filter(agent => 
+          agent.name.toLowerCase().startsWith(typedText.toLowerCase())
+        )
+        setFilteredAgents(filtered)
+        setSelectedIndex(filtered.length > 0 ? 0 : -1)
         return
       }
-      
-      // If there's text after @, filter agents based on that text
-      const filtered = agents.filter(agent => 
-        agent.name.toLowerCase().includes(typedText.toLowerCase())
-      )
-      setFilteredAgents(filtered)
-      setSelectedIndex(filtered.length > 0 ? 0 : -1)
-      return
-    }
     }
     
     setFilteredAgents([])
     setSelectedIndex(-1)
   }, [message, cursorPosition, agents, isVisible])
+
+  // Report state changes to parent component
+  useEffect(() => {
+    const hasValidSelection = filteredAgents.length > 0 && selectedIndex >= 0 && selectedIndex < filteredAgents.length
+    onStateChange?.(hasValidSelection)
+  }, [filteredAgents, selectedIndex, onStateChange])
 
   // Handle keyboard navigation
   useEffect(() => {
@@ -219,25 +229,30 @@ export default function AgentSuggestions({
       switch (e.key) {
         case 'ArrowDown':
           e.preventDefault()
+          e.stopPropagation()
           setSelectedIndex(prev => 
             prev < filteredAgents.length - 1 ? prev + 1 : 0
           )
           break
         case 'ArrowUp':
           e.preventDefault()
+          e.stopPropagation()
           setSelectedIndex(prev => 
             prev > 0 ? prev - 1 : filteredAgents.length - 1
           )
           break
         case 'Enter':
-          e.preventDefault()
-          e.stopPropagation()
+          // Only handle Enter if there's a valid selection
           if (selectedIndex >= 0 && selectedIndex < filteredAgents.length) {
+            e.preventDefault()
+            e.stopPropagation()
             onSuggestionSelect(filteredAgents[selectedIndex].name)
           }
+          // If no valid selection, let the event bubble up to ChatInput
           break
         case 'Escape':
           e.preventDefault()
+          e.stopPropagation()
           setFilteredAgents([])
           setSelectedIndex(-1)
           break
@@ -245,8 +260,8 @@ export default function AgentSuggestions({
     }
 
     // Add event listener to document to capture keyboard events
-    document.addEventListener('keydown', handleKeyDown)
-    return () => document.removeEventListener('keydown', handleKeyDown)
+    document.addEventListener('keydown', handleKeyDown, true) // Use capture phase
+    return () => document.removeEventListener('keydown', handleKeyDown, true)
   }, [isVisible, filteredAgents, selectedIndex, onSuggestionSelect])
 
   // Scroll selected item into view
@@ -288,7 +303,7 @@ export default function AgentSuggestions({
             <div className="flex items-center justify-between">
               <div className="font-medium text-gray-900">{agent.name}</div>
               <div className="flex gap-1">
-                {agent.isTemplate && (
+                {agent.isPremium && (
                   <span className="text-xs px-2 py-1 bg-blue-100 text-blue-700 rounded-full">
                     Template
                   </span>

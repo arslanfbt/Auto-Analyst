@@ -228,6 +228,9 @@ const ChatInput = forwardRef<
   const [showCommandSuggestions, setShowCommandSuggestions] = useState(false)
   const [commandQuery, setCommandQuery] = useState('')
   
+  // Agent suggestions state
+  const [agentSuggestionsHasSelection, setAgentSuggestionsHasSelection] = useState(false)
+  
   // Get subscription from store instead of manual construction
   const { subscription } = useUserSubscriptionStore()
   const deepAnalysisAccess = useFeatureAccess('DEEP_ANALYSIS', subscription)
@@ -1951,13 +1954,16 @@ const ChatInput = forwardRef<
                       onChange={handleInputChange}
                       onKeyDown={(e) => {
                         if (e.key === 'Enter' && !e.shiftKey) {
-                          // Check if agent suggestions are visible and should handle the Enter key
+                          // Check if agent suggestions are visible and have a selection
                           const isAgentSuggestionsVisible = !showCommandSuggestions && message.includes('@');
-                          if (isAgentSuggestionsVisible) {
-                            // Don't handle Enter here, let AgentSuggestions component handle it
-                            // The AgentSuggestions component will preventDefault if it handles the event
+                          
+                          if (isAgentSuggestionsVisible && agentSuggestionsHasSelection) {
+                            // AgentSuggestions will handle Enter key since it has a selection
+                            // Don't preventDefault here - let AgentSuggestions handle it
                             return;
                           }
+                          
+                          // If no agent suggestions selection, handle normally
                           e.preventDefault()
                           handleSubmit(e)
                         }
@@ -1990,6 +1996,7 @@ const ChatInput = forwardRef<
                         onSuggestionSelect={handleAgentSelect}
                         isVisible={!showCommandSuggestions && message.includes('@')}
                         userId={userId}
+                        onStateChange={setAgentSuggestionsHasSelection}
                       />
                     </AnimatePresence>
                     <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
