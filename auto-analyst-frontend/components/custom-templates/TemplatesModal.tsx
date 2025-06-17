@@ -165,6 +165,27 @@ export default function TemplatesModal({
     return preferences.find(p => p.template_id === templateId)
   }
 
+  // Helper function to determine if a template should be enabled by default
+  const isDefaultEnabledTemplate = (templateName: string) => {
+    const defaultAgentNames = [
+      "preprocessing_agent",
+      "statistical_analytics_agent", 
+      "sk_learn_agent",
+      "data_viz_agent"
+    ]
+    return defaultAgentNames.includes(templateName)
+  }
+
+  // Helper function to get the effective enabled state for a template
+  const getTemplateEnabledState = (template: TemplateAgent) => {
+    const preference = getTemplatePreference(template.template_id)
+    const defaultEnabled = isDefaultEnabledTemplate(template.template_name)
+    
+    return changes[template.template_id] !== undefined 
+      ? changes[template.template_id] 
+      : preference?.is_enabled ?? defaultEnabled
+  }
+
   // Filter templates based on search, category, and status
   const filteredTemplates = useMemo(() => {
     let filtered = templates
@@ -183,11 +204,7 @@ export default function TemplatesModal({
 
     if (statusFilter !== 'all') {
       filtered = filtered.filter(template => {
-        const preference = getTemplatePreference(template.template_id)
-        const isEnabled = changes[template.template_id] !== undefined 
-          ? changes[template.template_id] 
-          : preference?.is_enabled || false
-        
+        const isEnabled = getTemplateEnabledState(template)
         return statusFilter === 'enabled' ? isEnabled : !isEnabled
       })
     }
@@ -294,18 +311,13 @@ export default function TemplatesModal({
   // Get template data for rendering
   const getTemplateData = (template: TemplateAgent) => {
     const preference = getTemplatePreference(template.template_id)
-    const isEnabled = changes[template.template_id] !== undefined 
-      ? changes[template.template_id] 
-      : preference?.is_enabled || false
+    const isEnabled = getTemplateEnabledState(template)
     
     return { preference, isEnabled }
   }
 
   const enabledCount = hasAccess 
-    ? preferences.filter(p => {
-        const hasChanges = changes[p.template_id] !== undefined
-        return hasChanges ? changes[p.template_id] : p.is_enabled
-      }).length
+    ? templates.filter(template => getTemplateEnabledState(template)).length
     : 0
 
   return (

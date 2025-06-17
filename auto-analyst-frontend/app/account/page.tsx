@@ -86,7 +86,6 @@ export default function AccountPage() {
 
   const fetchUserData = async () => {
     try {
-      // logger.log('Fetching user data from API')
       setIsRefreshing(true)
       
       // Add cache-busting parameter and force flag to ensure fresh data
@@ -96,13 +95,11 @@ export default function AccountPage() {
       }
       
       const data: UserDataResponse = await response.json()
-      // logger.log('Received user data:', data)
       
       setProfile(data.profile)
       setSubscription(data.subscription)
       
       // Enhanced credits handling using centralized config
-      // logger.log('Credits data:', data.credits)
       
       if (data.credits) {
         // Use centralized config to get plan-specific defaults

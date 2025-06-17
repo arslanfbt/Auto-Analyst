@@ -728,6 +728,8 @@ Chart Styling Guidelines:
 
 class deep_analysis_module(dspy.Module):
     def __init__(self,agents, agents_desc):
+        logger.log_message(f"Initializing deep_analysis_module with {len(agents)} agents: {list(agents.keys())}", level=logging.INFO)
+        
         self.agents = agents
         # Make all dspy operations async using asyncify
         self.deep_questions = dspy.asyncify(dspy.Predict(deep_questions))
@@ -741,6 +743,8 @@ class deep_analysis_module(dspy.Module):
         self.styling_instructions = chart_instructions
         self.agents_desc = agents_desc
         self.final_conclusion = dspy.asyncify(dspy.ChainOfThought(final_conclusion))
+        
+        logger.log_message(f"Deep analysis module initialized successfully with agents: {list(self.agents.keys())}", level=logging.INFO)
 
     async def execute_deep_analysis_streaming(self, goal, dataset_info, session_df=None):
         """
@@ -828,13 +832,13 @@ class deep_analysis_module(dspy.Module):
                 dspy.Example(
                     goal=questions.deep_questions,
                     dataset=dataset_info,
-                    **({"plan_instructions": str(plan_instructions[key])} if "planner" in key else {}),
-                    **({"styling_index": "Sample styling guidelines"} if "data_viz" in key else {})
+                    plan_instructions=str(plan_instructions[key]),
+                    **({"styling_index": "Sample styling guidelines"} if "data_viz" in key or "viz" in key.lower() or "visual" in key.lower() or "plot" in key.lower() or "chart" in key.lower() else {})
                 ).with_inputs(
                     "goal",
-                    "dataset",
-                    *(["plan_instructions"] if "planner" in key else []),
-                    *(["styling_index"] if "data_viz" in key else [])
+                    "dataset", 
+                    "plan_instructions",
+                    *(["styling_index"] if "data_viz" in key or "viz" in key.lower() or "visual" in key.lower() or "plot" in key.lower() or "chart" in key.lower() else [])
                 )
                 for key in keys
             ]
