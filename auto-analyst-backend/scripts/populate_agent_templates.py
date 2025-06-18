@@ -375,35 +375,35 @@ def populate_agents_and_templates(include_defaults=True, include_premiums=True):
             print(f"\n🔒 --- Processing Premium Templates (Paid) ---")
             for category, templates in PREMIUM_TEMPLATES.items():
                 print(f"\n📁 {category}:")
+            
+            for template_data in templates:
+                template_name = template_data["template_name"]
                 
-                for template_data in templates:
-                    template_name = template_data["template_name"]
-                    
-                    # Check if template already exists
-                    existing = session.query(AgentTemplate).filter(
-                        AgentTemplate.template_name == template_name
-                    ).first()
-                    
-                    if existing:
-                        print(f"⏭️  Skipping {template_name} (already exists)")
-                        skipped_count += 1
-                        continue
-                    
+                # Check if template already exists
+                existing = session.query(AgentTemplate).filter(
+                    AgentTemplate.template_name == template_name
+                ).first()
+                
+                if existing:
+                    print(f"⏭️  Skipping {template_name} (already exists)")
+                    skipped_count += 1
+                    continue
+                
                     # Create new premium template
-                    template = AgentTemplate(
-                        template_name=template_name,
-                        display_name=template_data["display_name"],
-                        description=template_data["description"],
-                        icon_url=template_data["icon_url"],
-                        prompt_template=template_data["prompt_template"],
-                        category=category,
+                template = AgentTemplate(
+                    template_name=template_name,
+                    display_name=template_data["display_name"],
+                    description=template_data["description"],
+                    icon_url=template_data["icon_url"],
+                    prompt_template=template_data["prompt_template"],
+                    category=category,
                         is_premium_only=True,  # Premium templates require subscription
-                        is_active=True,
-                        created_at=datetime.now(UTC),
-                        updated_at=datetime.now(UTC)
-                    )
-                    
-                    session.add(template)
+                    is_active=True,
+                    created_at=datetime.now(UTC),
+                    updated_at=datetime.now(UTC)
+                )
+                
+                session.add(template)
                     print(f"✅ Created premium template: {template_name}")
                     premium_created += 1
         
