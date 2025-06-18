@@ -1,5 +1,5 @@
 "use client"
-import { Brain, LineChart, Database, BarChart2, Lock, Zap, FileText, TrendingUp, Cog, BarChart3, Github, Server, Cpu, Globe } from "lucide-react"
+import { Brain, LineChart, Database, BarChart2, Lock, Zap, FileText, TrendingUp, Cog, BarChart3, Github, Server, Cpu, Globe, Wrench, Target, Eye } from "lucide-react"
 
 export const features = [
   { 
@@ -34,6 +34,55 @@ export const features = [
   },
 ]
 
+export const templateCategories = [
+  {
+    icon: Wrench,
+    name: "Data Manipulation",
+    description: "Transform, clean, and prepare your data for analysis",
+    capabilities: [
+      "Clean and preprocess datasets with advanced techniques",
+      "Handle missing values and data quality issues", 
+      "Transform and reshape data structures",
+      "Merge, join, and aggregate multiple data sources",
+      "High-performance data processing capabilities"
+    ],
+    color: "from-red-300 to-red-400",
+    bgGradient: "from-red-50 to-red-100",
+    examples: "Pandas preprocessing, Polars optimization, data cleaning specialists"
+  },
+  {
+    icon: Target,
+    name: "Data Modelling", 
+    description: "Build statistical models and machine learning algorithms",
+    capabilities: [
+      "Statistical analysis and hypothesis testing",
+      "Machine learning model development",
+      "Predictive analytics and forecasting",
+      "Feature engineering and selection",
+      "Model validation and performance evaluation"
+    ],
+    color: "from-red-400 to-red-500",
+    bgGradient: "from-red-100 to-red-200",
+    examples: "Statistical analysis, ML algorithms, predictive modeling"
+  },
+  {
+    icon: Eye,
+    name: "Data Visualization",
+    description: "Create compelling charts and interactive visualizations",
+    capabilities: [
+      "Interactive and static chart creation",
+      "Multi-dimensional data visualization",
+      "Statistical plot recommendations",
+      "Custom styling and formatting options",
+      "Publication-ready visual outputs"
+    ],
+    color: "from-red-500 to-red-600",
+    bgGradient: "from-red-200 to-red-300",
+    examples: "Plotly interactives, Matplotlib static plots, Seaborn statistical charts"
+  }
+]
+
+// Legacy agents array for backward compatibility
 export const agents = [
   {
     icon: Database,
