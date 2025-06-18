@@ -355,6 +355,46 @@ async def toggle_template_preference(user_id: int, template_id: int, request: To
             if not user:
                 raise HTTPException(status_code=404, detail="User not found")
             
+            # If trying to disable, check if this would leave user with no enabled templates
+            if not request.is_enabled:
+                # Get list of default agent names that should be enabled by default
+                default_agent_names = [
+                    "preprocessing_agent",
+                    "statistical_analytics_agent", 
+                    "sk_learn_agent",
+                    "data_viz_agent"
+                ]
+                
+                # Get all active templates
+                all_templates = session.query(AgentTemplate).filter(
+                    AgentTemplate.is_active == True
+                ).all()
+                
+                enabled_count = 0
+                for template in all_templates:
+                    # Check if user has a preference record for this template
+                    preference = session.query(UserTemplatePreference).filter(
+                        UserTemplatePreference.user_id == user_id,
+                        UserTemplatePreference.template_id == template.template_id
+                    ).first()
+                    
+                    # Determine if template should be enabled by default
+                    is_default_agent = template.template_name in default_agent_names
+                    default_enabled = is_default_agent
+                    
+                    # Template is enabled by default for default agents, disabled for others
+                    is_enabled = preference.is_enabled if preference else default_enabled
+                    
+                    if is_enabled:
+                        enabled_count += 1
+                
+                # If disabling this template would leave the user with 0 enabled templates, reject
+                if enabled_count <= 1:
+                    raise HTTPException(
+                        status_code=400, 
+                        detail="Cannot disable the last active agent. At least one agent must remain active."
+                    )
+            
             success, message = toggle_user_template_preference(
                 user_id, template_id, request.is_enabled, session
             )
@@ -391,18 +431,50 @@ async def bulk_toggle_template_preferences(user_id: int, request: dict):
             if not template_preferences:
                 raise HTTPException(status_code=400, detail="No preferences provided")
             
-            # Check current enabled count for limit enforcement
-            current_enabled_count = session.query(UserTemplatePreference).filter(
-                UserTemplatePreference.user_id == user_id,
-                UserTemplatePreference.is_enabled == True
-            ).count()
+            # Get list of default agent names that should be enabled by default
+            default_agent_names = [
+                "preprocessing_agent",
+                "statistical_analytics_agent", 
+                "sk_learn_agent",
+                "data_viz_agent"
+            ]
             
-            # Count how many templates we're trying to enable
+            # Calculate current enabled count properly (including defaults)
+            all_templates = session.query(AgentTemplate).filter(
+                AgentTemplate.is_active == True
+            ).all()
+            
+            current_enabled_count = 0
+            for template in all_templates:
+                # Check if user has a preference record for this template
+                preference = session.query(UserTemplatePreference).filter(
+                    UserTemplatePreference.user_id == user_id,
+                    UserTemplatePreference.template_id == template.template_id
+                ).first()
+                
+                # Determine if template should be enabled by default
+                is_default_agent = template.template_name in default_agent_names
+                default_enabled = is_default_agent
+                
+                # Template is enabled by default for default agents, disabled for others
+                is_enabled = preference.is_enabled if preference else default_enabled
+                
+                if is_enabled:
+                    current_enabled_count += 1
+            
+            # Count how many templates we're trying to enable/disable
             enabling_count = sum(1 for pref in template_preferences if pref.get("is_enabled", False))
             disabling_count = sum(1 for pref in template_preferences if not pref.get("is_enabled", False))
             
             # Calculate what the new count would be
             projected_enabled_count = current_enabled_count + enabling_count - disabling_count
+            
+            # Check if the bulk operation would leave user with 0 enabled templates
+            if projected_enabled_count < 1:
+                raise HTTPException(
+                    status_code=400, 
+                    detail="Cannot disable all agents. At least one agent must remain active."
+                )
             
             results = []
             for pref in template_preferences:

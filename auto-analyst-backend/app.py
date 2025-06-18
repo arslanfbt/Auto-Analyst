@@ -1069,6 +1069,7 @@ def _get_model_name_for_provider(provider: str) -> str:
 async def _execute_plan_with_timeout(ai_system, enhanced_query, plan_response):
     """Execute the plan with timeout handling for each step"""
     try:
+        logger.log_message(f"Plan response: {plan_response}", level=logging.INFO)
         # Use the async generator from execute_plan directly
         async for agent_name, inputs, response in ai_system.execute_plan(enhanced_query, plan_response):
             # Yield results as they come

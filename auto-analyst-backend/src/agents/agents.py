@@ -1582,7 +1582,7 @@ class auto_analyst(dspy.Module):
             try:
                 # For planner use, load planner-enabled templates (max 10, prioritized by usage)
                 template_signatures = load_user_enabled_templates_for_planner_from_db(user_id, db_session)
-                logger.log_message(f"Loaded {len(template_signatures)} templates for planner use", level=logging.INFO)
+                logger.log_message(f"Loaded {template_signatures} templates for planner use", level=logging.INFO)
                 
                 for template_name, signature in template_signatures.items():
                     # Skip if this is a core agent - we'll load it separately
@@ -1861,6 +1861,7 @@ class auto_analyst(dspy.Module):
             else:
                 complexity = 'basic'
             plan_dict['complexity'] = complexity
+            logger.log_message(f"Plan dict: {plan_dict}", level=logging.INFO)
 
             return plan_dict
             
@@ -1880,7 +1881,8 @@ class auto_analyst(dspy.Module):
         import json
 
         # Clean and split the plan string into agent names
-        plan_text = plan.get("plan", "").replace("Plan", "").replace(":", "").strip()
+        plan_text = plan.get("plan", "").lower().replace("plan", "").replace(":", "").strip()
+        logger.log_message(f"Plan text: {plan_text}", level=logging.INFO)
         
         if "basic_qa_agent" in plan_text:
             inputs = dict(goal=query)

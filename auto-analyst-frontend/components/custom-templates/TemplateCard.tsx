@@ -9,6 +9,7 @@ interface TemplateCardProps {
   preference?: TemplatePreference
   isEnabled: boolean
   hasAccess: boolean
+  isLastTemplate?: boolean
   onToggleChange: (templateId: number, enabled: boolean) => void
 }
 
@@ -17,17 +18,35 @@ export default function TemplateCard({
   preference,
   isEnabled,
   hasAccess,
+  isLastTemplate = false,
   onToggleChange
 }: TemplateCardProps) {
   // User can only toggle if they have access (covers both free and premium users)
   // Premium-only templates are only toggleable by premium users (hasAccess = true for premium)
-  const canToggle = hasAccess
+  // Also cannot disable if this is the last template
+  const canToggle = hasAccess && !(isEnabled && isLastTemplate)
 
   const handleClick = () => {
     if (canToggle) {
       onToggleChange(template.template_id, !isEnabled)
     }
   }
+
+  // Determine the status text and color
+  const getStatusInfo = () => {
+    if (!hasAccess) {
+      return { text: 'Premium', color: 'text-gray-400' }
+    }
+    if (isEnabled && isLastTemplate) {
+      return { text: 'Required', color: 'text-orange-600' }
+    }
+    if (isEnabled) {
+      return { text: 'Active', color: 'text-green-600' }
+    }
+    return { text: 'Inactive', color: 'text-gray-400' }
+  }
+
+  const statusInfo = getStatusInfo()
 
   return (
     <motion.div
@@ -40,6 +59,7 @@ export default function TemplateCard({
             ? 'bg-gradient-to-br from-[#FF7F7F]/5 to-[#FF7F7F]/10 border-[#FF7F7F]/20 shadow-sm'
             : 'bg-white hover:bg-gray-50 border-gray-200'
       } ${!canToggle ? 'opacity-90' : ''}`}
+      title={isEnabled && isLastTemplate ? 'At least one agent must remain active' : undefined}
     >
       {/* Lock overlay for free users */}
       {!canToggle && (
@@ -88,6 +108,11 @@ export default function TemplateCard({
                   Premium
                 </Badge>
               )}
+              {/* {isEnabled && isLastTemplate && (
+                <Badge variant="outline" className="text-xs border-orange-400 text-orange-600 bg-orange-50 px-1 py-0 h-5 flex items-center">
+                  Required
+                </Badge>
+              )} */}
             </div>
           </div>
           
@@ -113,26 +138,23 @@ export default function TemplateCard({
               disabled={!canToggle}
               className={`w-6 h-6 rounded-md border-2 flex items-center justify-center transition-all duration-200 ${
                 isEnabled
-                  ? 'bg-[#FF7F7F] border-[#FF7F7F] text-white'
+                  ? isLastTemplate 
+                    ? 'bg-orange-500 border-orange-500 text-white'
+                    : 'bg-[#FF7F7F] border-[#FF7F7F] text-white'
                   : 'border-gray-300 hover:border-[#FF7F7F] bg-white'
               } ${!canToggle ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:scale-105'}`}
+              title={isEnabled && isLastTemplate ? 'At least one agent must remain active' : undefined}
             >
               {isEnabled && <Check className="w-4 h-4" />}
             </button>
-            <span className={`text-xs ${
-              !canToggle 
-                ? 'text-gray-400'
-                : isEnabled 
-                  ? 'text-green-600' 
-                  : 'text-gray-400'
-            }`}>
-              {!canToggle 
-                ? 'Premium'
-                : isEnabled 
-                  ? 'Active' 
-                  : 'Inactive'
-              }
+            <span className={`text-xs ${statusInfo.color}`}>
+              {statusInfo.text}
             </span>
+            {isEnabled && isLastTemplate && (
+              <span className="text-xs text-orange-600 font-medium">
+                Min required
+              </span>
+            )}
           </div>
         </div>
       </div>

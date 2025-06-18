@@ -65,7 +65,7 @@ export default function AgentSuggestions({
     return null
   }
 
-  // Fetch agents from the main agents endpoint (includes both standard and custom)
+  // Fetch agents from the main agents endpoint (now all are templates in DB)
   const fetchAllAgents = async (): Promise<AgentSuggestion[]> => {
     const currentUserId = getUserId()
     
@@ -82,34 +82,23 @@ export default function AgentSuggestions({
         const data = await response.json()
         const allAgents: AgentSuggestion[] = []
         
-        // // Add standard agents
-        // if (data.standard_agents) {
-        //   data.standard_agents.forEach((agentName: string) => {
-        //     const standardAgent = standardAgents.find(agent => agent.name === agentName)
-        //     if (standardAgent) {
-        //       allAgents.push(standardAgent)
-        //     }
-        //   })
-        // }
-        
-        // Add template agents (only for users with custom agents access)
-        if (data.template_agents && data.template_agents.length > 0 && customAgentsAccess.hasAccess) {
+        // All agents are now template agents from the database
+        // Load all template agents, filtering will be done based on premium access
+        if (data.template_agents && data.template_agents.length > 0) {
           const templateAgents = await fetchTemplateAgents()
           allAgents.push(...templateAgents)
         }
         
-        // Custom agents are deprecated - using templates only
-        
         return allAgents
       } else {
         console.error('Failed to fetch agents:', response.status, await response.text())
-        // Fallback to standard agents only
-        return standardAgents
+        // Fallback to empty array since all agents should be in DB now
+        return []
       }
     } catch (error) {
       console.error('Error fetching agents:', error)
-      // Fallback to standard agents only
-      return standardAgents
+      // Fallback to empty array since all agents should be in DB now
+      return []
     }
   }
 
@@ -129,10 +118,14 @@ export default function AgentSuggestions({
             const mappedTemplates = category.templates.map((template: any) => ({
               name: template.agent_name,
               description: template.description,
-              // isTemplate: true,
+              isTemplate: true,
               isPremium: template.is_premium_only
             }))
-            allTemplates.push(...mappedTemplates)
+            // Filter out premium agents if user doesn't have access
+            const filteredTemplates = customAgentsAccess.hasAccess 
+              ? mappedTemplates 
+              : mappedTemplates.filter((template: any) => !template.isPremium)
+            allTemplates.push(...filteredTemplates)
           }
         })
         
@@ -304,7 +297,7 @@ export default function AgentSuggestions({
               <div className="font-medium text-gray-900">{agent.name}</div>
               <div className="flex gap-1">
                 {agent.isPremium && (
-                  <span className="text-xs px-2 py-1 bg-blue-100 text-blue-700 rounded-full">
+                  <span className="text-xs px-2 py-1 bg-[#FF7F7F]/12 text-[#000000] rounded-full">
                     Template
                   </span>
                 )}

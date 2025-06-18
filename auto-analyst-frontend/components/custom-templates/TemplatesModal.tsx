@@ -64,29 +64,18 @@ export default function TemplatesModal({
   const loadTemplatesForFreeUsers = async () => {
     setLoading(true)
     try {
-      console.log('Loading templates for free users...', { API_URL })
-      
       // Fetch all templates (no user-specific data needed)
       const response = await fetch(`${API_URL}/templates/`).catch(err => {
-        console.error('Free user templates fetch error:', err)
         throw new Error(`Templates endpoint failed: ${err.message}`)
       })
 
-      console.log('Free user templates response:', { status: response.status })
-
       if (!response.ok) {
         const errorText = await response.text()
-        console.error('Free user templates response error:', { status: response.status, errorText })
         throw new Error(`Failed to load templates: ${response.status} ${response.statusText} - ${errorText}`)
       }
 
       const templatesData = await response.json().catch(err => {
-        console.error('Free user templates JSON parse error:', err)
         throw new Error(`Failed to parse templates response: ${err.message}`)
-      })
-      
-      console.log('Free user templates data parsed successfully:', { 
-        templatesCount: templatesData.length 
       })
       
       setTemplates(templatesData)
@@ -108,42 +97,30 @@ export default function TemplatesModal({
   const loadData = async () => {
     setLoading(true)
     try {
-      console.log('Loading templates data for modal...', { API_URL, userId })
-      
       // Fetch global template data with global usage counts
       const [templatesResponse, preferencesResponse] = await Promise.all([
         fetch(`${API_URL}/templates/`).catch(err => {
-          console.error('Templates fetch error:', err)
           throw new Error(`Templates endpoint failed: ${err.message}`)
         }), // Global templates with global usage counts
         fetch(`${API_URL}/templates/user/${userId}`).catch(err => {
-          console.error('Preferences fetch error:', err)
           throw new Error(`Preferences endpoint failed: ${err.message}`)
         }) // User preferences with per-user usage
       ])
 
-      console.log('Modal responses received:', { 
-        templatesStatus: templatesResponse.status,
-        preferencesStatus: preferencesResponse.status 
-      })
-
       // Check templates response
       if (!templatesResponse.ok) {
         const errorText = await templatesResponse.text()
-        console.error('Templates response error:', { status: templatesResponse.status, errorText })
         throw new Error(`Failed to load templates: ${templatesResponse.status} ${templatesResponse.statusText} - ${errorText}`)
       }
 
       // Check preferences response
       if (!preferencesResponse.ok) {
         const errorText = await preferencesResponse.text()
-        console.error('Preferences response error:', { status: preferencesResponse.status, errorText })
         throw new Error(`Failed to load preferences: ${preferencesResponse.status} ${preferencesResponse.statusText} - ${errorText}`)
       }
 
       // Parse templates response
       const globalTemplatesData = await templatesResponse.json().catch(err => {
-        console.error('Templates JSON parse error:', err)
         throw new Error(`Failed to parse templates response: ${err.message}`)
       })
       
@@ -165,7 +142,6 @@ export default function TemplatesModal({
 
       // Parse preferences response
       const userPreferencesData = await preferencesResponse.json().catch(err => {
-        console.error('Preferences JSON parse error:', err)
         throw new Error(`Failed to parse preferences response: ${err.message}`)
       })
       
@@ -182,11 +158,6 @@ export default function TemplatesModal({
         last_used_at: item.last_used_at
       }))
       setPreferences(preferencesData)
-
-      console.log('Modal data parsed successfully:', { 
-        templatesCount: templatesData.length,
-        preferencesCount: preferencesData.length 
-      })
 
       // Reset changes when loading data
       setChanges({})
@@ -339,7 +310,7 @@ export default function TemplatesModal({
       if (response.ok) {
         toast({
           title: "Settings Saved!",
-          description: `Updated ${preferencesToUpdate.length} template preferences`,
+          description: `Updated template preferences`,
           duration: 3000,
         })
         setChanges({})
@@ -368,8 +339,29 @@ export default function TemplatesModal({
     return { preference, isEnabled }
   }
 
+  // Calculate enabled count including pending changes
+  const getEnabledCountWithChanges = () => {
+    let count = 0
+    templates.forEach(template => {
+      const isCurrentlyEnabled = getTemplateEnabledState(template)
+      if (isCurrentlyEnabled) {
+        count++
+      }
+    })
+    return count
+  }
+
+  // Check if disabling this template would leave user with 0 templates
+  const wouldLeaveZeroTemplates = (templateId: number) => {
+    const currentEnabledCount = getEnabledCountWithChanges()
+    const templateCurrentlyEnabled = getTemplateEnabledState(templates.find(t => t.template_id === templateId)!)
+    
+    // If this template is currently enabled and it's the only one, disabling it would leave 0
+    return templateCurrentlyEnabled && currentEnabledCount === 1
+  }
+
   const enabledCount = hasAccess 
-    ? templates.filter(template => getTemplateEnabledState(template)).length
+    ? getEnabledCountWithChanges()
     : 0
 
   return (
@@ -535,6 +527,8 @@ export default function TemplatesModal({
                     <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
                       {filteredTemplates.map(template => {
                         const { preference, isEnabled } = getTemplateData(template)
+                        const isLastTemplate = wouldLeaveZeroTemplates(template.template_id)
+                        
                         return (
                           <TemplateCard
                             key={template.template_id}
@@ -542,6 +536,7 @@ export default function TemplatesModal({
                             preference={preference}
                             isEnabled={isEnabled}
                             hasAccess={hasAccess}
+                            isLastTemplate={isLastTemplate}
                             onToggleChange={handleToggleChange}
                           />
                         )
@@ -563,6 +558,12 @@ export default function TemplatesModal({
                     <>
                       <span className="text-gray-700">
                         Use the toggle switches to enable/disable agents to be used by planner. You can use any agent directly with @agent_name.
+                        <br />
+                        {enabledCount === 1 && (
+                          <span className="text-gray-600 font-medium">
+                            {' '}Note: At least one agent must remain active.
+                          </span>
+                        )}
                       </span>
                       {Object.keys(changes).length > 0 && (
                         <span className="text-[#FF7F7F] font-medium">

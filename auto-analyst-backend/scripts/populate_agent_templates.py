@@ -25,7 +25,6 @@ def get_database_type():
     else:
         return "unknown"
 
-# Default agents (free for all users)
 DEFAULT_AGENTS = {
     "Data Manipulation": [
         {
@@ -203,7 +202,6 @@ Example Summary:
     ]
 }
 
-# Premium template agent definitions
 PREMIUM_TEMPLATES = {
     "Data Visualization": [
         {
