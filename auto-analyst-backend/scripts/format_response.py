@@ -599,9 +599,6 @@ def execute_code_from_markdown(code_str, dataframe=None):
     current_block = []
     current_block_name = "unknown"
     
-    with open("sample_clean_code.py", 'w', encoding='utf-8') as f:
-        f.write(modified_code)
-    
     for line in modified_code.splitlines():
         # Check if line contains a block identifier comment
         block_match = re.match(r'^# ([a-zA-Z_]+)_agent code start', line)
