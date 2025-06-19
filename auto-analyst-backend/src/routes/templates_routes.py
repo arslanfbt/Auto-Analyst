@@ -195,6 +195,9 @@ async def get_user_template_preferences(user_id: int, variant_type: str = Query(
                 is_default_agent = template.template_name in default_agent_names
                 default_enabled = is_default_agent  # Default agents enabled by default, others disabled
                 
+                # Template is enabled by default for default agents, disabled for others
+                is_enabled = preference.is_enabled if preference else default_enabled
+                
                 result.append(UserTemplatePreferenceResponse(
                     template_id=template.template_id,
                     template_name=template.template_name,
@@ -204,7 +207,7 @@ async def get_user_template_preferences(user_id: int, variant_type: str = Query(
                     icon_url=template.icon_url,
                     is_premium_only=template.is_premium_only,
                     is_active=template.is_active,
-                    is_enabled=preference.is_enabled if preference else default_enabled,  # Default agents enabled by default
+                    is_enabled=is_enabled,
                     usage_count=preference.usage_count if preference else 0,
                     last_used_at=preference.last_used_at if preference else None,
                     created_at=preference.created_at if preference else None,
@@ -260,12 +263,12 @@ async def get_user_enabled_templates(user_id: int, variant_type: str = Query(def
                 ]
             else:
                 default_agent_names = [
-                    "preprocessing_agent",
+                        "preprocessing_agent",
                     "statistical_analytics_agent", 
                     "sk_learn_agent",
                     "data_viz_agent"
                 ]
-            
+                
             result = []
             for template in all_templates:
                 # Check if user has a preference record for this template
@@ -274,7 +277,7 @@ async def get_user_enabled_templates(user_id: int, variant_type: str = Query(def
                     UserTemplatePreference.template_id == template.template_id
                 ).first()
                 
-                # Determine if template should be enabled by default
+                # Determine if template should be enabled by default  
                 is_default_agent = template.template_name in default_agent_names
                 default_enabled = is_default_agent  # Default agents enabled by default, others disabled
                 
@@ -434,7 +437,7 @@ async def toggle_template_preference(user_id: int, template_id: int, request: To
                     
                     # Determine if template should be enabled by default
                     is_default_agent = template.template_name in default_agent_names
-                    default_enabled = is_default_agent
+                    default_enabled = is_default_agent  # Default agents enabled by default, others disabled
                     
                     # Template is enabled by default for default agents, disabled for others
                     is_enabled = preference.is_enabled if preference else default_enabled
@@ -486,8 +489,7 @@ async def bulk_toggle_template_preferences(user_id: int, request: dict):
                 raise HTTPException(status_code=400, detail="No preferences provided")
             
             # Get list of default planner agent names that should be enabled by default
-            # This function is primarily used by the templates modal which works with planner variants
-            default_agent_names = [
+            default_planner_agent_names = [
                 "planner_preprocessing_agent",
                 "planner_statistical_analytics_agent", 
                 "planner_sk_learn_agent",
@@ -510,8 +512,8 @@ async def bulk_toggle_template_preferences(user_id: int, request: dict):
                 ).first()
                 
                 # Determine if template should be enabled by default
-                is_default_agent = template.template_name in default_agent_names
-                default_enabled = is_default_agent
+                is_default_planner_agent = template.template_name in default_planner_agent_names
+                default_enabled = is_default_planner_agent  # Default planner agents enabled by default, others disabled
                 
                 # Template is enabled by default for default agents, disabled for others
                 is_enabled = preference.is_enabled if preference else default_enabled

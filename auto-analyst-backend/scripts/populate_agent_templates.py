@@ -531,7 +531,6 @@ Output clean matplotlib code with professional styling.
             "prompt_template": """
 You are a matplotlib visualization agent specifically optimized for multi-agent data analytics pipelines.
 
-This is the planner variant of the matplotlib_agent, designed to work seamlessly in coordinated multi-agent systems.
 
 You are given:
 * Input data and parameters from previous agents in the pipeline
@@ -618,7 +617,6 @@ Output clean, optimized Polars code with performance considerations.
             "prompt_template": """
 You are a Polars data processing agent specifically optimized for multi-agent data analytics pipelines.
 
-This is the planner variant of the polars_agent, designed to work seamlessly in coordinated multi-agent systems.
 
 You are given:
 * Input data and parameters from previous agents in the pipeline
@@ -655,16 +653,16 @@ Respond in the user's language for all summary and reasoning but keep the code i
     "Data Visualization": [
         # Matplotlib Agent - Individual
         {
-            "template_name": "matplotlib_agent",
-            "display_name": "Matplotlib Static Plots Agent",
+            "template_name": "data_viz_agent",
+            "display_name": "Data Visualization Agent",
             "description": "Creates publication-quality static visualizations using Matplotlib—perfect for academic papers and print materials.",
             "icon_url": "/icons/templates/matplotlib_agent.png",
             "variant_type": "individual",
             "base_agent": "matplotlib_agent",
             "prompt_template": """
-You are a matplotlib visualization specialist for creating publication-quality static plots.
+You are a data visualization specialist for creating publication-quality static plots.
 
-You create professional, static visualizations using matplotlib, ideal for:
+You create professional, static visualizations using plotly, ideal for:
 - Academic publications
 - Reports and presentations
 - Print-ready figures
@@ -681,33 +679,32 @@ Your mission:
 - Ensure plots are publication-ready
 - Handle multiple subplots when needed
 
-Key matplotlib strengths:
+Key plotly strengths:
 - Fine-grained control over plot elements
 - Publication-quality output
 - Custom styling and annotations
 - Support for various output formats (PNG, PDF, SVG)
 
 Best practices:
-1. Use `plt.style.use()` for consistent styling
+1. Use `px.style.use()` for consistent styling
 2. Add proper labels, titles, and legends
 3. Optimize figure size and DPI for intended use
 4. Use appropriate color schemes and fonts
 
-Output clean matplotlib code with professional styling.
+Output clean plotly code with professional styling.
 """
         },
         # Matplotlib Agent - Planner
         {
-            "template_name": "planner_matplotlib_agent",
-            "display_name": "Matplotlib Static Plots Agent (Planner)",
-            "description": "Multi-agent planner variant: Creates publication-quality static visualizations using Matplotlib—perfect for academic papers and print materials.",
-            "icon_url": "/icons/templates/matplotlib_agent.png",
+            "template_name": "planner_data_viz_agent",
+            "display_name": "Data Visualization Agent (Planner)",
+            "description": "Multi-agent planner variant: Creates publication-quality static visualizations using Plotly—perfect for academic papers and print materials.",
+            "icon_url": "/icons/templates/data_viz_agent.png",
             "variant_type": "planner",
-            "base_agent": "matplotlib_agent",
+            "base_agent": "data_viz_agent",
             "prompt_template": """
-You are a matplotlib visualization agent specifically optimized for multi-agent data analytics pipelines.
+You are a data visualization agent specifically optimized for multi-agent data analytics pipelines.
 
-This is the planner variant of the matplotlib_agent, designed to work seamlessly in coordinated multi-agent systems.
 
 You are given:
 * Input data and parameters from previous agents in the pipeline
@@ -730,7 +727,7 @@ You are given:
 * Optimize for pipeline performance and coordination
 
 ### Original Agent Capabilities:
-Creates publication-quality static visualizations using Matplotlib—perfect for academic papers and print materials.
+Creates publication-quality static visualizations using Plotly—perfect for academic papers and print materials.
 
 ### Output:
 * Code implementing the required functionality per plan_instructions
@@ -801,7 +798,7 @@ def populate_agents_and_templates(include_defaults=True, include_premiums=True):
             print(f"\n🔒 --- Processing Premium Templates (Paid) ---")
             for category, templates in PREMIUM_TEMPLATES.items():
                 print(f"\n📁 {category}:")
-                
+            
                 for template_data in templates:
                     template_name = template_data["template_name"]
                     
@@ -815,7 +812,7 @@ def populate_agents_and_templates(include_defaults=True, include_premiums=True):
                         skipped_count += 1
                         continue
                     
-                    # Create new premium template
+                        # Create new premium template
                     template = AgentTemplate(
                         template_name=template_name,
                         display_name=template_data["display_name"],

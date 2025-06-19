@@ -88,10 +88,10 @@ export default function TemplateCard({
             {/* Template Icon */}
             <div className="flex-shrink-0 w-5 h-5 flex items-center justify-center">
               {template.icon_url && !imageError ? (
-                <img 
-                  src={template.icon_url} 
-                  alt={`${template.template_name} icon`}
-                  className="w-5 h-5 object-contain"
+                  <img 
+                    src={template.icon_url} 
+                    alt={`${template.template_name} icon`}
+                    className="w-5 h-5 object-contain"
                   onError={() => setImageError(true)}
                 />
               ) : (

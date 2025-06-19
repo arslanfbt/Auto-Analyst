@@ -30,15 +30,22 @@ def create_custom_agent_signature(agent_name, description, prompt_template, cate
     else:
         is_viz_agent = 'viz' in agent_name.lower() or 'visual' in agent_name.lower() or 'plot' in agent_name.lower() or 'chart' in agent_name.lower()
     
+    if agent_name.startswith('planner_'):
+        is_planner_agent = True
+    else:
+        is_planner_agent = False
+    
     # Standard input/output fields that match the unified agent signatures
     class_attributes = {
         '__doc__': prompt_template,  # The custom prompt becomes the docstring
         'goal': dspy.InputField(desc="User-defined goal which includes information about data and task they want to perform"),
         'dataset': dspy.InputField(desc="Provides information about the data in the data frame. Only use column names and dataframe_name as in this context"),
-        'plan_instructions': dspy.InputField(desc="Agent-level instructions about what to create and receive (optional for individual use)", default=""),
         'code': dspy.OutputField(desc="Generated Python code for the analysis"),
         'summary': dspy.OutputField(desc="A concise bullet-point summary of what was done and key results")
     }
+    
+    if is_planner_agent:
+        class_attributes['plan_instructions'] = dspy.InputField(desc="Agent-level instructions about what to create and receive", default=""),
     
     # Add styling_index for visualization agents
     if is_viz_agent:
@@ -115,6 +122,7 @@ def load_user_enabled_templates_for_planner_from_db(user_id, db_session):
     """
     Load planner variant template agents that are enabled for planner use (max 10, prioritized by usage).
     Default planner agents are enabled by default unless explicitly disabled by user preference.
+    Custom/premium agents require explicit enablement.
     
     Args:
         user_id: ID of the user
@@ -1584,11 +1592,13 @@ class auto_analyst(dspy.Module):
             try:
                 # For planner use, load planner-enabled templates (max 10, prioritized by usage)
                 template_signatures = load_user_enabled_templates_for_planner_from_db(user_id, db_session)
+
                 logger.log_message(f"Loaded {template_signatures} templates for planner use", level=logging.INFO)
                 
                 for template_name, signature in template_signatures.items():
-                    # Skip if this is a core agent - we'll load it separately
-                    if template_name in ['preprocessing_agent', 'statistical_analytics_agent', 'sk_learn_agent', 'data_viz_agent']:
+                    # For planner module, load all planner variants (including core planner agents)
+                    # Skip only individual variants, not planner variants
+                    if template_name in ['planner_preprocessing_agent', 'planner_statistical_analytics_agent', 'planner_sk_learn_agent', 'planner_data_viz_agent']:
                         continue
                         
                     # Add template agent to agents dict
@@ -1647,67 +1657,70 @@ class auto_analyst(dspy.Module):
             except Exception as e:
                 logger.log_message(f"Error loading template agents for user {user_id}: {str(e)}", level=logging.ERROR)
 
-        # Load core agents based on user preferences (not always loaded)
-        if not agents and user_id and db_session:
+        # Load core planner agents based on user preferences (only planner variants for planner module)
+        if len(self.agents) == 0 and user_id and db_session:
             try:
-                # Get user preferences for core agents
+                # Get user preferences for core planner agents
                 from src.db.schemas.models import AgentTemplate, UserTemplatePreference
                 
-                core_agent_names = ['preprocessing_agent', 'statistical_analytics_agent', 'sk_learn_agent', 'data_viz_agent']
+                # For planner module, use planner variants of core agents
+                core_planner_agent_names = ['planner_preprocessing_agent', 'planner_statistical_analytics_agent', 'planner_sk_learn_agent', 'planner_data_viz_agent']
                 
-                for agent_name in core_agent_names:
-                    # Check if user has enabled this core agent
+                for agent_name in core_planner_agent_names:
+                    # Check if user has enabled this core agent (check both planner and individual preferences)
                     template = db_session.query(AgentTemplate).filter(
                         AgentTemplate.template_name == agent_name,
                         AgentTemplate.is_active == True
                     ).first()
                     
                     if not template:
-                        logger.log_message(f"Core agent template '{agent_name}' not found in database", level=logging.WARNING)
+                        logger.log_message(f"Core planner agent template '{agent_name}' not found in database", level=logging.WARNING)
                         continue
                     
-                    # Check user preference
+                    # Check user preference for this planner agent
                     preference = db_session.query(UserTemplatePreference).filter(
                         UserTemplatePreference.user_id == user_id,
                         UserTemplatePreference.template_id == template.template_id
                     ).first()
                     
-                    # Core agents are enabled by default unless explicitly disabled
+                    # Core planner agents are enabled by default unless explicitly disabled
                     is_enabled = preference.is_enabled if preference else True
                     
                     if not is_enabled:
                         continue
                     
-                    # Get the agent signature class
-                    if agent_name == 'preprocessing_agent':
-                        agent_signature = preprocessing_agent
-                    elif agent_name == 'statistical_analytics_agent':
-                        agent_signature = statistical_analytics_agent
-                    elif agent_name == 'sk_learn_agent':
-                        agent_signature = sk_learn_agent
-                    elif agent_name == 'data_viz_agent':
-                        agent_signature = data_viz_agent
+                    # Skip if already loaded from template_signatures
+                    if agent_name in self.agents:
+                        continue
+                    
+                    # Create dynamic signature for planner agent
+                    signature = create_custom_agent_signature(
+                        template.template_name,
+                        template.description,
+                        template.prompt_template,
+                        template.category
+                    )
                     
                     # Add to agents dict
-                    self.agents[agent_name] = dspy.asyncify(dspy.ChainOfThought(agent_signature))
+                    self.agents[agent_name] = dspy.asyncify(dspy.ChainOfThought(signature))
                     
-                    # Set input fields based on signature
-                    if agent_name == 'data_viz_agent':
+                    # Set input fields based on signature (all planner agents need plan_instructions)
+                    if 'data_viz' in agent_name.lower() or template.category == 'Data Visualization':
                         self.agent_inputs[agent_name] = {'goal', 'dataset', 'styling_index', 'plan_instructions'}
                     else:
                         self.agent_inputs[agent_name] = {'goal', 'dataset', 'plan_instructions'}
                     
                     # Get description from database
-                    self.agent_desc.append({agent_name: get_agent_description(agent_name)})
-                    logger.log_message(f"Loaded core agent: {agent_name}", level=logging.DEBUG)
+                    description = f"Planner: {template.description}"
+                    self.agent_desc.append({agent_name: description})
+                    logger.log_message(f"Loaded core planner agent: {agent_name}", level=logging.DEBUG)
                     
             except Exception as e:
-                logger.log_message(f"Error loading core agents based on preferences: {str(e)}", level=logging.ERROR)
-                # Fallback to loading all core agents if preference system fails
-                self._load_default_agents_fallback()
-        elif not agents:
-            # If no user_id/db_session provided, load all core agents as fallback
-            self._load_default_agents_fallback()
+                logger.log_message(f"Error loading core planner agents based on preferences: {str(e)}", level=logging.ERROR)
+                # Don't fallback - user must explicitly enable agents
+        elif len(self.agents) == 0:
+            # If no user_id/db_session provided and no agents loaded, this indicates a configuration issue
+            logger.log_message("No agents loaded and no user preferences available - check configuration", level=logging.ERROR)
         else:
             # Load standard agents from provided list (legacy support)
             for i, a in enumerate(agents):
@@ -1764,11 +1777,52 @@ class auto_analyst(dspy.Module):
             self.agent_desc.append({agent_name: get_agent_description(agent_name)})
             logger.log_message(f"Added fallback agent: {agent_name}", level=logging.DEBUG)
 
+    def _load_default_planner_agents_fallback(self):
+        """Fallback method to load default planner agents when preference system fails"""
+        logger.log_message("Loading default planner agents as fallback for auto_analyst", level=logging.WARNING)
+        
+        # For planner module, load the 4 core planner agents
+        core_planner_agent_names = ['planner_preprocessing_agent', 'planner_statistical_analytics_agent', 'planner_sk_learn_agent', 'planner_data_viz_agent']
+        
+        for agent_name in core_planner_agent_names:
+            # Skip if already loaded
+            if agent_name in self.agents:
+                continue
+                
+            # Create a basic signature for the planner agent as fallback
+            # In production, these should come from the database
+            if agent_name == 'planner_preprocessing_agent':
+                base_signature = preprocessing_agent
+                description = "Planner: Data preprocessing agent for multi-agent pipelines"
+            elif agent_name == 'planner_statistical_analytics_agent':
+                base_signature = statistical_analytics_agent
+                description = "Planner: Statistical analytics agent for multi-agent pipelines"
+            elif agent_name == 'planner_sk_learn_agent':
+                base_signature = sk_learn_agent
+                description = "Planner: Machine learning agent for multi-agent pipelines"
+            elif agent_name == 'planner_data_viz_agent':
+                base_signature = data_viz_agent
+                description = "Planner: Data visualization agent for multi-agent pipelines"
+            
+            # Add to agents dict using base signature (fallback mode)
+            self.agents[agent_name] = dspy.asyncify(dspy.ChainOfThought(base_signature))
+            
+            # Set input fields based on signature
+            if 'data_viz' in agent_name:
+                self.agent_inputs[agent_name] = {'goal', 'dataset', 'styling_index', 'plan_instructions'}
+            else:
+                self.agent_inputs[agent_name] = {'goal', 'dataset', 'plan_instructions'}
+            
+            # Add description
+            self.agent_desc.append({agent_name: description})
+            logger.log_message(f"Added fallback planner agent: {agent_name}", level=logging.DEBUG)
+
     async def _track_agent_usage(self, agent_name):
         """Track usage for template agents"""
         try:
-            # Skip tracking for standard agents
-            if agent_name in ['preprocessing_agent', 'statistical_analytics_agent', 'sk_learn_agent', 'data_viz_agent', 'basic_qa_agent']:
+            # Skip tracking for standard agents and planner variants
+            if agent_name in ['preprocessing_agent', 'statistical_analytics_agent', 'sk_learn_agent', 'data_viz_agent', 'basic_qa_agent',
+                            'planner_preprocessing_agent', 'planner_statistical_analytics_agent', 'planner_sk_learn_agent', 'planner_data_viz_agent']:
                 return
             
             # Only track if we have user_id (template agents)
@@ -1855,8 +1909,12 @@ class auto_analyst(dspy.Module):
         
         
         try:
-            module_return = await self.planner(goal=dict_['goal'], dataset=dict_['dataset'], Agent_desc=dict_['Agent_desc'])
-                    
+            module_return = await self.planner(
+                goal=dict_['goal'], 
+                dataset=dict_['dataset'], 
+                Agent_desc=dict_['Agent_desc']
+            )
+            logger.log_message(f"Module return: {dict_['Agent_desc']}", level=logging.INFO)        
             plan_dict = dict(module_return['plan'])
             if 'complexity' in module_return:
                 complexity = module_return['complexity']
@@ -1883,7 +1941,7 @@ class auto_analyst(dspy.Module):
         import json
 
         # Clean and split the plan string into agent names
-        plan_text = plan.get("plan", "").lower().replace("plan", "").replace(":", "").strip()
+        plan_text = plan.get("plan", "").lower().replace("plan:", "").strip()
         logger.log_message(f"Plan text: {plan_text}", level=logging.INFO)
         
         if "basic_qa_agent" in plan_text:
