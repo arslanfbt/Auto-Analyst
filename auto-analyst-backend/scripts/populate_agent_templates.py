@@ -798,7 +798,7 @@ def populate_agents_and_templates(include_defaults=True, include_premiums=True):
             print(f"\n🔒 --- Processing Premium Templates (Paid) ---")
             for category, templates in PREMIUM_TEMPLATES.items():
                 print(f"\n📁 {category}:")
-            
+                            
                 for template_data in templates:
                     template_name = template_data["template_name"]
                     
@@ -812,7 +812,7 @@ def populate_agents_and_templates(include_defaults=True, include_premiums=True):
                         skipped_count += 1
                         continue
                     
-                        # Create new premium template
+                    # Create new premium template
                     template = AgentTemplate(
                         template_name=template_name,
                         display_name=template_data["display_name"],
