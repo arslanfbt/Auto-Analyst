@@ -29,16 +29,17 @@ def create_custom_agent_signature(agent_name, description, prompt_template, cate
         is_viz_agent = True
     else:
         is_viz_agent = 'viz' in agent_name.lower() or 'visual' in agent_name.lower() or 'plot' in agent_name.lower() or 'chart' in agent_name.lower()
-    
+
     # Standard input/output fields that match the unified agent signatures
     class_attributes = {
         '__doc__': prompt_template,  # The custom prompt becomes the docstring
         'goal': dspy.InputField(desc="User-defined goal which includes information about data and task they want to perform"),
         'dataset': dspy.InputField(desc="Provides information about the data in the data frame. Only use column names and dataframe_name as in this context"),
-        'plan_instructions': dspy.InputField(desc="Agent-level instructions about what to create and receive (optional for individual use)", default=""),
+        'plan_instructions': dspy.InputField(desc="Agent-level instructions about what to create and receive", default=""),
         'code': dspy.OutputField(desc="Generated Python code for the analysis"),
         'summary': dspy.OutputField(desc="A concise bullet-point summary of what was done and key results")
     }
+    
     
     # Add styling_index for visualization agents
     if is_viz_agent:
@@ -113,8 +114,9 @@ def load_user_enabled_templates_from_db(user_id, db_session):
 
 def load_user_enabled_templates_for_planner_from_db(user_id, db_session):
     """
-    Load template agents that are enabled for planner use (max 10, prioritized by usage).
-    Default agents are enabled by default unless explicitly disabled by user preference.
+    Load planner variant template agents that are enabled for planner use (max 10, prioritized by usage).
+    Default planner agents are enabled by default unless explicitly disabled by user preference.
+    Custom/premium agents require explicit enablement.
     
     Args:
         user_id: ID of the user
@@ -132,17 +134,18 @@ def load_user_enabled_templates_for_planner_from_db(user_id, db_session):
         if not user_id:
             return agent_signatures
         
-        # Get list of default agent names that should be enabled by default
-        default_agent_names = [
-            "preprocessing_agent",
-            "statistical_analytics_agent", 
-            "sk_learn_agent",
-            "data_viz_agent"
+        # Get list of default planner agent names that should be enabled by default
+        default_planner_agent_names = [
+            "planner_preprocessing_agent",
+            "planner_statistical_analytics_agent", 
+            "planner_sk_learn_agent",
+            "planner_data_viz_agent"
         ]
         
-        # Get all active templates
+        # Get all active planner variant templates
         all_templates = db_session.query(AgentTemplate).filter(
-            AgentTemplate.is_active == True
+            AgentTemplate.is_active == True,
+            AgentTemplate.variant_type.in_(['planner', 'both'])
         ).all()
         
         enabled_templates = []
@@ -154,8 +157,8 @@ def load_user_enabled_templates_for_planner_from_db(user_id, db_session):
             ).first()
             
             # Determine if template should be enabled by default
-            is_default_agent = template.template_name in default_agent_names
-            default_enabled = is_default_agent  # Default agents enabled by default, others disabled
+            is_default_planner_agent = template.template_name in default_planner_agent_names
+            default_enabled = is_default_planner_agent  # Default planner agents enabled by default, others disabled
             
             # Template is enabled by default for default agents, disabled for others
             is_enabled = preference.is_enabled if preference else default_enabled
@@ -275,8 +278,8 @@ def toggle_user_template_preference(user_id, template_id, is_enabled, db_session
 
 def load_all_available_templates_from_db(db_session):
     """
-    Load ALL available template agents from the database for direct access.
-    This allows users to use any template via @template_name regardless of preferences.
+    Load ALL available individual variant template agents from the database for direct access.
+    This allows users to use any individual template via @template_name regardless of preferences.
     
     Args:
         db_session: Database session
@@ -289,9 +292,10 @@ def load_all_available_templates_from_db(db_session):
         
         agent_signatures = {}
         
-        # Get all active templates
+        # Get all active individual variant templates
         all_templates = db_session.query(AgentTemplate).filter(
-            AgentTemplate.is_active == True
+            AgentTemplate.is_active == True,
+            AgentTemplate.variant_type.in_(['individual', 'both'])
         ).all()
         
         for template in all_templates:
@@ -1128,7 +1132,7 @@ class auto_analyst_ind(dspy.Module):
         self.agent_inputs = {}
         self.agent_desc = []
         
-        logger.log_message(f"[INIT] Initializing auto_analyst_ind with user_id={user_id}, agents={len(agents) if agents else 0}", level=logging.INFO)
+        # logger.log_message(f"[INIT] Initializing auto_analyst_ind with user_id={user_id}, agents={len(agents) if agents else 0}", level=logging.INFO)
         
         # Load core agents based on user preferences (not always loaded)
         if not agents and user_id and db_session:
@@ -1172,7 +1176,7 @@ class auto_analyst_ind(dspy.Module):
                     
                     # Get description from database
                     self.agent_desc.append({agent_name: get_agent_description(agent_name)})
-                    logger.log_message(f"[INIT] Successfully loaded core agent: {agent_name} with inputs: {self.agent_inputs[agent_name]}", level=logging.INFO)
+                    # logger.log_message(f"[INIT] Successfully loaded core agent: {agent_name} with inputs: {self.agent_inputs[agent_name]}", level=logging.INFO)
                     
             except Exception as e:
                 logger.log_message(f"[INIT] Error loading core agents based on preferences: {str(e)}", level=logging.ERROR)
@@ -1180,16 +1184,16 @@ class auto_analyst_ind(dspy.Module):
                 self._load_default_agents_fallback()
         elif not agents:
             # If no user_id/db_session provided, load all core agents as fallback
-            logger.log_message(f"[INIT] No agents provided and no user_id/db_session, loading fallback agents", level=logging.INFO)
+            # logger.log_message(f"[INIT] No agents provided and no user_id/db_session, loading fallback agents", level=logging.INFO)
             self._load_default_agents_fallback()
         else:
             # Load standard agents from provided list (legacy support)
-            logger.log_message(f"[INIT] Loading agents from provided list (legacy support)", level=logging.INFO)
+            # logger.log_message(f"[INIT] Loading agents from provided list (legacy support)", level=logging.INFO)
             for i, a in enumerate(agents):
                 name = a.__pydantic_core_schema__['schema']['model_name']
                 self.agents[name] = dspy.asyncify(dspy.ChainOfThought(a))
                 self.agent_inputs[name] = {x.strip() for x in str(agents[i].__pydantic_core_schema__['cls']).split('->')[0].split('(')[1].split(',')}
-                logger.log_message(f"[INIT] Added legacy agent: {name}, inputs: {self.agent_inputs[name]}", level=logging.DEBUG)
+                # logger.log_message(f"[INIT] Added legacy agent: {name}, inputs: {self.agent_inputs[name]}", level=logging.DEBUG)
                 self.agent_desc.append({name: get_agent_description(name)})
 
         # Load ALL available template agents if user_id and db_session are provided
@@ -1199,12 +1203,12 @@ class auto_analyst_ind(dspy.Module):
                 # For individual use, load ALL available templates regardless of user preferences
                 template_signatures = load_all_available_templates_from_db(db_session)
                 
-                logger.log_message(f"[INIT] Loaded {len(template_signatures)} template signatures from database", level=logging.INFO)
+                # logger.log_message(f"[INIT] Loaded {len(template_signatures)} template signatures from database", level=logging.INFO)
                 
                 for template_name, signature in template_signatures.items():
                     # Skip if this is a core agent - we'll load it separately
                     if template_name in ['preprocessing_agent', 'statistical_analytics_agent', 'sk_learn_agent', 'data_viz_agent']:
-                        logger.log_message(f"[INIT] Skipping template {template_name} as it's a core agent", level=logging.DEBUG)
+                        # logger.log_message(f"[INIT] Skipping template {template_name} as it's a core agent", level=logging.DEBUG)
                         continue
                         
                     # Add template agent to agents dict
@@ -1260,7 +1264,7 @@ class auto_analyst_ind(dspy.Module):
                         logger.log_message(f"[INIT] Error getting description for template {template_name}: {str(desc_error)}", level=logging.WARNING)
                         self.agent_desc.append({template_name: f"Template: {template_name}"})
                         
-                    logger.log_message(f"[INIT] Successfully loaded template agent: {template_name} with inputs: {self.agent_inputs[template_name]}, is_viz_agent: {is_viz_agent}", level=logging.INFO)
+                    # logger.log_message(f"[INIT] Successfully loaded template agent: {template_name} with inputs: {self.agent_inputs[template_name]}, is_viz_agent: {is_viz_agent}", level=logging.INFO)
                         
             except Exception as e:
                 logger.log_message(f"[INIT] Error loading template agents for user {user_id}: {str(e)}", level=logging.ERROR)
@@ -1277,13 +1281,13 @@ class auto_analyst_ind(dspy.Module):
         self.user_id = user_id
         
         # Log final summary
-        logger.log_message(f"[INIT] Initialization complete. Total agents loaded: {len(self.agents)}", level=logging.INFO)
-        logger.log_message(f"[INIT] Available agents: {list(self.agents.keys())}", level=logging.INFO)
-        logger.log_message(f"[INIT] Agent inputs mapping: {self.agent_inputs}", level=logging.DEBUG)
+        # logger.log_message(f"[INIT] Initialization complete. Total agents loaded: {len(self.agents)}", level=logging.INFO)
+        # logger.log_message(f"[INIT] Available agents: {list(self.agents.keys())}", level=logging.INFO)
+        # logger.log_message(f"[INIT] Agent inputs mapping: {self.agent_inputs}", level=logging.DEBUG)
 
     def _load_default_agents_fallback(self):
         """Fallback method to load default agents when preference system fails"""
-        logger.log_message("Loading default agents as fallback for auto_analyst_ind", level=logging.WARNING)
+        # logger.log_message("Loading default agents as fallback for auto_analyst_ind", level=logging.WARNING)
         
         # Load the 4 core agents from database
         core_agent_names = ['preprocessing_agent', 'statistical_analytics_agent', 'sk_learn_agent', 'data_viz_agent']
@@ -1310,7 +1314,7 @@ class auto_analyst_ind(dspy.Module):
             
             # Get description from database
             self.agent_desc.append({agent_name: get_agent_description(agent_name)})
-            logger.log_message(f"Added fallback agent: {agent_name}", level=logging.DEBUG)
+            # logger.log_message(f"Added fallback agent: {agent_name}", level=logging.DEBUG)
 
     async def _track_agent_usage(self, agent_name):
         """Track usage for template agents"""
@@ -1381,8 +1385,8 @@ class auto_analyst_ind(dspy.Module):
     async def execute_agent(self, specified_agent, inputs):
         """Execute agent and generate memory summary in parallel"""
         try:
-            logger.log_message(f"[EXECUTE] Starting execution of agent: {specified_agent}", level=logging.INFO)
-            logger.log_message(f"[EXECUTE] Agent inputs: {inputs}", level=logging.DEBUG)
+            # logger.log_message(f"[EXECUTE] Starting execution of agent: {specified_agent}", level=logging.INFO)
+            # logger.log_message(f"[EXECUTE] Agent inputs: {inputs}", level=logging.DEBUG)
             
             # Execute main agent
             agent_result = await self.agents[specified_agent.strip()](**inputs)
@@ -1390,25 +1394,25 @@ class auto_analyst_ind(dspy.Module):
             # Track usage for custom agents and templates
             await self._track_agent_usage(specified_agent.strip())
             
-            logger.log_message(f"[EXECUTE] Agent {specified_agent} execution completed successfully", level=logging.INFO)
+            # logger.log_message(f"[EXECUTE] Agent {specified_agent} execution completed successfully", level=logging.INFO)
             return specified_agent.strip(), dict(agent_result)
             
         except Exception as e:
-            logger.log_message(f"[EXECUTE] Error executing agent {specified_agent}: {str(e)}", level=logging.ERROR)
+            # logger.log_message(f"[EXECUTE] Error executing agent {specified_agent}: {str(e)}", level=logging.ERROR)
             import traceback
-            logger.log_message(f"[EXECUTE] Full traceback: {traceback.format_exc()}", level=logging.ERROR)
+            # logger.log_message(f"[EXECUTE] Full traceback: {traceback.format_exc()}", level=logging.ERROR)
             return specified_agent.strip(), {"error": str(e)}
 
     async def forward(self, query, specified_agent):        
         try:
-            logger.log_message(f"[FORWARD] Processing query with specified agent: {specified_agent}", level=logging.INFO)
-            logger.log_message(f"[FORWARD] Query: {query}", level=logging.DEBUG)
+            # logger.log_message(f"[FORWARD] Processing query with specified agent: {specified_agent}", level=logging.INFO)
+            # logger.log_message(f"[FORWARD] Query: {query}", level=logging.DEBUG)
             
             # If specified_agent contains multiple agents separated by commas
             # This is for handling multiple @agent mentions in one query
             if "," in specified_agent:
                 agent_list = [agent.strip() for agent in specified_agent.split(",")]
-                logger.log_message(f"[FORWARD] Multiple agents detected: {agent_list}", level=logging.INFO)
+                # logger.log_message(f"[FORWARD] Multiple agents detected: {agent_list}", level=logging.INFO)
                 return await self.execute_multiple_agents(query, agent_list)
             
             # Process query with specified agent (single agent case)
@@ -1419,19 +1423,13 @@ class auto_analyst_ind(dspy.Module):
             dict_['hint'] = []
             dict_['goal'] = query
             dict_['Agent_desc'] = str(self.agent_desc)
-            
-            logger.log_message(f"[FORWARD] Retrieved context - dataset length: {len(dict_['dataset'])}, styling_index length: {len(dict_['styling_index'])}", level=logging.DEBUG)
-            
+                        
             if specified_agent.strip() not in self.agent_inputs:
-                logger.log_message(f"[FORWARD] ERROR: Agent '{specified_agent.strip()}' not found in agent_inputs", level=logging.ERROR)
-                logger.log_message(f"[FORWARD] Available agents: {list(self.agent_inputs.keys())}", level=logging.ERROR)
                 return {"response": f"Agent '{specified_agent.strip()}' not found in agent inputs"}
             
             # Create inputs that match exactly what the agent expects
             inputs = {}
             required_fields = self.agent_inputs[specified_agent.strip()]
-            
-            logger.log_message(f"[FORWARD] Required fields for {specified_agent.strip()}: {required_fields}", level=logging.INFO)
             
             for field in required_fields:
                 if field == 'goal':
@@ -1449,17 +1447,12 @@ class auto_analyst_ind(dspy.Module):
                     if field in dict_:
                         inputs[field] = dict_[field]
                     else:
-                        logger.log_message(f"[FORWARD] WARNING: Field '{field}' required by agent but not available in dict_", level=logging.WARNING)
                         inputs[field] = ""  # Provide empty string as fallback
             
-            logger.log_message(f"[FORWARD] Prepared inputs for {specified_agent.strip()}: {list(inputs.keys())}", level=logging.INFO)
             
             if specified_agent.strip() not in self.agents:
-                logger.log_message(f"[FORWARD] ERROR: Agent '{specified_agent.strip()}' not found in agents", level=logging.ERROR)
-                logger.log_message(f"[FORWARD] Available agents: {list(self.agents.keys())}", level=logging.ERROR)
                 return {"response": f"Agent '{specified_agent.strip()}' not found in agents"}
             
-            logger.log_message(f"[FORWARD] About to execute agent {specified_agent.strip()}", level=logging.INFO)
             result = await self.agents[specified_agent.strip()](**inputs)
                         
             # Track usage for template agents
@@ -1467,23 +1460,18 @@ class auto_analyst_ind(dspy.Module):
             
             try:
                 result_dict = dict(result)
-                logger.log_message(f"[FORWARD] Agent execution successful, result keys: {list(result_dict.keys())}", level=logging.INFO)
             except Exception as dict_error:
-                logger.log_message(f"[FORWARD] Error converting agent result to dict: {str(dict_error)}", level=logging.ERROR)
                 return {"response": f"Error converting agent result to dict: {str(dict_error)}"}
             
             output_dict = {specified_agent.strip(): result_dict}
 
             # Check for errors in the agent's response (not in the outer dict)
             if "error" in result_dict:
-                logger.log_message(f"[FORWARD] Agent returned error: {result_dict['error']}", level=logging.ERROR)
                 return {"response": f"Error executing agent: {result_dict['error']}"}
 
-            logger.log_message(f"[FORWARD] Successfully processed agent {specified_agent.strip()}", level=logging.INFO)
             return output_dict
 
         except Exception as e:
-            logger.log_message(f"[FORWARD] Exception in auto_analyst_ind.forward: {str(e)}", level=logging.ERROR)
             import traceback
             logger.log_message(f"[FORWARD] Full traceback: {traceback.format_exc()}", level=logging.ERROR)
             return {"response": f"This is the error from the system: {str(e)}"}
@@ -1535,9 +1523,10 @@ class auto_analyst_ind(dspy.Module):
                         if field in dict_:
                             inputs[field] = dict_[field]
                         else:
-                            logger.log_message(f"[MULTI] WARNING: Field '{field}' required by agent but not available in dict_", level=logging.WARNING)
+                            # logger.log_message(f"[MULTI] WARNING: Field '{field}' required by agent but not available in dict_", level=logging.WARNING)
+                            pass
                 
-                logger.log_message(f"[MULTI] Prepared inputs for {agent_name}: {list(inputs.keys())}", level=logging.DEBUG)
+                # logger.log_message(f"[MULTI] Prepared inputs for {agent_name}: {list(inputs.keys())}", level=logging.DEBUG)
                 
                 # Execute agent
                 try:
@@ -1552,13 +1541,13 @@ class auto_analyst_ind(dspy.Module):
                     if 'code' in agent_dict:
                         code_list.append(agent_dict['code'])
                         
-                    logger.log_message(f"[MULTI] Successfully executed agent: {agent_name}", level=logging.INFO)
+                    # logger.log_message(f"[MULTI] Successfully executed agent: {agent_name}", level=logging.INFO)
                     
                 except Exception as agent_error:
-                    logger.log_message(f"[MULTI] Error executing agent {agent_name}: {str(agent_error)}", level=logging.ERROR)
+                    # logger.log_message(f"[MULTI] Error executing agent {agent_name}: {str(agent_error)}", level=logging.ERROR)
                     results[agent_name] = {"error": str(agent_error)}
             
-            logger.log_message(f"[MULTI] Completed multiple agent execution. Results: {list(results.keys())}", level=logging.INFO)
+            # logger.log_message(f"[MULTI] Completed multiple agent execution. Results: {list(results.keys())}", level=logging.INFO)
             return results
             
         except Exception as e:
@@ -1577,16 +1566,17 @@ class auto_analyst(dspy.Module):
         self.agent_desc = []
         
         # Load user-enabled template agents if user_id and db_session are provided
-        logger.log_message(f"Loading user-enabled template agents for user {user_id}", level=logging.INFO)
         if user_id and db_session:
             try:
                 # For planner use, load planner-enabled templates (max 10, prioritized by usage)
                 template_signatures = load_user_enabled_templates_for_planner_from_db(user_id, db_session)
-                logger.log_message(f"Loaded {template_signatures} templates for planner use", level=logging.INFO)
+
+                # logger.log_message(f"Loaded {template_signatures} templates for planner use", level=logging.INFO)
                 
                 for template_name, signature in template_signatures.items():
-                    # Skip if this is a core agent - we'll load it separately
-                    if template_name in ['preprocessing_agent', 'statistical_analytics_agent', 'sk_learn_agent', 'data_viz_agent']:
+                    # For planner module, load all planner variants (including core planner agents)
+                    # Skip only individual variants, not planner variants
+                    if template_name in ['planner_preprocessing_agent', 'planner_statistical_analytics_agent', 'planner_sk_learn_agent', 'planner_data_viz_agent']:
                         continue
                         
                     # Add template agent to agents dict
@@ -1645,67 +1635,70 @@ class auto_analyst(dspy.Module):
             except Exception as e:
                 logger.log_message(f"Error loading template agents for user {user_id}: {str(e)}", level=logging.ERROR)
 
-        # Load core agents based on user preferences (not always loaded)
-        if not agents and user_id and db_session:
+        # Load core planner agents based on user preferences (only planner variants for planner module)
+        if len(self.agents) == 0 and user_id and db_session:
             try:
-                # Get user preferences for core agents
+                # Get user preferences for core planner agents
                 from src.db.schemas.models import AgentTemplate, UserTemplatePreference
                 
-                core_agent_names = ['preprocessing_agent', 'statistical_analytics_agent', 'sk_learn_agent', 'data_viz_agent']
+                # For planner module, use planner variants of core agents
+                core_planner_agent_names = ['planner_preprocessing_agent', 'planner_statistical_analytics_agent', 'planner_sk_learn_agent', 'planner_data_viz_agent']
                 
-                for agent_name in core_agent_names:
-                    # Check if user has enabled this core agent
+                for agent_name in core_planner_agent_names:
+                    # Check if user has enabled this core agent (check both planner and individual preferences)
                     template = db_session.query(AgentTemplate).filter(
                         AgentTemplate.template_name == agent_name,
                         AgentTemplate.is_active == True
                     ).first()
                     
                     if not template:
-                        logger.log_message(f"Core agent template '{agent_name}' not found in database", level=logging.WARNING)
+                        logger.log_message(f"Core planner agent template '{agent_name}' not found in database", level=logging.WARNING)
                         continue
                     
-                    # Check user preference
+                    # Check user preference for this planner agent
                     preference = db_session.query(UserTemplatePreference).filter(
                         UserTemplatePreference.user_id == user_id,
                         UserTemplatePreference.template_id == template.template_id
                     ).first()
                     
-                    # Core agents are enabled by default unless explicitly disabled
+                    # Core planner agents are enabled by default unless explicitly disabled
                     is_enabled = preference.is_enabled if preference else True
                     
                     if not is_enabled:
                         continue
                     
-                    # Get the agent signature class
-                    if agent_name == 'preprocessing_agent':
-                        agent_signature = preprocessing_agent
-                    elif agent_name == 'statistical_analytics_agent':
-                        agent_signature = statistical_analytics_agent
-                    elif agent_name == 'sk_learn_agent':
-                        agent_signature = sk_learn_agent
-                    elif agent_name == 'data_viz_agent':
-                        agent_signature = data_viz_agent
+                    # Skip if already loaded from template_signatures
+                    if agent_name in self.agents:
+                        continue
+                    
+                    # Create dynamic signature for planner agent
+                    signature = create_custom_agent_signature(
+                        template.template_name,
+                        template.description,
+                        template.prompt_template,
+                        template.category
+                    )
                     
                     # Add to agents dict
-                    self.agents[agent_name] = dspy.asyncify(dspy.ChainOfThought(agent_signature))
+                    self.agents[agent_name] = dspy.asyncify(dspy.ChainOfThought(signature))
                     
-                    # Set input fields based on signature
-                    if agent_name == 'data_viz_agent':
+                    # Set input fields based on signature (all planner agents need plan_instructions)
+                    if 'data_viz' in agent_name.lower() or template.category == 'Data Visualization':
                         self.agent_inputs[agent_name] = {'goal', 'dataset', 'styling_index', 'plan_instructions'}
                     else:
                         self.agent_inputs[agent_name] = {'goal', 'dataset', 'plan_instructions'}
                     
                     # Get description from database
-                    self.agent_desc.append({agent_name: get_agent_description(agent_name)})
-                    logger.log_message(f"Loaded core agent: {agent_name}", level=logging.DEBUG)
+                    description = f"Planner: {template.description}"
+                    self.agent_desc.append({agent_name: description})
+                    logger.log_message(f"Loaded core planner agent: {agent_name}", level=logging.DEBUG)
                     
             except Exception as e:
-                logger.log_message(f"Error loading core agents based on preferences: {str(e)}", level=logging.ERROR)
-                # Fallback to loading all core agents if preference system fails
-                self._load_default_agents_fallback()
-        elif not agents:
-            # If no user_id/db_session provided, load all core agents as fallback
-            self._load_default_agents_fallback()
+                logger.log_message(f"Error loading core planner agents based on preferences: {str(e)}", level=logging.ERROR)
+                # Don't fallback - user must explicitly enable agents
+        elif len(self.agents) == 0:
+            # If no user_id/db_session provided and no agents loaded, this indicates a configuration issue
+            logger.log_message("No agents loaded and no user preferences available - check configuration", level=logging.ERROR)
         else:
             # Load standard agents from provided list (legacy support)
             for i, a in enumerate(agents):
@@ -1762,10 +1755,50 @@ class auto_analyst(dspy.Module):
             self.agent_desc.append({agent_name: get_agent_description(agent_name)})
             logger.log_message(f"Added fallback agent: {agent_name}", level=logging.DEBUG)
 
+    def _load_default_planner_agents_fallback(self):
+        """Fallback method to load default planner agents when preference system fails"""
+        logger.log_message("Loading default planner agents as fallback for auto_analyst", level=logging.WARNING)
+        
+        # For planner module, load the 4 core planner agents
+        core_planner_agent_names = ['planner_preprocessing_agent', 'planner_statistical_analytics_agent', 'planner_sk_learn_agent', 'planner_data_viz_agent']
+        
+        for agent_name in core_planner_agent_names:
+            # Skip if already loaded
+            if agent_name in self.agents:
+                continue
+                
+            # Create a basic signature for the planner agent as fallback
+            # In production, these should come from the database
+            if agent_name == 'planner_preprocessing_agent':
+                base_signature = preprocessing_agent
+                description = "Planner: Data preprocessing agent for multi-agent pipelines"
+            elif agent_name == 'planner_statistical_analytics_agent':
+                base_signature = statistical_analytics_agent
+                description = "Planner: Statistical analytics agent for multi-agent pipelines"
+            elif agent_name == 'planner_sk_learn_agent':
+                base_signature = sk_learn_agent
+                description = "Planner: Machine learning agent for multi-agent pipelines"
+            elif agent_name == 'planner_data_viz_agent':
+                base_signature = data_viz_agent
+                description = "Planner: Data visualization agent for multi-agent pipelines"
+            
+            # Add to agents dict using base signature (fallback mode)
+            self.agents[agent_name] = dspy.asyncify(dspy.ChainOfThought(base_signature))
+            
+            # Set input fields based on signature
+            if 'data_viz' in agent_name:
+                self.agent_inputs[agent_name] = {'goal', 'dataset', 'styling_index', 'plan_instructions'}
+            else:
+                self.agent_inputs[agent_name] = {'goal', 'dataset', 'plan_instructions'}
+            
+            # Add description
+            self.agent_desc.append({agent_name: description})
+            logger.log_message(f"Added fallback planner agent: {agent_name}", level=logging.DEBUG)
+
     async def _track_agent_usage(self, agent_name):
         """Track usage for template agents"""
         try:
-            # Skip tracking for standard agents
+            # Skip tracking for standard agents and basic_qa_agent (but DO track planner variants)
             if agent_name in ['preprocessing_agent', 'statistical_analytics_agent', 'sk_learn_agent', 'data_viz_agent', 'basic_qa_agent']:
                 return
             
@@ -1853,15 +1886,44 @@ class auto_analyst(dspy.Module):
         
         
         try:
-            module_return = await self.planner(goal=dict_['goal'], dataset=dict_['dataset'], Agent_desc=dict_['Agent_desc'])
+            module_return = await self.planner(
+                goal=dict_['goal'], 
+                dataset=dict_['dataset'], 
+                Agent_desc=dict_['Agent_desc']
+            )
+            logger.log_message(f"Module return: {module_return}", level=logging.INFO)
+            
+            # Handle different plan formats
+            plan = module_return['plan']
+            logger.log_message(f"Plan from module_return: {plan}, type: {type(plan)}", level=logging.INFO)
+            
+            # If plan is a string (agent name), convert to proper format
+            if isinstance(plan, str):
+                if 'complexity' in module_return:
+                    complexity = module_return['complexity']
+                else:
+                    complexity = 'basic'
                     
-            plan_dict = dict(module_return['plan'])
-            if 'complexity' in module_return:
-                complexity = module_return['complexity']
+                plan_dict = {
+                    'plan': plan,
+                    'complexity': complexity
+                }
+                
+                # Add plan_instructions if available
+                if 'plan_instructions' in module_return:
+                    plan_dict['plan_instructions'] = module_return['plan_instructions']
+                else:
+                    plan_dict['plan_instructions'] = {}
             else:
-                complexity = 'basic'
-            plan_dict['complexity'] = complexity
-            logger.log_message(f"Plan dict: {plan_dict}", level=logging.INFO)
+                # If plan is already a dict, use it directly
+                plan_dict = dict(plan) if not isinstance(plan, dict) else plan
+                if 'complexity' in module_return:
+                    complexity = module_return['complexity']
+                else:
+                    complexity = 'basic'
+                plan_dict['complexity'] = complexity
+                
+            logger.log_message(f"Final plan dict: {plan_dict}", level=logging.INFO)
 
             return plan_dict
             
@@ -1881,7 +1943,7 @@ class auto_analyst(dspy.Module):
         import json
 
         # Clean and split the plan string into agent names
-        plan_text = plan.get("plan", "").lower().replace("plan", "").replace(":", "").strip()
+        plan_text = plan.get("plan", "").lower().replace("plan:", "").strip()
         logger.log_message(f"Plan text: {plan_text}", level=logging.INFO)
         
         if "basic_qa_agent" in plan_text:

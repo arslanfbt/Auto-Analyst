@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useState } from 'react'
 import { motion } from 'framer-motion'
 import { Sparkles, Lock, TrendingUp, Check } from 'lucide-react'
 import { Badge } from '../ui/badge'
@@ -23,6 +23,8 @@ export default function TemplateCard({
   wouldExceedMax = false,
   onToggleChange
 }: TemplateCardProps) {
+  const [imageError, setImageError] = useState(false)
+  
   // User can only toggle if they have access (covers both free and premium users)
   // Premium-only templates are only toggleable by premium users (hasAccess = true for premium)
   // Also cannot disable if this is the last template
@@ -54,6 +56,9 @@ export default function TemplateCard({
 
   const statusInfo = getStatusInfo()
 
+  // Remove "(Planner)" suffix from display name since we're in a planner context
+  const cleanDisplayName = template.display_name?.replace(/\s*\(Planner\)\s*$/i, '') || template.template_name
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -82,32 +87,20 @@ export default function TemplateCard({
           <div className="flex items-center gap-2 mb-2">
             {/* Template Icon */}
             <div className="flex-shrink-0 w-5 h-5 flex items-center justify-center">
-              {template.icon_url ? (
-                <>
+              {template.icon_url && !imageError ? (
                   <img 
                     src={template.icon_url} 
                     alt={`${template.template_name} icon`}
                     className="w-5 h-5 object-contain"
-                    onError={(e) => {
-                      // Fallback to Sparkles icon if image fails to load
-                      const target = e.target as HTMLImageElement;
-                      target.style.display = 'none';
-                      const fallback = target.nextElementSibling as HTMLElement;
-                      if (fallback) {
-                        fallback.style.display = 'block';
-                      }
-                    }}
-                  />
-                  {/* Fallback icon - hidden by default when image exists */}
-                  <Sparkles className="w-4 h-4 text-[#FF7F7F]" style={{ display: 'none' }} />
-                </>
+                  onError={() => setImageError(true)}
+                />
               ) : (
-                // Show Sparkles icon if no icon_url
+                // Show Sparkles icon if no icon_url or image failed to load
                 <Sparkles className="w-4 h-4 text-[#FF7F7F]" />
               )}
             </div>
             
-            <h3 className="font-medium text-gray-900 text-sm">{template.display_name}</h3>
+            <h3 className="font-medium text-gray-900 text-sm">{cleanDisplayName}</h3>
             <div className="flex items-center gap-1">
               {template.is_premium_only && (
                 <Badge variant="outline" className="text-xs border-[#FF7F7F] text-[#FF7F7F] px-1 py-0 h-5 flex items-center">

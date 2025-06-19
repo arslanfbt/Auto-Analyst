@@ -105,7 +105,8 @@ export default function AgentSuggestions({
   // Fetch template agents
   const fetchTemplateAgents = async (): Promise<AgentSuggestion[]> => {
     try {
-      const templatesUrl = `${API_URL}/templates/categories`
+      // Only fetch individual variants for @ mentions
+      const templatesUrl = `${API_URL}/templates/categories?variant_type=individual`
       const response = await fetch(templatesUrl)
       
       if (response.ok) {

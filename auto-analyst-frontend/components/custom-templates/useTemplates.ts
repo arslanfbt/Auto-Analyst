@@ -35,10 +35,10 @@ export function useTemplates({ userId, enabled = true }: UseTemplatesProps): Use
     
     try {
       const [templatesResponse, preferencesResponse] = await Promise.all([
-        fetch(`${API_URL}/templates/`).catch(err => {
+        fetch(`${API_URL}/templates/?variant_type=planner`).catch(err => {
           throw new Error(`Templates endpoint failed: ${err.message}`)
         }),
-        fetch(`${API_URL}/templates/user/${userId}`).catch(err => {
+        fetch(`${API_URL}/templates/user/${userId}?variant_type=planner`).catch(err => {
           throw new Error(`Preferences endpoint failed: ${err.message}`)
         })
       ])

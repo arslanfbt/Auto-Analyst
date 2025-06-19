@@ -192,6 +192,10 @@ class AgentTemplate(Base):
     category = Column(String(50), nullable=True)  # 'Visualization', 'Modelling', 'Data Manipulation'
     is_premium_only = Column(Boolean, default=False)  # True if template requires premium subscription
     
+    # Agent variant support
+    variant_type = Column(String(20), default='individual')  # 'planner', 'individual', or 'both'
+    base_agent = Column(String(100), nullable=True)  # Base agent name for variants (e.g., 'preprocessing_agent')
+    
     # Status and metadata
     is_active = Column(Boolean, default=True)
     
