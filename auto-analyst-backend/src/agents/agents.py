@@ -113,8 +113,8 @@ def load_user_enabled_templates_from_db(user_id, db_session):
 
 def load_user_enabled_templates_for_planner_from_db(user_id, db_session):
     """
-    Load template agents that are enabled for planner use (max 10, prioritized by usage).
-    Default agents are enabled by default unless explicitly disabled by user preference.
+    Load planner variant template agents that are enabled for planner use (max 10, prioritized by usage).
+    Default planner agents are enabled by default unless explicitly disabled by user preference.
     
     Args:
         user_id: ID of the user
@@ -132,17 +132,18 @@ def load_user_enabled_templates_for_planner_from_db(user_id, db_session):
         if not user_id:
             return agent_signatures
         
-        # Get list of default agent names that should be enabled by default
-        default_agent_names = [
-            "preprocessing_agent",
-            "statistical_analytics_agent", 
-            "sk_learn_agent",
-            "data_viz_agent"
+        # Get list of default planner agent names that should be enabled by default
+        default_planner_agent_names = [
+            "planner_preprocessing_agent",
+            "planner_statistical_analytics_agent", 
+            "planner_sk_learn_agent",
+            "planner_data_viz_agent"
         ]
         
-        # Get all active templates
+        # Get all active planner variant templates
         all_templates = db_session.query(AgentTemplate).filter(
-            AgentTemplate.is_active == True
+            AgentTemplate.is_active == True,
+            AgentTemplate.variant_type.in_(['planner', 'both'])
         ).all()
         
         enabled_templates = []
@@ -154,8 +155,8 @@ def load_user_enabled_templates_for_planner_from_db(user_id, db_session):
             ).first()
             
             # Determine if template should be enabled by default
-            is_default_agent = template.template_name in default_agent_names
-            default_enabled = is_default_agent  # Default agents enabled by default, others disabled
+            is_default_planner_agent = template.template_name in default_planner_agent_names
+            default_enabled = is_default_planner_agent  # Default planner agents enabled by default, others disabled
             
             # Template is enabled by default for default agents, disabled for others
             is_enabled = preference.is_enabled if preference else default_enabled
@@ -275,8 +276,8 @@ def toggle_user_template_preference(user_id, template_id, is_enabled, db_session
 
 def load_all_available_templates_from_db(db_session):
     """
-    Load ALL available template agents from the database for direct access.
-    This allows users to use any template via @template_name regardless of preferences.
+    Load ALL available individual variant template agents from the database for direct access.
+    This allows users to use any individual template via @template_name regardless of preferences.
     
     Args:
         db_session: Database session
@@ -289,9 +290,10 @@ def load_all_available_templates_from_db(db_session):
         
         agent_signatures = {}
         
-        # Get all active templates
+        # Get all active individual variant templates
         all_templates = db_session.query(AgentTemplate).filter(
-            AgentTemplate.is_active == True
+            AgentTemplate.is_active == True,
+            AgentTemplate.variant_type.in_(['individual', 'both'])
         ).all()
         
         for template in all_templates:

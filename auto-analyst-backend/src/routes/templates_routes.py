@@ -90,13 +90,26 @@ def get_global_usage_counts(session, template_ids: List[int] = None) -> Dict[int
 
 # Routes
 @router.get("/", response_model=List[TemplateResponse])
-async def get_all_templates():
+async def get_all_templates(variant_type: str = Query(default="all", description="Filter by variant type: 'individual', 'planner', or 'all'")):
     """Get all available agent templates with global usage statistics"""
     try:
         session = session_factory()
         
         try:
-            templates = get_all_available_templates(session)
+            # Get templates filtered by variant type
+            query = session.query(AgentTemplate).filter(AgentTemplate.is_active == True)
+            
+            # Filter by variant type if specified
+            if variant_type and variant_type != "all":
+                if variant_type == "individual":
+                    query = query.filter(AgentTemplate.variant_type.in_(['individual', 'both']))
+                elif variant_type == "planner":
+                    query = query.filter(AgentTemplate.variant_type.in_(['planner', 'both']))
+                else:
+                    # Invalid variant_type, default to all
+                    pass
+            
+            templates = query.all()
             
             # Get template IDs for usage calculation
             template_ids = [template.template_id for template in templates]
@@ -127,7 +140,7 @@ async def get_all_templates():
         raise HTTPException(status_code=500, detail=f"Failed to retrieve templates: {str(e)}")
 
 @router.get("/user/{user_id}", response_model=List[UserTemplatePreferenceResponse])
-async def get_user_template_preferences(user_id: int):
+async def get_user_template_preferences(user_id: int, variant_type: str = Query(default="planner", description="Filter by variant type: 'individual', 'planner', or 'all'")):
     """Get all templates with user preferences (enabled/disabled status and usage)"""
     try:
         session = session_factory()
@@ -138,18 +151,37 @@ async def get_user_template_preferences(user_id: int):
             if not user:
                 raise HTTPException(status_code=404, detail="User not found")
             
-            # Get all active templates
-            templates = session.query(AgentTemplate).filter(
-                AgentTemplate.is_active == True
-            ).all()
+            # Get templates filtered by variant type (default to planner for modal)
+            query = session.query(AgentTemplate).filter(AgentTemplate.is_active == True)
+            
+            # Filter by variant type
+            if variant_type and variant_type != "all":
+                if variant_type == "individual":
+                    query = query.filter(AgentTemplate.variant_type.in_(['individual', 'both']))
+                elif variant_type == "planner":
+                    query = query.filter(AgentTemplate.variant_type.in_(['planner', 'both']))
+                else:
+                    # Invalid variant_type, default to planner for modal
+                    query = query.filter(AgentTemplate.variant_type.in_(['planner', 'both']))
+            
+            templates = query.all()
             
             # Get list of default agent names that should be enabled by default
-            default_agent_names = [
-                "preprocessing_agent",
-                "statistical_analytics_agent", 
-                "sk_learn_agent",
-                "data_viz_agent"
-            ]
+            # Use planner variants when filtering for planner, individual variants otherwise
+            if variant_type == "planner":
+                default_agent_names = [
+                    "planner_preprocessing_agent",
+                    "planner_statistical_analytics_agent", 
+                    "planner_sk_learn_agent",
+                    "planner_data_viz_agent"
+                ]
+            else:
+                default_agent_names = [
+                    "preprocessing_agent",
+                    "statistical_analytics_agent", 
+                    "sk_learn_agent",
+                    "data_viz_agent"
+                ]
             
             result = []
             for template in templates:
@@ -191,7 +223,7 @@ async def get_user_template_preferences(user_id: int):
         raise HTTPException(status_code=500, detail=f"Failed to retrieve user template preferences: {str(e)}")
 
 @router.get("/user/{user_id}/enabled", response_model=List[UserTemplatePreferenceResponse])
-async def get_user_enabled_templates(user_id: int):
+async def get_user_enabled_templates(user_id: int, variant_type: str = Query(default="planner", description="Filter by variant type: 'individual', 'planner', or 'all'")):
     """Get only templates that are enabled for the user (all templates enabled by default)"""
     try:
         session = session_factory()
@@ -202,18 +234,37 @@ async def get_user_enabled_templates(user_id: int):
             if not user:
                 raise HTTPException(status_code=404, detail="User not found")
             
-            # Get all active templates
-            all_templates = session.query(AgentTemplate).filter(
-                AgentTemplate.is_active == True
-            ).all()
+            # Get templates filtered by variant type (default to planner for modal)
+            query = session.query(AgentTemplate).filter(AgentTemplate.is_active == True)
+            
+            # Filter by variant type
+            if variant_type and variant_type != "all":
+                if variant_type == "individual":
+                    query = query.filter(AgentTemplate.variant_type.in_(['individual', 'both']))
+                elif variant_type == "planner":
+                    query = query.filter(AgentTemplate.variant_type.in_(['planner', 'both']))
+                else:
+                    # Invalid variant_type, default to planner for modal
+                    query = query.filter(AgentTemplate.variant_type.in_(['planner', 'both']))
+            
+            all_templates = query.all()
             
             # Get list of default agent names that should be enabled by default
-            default_agent_names = [
-                "preprocessing_agent",
-                "statistical_analytics_agent", 
-                "sk_learn_agent",
-                "data_viz_agent"
-            ]
+            # Use planner variants when filtering for planner, individual variants otherwise
+            if variant_type == "planner":
+                default_agent_names = [
+                    "planner_preprocessing_agent",
+                    "planner_statistical_analytics_agent", 
+                    "planner_sk_learn_agent",
+                    "planner_data_viz_agent"
+                ]
+            else:
+                default_agent_names = [
+                    "preprocessing_agent",
+                    "statistical_analytics_agent", 
+                    "sk_learn_agent",
+                    "data_viz_agent"
+                ]
             
             result = []
             for template in all_templates:
@@ -270,17 +321,18 @@ async def get_user_enabled_templates_for_planner(user_id: int):
             if not user:
                 raise HTTPException(status_code=404, detail="User not found")
             
-            # Get list of default agent names that should be enabled by default
-            default_agent_names = [
-                "preprocessing_agent",
-                "statistical_analytics_agent", 
-                "sk_learn_agent",
-                "data_viz_agent"
+            # Get list of default planner agent names that should be enabled by default
+            default_planner_agent_names = [
+                "planner_preprocessing_agent",
+                "planner_statistical_analytics_agent", 
+                "planner_sk_learn_agent",
+                "planner_data_viz_agent"
             ]
             
-            # Get all active templates
+            # Get all active planner variant templates
             all_templates = session.query(AgentTemplate).filter(
-                AgentTemplate.is_active == True
+                AgentTemplate.is_active == True,
+                AgentTemplate.variant_type.in_(['planner', 'both'])
             ).all()
             
             enabled_templates = []
@@ -292,8 +344,8 @@ async def get_user_enabled_templates_for_planner(user_id: int):
                 ).first()
                 
                 # Determine if template should be enabled by default
-                is_default_agent = template.template_name in default_agent_names
-                default_enabled = is_default_agent  # Default agents enabled by default, others disabled
+                is_default_planner_agent = template.template_name in default_planner_agent_names
+                default_enabled = is_default_planner_agent  # Default planner agents enabled by default, others disabled
                 
                 # Template is enabled by default for default agents, disabled for others
                 is_enabled = preference.is_enabled if preference else default_enabled
@@ -357,17 +409,19 @@ async def toggle_template_preference(user_id: int, template_id: int, request: To
             
             # If trying to disable, check if this would leave user with no enabled templates
             if not request.is_enabled:
-                # Get list of default agent names that should be enabled by default
+                # Get list of default planner agent names that should be enabled by default
+                # This function is primarily used by the templates modal which works with planner variants
                 default_agent_names = [
-                    "preprocessing_agent",
-                    "statistical_analytics_agent", 
-                    "sk_learn_agent",
-                    "data_viz_agent"
+                    "planner_preprocessing_agent",
+                    "planner_statistical_analytics_agent", 
+                    "planner_sk_learn_agent",
+                    "planner_data_viz_agent"
                 ]
                 
-                # Get all active templates
+                # Get all active planner templates (since this is used by the templates modal)
                 all_templates = session.query(AgentTemplate).filter(
-                    AgentTemplate.is_active == True
+                    AgentTemplate.is_active == True,
+                    AgentTemplate.variant_type.in_(['planner', 'both'])
                 ).all()
                 
                 enabled_count = 0
@@ -431,17 +485,20 @@ async def bulk_toggle_template_preferences(user_id: int, request: dict):
             if not template_preferences:
                 raise HTTPException(status_code=400, detail="No preferences provided")
             
-            # Get list of default agent names that should be enabled by default
+            # Get list of default planner agent names that should be enabled by default
+            # This function is primarily used by the templates modal which works with planner variants
             default_agent_names = [
-                "preprocessing_agent",
-                "statistical_analytics_agent", 
-                "sk_learn_agent",
-                "data_viz_agent"
+                "planner_preprocessing_agent",
+                "planner_statistical_analytics_agent", 
+                "planner_sk_learn_agent",
+                "planner_data_viz_agent"
             ]
             
             # Calculate current enabled count properly (including defaults)
+            # Focus on planner variants since this is used by the templates modal
             all_templates = session.query(AgentTemplate).filter(
-                AgentTemplate.is_active == True
+                AgentTemplate.is_active == True,
+                AgentTemplate.variant_type.in_(['planner', 'both'])
             ).all()
             
             current_enabled_count = 0
@@ -584,16 +641,26 @@ async def get_template_categories():
         raise HTTPException(status_code=500, detail=f"Failed to retrieve template categories: {str(e)}")
 
 @router.get("/categories")
-async def get_templates_by_categories():
+async def get_templates_by_categories(variant_type: str = Query(default="individual", description="Filter by variant type: 'individual', 'planner', or 'all'")):
     """Get all templates grouped by category for frontend template browser with global usage statistics"""
     try:
         session = session_factory()
         
         try:
-            # Get all active templates
-            templates = session.query(AgentTemplate).filter(
-                AgentTemplate.is_active == True
-            ).order_by(AgentTemplate.category, AgentTemplate.template_name).all()
+            # Get templates filtered by variant type
+            query = session.query(AgentTemplate).filter(AgentTemplate.is_active == True)
+            
+            # Filter by variant type if specified
+            if variant_type and variant_type != "all":
+                if variant_type == "individual":
+                    query = query.filter(AgentTemplate.variant_type.in_(['individual', 'both']))
+                elif variant_type == "planner":
+                    query = query.filter(AgentTemplate.variant_type.in_(['planner', 'both']))
+                else:
+                    # Invalid variant_type, default to individual
+                    query = query.filter(AgentTemplate.variant_type.in_(['individual', 'both']))
+            
+            templates = query.order_by(AgentTemplate.category, AgentTemplate.template_name).all()
             
             # Get template IDs for usage calculation
             template_ids = [template.template_id for template in templates]

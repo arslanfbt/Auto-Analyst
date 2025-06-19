@@ -64,8 +64,8 @@ export default function TemplatesModal({
   const loadTemplatesForFreeUsers = async () => {
     setLoading(true)
     try {
-      // Fetch all templates (no user-specific data needed)
-      const response = await fetch(`${API_URL}/templates/`).catch(err => {
+      // Fetch all planner templates (no user-specific data needed for free users)
+      const response = await fetch(`${API_URL}/templates/?variant_type=planner`).catch(err => {
         throw new Error(`Templates endpoint failed: ${err.message}`)
       })
 
@@ -97,14 +97,14 @@ export default function TemplatesModal({
   const loadData = async () => {
     setLoading(true)
     try {
-      // Fetch global template data with global usage counts
+      // Fetch global template data with global usage counts (planner variants only for modal)
       const [templatesResponse, preferencesResponse] = await Promise.all([
-        fetch(`${API_URL}/templates/`).catch(err => {
+        fetch(`${API_URL}/templates/?variant_type=planner`).catch(err => {
           throw new Error(`Templates endpoint failed: ${err.message}`)
-        }), // Global templates with global usage counts
-        fetch(`${API_URL}/templates/user/${userId}`).catch(err => {
+        }), // Global planner templates with global usage counts
+        fetch(`${API_URL}/templates/user/${userId}?variant_type=planner`).catch(err => {
           throw new Error(`Preferences endpoint failed: ${err.message}`)
-        }) // User preferences with per-user usage
+        }) // User preferences for planner variants
       ])
 
       // Check templates response
