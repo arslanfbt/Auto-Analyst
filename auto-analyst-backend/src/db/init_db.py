@@ -15,17 +15,15 @@ DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///chat_database.db")
 # Determine database type and set appropriate engine configurations
 if DATABASE_URL.startswith('postgresql'):
     # PostgreSQL-specific configuration
-    ask = input("Are you sure?")
-    if ask.lower() == "yes":
-        engine = create_engine(
-            DATABASE_URL,
-            pool_size=10,
-            max_overflow=20,
-            pool_pre_ping=True,  # Check connection validity before use
-            pool_recycle=300     # Recycle connections after 5 minutes
-        )
-        is_postgresql = True
-        logger.log_message("Using PostgreSQL database engine", logging.INFO)
+    engine = create_engine(
+        DATABASE_URL,
+        pool_size=10,
+        max_overflow=20,
+        pool_pre_ping=True,  # Check connection validity before use
+        pool_recycle=300     # Recycle connections after 5 minutes
+    )
+    is_postgresql = True
+    logger.log_message("Using PostgreSQL database engine", logging.INFO)
 else:
     # SQLite configuration
     engine = create_engine(DATABASE_URL)

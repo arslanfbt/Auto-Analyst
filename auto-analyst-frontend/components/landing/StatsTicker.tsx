@@ -61,11 +61,19 @@ export default function StatsTicker() {
 
   const fetchTickerData = async () => {
     try {
-      const response = await fetch('/api/analytics/public/ticker')
+      // Add timestamp to prevent caching
+      const timestamp = new Date().getTime()
+      const response = await fetch(`/api/analytics/public/ticker?t=${timestamp}`, {
+        cache: 'no-store',
+        headers: {
+          'Cache-Control': 'no-cache'
+        }
+      })
       if (!response.ok) {
         throw new Error('Failed to fetch ticker data')
       }
       const data = await response.json()
+      console.log('Ticker data fetched:', data) // Debug log
       setTickerData(data)
       setError(null)
     } catch (err) {

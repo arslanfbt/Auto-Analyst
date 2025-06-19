@@ -360,6 +360,9 @@ export default function TemplatesModal({
     return templateCurrentlyEnabled && currentEnabledCount === 1
   }
 
+  // Check if activating this templates would leave user with more than 10 templates
+  const 
+
   const enabledCount = hasAccess 
     ? getEnabledCountWithChanges()
     : 0

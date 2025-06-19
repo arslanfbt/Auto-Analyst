@@ -5,6 +5,7 @@ import { motion } from "framer-motion"
 import LoadingIndicator from "@/components/chat/LoadingIndicator"
 import MessageContent from "@/components/chat/MessageContent"
 import PlotlyChart from "@/components/chat/PlotlyChart"
+import MatplotlibChart from "@/components/chat/MatplotlibChart"
 import { ChatMessage } from "@/lib/store/chatHistoryStore"
 import WelcomeSection from "./WelcomeSection"
 import CodeCanvas from "./CodeCanvas"
@@ -46,7 +47,7 @@ interface CodeEntry {
 }
 
 interface CodeOutput {
-  type: 'output' | 'error' | 'plotly';
+  type: 'output' | 'error' | 'plotly' | 'matplotlib';
   content: string | any;
   messageIndex: number;
   codeId: string;
@@ -666,6 +667,38 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
         newOutputs[messageId] = [
           ...(newOutputs[messageId] || []),
           ...plotlyOutputItems
+        ];
+      }
+    }
+
+    // Add matplotlib outputs if any
+    if (result.matplotlib_outputs && result.matplotlib_outputs.length > 0) {
+      console.log("Adding matplotlib outputs:", result.matplotlib_outputs);
+      
+      // Process all matplotlib outputs
+      const matplotlibOutputItems: CodeOutput[] = [];
+      
+      result.matplotlib_outputs.forEach((matplotlibOutput: string) => {
+        try {
+          const matplotlibContent = matplotlibOutput.replace(/```matplotlib\n|\n```/g, "");
+          console.log("Parsed matplotlib content length:", matplotlibContent.length);
+          
+          matplotlibOutputItems.push({
+            type: 'matplotlib',
+            content: matplotlibContent, // base64 string directly
+            messageIndex: messageId,
+            codeId: entryId
+          });
+        } catch (e) {
+          console.error("Error parsing Matplotlib data:", e);
+        }
+      });
+      
+      // Add any matplotlib outputs to the existing text output
+      if (matplotlibOutputItems.length > 0) {
+        newOutputs[messageId] = [
+          ...(newOutputs[messageId] || []),
+          ...matplotlibOutputItems
         ];
       }
     }
@@ -1468,6 +1501,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
     const errorOutputs = relevantOutputs.filter(output => output.type === 'error');
     const textOutputs = relevantOutputs.filter(output => output.type === 'output');
     const plotlyOutputs = relevantOutputs.filter(output => output.type === 'plotly');
+    const matplotlibOutputs = relevantOutputs.filter(output => output.type === 'matplotlib');
     
     return (
       <div className="mt-2 space-y-4">
@@ -1560,11 +1594,24 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
         {plotlyOutputs.map((output, idx) => (
           <div key={`plotly-${messageIndex}-${idx}`} className="bg-white border border-gray-200 rounded-md p-3 overflow-auto relative">
             <div className="flex items-center text-gray-700 font-medium mb-2">
-              Visualization
+              📊 Interactive Visualization
             </div>
             
             <div className="w-full">
               <PlotlyChart data={output.content.data} layout={output.content.layout} />
+            </div>
+          </div>
+        ))}
+        
+        {/* Render matplotlib charts */}
+        {matplotlibOutputs.map((output, idx) => (
+          <div key={`matplotlib-${messageIndex}-${idx}`} className="bg-white border border-gray-200 rounded-md p-3 overflow-auto relative">
+            <div className="flex items-center text-gray-700 font-medium mb-2">
+              📈 Chart Visualization
+            </div>
+            
+            <div className="w-full">
+              <MatplotlibChart imageData={output.content} />
             </div>
           </div>
         ))}

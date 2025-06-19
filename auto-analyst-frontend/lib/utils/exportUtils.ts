@@ -2,7 +2,7 @@ import { marked } from 'marked';
 
 // Define interfaces for the output data structure
 interface CodeOutput {
-  type: 'output' | 'error' | 'plotly';
+  type: 'output' | 'error' | 'plotly' | 'matplotlib';
   content: string | any;
   messageIndex: number;
   codeId: string;
@@ -520,6 +520,7 @@ function formatOutputsForExport(outputs: CodeOutput[], format: 'md' | 'html'): s
   const errorOutputs = outputs.filter(output => output.type === 'error');
   const textOutputs = outputs.filter(output => output.type === 'output');
   const plotlyOutputs = outputs.filter(output => output.type === 'plotly');
+  const matplotlibOutputs = outputs.filter(output => output.type === 'matplotlib');
 
   // Add error outputs
   if (errorOutputs.length > 0) {
@@ -573,7 +574,7 @@ function formatOutputsForExport(outputs: CodeOutput[], format: 'md' | 'html'): s
         });
         
         sections.push(`<div class="plotly-chart" data-plotly='${escapeHtml(plotlyData)}'>
-  <div class="section-title">📈 Visualization ${index + 1}</div>
+  <div class="section-title">📈 Interactive Visualization ${index + 1}</div>
 </div>`);
       });
     } else {
@@ -583,7 +584,27 @@ function formatOutputsForExport(outputs: CodeOutput[], format: 'md' | 'html'): s
           layout: output.content.layout
         }, null, 2);
         
-        sections.push(`## 📈 Visualization ${index + 1}\n\n\`\`\`plotly\n${plotlyJson}\n\`\`\`\n`);
+        sections.push(`## 📈 Interactive Visualization ${index + 1}\n\n\`\`\`plotly\n${plotlyJson}\n\`\`\`\n`);
+      });
+    }
+  }
+
+  // Add matplotlib visualizations
+  if (matplotlibOutputs.length > 0) {
+    if (format === 'html') {
+      matplotlibOutputs.forEach((output, index) => {
+        const imageData = output.content.startsWith('data:image/') ? output.content : `data:image/png;base64,${output.content}`;
+        
+        sections.push(`<div class="matplotlib-chart" style="margin: 24px 0; padding: 20px; border-radius: 8px; background-color: var(--bg-color); border: 1px solid var(--border-color); border-left: 4px solid var(--primary-color);">
+  <div class="section-title">📈 Chart Visualization ${index + 1}</div>
+  <div style="text-align: center;">
+    <img src="${escapeHtml(imageData)}" alt="Matplotlib Chart ${index + 1}" style="max-width: 100%; height: auto; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);" />
+  </div>
+</div>`);
+      });
+    } else {
+      matplotlibOutputs.forEach((output, index) => {
+        sections.push(`## 📈 Chart Visualization ${index + 1}\n\n\`\`\`matplotlib\n${output.content}\n\`\`\`\n`);
       });
     }
   }

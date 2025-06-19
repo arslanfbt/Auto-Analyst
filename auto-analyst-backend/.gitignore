@@ -29,5 +29,7 @@ alembic.ini
 
 schema*.md
 
+agent_config.json
+
 
 notebooks/
