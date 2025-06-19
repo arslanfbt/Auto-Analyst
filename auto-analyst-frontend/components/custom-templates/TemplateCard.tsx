@@ -10,6 +10,7 @@ interface TemplateCardProps {
   isEnabled: boolean
   hasAccess: boolean
   isLastTemplate?: boolean
+  wouldExceedMax?: boolean
   onToggleChange: (templateId: number, enabled: boolean) => void
 }
 
@@ -19,12 +20,14 @@ export default function TemplateCard({
   isEnabled,
   hasAccess,
   isLastTemplate = false,
+  wouldExceedMax = false,
   onToggleChange
 }: TemplateCardProps) {
   // User can only toggle if they have access (covers both free and premium users)
   // Premium-only templates are only toggleable by premium users (hasAccess = true for premium)
   // Also cannot disable if this is the last template
-  const canToggle = hasAccess && !(isEnabled && isLastTemplate)
+  // Also cannot enable if it would exceed the maximum limit
+  const canToggle = hasAccess && !(isEnabled && isLastTemplate) && !(!isEnabled && wouldExceedMax)
 
   const handleClick = () => {
     if (canToggle) {
@@ -39,6 +42,9 @@ export default function TemplateCard({
     }
     if (isEnabled && isLastTemplate) {
       return { text: 'Required', color: 'text-orange-600' }
+    }
+    if (!isEnabled && wouldExceedMax) {
+      return { text: 'Limit reached', color: 'text-gray-400' }
     }
     if (isEnabled) {
       return { text: 'Active', color: 'text-green-600' }
@@ -59,7 +65,13 @@ export default function TemplateCard({
             ? 'bg-gradient-to-br from-[#FF7F7F]/5 to-[#FF7F7F]/10 border-[#FF7F7F]/20 shadow-sm'
             : 'bg-white hover:bg-gray-50 border-gray-200'
       } ${!canToggle ? 'opacity-90' : ''}`}
-      title={isEnabled && isLastTemplate ? 'At least one agent must remain active' : undefined}
+      title={
+        isEnabled && isLastTemplate 
+          ? 'At least one agent must remain active' 
+          : !isEnabled && wouldExceedMax 
+            ? 'Maximum of 10 agents reached. Disable another agent first.'
+            : undefined
+      }
     >
       {/* Lock overlay for free users */}
       {!canToggle && (
@@ -143,7 +155,13 @@ export default function TemplateCard({
                     : 'bg-[#FF7F7F] border-[#FF7F7F] text-white'
                   : 'border-gray-300 hover:border-[#FF7F7F] bg-white'
               } ${!canToggle ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:scale-105'}`}
-              title={isEnabled && isLastTemplate ? 'At least one agent must remain active' : undefined}
+              title={
+                isEnabled && isLastTemplate 
+                  ? 'At least one agent must remain active' 
+                  : !isEnabled && wouldExceedMax 
+                    ? 'Maximum of 10 agents reached'
+                    : undefined
+              }
             >
               {isEnabled && <Check className="w-4 h-4" />}
             </button>
@@ -153,6 +171,11 @@ export default function TemplateCard({
             {isEnabled && isLastTemplate && (
               <span className="text-xs text-orange-600 font-medium">
                 Min required
+              </span>
+            )}
+            {!isEnabled && wouldExceedMax && (
+              <span className="text-xs text-gray-500 font-medium">
+                Max reached
               </span>
             )}
           </div>

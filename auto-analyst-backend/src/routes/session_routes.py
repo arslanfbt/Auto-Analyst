@@ -269,8 +269,8 @@ async def update_model_settings(
 
         # Test the model configuration without setting it globally
         try:
-            resp = lm("Hello, are you working?")
-            logger.log_message(f"Model Response: {resp}", level=logging.INFO)
+            # resp = lm("Hello, are you working?")
+            # logger.log_message(f"Model Response: {resp}", level=logging.INFO)
             # REMOVED: dspy.configure(lm=lm) - no longer set globally
             return {"message": "Model settings updated successfully"}
         except Exception as model_error:

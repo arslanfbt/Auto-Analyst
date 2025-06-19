@@ -21,7 +21,7 @@ import { createDownloadHandler } from "@/lib/utils/exportUtils"
 
 // Define the CodeOutput interface locally to match the one in exportUtils
 interface CodeOutput {
-  type: 'output' | 'error' | 'plotly';
+  type: 'output' | 'error' | 'plotly' | 'matplotlib';
   content: string | any;
   messageIndex: number;
   codeId: string;
@@ -493,11 +493,11 @@ const MessageContent: React.FC<MessageContentProps> = ({
         if (match.index > lastIndex) {
           const beforeContent = content.substring(lastIndex, match.index);
           if (beforeContent.trim()) {
-            // Remove plotly blocks from the before content as they'll be handled separately
-            const plotlyParts = beforeContent.split(/(```plotly[\s\S]*?```)/);
+            // Remove plotly and matplotlib blocks from the before content as they'll be handled separately
+            const plotlyParts = beforeContent.split(/(```(?:plotly|matplotlib)[\s\S]*?```)/);
             plotlyParts.forEach((plotlyPart, plotlyIndex) => {
-              if (plotlyPart.startsWith("```plotly") && plotlyPart.endsWith("```")) {
-                // Skip plotly blocks
+              if ((plotlyPart.startsWith("```plotly") || plotlyPart.startsWith("```matplotlib")) && plotlyPart.endsWith("```")) {
+                // Skip plotly and matplotlib blocks
                 return;
               } else if (plotlyPart.trim()) {
                 parts.push(
@@ -567,11 +567,11 @@ const MessageContent: React.FC<MessageContentProps> = ({
       if (lastIndex < content.length) {
         const remainingContent = content.substring(lastIndex);
         if (remainingContent.trim()) {
-          // Remove plotly blocks as they'll be handled separately
-          const plotlyParts = remainingContent.split(/(```plotly[\s\S]*?```)/);
+          // Remove plotly and matplotlib blocks as they'll be handled separately
+          const plotlyParts = remainingContent.split(/(```(?:plotly|matplotlib)[\s\S]*?```)/);
           plotlyParts.forEach((plotlyPart, plotlyIndex) => {
-            if (plotlyPart.startsWith("```plotly") && plotlyPart.endsWith("```")) {
-              // Skip plotly blocks
+            if ((plotlyPart.startsWith("```plotly") || plotlyPart.startsWith("```matplotlib")) && plotlyPart.endsWith("```")) {
+              // Skip plotly and matplotlib blocks
               return;
             } else if (plotlyPart.trim()) {
               parts.push(
@@ -591,10 +591,10 @@ const MessageContent: React.FC<MessageContentProps> = ({
       
       // If no tables were found, process the entire content with ReactMarkdown
       if (parts.length === 0) {
-        // Remove plotly blocks as they'll be handled separately
-        const plotlyParts = content.split(/(```plotly[\s\S]*?```)/);
+        // Remove plotly and matplotlib blocks as they'll be handled separately
+        const plotlyParts = content.split(/(```(?:plotly|matplotlib)[\s\S]*?```)/);
         return plotlyParts.map((part, index) => {
-          if (part.startsWith("```plotly") && part.endsWith("```")) {
+          if ((part.startsWith("```plotly") || part.startsWith("```matplotlib")) && part.endsWith("```")) {
             return null;
           } else if (part.trim()) {
             return (

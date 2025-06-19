@@ -360,6 +360,15 @@ export default function TemplatesModal({
     return templateCurrentlyEnabled && currentEnabledCount === 1
   }
 
+  // Check if enabling this template would exceed the 10 template limit
+  const wouldExceedMaxTemplates = (templateId: number) => {
+    const currentEnabledCount = getEnabledCountWithChanges()
+    const templateCurrentlyEnabled = getTemplateEnabledState(templates.find(t => t.template_id === templateId)!)
+    
+    // If this template is currently disabled and enabling it would exceed 10
+    return !templateCurrentlyEnabled && currentEnabledCount >= 10
+  }
+
   const enabledCount = hasAccess 
     ? getEnabledCountWithChanges()
     : 0
@@ -528,6 +537,7 @@ export default function TemplatesModal({
                       {filteredTemplates.map(template => {
                         const { preference, isEnabled } = getTemplateData(template)
                         const isLastTemplate = wouldLeaveZeroTemplates(template.template_id)
+                        const wouldExceedMax = wouldExceedMaxTemplates(template.template_id)
                         
                         return (
                           <TemplateCard
@@ -537,6 +547,7 @@ export default function TemplatesModal({
                             isEnabled={isEnabled}
                             hasAccess={hasAccess}
                             isLastTemplate={isLastTemplate}
+                            wouldExceedMax={wouldExceedMax}
                             onToggleChange={handleToggleChange}
                           />
                         )
@@ -562,6 +573,11 @@ export default function TemplatesModal({
                         {enabledCount === 1 && (
                           <span className="text-gray-600 font-medium">
                             {' '}Note: At least one agent must remain active.
+                          </span>
+                        )}
+                        {enabledCount >= 10 && (
+                          <span className="text-gray-600 font-medium">
+                            {' '}Note: You have reached the maximum of 10 active agents.
                           </span>
                         )}
                       </span>
