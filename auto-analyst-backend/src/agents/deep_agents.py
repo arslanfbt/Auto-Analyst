@@ -728,7 +728,7 @@ Chart Styling Guidelines:
 
 class deep_analysis_module(dspy.Module):
     def __init__(self,agents, agents_desc):
-        logger.log_message(f"Initializing deep_analysis_module with {len(agents)} agents: {list(agents.keys())}", level=logging.INFO)
+        logger.log_message(f"Initializing deep_analysis_module with {agents} agents: {list(agents.keys())}", level=logging.INFO)
         
         self.agents = agents
         # Make all dspy operations async using asyncify

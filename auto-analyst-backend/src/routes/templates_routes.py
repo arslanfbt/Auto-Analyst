@@ -176,12 +176,12 @@ async def get_user_template_preferences(user_id: int, variant_type: str = Query(
                     "planner_data_viz_agent"
                 ]
             else:
-                default_agent_names = [
-                    "preprocessing_agent",
-                    "statistical_analytics_agent", 
-                    "sk_learn_agent",
-                    "data_viz_agent"
-                ]
+            default_agent_names = [
+                "preprocessing_agent",
+                "statistical_analytics_agent", 
+                "sk_learn_agent",
+                "data_viz_agent"
+            ]
             
             result = []
             for template in templates:
@@ -262,13 +262,13 @@ async def get_user_enabled_templates(user_id: int, variant_type: str = Query(def
                     "planner_data_viz_agent"
                 ]
             else:
-                default_agent_names = [
-                        "preprocessing_agent",
-                    "statistical_analytics_agent", 
-                    "sk_learn_agent",
-                    "data_viz_agent"
-                ]
-                
+            default_agent_names = [
+                "preprocessing_agent",
+                "statistical_analytics_agent", 
+                "sk_learn_agent",
+                "data_viz_agent"
+            ]
+            
             result = []
             for template in all_templates:
                 # Check if user has a preference record for this template
@@ -277,7 +277,7 @@ async def get_user_enabled_templates(user_id: int, variant_type: str = Query(def
                     UserTemplatePreference.template_id == template.template_id
                 ).first()
                 
-                # Determine if template should be enabled by default  
+                # Determine if template should be enabled by default
                 is_default_agent = template.template_name in default_agent_names
                 default_enabled = is_default_agent  # Default agents enabled by default, others disabled
                 
