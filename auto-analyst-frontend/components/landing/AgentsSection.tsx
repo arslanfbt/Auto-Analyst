@@ -19,7 +19,7 @@ export default function AgentsSection() {
       { name: "Statistical Models", icon: "/icons/templates/statsmodel.svg" }
     ],
     "Data Visualization": [
-      { name: "Plotly", icon: "/icons/templates/data_viz_agent.svg" },
+      { name: "Plotly", icon: "/icons/templates/plotly.svg" },
       { name: "Matplotlib", icon: "/icons/templates/matplotlib.svg" },
       { name: "Seaborn", icon: "/icons/templates/seaborn.svg" }
     ]
