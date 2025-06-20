@@ -25,11 +25,11 @@ migrations/
 alembic.ini
 
 
-*-2.db
+*.db
 
 schema*.md
 
-agent_config.json
+# agent_config.json
 
 
 notebooks/

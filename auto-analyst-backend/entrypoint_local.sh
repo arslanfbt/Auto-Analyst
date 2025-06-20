@@ -71,6 +71,7 @@ except Exception as e:
 }
 
 # Function to populate agents and templates for development (SQLite only)
+# Uses agents_config.json if available, falls back to legacy method
 populate_agents_templates() {
     echo "🔧 Checking if agents/templates need to be populated..."
     python -c "
@@ -112,16 +113,45 @@ except Exception as e:
     # Check if population is needed (exit code 1 means yes)
     if [ $? -eq 1 ]; then
         echo "🚀 Running agent/template population for SQLite..."
-        python scripts/populate_agent_templates.py auto
+        
+        # Check if agents_config.json exists (try multiple locations)
+        if [ -f "agents_config.json" ] || [ -f "/app/agents_config.json" ] || [ -f "../agents_config.json" ]; then
+            echo "📖 Found agents_config.json - validating configuration..."
+            
+            # Validate configuration first
+            python scripts/populate_agent_templates.py validate
+            validation_result=$?
+            
+            if [ $validation_result -eq 0 ]; then
+                echo "✅ Configuration valid - proceeding with sync"
+                python scripts/populate_agent_templates.py sync
+            else
+                echo "⚠️  Configuration validation failed - attempting sync anyway"
+                python scripts/populate_agent_templates.py sync
+            fi
+        else
+            echo "⚠️  agents_config.json not found - trying legacy method"
+            python scripts/populate_agent_templates.py
+        fi
         
         if [ $? -eq 0 ]; then
             echo "✅ Agent/template population completed successfully"
         else
             echo "⚠️  Agent/template population had issues, but continuing..."
             echo "📋 You may need to populate templates manually"
+            echo "💡 Tip: Ensure agents_config.json exists in the backend directory"
         fi
     fi
 }
+
+# Check if we need to find agents_config.json from space root
+if [ ! -f "/app/agents_config.json" ]; then
+    echo "⚠️  agents_config.json not found in container - checking build issues"
+    echo "📁 Files in /app directory:"
+    ls -la /app/ | head -10
+else
+    echo "✅ agents_config.json found in container"
+fi
 
 # Main startup sequence
 echo "🔧 Initializing production environment..."

@@ -176,12 +176,12 @@ async def get_user_template_preferences(user_id: int, variant_type: str = Query(
                     "planner_data_viz_agent"
                 ]
             else:
-            default_agent_names = [
-                "preprocessing_agent",
-                "statistical_analytics_agent", 
-                "sk_learn_agent",
-                "data_viz_agent"
-            ]
+                default_agent_names = [
+                    "preprocessing_agent",
+                    "statistical_analytics_agent", 
+                    "sk_learn_agent",
+                    "data_viz_agent"
+                ]
             
             result = []
             for template in templates:
@@ -262,12 +262,12 @@ async def get_user_enabled_templates(user_id: int, variant_type: str = Query(def
                     "planner_data_viz_agent"
                 ]
             else:
-            default_agent_names = [
-                "preprocessing_agent",
-                "statistical_analytics_agent", 
-                "sk_learn_agent",
-                "data_viz_agent"
-            ]
+                default_agent_names = [
+                    "preprocessing_agent",
+                    "statistical_analytics_agent", 
+                    "sk_learn_agent",
+                    "data_viz_agent"
+                ]
             
             result = []
             for template in all_templates:

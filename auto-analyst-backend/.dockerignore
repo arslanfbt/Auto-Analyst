@@ -13,4 +13,6 @@ notebooks/
 .idea/
 .vscode/
 .DS_Store
+# Exclude most JSON files but allow agents_config.json
 *.json
+!agents_config.json
