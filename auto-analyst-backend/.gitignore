@@ -11,8 +11,6 @@ venv/
 
 try*
 
-chat_database_temp.db
-
 logs/
 
 updated_code.py
@@ -30,6 +28,8 @@ alembic.ini
 *.db
 
 schema*.md
+
+# agent_config.json
 
 
 notebooks/

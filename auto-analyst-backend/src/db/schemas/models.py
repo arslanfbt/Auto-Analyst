@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine, Column, Integer, String, ForeignKey, DateTime, Text, Float, Boolean, JSON
+from sqlalchemy import create_engine, Column, Integer, String, ForeignKey, DateTime, Text, Float, Boolean, JSON, UniqueConstraint
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
 from datetime import datetime, UTC
@@ -18,6 +18,7 @@ class User(Base):
     chats = relationship("Chat", back_populates="user", cascade="all, delete-orphan")
     usage_records = relationship("ModelUsage", back_populates="user")
     deep_analysis_reports = relationship("DeepAnalysisReport", back_populates="user", cascade="all, delete-orphan")
+    template_preferences = relationship("UserTemplatePreference", back_populates="user", cascade="all, delete-orphan")
 
 # Define the Chats table
 class Chat(Base):
@@ -171,5 +172,66 @@ class DeepAnalysisReport(Base):
     
     # Relationships
     user = relationship("User", back_populates="deep_analysis_reports")
+    
+class AgentTemplate(Base):
+    """Stores predefined agent templates that users can enable/disable."""
+    __tablename__ = 'agent_templates'
+    
+    template_id = Column(Integer, primary_key=True, autoincrement=True)
+    
+    # Template definition
+    template_name = Column(String(100), nullable=False, unique=True)  # e.g., 'pytorch_specialist', 'data_cleaning_expert'
+    display_name = Column(String(200), nullable=True)  # User-friendly display name
+    description = Column(Text, nullable=False)  # Short description for template selection
+    prompt_template = Column(Text, nullable=False)  # Main prompt/instructions for agent behavior
+    
+    # Template appearance
+    icon_url = Column(String(500), nullable=True)  # URL to template icon (CDN, data URL, or relative path)
+    
+    # Template categorization
+    category = Column(String(50), nullable=True)  # 'Visualization', 'Modelling', 'Data Manipulation'
+    is_premium_only = Column(Boolean, default=False)  # True if template requires premium subscription
+    
+    # Agent variant support
+    variant_type = Column(String(20), default='individual')  # 'planner', 'individual', or 'both'
+    base_agent = Column(String(100), nullable=True)  # Base agent name for variants (e.g., 'preprocessing_agent')
+    
+    # Status and metadata
+    is_active = Column(Boolean, default=True)
+    
+    # Timestamps
+    created_at = Column(DateTime, default=lambda: datetime.now(UTC))
+    updated_at = Column(DateTime, default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC))
+    
+    # Relationships
+    user_preferences = relationship("UserTemplatePreference", back_populates="template", cascade="all, delete-orphan")
+
+class UserTemplatePreference(Base):
+    """Tracks user preferences and usage for agent templates."""
+    __tablename__ = 'user_template_preferences'
+    
+    preference_id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey('users.user_id', ondelete="CASCADE"), nullable=False)
+    template_id = Column(Integer, ForeignKey('agent_templates.template_id', ondelete="CASCADE"), nullable=False)
+    
+    # User preferences
+    is_enabled = Column(Boolean, default=True)  # Whether user has this template enabled
+    
+    # Usage tracking
+    usage_count = Column(Integer, default=0)  # Track how many times user has used this template
+    last_used_at = Column(DateTime, nullable=True)  # Last time user used this template
+    
+    # Timestamps
+    created_at = Column(DateTime, default=lambda: datetime.now(UTC))
+    updated_at = Column(DateTime, default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC))
+    
+    # Relationships
+    user = relationship("User", back_populates="template_preferences")
+    template = relationship("AgentTemplate", back_populates="user_preferences")
+    
+    # Constraints - user can only have one preference record per template
+    __table_args__ = (
+        UniqueConstraint('user_id', 'template_id', name='unique_user_template_preference'),
+    )
     
     

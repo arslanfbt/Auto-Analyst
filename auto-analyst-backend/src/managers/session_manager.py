@@ -27,19 +27,21 @@ class SessionManager:
     
     def __init__(self, styling_instructions: List[str], available_agents: Dict):
         """
-        Initialize session manager with styling instructions and agents
+        Initialize SessionManager with styling instructions and available agents
         
         Args:
-            styling_instructions: List of styling instructions
-            available_agents: Dictionary of available agents
+            styling_instructions: List of styling instructions for visualization
+            available_agents: Dictionary of available agents (deprecated - agents now loaded from DB)
         """
+        self.styling_instructions = styling_instructions
         self._sessions = {}
         self._default_df = None
         self._default_retrievers = None
         self._default_ai_system = None
-        self._dataset_description = None
         self._make_data = None
-        self._default_name = "Housing Dataset"  # Default dataset name
+        # Initialize chat manager
+        self._dataset_description = "Housing Dataset"
+        self._default_name = "Housing.csv"
         
         self._dataset_description = """This dataset contains residential property information with details about pricing, physical characteristics, and amenities. The data can be used for real estate market analysis, property valuation, and understanding the relationship between house features and prices.
 
@@ -92,8 +94,8 @@ This dataset appears clean with consistent formatting and no missing values, mak
             self._default_df = pd.read_csv("Housing.csv")
             self._make_data = make_data(self._default_df, self._dataset_description)
             self._default_retrievers = self.initialize_retrievers(self.styling_instructions, [str(self._make_data)])
-            self._default_ai_system = auto_analyst(agents=list(self.available_agents.values()), 
-                                                  retrievers=self._default_retrievers)
+            # Create default AI system - agents will be loaded from database
+            self._default_ai_system = auto_analyst(agents=[], retrievers=self._default_retrievers)
         except Exception as e:
             logger.log_message(f"Error initializing default dataset: {str(e)}", level=logging.ERROR)
             raise e
@@ -206,7 +208,13 @@ This dataset appears clean with consistent formatting and no missing values, mak
         try:
             self._make_data = make_data(df, desc)
             retrievers = self.initialize_retrievers(self.styling_instructions, [str(self._make_data)])
-            ai_system = auto_analyst(agents=list(self.available_agents.values()), retrievers=retrievers)
+            
+            # Check if session has a user_id to create user-specific AI system
+            current_user_id = None
+            if session_id in self._sessions and "user_id" in self._sessions[session_id]:
+                current_user_id = self._sessions[session_id]["user_id"]
+            
+            ai_system = self.create_ai_system_for_user(retrievers, current_user_id)
             
             # Get default model config for new sessions
             default_model_config = {
@@ -284,6 +292,44 @@ This dataset appears clean with consistent formatting and no missing values, mak
             logger.log_message(f"Error resetting session {session_id}: {str(e)}", level=logging.ERROR)
             raise e
 
+    def create_ai_system_for_user(self, retrievers, user_id=None):
+        """
+        Create an AI system with user-specific agents (including custom agents)
+        
+        Args:
+            retrievers: The retrievers for the AI system
+            user_id: Optional user ID to load custom agents for
+            
+        Returns:
+            An auto_analyst instance with all available agents (standard + custom)
+        """
+        try:
+            if user_id:
+                # Import here to avoid circular imports
+                from src.db.init_db import session_factory
+                
+                # Create a database session
+                db_session = session_factory()
+                try:
+                    # Create AI system with user context to load custom agents
+                    ai_system = auto_analyst(
+                        agents=[], 
+                        retrievers=retrievers,
+                        user_id=user_id,
+                        db_session=db_session
+                    )
+                    logger.log_message(f"Created AI system for user {user_id}", level=logging.INFO)
+                    return ai_system
+                finally:
+                    db_session.close()
+            else:
+                # Create standard AI system without custom agents
+                return auto_analyst(agents=[], retrievers=retrievers)
+                
+        except Exception as e:
+            logger.log_message(f"Error creating AI system for user {user_id}: {str(e)}", level=logging.ERROR)
+            # Fallback to standard AI system
+            return auto_analyst(agents=[], retrievers=retrievers)
 
     def set_session_user(self, session_id: str, user_id: int, chat_id: int = None):
         """
@@ -318,6 +364,16 @@ This dataset appears clean with consistent formatting and no missing values, mak
         
         # Store chat ID
         self._sessions[session_id]["chat_id"] = chat_id_to_use
+        
+        # Recreate AI system with user context to load custom agents
+        try:
+            session_retrievers = self._sessions[session_id]["retrievers"]
+            user_ai_system = self.create_ai_system_for_user(session_retrievers, user_id)
+            self._sessions[session_id]["ai_system"] = user_ai_system
+            logger.log_message(f"Updated AI system for session {session_id} with user {user_id}", level=logging.INFO)
+        except Exception as e:
+            logger.log_message(f"Error updating AI system for user {user_id}: {str(e)}", level=logging.ERROR)
+            # Continue with existing AI system if update fails
         
         # Make sure this data gets saved
         logger.log_message(f"Associated session {session_id} with user_id={user_id}, chat_id={chat_id_to_use}", level=logging.INFO)

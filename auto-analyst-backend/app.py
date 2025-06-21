@@ -42,6 +42,7 @@ from src.routes.code_routes import router as code_router
 from src.routes.feedback_routes import router as feedback_router
 from src.routes.session_routes import router as session_router, get_session_id_dependency
 from src.routes.deep_analysis_routes import router as deep_analysis_router
+from src.routes.templates_routes import router as templates_router
 from src.schemas.query_schemas import QueryRequest
 from src.utils.logger import Logger
 
@@ -254,19 +255,7 @@ if not os.path.exists(housing_csv_path):
     logger.log_message(f"Housing.csv not found at {os.path.abspath(housing_csv_path)}", level=logging.ERROR)
     raise FileNotFoundError(f"Housing.csv not found at {os.path.abspath(housing_csv_path)}")
 
-AVAILABLE_AGENTS = {
-    "data_viz_agent": data_viz_agent,
-    "sk_learn_agent": sk_learn_agent,
-    "statistical_analytics_agent": statistical_analytics_agent,
-    "preprocessing_agent": preprocessing_agent,
-}
-
-PLANNER_AGENTS = {
-    "planner_preprocessing_agent": planner_preprocessing_agent,
-    "planner_sk_learn_agent": planner_sk_learn_agent,
-    "planner_statistical_analytics_agent": planner_statistical_analytics_agent,
-    "planner_data_viz_agent": planner_data_viz_agent,
-}
+# All agents are now loaded from database - no hardcoded dictionaries needed
 
 # Add session header
 X_SESSION_ID = APIKeyHeader(name="X-Session-ID", auto_error=False)
@@ -274,7 +263,7 @@ X_SESSION_ID = APIKeyHeader(name="X-Session-ID", auto_error=False)
 # Update AppState class to use SessionManager
 class AppState:
     def __init__(self):
-        self._session_manager = SessionManager(styling_instructions, PLANNER_AGENTS)
+        self._session_manager = SessionManager(styling_instructions, {})  # Empty dict, agents loaded from DB
         self.model_config = DEFAULT_MODEL_CONFIG.copy()
         # Update the SessionManager with the current model_config
         self._session_manager._app_model_config = self.model_config
@@ -325,23 +314,89 @@ class AppState:
     def get_deep_analyzer(self, session_id: str):
         """Get or create deep analysis module for a session"""
         session_state = self.get_session_state(session_id)
-        if not hasattr(session_state, 'deep_analyzer') or session_state.get('deep_analyzer') is None:
-            # Create agents dictionary for deep analysis
-            deep_agents = {
-                "planner_data_viz_agent": dspy.asyncify(dspy.ChainOfThought(planner_data_viz_agent)),
-                "planner_statistical_analytics_agent": dspy.asyncify(dspy.ChainOfThought(planner_statistical_analytics_agent)), 
-                "planner_sk_learn_agent": dspy.asyncify(dspy.ChainOfThought(planner_sk_learn_agent)),
-                "planner_preprocessing_agent": dspy.asyncify(dspy.ChainOfThought(planner_preprocessing_agent))
-            }
+        user_id = session_state.get("user_id")
+        
+        # Check if we need to recreate the deep analyzer (user changed or doesn't exist)
+        current_analyzer = session_state.get('deep_analyzer')
+        analyzer_user_id = session_state.get('deep_analyzer_user_id')
+        
+        logger.log_message(f"Deep analyzer check - session: {session_id}, current_user: {user_id}, analyzer_user: {analyzer_user_id}, has_analyzer: {current_analyzer is not None}", level=logging.INFO)
+        
+        if (not current_analyzer or 
+            analyzer_user_id != user_id or 
+            not hasattr(session_state, 'deep_analyzer')):
             
-            deep_agents_desc = PLANNER_AGENTS_WITH_DESCRIPTION
+            logger.log_message(f"Creating/recreating deep analyzer for session {session_id}, user_id: {user_id} (reason: analyzer_exists={current_analyzer is not None}, user_match={analyzer_user_id == user_id})", level=logging.INFO)
+            
+            # Load user-enabled agents from database using preference system
+            from src.db.init_db import session_factory
+            from src.agents.agents import load_user_enabled_templates_for_planner_from_db
+            
+            db_session = session_factory()
+            try:
+                # Load user-enabled agents for planner (respects preferences)
+                if user_id:
+                    enabled_agents_dict = load_user_enabled_templates_for_planner_from_db(user_id, db_session)
+                    logger.log_message(f"Deep analyzer loaded {len(enabled_agents_dict)} enabled agents for user {user_id}: {list(enabled_agents_dict.keys())}", level=logging.INFO)
+                    
+                    if not enabled_agents_dict:
+                        logger.log_message(f"WARNING: No enabled agents found for user {user_id}, falling back to defaults", level=logging.WARNING)
+                        # Fallback to default agents if no enabled agents
+                        from src.agents.agents import preprocessing_agent, statistical_analytics_agent, sk_learn_agent, data_viz_agent
+                        enabled_agents_dict = {
+                            "preprocessing_agent": preprocessing_agent,
+                            "statistical_analytics_agent": statistical_analytics_agent,
+                            "sk_learn_agent": sk_learn_agent,
+                            "data_viz_agent": data_viz_agent
+                        }
+                else:
+                    # Fallback to default agents if no user_id
+                    logger.log_message("No user_id in session, loading default agents for deep analysis", level=logging.WARNING)
+                    from src.agents.agents import preprocessing_agent, statistical_analytics_agent, sk_learn_agent, data_viz_agent
+                    enabled_agents_dict = {
+                        "preprocessing_agent": preprocessing_agent,
+                        "statistical_analytics_agent": statistical_analytics_agent,
+                        "sk_learn_agent": sk_learn_agent,
+                        "data_viz_agent": data_viz_agent
+                    }
+                
+                # Create agents dictionary for deep analysis using enabled agents
+                deep_agents = {}
+                deep_agents_desc = {}
+                
+                for agent_name, signature in enabled_agents_dict.items():
+                    deep_agents[agent_name] = dspy.asyncify(dspy.ChainOfThought(signature))
+                    # Get agent description from database
+                    deep_agents_desc[agent_name] = get_agent_description(agent_name)
+                
+                logger.log_message(f"Deep analyzer initialized with {len(deep_agents)} agents: {list(deep_agents.keys())}", level=logging.INFO)
+                
+            except Exception as e:
+                logger.log_message(f"Error loading agents for deep analysis: {str(e)}", level=logging.ERROR)
+                # Fallback to minimal set
+                from src.agents.agents import preprocessing_agent, statistical_analytics_agent, sk_learn_agent, data_viz_agent
+                deep_agents = {
+                    "preprocessing_agent": dspy.asyncify(dspy.ChainOfThought(preprocessing_agent)),
+                    "statistical_analytics_agent": dspy.asyncify(dspy.ChainOfThought(statistical_analytics_agent)),
+                    "sk_learn_agent": dspy.asyncify(dspy.ChainOfThought(sk_learn_agent)),
+                    "data_viz_agent": dspy.asyncify(dspy.ChainOfThought(data_viz_agent))
+                }
+                deep_agents_desc = {name: get_agent_description(name) for name in deep_agents.keys()}
+                logger.log_message(f"Using fallback agents: {list(deep_agents.keys())}", level=logging.WARNING)
+            finally:
+                db_session.close()
+            
             session_state['deep_analyzer'] = deep_analysis_module(agents=deep_agents, agents_desc=deep_agents_desc)
+            session_state['deep_analyzer_user_id'] = user_id  # Track which user this analyzer was created for
+        else:
+            logger.log_message(f"Using existing deep analyzer for session {session_id}, user_id: {user_id}", level=logging.INFO)
         
         return session_state['deep_analyzer']
 
 # Initialize FastAPI app with state
 app = FastAPI(title="AI Analytics API", version="1.0")
 app.state = AppState()
+
 
 # Configure middleware
 # Use a wildcard for local development or read from environment
@@ -399,11 +454,10 @@ app.add_middleware(
 RESPONSE_ERROR_INVALID_QUERY = "Please provide a valid query..."
 RESPONSE_ERROR_NO_DATASET = "No dataset is currently loaded. Please link a dataset before proceeding with your analysis."
 DEFAULT_TOKEN_RATIO = 1.5
-REQUEST_TIMEOUT_SECONDS = 60  # Timeout for LLM requests
+REQUEST_TIMEOUT_SECONDS = 120  # Timeout for LLM requests
 MAX_RECENT_MESSAGES = 3
 DB_BATCH_SIZE = 10  # For future batch DB operations
 
-# Replace the existing chat_with_agent function
 @app.post("/chat/{agent_name}", response_model=dict)
 async def chat_with_agent(
     agent_name: str, 
@@ -412,51 +466,120 @@ async def chat_with_agent(
     session_id: str = Depends(get_session_id_dependency)
 ):
     session_state = app.state.get_session_state(session_id)
+    logger.log_message(f"[DEBUG] chat_with_agent called with agent: '{agent_name}', query: '{request.query[:100]}...'", level=logging.DEBUG)
     
     try:
         # Extract and validate query parameters
+        logger.log_message(f"[DEBUG] Updating session from query params", level=logging.DEBUG)
         _update_session_from_query_params(request_obj, session_state)
+        logger.log_message(f"[DEBUG] Session state after query params: user_id={session_state.get('user_id')}, chat_id={session_state.get('chat_id')}", level=logging.DEBUG)
         
         # Validate dataset and agent name
         if session_state["current_df"] is None:
+            logger.log_message(f"[DEBUG] No dataset loaded", level=logging.DEBUG)
             raise HTTPException(status_code=400, detail=RESPONSE_ERROR_NO_DATASET)
 
-        _validate_agent_name(agent_name)
+        logger.log_message(f"[DEBUG] About to validate agent name: '{agent_name}'", level=logging.DEBUG)
+        _validate_agent_name(agent_name, session_state)
+        logger.log_message(f"[DEBUG] Agent validation completed successfully", level=logging.DEBUG)
         
         # Record start time for timing
         start_time = time.time()
         
         # Get chat context and prepare query
+        logger.log_message(f"[DEBUG] Preparing query with context", level=logging.DEBUG)
         enhanced_query = _prepare_query_with_context(request.query, session_state)
+        logger.log_message(f"[DEBUG] Enhanced query length: {len(enhanced_query)}", level=logging.DEBUG)
         
-        # Initialize agent
+        # Initialize agent - handle standard, template, and custom agents
         if "," in agent_name:
-            agent_list = [AVAILABLE_AGENTS[agent.strip()] for agent in agent_name.split(",")]
-            agent = auto_analyst_ind(agents=agent_list, retrievers=session_state["retrievers"])
-        else:
-            agent = auto_analyst_ind(agents=[AVAILABLE_AGENTS[agent_name]], retrievers=session_state["retrievers"])
-        
-        # Execute agent with timeout
-        try:
-            # Get session-specific model
-            session_lm = get_session_lm(session_state)
+            logger.log_message(f"[DEBUG] Processing multiple agents: {agent_name}", level=logging.DEBUG)
+            # Multiple agents case
+            agent_list = [agent.strip() for agent in agent_name.split(",")]
             
-            # Use session-specific model for this request
-            with dspy.context(lm=session_lm):
-                response = await asyncio.wait_for(
-                    agent.forward(enhanced_query, agent_name),
-                    timeout=REQUEST_TIMEOUT_SECONDS
-                )
-        except asyncio.TimeoutError:
-            logger.log_message(f"Agent execution timed out for {agent_name}", level=logging.WARNING)
-            raise HTTPException(status_code=504, detail="Request timed out. Please try a simpler query.")
-        except Exception as agent_error:
-            logger.log_message(f"Agent execution failed: {str(agent_error)}", level=logging.ERROR)
-            raise HTTPException(status_code=500, detail="Failed to process query. Please try again.")
+            # Categorize agents
+            standard_agents = [agent for agent in agent_list if _is_standard_agent(agent)]
+            template_agents = [agent for agent in agent_list if _is_template_agent(agent)]
+            custom_agents = [agent for agent in agent_list if not _is_standard_agent(agent) and not _is_template_agent(agent)]
+            
+            logger.log_message(f"[DEBUG] Agent categorization - standard: {standard_agents}, template: {template_agents}, custom: {custom_agents}", level=logging.DEBUG)
+            
+            if custom_agents:
+                # If any custom agents, use session AI system for all
+                ai_system = session_state["ai_system"]
+                session_lm = get_session_lm(session_state)
+                logger.log_message(f"[DEBUG] Using custom agent execution path", level=logging.DEBUG)
+                with dspy.context(lm=session_lm):
+                    response = await asyncio.wait_for(
+                        _execute_custom_agents(ai_system, agent_list, enhanced_query),
+                        timeout=REQUEST_TIMEOUT_SECONDS
+                    )
+                    logger.log_message(f"[DEBUG] Custom agents response type: {type(response)}, keys: {list(response.keys()) if isinstance(response, dict) else 'not a dict'}", level=logging.DEBUG)
+            else:
+                # All standard/template agents - use auto_analyst_ind which loads from DB
+                user_id = session_state.get("user_id")
+                logger.log_message(f"[DEBUG] Using auto_analyst_ind for multiple standard/template agents with user_id: {user_id}", level=logging.DEBUG)
         
+                # Create database session for agent loading
+                from src.db.init_db import session_factory
+                db_session = session_factory()
+                try:
+                    # auto_analyst_ind will load all agents from database
+                    logger.log_message(f"[DEBUG] Creating auto_analyst_ind instance", level=logging.DEBUG)
+                    agent = auto_analyst_ind(agents=[], retrievers=session_state["retrievers"], user_id=user_id, db_session=db_session)
+                    session_lm = get_session_lm(session_state)
+                    logger.log_message(f"[DEBUG] About to call agent.forward with query and agent list", level=logging.DEBUG)
+                    with dspy.context(lm=session_lm):
+                        response = await asyncio.wait_for(
+                            agent.forward(enhanced_query, ",".join(agent_list)),
+                            timeout=REQUEST_TIMEOUT_SECONDS
+                        )
+                        logger.log_message(f"[DEBUG] auto_analyst_ind response type: {type(response)}, content: {str(response)[:200]}...", level=logging.DEBUG)
+                finally:
+                    db_session.close()
+        else:
+            logger.log_message(f"[DEBUG] Processing single agent: {agent_name}", level=logging.DEBUG)
+            # Single agent case
+            if _is_standard_agent(agent_name) or _is_template_agent(agent_name):
+                # Standard or template agent - use auto_analyst_ind which loads from DB
+                user_id = session_state.get("user_id")
+                logger.log_message(f"[DEBUG] Using auto_analyst_ind for single standard/template agent '{agent_name}' with user_id: {user_id}", level=logging.DEBUG)
+                
+                # Create database session for agent loading
+                from src.db.init_db import session_factory
+                db_session = session_factory()
+                try:
+                    # auto_analyst_ind will load all agents from database
+                    logger.log_message(f"[DEBUG] Creating auto_analyst_ind instance for single agent", level=logging.DEBUG)
+                    agent = auto_analyst_ind(agents=[], retrievers=session_state["retrievers"], user_id=user_id, db_session=db_session)
+                    session_lm = get_session_lm(session_state)
+                    logger.log_message(f"[DEBUG] About to call agent.forward for single agent '{agent_name}'", level=logging.DEBUG)
+                    with dspy.context(lm=session_lm):
+                        response = await asyncio.wait_for(
+                            agent.forward(enhanced_query, agent_name),
+                            timeout=REQUEST_TIMEOUT_SECONDS
+                        )
+                        logger.log_message(f"[DEBUG] Single agent response type: {type(response)}, content: {str(response)[:200]}...", level=logging.DEBUG)
+                finally:
+                    db_session.close()
+            else:
+                # Custom agent - use session AI system
+                ai_system = session_state["ai_system"]
+                session_lm = get_session_lm(session_state)
+                logger.log_message(f"[DEBUG] Using custom agent execution for '{agent_name}'", level=logging.DEBUG)
+                with dspy.context(lm=session_lm):
+                    response = await asyncio.wait_for(
+                        _execute_custom_agents(ai_system, [agent_name], enhanced_query),
+                        timeout=REQUEST_TIMEOUT_SECONDS
+                    )
+                    logger.log_message(f"[DEBUG] Custom single agent response type: {type(response)}, content: {str(response)[:200]}...", level=logging.DEBUG)
+        
+        logger.log_message(f"[DEBUG] About to format response to markdown. Response type: {type(response)}", level=logging.DEBUG)
         formatted_response = format_response_to_markdown(response, agent_name, session_state["current_df"])
+        logger.log_message(f"[DEBUG] Formatted response type: {type(formatted_response)}, length: {len(str(formatted_response))}", level=logging.DEBUG)
         
         if formatted_response == RESPONSE_ERROR_INVALID_QUERY:
+            logger.log_message(f"[DEBUG] Response was invalid query error", level=logging.DEBUG)
             return {
                 "agent_name": agent_name,
                 "query": request.query,
@@ -466,6 +589,7 @@ async def chat_with_agent(
         
         # Track usage statistics
         if session_state.get("user_id"):
+            logger.log_message(f"[DEBUG] Tracking model usage", level=logging.DEBUG)
             _track_model_usage(
                 session_state=session_state,
                 enhanced_query=enhanced_query,
@@ -473,6 +597,7 @@ async def chat_with_agent(
                 processing_time_ms=int((time.time() - start_time) * 1000)
             )
         
+        logger.log_message(f"[DEBUG] chat_with_agent completed successfully", level=logging.DEBUG)
         return {
             "agent_name": agent_name,
             "query": request.query,  # Return original query without context
@@ -481,12 +606,19 @@ async def chat_with_agent(
         }
     except HTTPException:
         # Re-raise HTTP exceptions to preserve status codes
+        logger.log_message(f"[DEBUG] HTTPException caught and re-raised", level=logging.DEBUG)
         raise
+    except asyncio.TimeoutError:
+        logger.log_message(f"[ERROR] Timeout error in chat_with_agent", level=logging.ERROR)
+        raise HTTPException(status_code=504, detail="Request timed out. Please try a simpler query.")
     except Exception as e:
-        logger.log_message(f"Unexpected error in chat_with_agent: {str(e)}", level=logging.ERROR)
+        logger.log_message(f"[ERROR] Unexpected error in chat_with_agent: {str(e)}", level=logging.ERROR)
+        logger.log_message(f"[ERROR] Exception type: {type(e)}, traceback: {str(e)}", level=logging.ERROR)
+        import traceback
+        logger.log_message(f"[ERROR] Full traceback: {traceback.format_exc()}", level=logging.ERROR)
         raise HTTPException(status_code=500, detail="An unexpected error occurred. Please try again later.")
-    
-    
+
+
 @app.post("/chat", response_model=dict)
 async def chat_with_all(
     request: QueryRequest,
@@ -525,7 +657,6 @@ async def chat_with_all(
         # Re-raise HTTP exceptions to preserve status codes
         raise
     except Exception as e:
-        logger.log_message(f"Unexpected error in chat_with_all: {str(e)}", level=logging.ERROR)
         raise HTTPException(status_code=500, detail="An unexpected error occurred. Please try again later.")
 
 
@@ -554,24 +685,138 @@ def _update_session_from_query_params(request_obj: Request, session_state: dict)
             )
 
 
-def _validate_agent_name(agent_name: str):
-    """Validate that the requested agent(s) exist"""
+def _validate_agent_name(agent_name: str, session_state: dict = None):
+    """Validate that the agent name(s) are available"""
+    logger.log_message(f"[DEBUG] Validating agent name: '{agent_name}'", level=logging.DEBUG)
+    
     if "," in agent_name:
+        # Multiple agents
         agent_list = [agent.strip() for agent in agent_name.split(",")]
+        logger.log_message(f"[DEBUG] Multiple agents detected: {agent_list}", level=logging.DEBUG)
         for agent in agent_list:
-            if agent not in AVAILABLE_AGENTS:
-                available = list(AVAILABLE_AGENTS.keys())
+            is_available = _is_agent_available(agent, session_state)
+            logger.log_message(f"[DEBUG] Agent '{agent}' availability: {is_available}", level=logging.DEBUG)
+            if not is_available:
+                available_agents = _get_available_agents_list(session_state)
+                logger.log_message(f"[DEBUG] Agent '{agent}' not found. Available: {available_agents}", level=logging.DEBUG)
                 raise HTTPException(
-                    status_code=404, 
-                    detail=f"Agent '{agent}' not found. Available agents: {available}"
+                    status_code=400, 
+                    detail=f"Agent '{agent}' not found. Available agents: {available_agents}"
                 )
-    elif agent_name not in AVAILABLE_AGENTS:
-        available = list(AVAILABLE_AGENTS.keys())
-        raise HTTPException(
-            status_code=404, 
-            detail=f"Agent '{agent_name}' not found. Available agents: {available}"
-        )
+    else:
+        # Single agent
+        is_available = _is_agent_available(agent_name, session_state)
+        logger.log_message(f"[DEBUG] Single agent '{agent_name}' availability: {is_available}", level=logging.DEBUG)
+        if not is_available:
+            available_agents = _get_available_agents_list(session_state)
+            logger.log_message(f"[DEBUG] Agent '{agent_name}' not found. Available: {available_agents}", level=logging.DEBUG)
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Agent '{agent_name}' not found. Available agents: {available_agents}"
+            )
+    
+    logger.log_message(f"[DEBUG] Agent validation passed for: '{agent_name}'", level=logging.DEBUG)
 
+def _is_agent_available(agent_name: str, session_state: dict = None) -> bool:
+    """Check if an agent is available (standard, template, or custom)"""
+    # Check if it's a standard agent
+    if _is_standard_agent(agent_name):
+        return True
+    
+    # Check if it's a template agent
+    if _is_template_agent(agent_name):
+        return True
+    
+    # Check if it's a custom agent in session
+    if session_state and "ai_system" in session_state:
+        ai_system = session_state["ai_system"]
+        if hasattr(ai_system, 'agents') and agent_name in ai_system.agents:
+            return True
+    
+    return False
+
+def _get_available_agents_list(session_state: dict = None) -> list:
+    """Get list of all available agents from database"""
+    from src.db.init_db import session_factory
+    from src.agents.agents import load_all_available_templates_from_db
+    
+    # Core agents (always available)
+    available = ["preprocessing_agent", "statistical_analytics_agent", "sk_learn_agent", "data_viz_agent"]
+    
+    # Add template agents from database
+    db_session = session_factory()
+    try:
+        template_agents_dict = load_all_available_templates_from_db(db_session)
+        # template_agents_dict is a dict with template_name as keys
+        template_names = [template_name for template_name in template_agents_dict.keys() 
+                         if template_name not in available and template_name != 'basic_qa_agent']
+        available.extend(template_names)
+    except Exception as e:
+        logger.log_message(f"Error loading template agents: {str(e)}", level=logging.ERROR)
+    finally:
+        db_session.close()
+    
+    return available
+
+def _is_standard_agent(agent_name: str) -> bool:
+    """Check if agent is one of the 4 core standard agents"""
+    standard_agents = ["preprocessing_agent", "statistical_analytics_agent", "sk_learn_agent", "data_viz_agent"]
+    return agent_name in standard_agents
+
+def _is_template_agent(agent_name: str) -> bool:
+    """Check if agent is a template agent"""
+    try:
+        from src.db.init_db import session_factory
+        from src.db.schemas.models import AgentTemplate
+        
+        db_session = session_factory()
+        try:
+            template = db_session.query(AgentTemplate).filter(
+                AgentTemplate.template_name == agent_name,
+                AgentTemplate.is_active == True
+            ).first()
+            return template is not None
+        finally:
+            db_session.close()
+    except Exception as e:
+        logger.log_message(f"Error checking if {agent_name} is template: {str(e)}", level=logging.ERROR)
+        return False
+
+async def _execute_custom_agents(ai_system, agent_names: list, query: str):
+    """Execute custom agents using the session's AI system"""
+    try:
+        # For custom agents, we need to use the AI system's execute_agent method
+        if len(agent_names) == 1:
+            # Single custom agent
+            agent_name = agent_names[0]
+            # Prepare inputs for the custom agent (similar to standard agents like data_viz_agent)
+            dict_ = {}
+            dict_['dataset'] = ai_system.dataset.retrieve(query)[0].text
+            dict_['styling_index'] = ai_system.styling_index.retrieve(query)[0].text
+            dict_['goal'] = query
+            dict_['Agent_desc'] = str(ai_system.agent_desc)
+
+            # Get input fields for this agent
+            if agent_name in ai_system.agent_inputs:
+                inputs = {x: dict_[x] for x in ai_system.agent_inputs[agent_name] if x in dict_}
+                
+                # Execute the custom agent
+                agent_name_result, result_dict = await ai_system.execute_agent(agent_name, inputs)
+                return {agent_name_result: result_dict}
+            else:
+                logger.log_message(f"Agent '{agent_name}' not found in ai_system.agent_inputs", level=logging.ERROR)
+                return {"error": f"Agent '{agent_name}' input configuration not found"}
+        else:
+            # Multiple agents - execute sequentially
+            results = {}
+            for agent_name in agent_names:
+                single_result = await _execute_custom_agents(ai_system, [agent_name], query)
+                results.update(single_result)
+            return results
+            
+    except Exception as e:
+        logger.log_message(f"Error in _execute_custom_agents: {str(e)}", level=logging.ERROR)
+        return {"error": f"Error executing custom agents: {str(e)}"}
 
 def _prepare_query_with_context(query: str, session_state: dict) -> str:
     """Prepare the query with chat context from previous messages"""
@@ -824,6 +1069,7 @@ def _get_model_name_for_provider(provider: str) -> str:
 async def _execute_plan_with_timeout(ai_system, enhanced_query, plan_response):
     """Execute the plan with timeout handling for each step"""
     try:
+        logger.log_message(f"Plan response: {plan_response}", level=logging.INFO)
         # Use the async generator from execute_plan directly
         async for agent_name, inputs, response in ai_system.execute_plan(enhanced_query, plan_response):
             # Yield results as they come
@@ -835,16 +1081,55 @@ async def _execute_plan_with_timeout(ai_system, enhanced_query, plan_response):
 
 # Add an endpoint to list available agents
 @app.get("/agents", response_model=dict)
-async def list_agents():
-    return {
-        "available_agents": list(AVAILABLE_AGENTS.keys()),
-        "planner_agents": list(PLANNER_AGENTS.keys()),
-        "deep_analysis": {
-            "available": True,
-            "description": "Comprehensive multi-step analysis with automated planning"
-        },
-        "description": "List of available specialized agents that can be called using @agent_name"
-    }
+async def list_agents(request: Request, session_id: str = Depends(get_session_id_dependency)):
+    """Get all available agents (standard, template, and custom)"""
+    session_state = app.state.get_session_state(session_id)
+    
+    try:
+        # Get all available agents from database and session
+        available_agents_list = _get_available_agents_list(session_state)
+        
+        # Categorize agents
+        standard_agents = ["preprocessing_agent", "statistical_analytics_agent", "sk_learn_agent", "data_viz_agent"]
+        
+        # Get template agents from database
+        from src.db.init_db import session_factory
+        from src.agents.agents import load_all_available_templates_from_db
+        
+        db_session = session_factory()
+        try:
+            template_agents_dict = load_all_available_templates_from_db(db_session)
+            # template_agents_dict is a dict with template_name as keys
+            template_agents = [template_name for template_name in template_agents_dict.keys() 
+                             if template_name not in standard_agents and template_name != 'basic_qa_agent']
+        except Exception as e:
+            logger.log_message(f"Error loading template agents in /agents endpoint: {str(e)}", level=logging.ERROR)
+            template_agents = []
+        finally:
+            db_session.close()
+        
+        # Get custom agents from session
+        custom_agents = []
+        if session_state and "ai_system" in session_state:
+            ai_system = session_state["ai_system"]
+            if hasattr(ai_system, 'agents'):
+                custom_agents = [agent for agent in available_agents_list
+                               if agent not in standard_agents and agent not in template_agents]
+        
+        # Ensure template agents are in the available list
+        for template_agent in template_agents:
+            if template_agent not in available_agents_list:
+                available_agents_list.append(template_agent)
+        
+        return {
+            "available_agents": available_agents_list,
+            "standard_agents": standard_agents,
+            "template_agents": template_agents,
+            "custom_agents": custom_agents
+        }
+    except Exception as e:
+        logger.log_message(f"Error getting agents list: {str(e)}", level=logging.ERROR)
+        raise HTTPException(status_code=500, detail=f"Error getting agents list: {str(e)}")
 
 @app.get("/health", response_model=dict)
 async def health():
@@ -948,7 +1233,7 @@ async def deep_analysis_streaming(
         session_lm = dspy.LM(model="anthropic/claude-sonnet-4-20250514", max_tokens=7000, temperature=0.5)
         
         return StreamingResponse(
-            _generate_deep_analysis_stream(session_state, request.goal, session_lm),
+            _generate_deep_analysis_stream(session_state, request.goal, session_lm, session_id),
             media_type='text/event-stream',
             headers={
                 'Cache-Control': 'no-cache',
@@ -965,7 +1250,7 @@ async def deep_analysis_streaming(
         logger.log_message(f"Streaming deep analysis failed: {str(e)}", level=logging.ERROR)
         raise HTTPException(status_code=500, detail=f"Streaming deep analysis failed: {str(e)}")
 
-async def _generate_deep_analysis_stream(session_state: dict, goal: str, session_lm):
+async def _generate_deep_analysis_stream(session_state: dict, goal: str, session_lm, session_id: str):
     """Generate streaming responses for deep analysis"""
     # Track the start time for duration calculation
     start_time = datetime.now(UTC)
@@ -1036,7 +1321,6 @@ async def _generate_deep_analysis_stream(session_state: dict, goal: str, session
                         if step == "completed":
                             if content:
                                 report.html_report = content
-                                logger.log_message(f"Storing HTML report in database, length: {len(content)}", level=logging.INFO)
                             else:
                                 logger.log_message("No HTML content provided for completed step", level=logging.WARNING)
                                 
@@ -1072,8 +1356,9 @@ async def _generate_deep_analysis_stream(session_state: dict, goal: str, session
             # Update DB status to running
             await update_report_in_db("running", 5)
             
-            # Get deep analyzer
-            deep_analyzer = app.state.get_deep_analyzer(session_state.get("session_id", "default"))
+            # Get deep analyzer - use the correct session_id from the session_state
+            logger.log_message(f"Getting deep analyzer for session_id: {session_id}, user_id: {user_id}", level=logging.INFO)
+            deep_analyzer = app.state.get_deep_analyzer(session_id)
             
             # Make the dataset available globally for code execution
             globals()['df'] = df
@@ -1127,9 +1412,7 @@ async def _generate_deep_analysis_stream(session_state: dict, goal: str, session
                         # Generate HTML report using the original final_result with Figure objects
                         html_report = None
                         try:
-                            logger.log_message("Generating HTML report...", level=logging.INFO)
                             html_report = generate_html_report(final_result)
-                            logger.log_message(f"HTML report generated successfully, length: {len(html_report) if html_report else 0}", level=logging.INFO)
                         except Exception as e:
                             logger.log_message(f"Error generating HTML report: {str(e)}", level=logging.ERROR)
                             # Continue even if HTML generation fails
@@ -1273,10 +1556,8 @@ async def download_html_report(
                         report.html_report = html_report
                         report.updated_at = datetime.now(UTC)
                         db_session.commit()
-                        logger.log_message(f"Updated HTML report in database for UUID {report_uuid}", level=logging.INFO)
                 except Exception as e:
                     db_session.rollback()
-                    logger.log_message(f"Error storing HTML report in database: {str(e)}", level=logging.ERROR)
                 finally:
                     db_session.close()
             except Exception as e:
@@ -1301,6 +1582,68 @@ async def download_html_report(
         logger.log_message(f"Failed to generate HTML report: {str(e)}", level=logging.ERROR)
         raise HTTPException(status_code=500, detail=f"Failed to generate report: {str(e)}")
 
+@app.get("/debug/deep_analysis_agents")
+async def debug_deep_analysis_agents(session_id: str = Depends(get_session_id_dependency)):
+    """Debug endpoint to show which agents are loaded for deep analysis"""
+    session_state = app.state.get_session_state(session_id)
+    user_id = session_state.get("user_id")
+    
+    try:
+        # Get the deep analyzer for this session
+        deep_analyzer = app.state.get_deep_analyzer(session_id)
+        
+        # Get the agents from the deep analyzer
+        available_agents = list(deep_analyzer.agents.keys()) if hasattr(deep_analyzer, 'agents') else []
+        
+        # Also get the raw enabled agents from database
+        from src.db.init_db import session_factory
+        from src.agents.agents import load_user_enabled_templates_for_planner_from_db
+        
+        db_session = session_factory()
+        try:
+            if user_id:
+                enabled_agents_dict = load_user_enabled_templates_for_planner_from_db(user_id, db_session)
+                db_enabled_agents = list(enabled_agents_dict.keys())
+            else:
+                db_enabled_agents = ["No user_id - using defaults"]
+        finally:
+            db_session.close()
+        
+        return {
+            "session_id": session_id,
+            "user_id": user_id,
+            "deep_analyzer_agents": available_agents,
+            "db_enabled_agents": db_enabled_agents,
+            "agents_match": set(available_agents) == set(db_enabled_agents) if user_id else "N/A"
+        }
+        
+    except Exception as e:
+        logger.log_message(f"Error in debug endpoint: {str(e)}", level=logging.ERROR)
+        return {
+            "error": str(e),
+            "session_id": session_id,
+            "user_id": user_id
+        }
+
+@app.post("/debug/clear_deep_analyzer")
+async def clear_deep_analyzer_cache(session_id: str = Depends(get_session_id_dependency)):
+    """Debug endpoint to clear the deep analyzer cache and force reload"""
+    session_state = app.state.get_session_state(session_id)
+    
+    # Clear the cached deep analyzer
+    if 'deep_analyzer' in session_state:
+        del session_state['deep_analyzer']
+    if 'deep_analyzer_user_id' in session_state:
+        del session_state['deep_analyzer_user_id']
+    
+    logger.log_message(f"Cleared deep analyzer cache for session {session_id}", level=logging.INFO)
+    
+    return {
+        "message": "Deep analyzer cache cleared",
+        "session_id": session_id,
+        "user_id": session_state.get("user_id")
+    }
+
 # In the section where routers are included, add the session_router
 app.include_router(chat_router)
 app.include_router(analytics_router)
@@ -1308,6 +1651,7 @@ app.include_router(code_router)
 app.include_router(session_router)
 app.include_router(feedback_router)
 app.include_router(deep_analysis_router)
+app.include_router(templates_router)
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)

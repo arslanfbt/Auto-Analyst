@@ -101,8 +101,8 @@ export default function LandingPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8">
           <StatsTicker />
         </div>
-        <WhyAutoAnalystSection />
         <AgentsSection />
+        <WhyAutoAnalystSection />
         <FeaturesSection />
         <ConnectorsSection />
         <MissionSection />

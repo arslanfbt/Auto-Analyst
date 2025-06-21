@@ -64,7 +64,11 @@ export default function HeroSection() {
   }, [])
 
   const handleGetStarted = () => {
-    router.push('/chat')
+    if (session) {
+      router.push('/chat')
+    } else {
+      router.push('/login?callbackUrl=/chat')
+    }
   }
 
   const handleCustomSolution = () => {
