@@ -23,7 +23,7 @@ export const MODEL_COSTS = {
     "o1": { input: 0.015, output: 0.06 },  
     "o1-pro": { input: 0.015, output: 0.6 },
     "o1-mini": { input: 0.00011, output: 0.00044 }, 
-    "o3": { input: 0.001, output: 0.04 },
+    "o3": { input: 0.002, output: 0.008 },
     "o3-mini": { input: 0.00011, output: 0.00044 },
     "gpt-3.5-turbo": { input: 0.0005, output: 0.0015 }
   },

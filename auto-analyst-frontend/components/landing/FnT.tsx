@@ -1,5 +1,5 @@
 "use client"
-import { Brain, LineChart, Database, BarChart2, Lock, Zap, FileText, TrendingUp, Cog, BarChart3, Github, Server, Cpu, Globe } from "lucide-react"
+import { Brain, LineChart, Database, BarChart2, Lock, Zap, FileText, TrendingUp, Cog, BarChart3, Github, Server, Cpu, Globe, Wrench, Target, ScatterChart, Table2 } from "lucide-react"
 
 export const features = [
   { 
@@ -34,6 +34,49 @@ export const features = [
   },
 ]
 
+export const templateCategories = [
+  {
+    icon: Table2,
+    name: "Data Manipulation",
+    description: "Transform, clean, and prepare your data for analysis",
+    capabilities: [
+      "Clean and preprocess datasets with advanced techniques",
+      "Handle missing values and data quality issues", 
+      "Transform and reshape data structures",
+    ],
+    color: "from-red-300 to-red-400",
+    bgGradient: "from-red-50 to-red-100",
+    examples: "Pandas preprocessing, Polars optimization, data cleaning specialists"
+  },
+  {
+    icon: Target,
+    name: "Data Modelling", 
+    description: "Build statistical models and machine learning algorithms",
+    capabilities: [
+      "Statistical analysis and hypothesis testing",
+      "Predictive analytics and forecasting",
+      "Sophisticated ML techniques for advanced modelling",
+    ],
+    color: "from-red-400 to-red-500",
+    bgGradient: "from-red-100 to-red-200",
+    examples: "Statistical analysis, ML algorithms, predictive modeling"
+  },
+  {
+    icon: ScatterChart,
+    name: "Data Visualization",
+    description: "Create compelling charts and interactive visualizations",
+    capabilities: [
+      "Interactive and static chart creation",
+      "Multi-dimensional data visualization",
+      "Publication-ready visual outputs"
+    ],
+    color: "from-red-500 to-red-600",
+    bgGradient: "from-red-200 to-red-300",
+    examples: "Plotly interactives, Matplotlib static plots, Seaborn statistical charts"
+  }
+]
+
+// Legacy agents array for backward compatibility
 export const agents = [
   {
     icon: Database,
@@ -56,8 +99,6 @@ export const agents = [
       "Correlation and regression analysis",
       "Hypothesis testing and A/B tests",
       "Time series analysis",
-      "Statistical modeling",
-      "Confidence intervals and p-values"
     ],
     color: "from-green-500 to-green-600"
   },
@@ -66,11 +107,9 @@ export const agents = [
     name: "Scikit-Learn Agent",
     description: "Machine learning specialist for predictive modeling",
     capabilities: [
-      "Random Forest and ensemble methods",
       "K-means clustering analysis", 
       "Classification and regression",
       "Feature selection and engineering",
-      "Model evaluation and validation"
     ],
     color: "from-purple-500 to-purple-600"
   },
@@ -80,13 +119,24 @@ export const agents = [
     description: "Interactive visualizations using Plotly",
     capabilities: [
       "Interactive charts and graphs",
-      "Statistical plot recommendations",
       "Multi-dimensional visualizations",
       "Custom styling and formatting",
       "Export-ready visualizations"
     ],
     color: "from-orange-500 to-orange-600"
   }
+]
+
+export const majorLibraries = [
+  { name: "Pandas", category: "Data Manipulation", icon: "/icons/templates/preprocessing_agent.svg", description: "Data cleaning & preprocessing" },
+  { name: "NumPy", category: "Data Manipulation", icon: "/icons/templates/numpy.svg", description: "Numerical computing foundation" },
+  { name: "Polars", category: "Data Manipulation", icon: "/icons/templates/polars.svg", description: "High-performance data processing" },
+  { name: "Scikit-Learn", category: "Data Modelling", icon: "/icons/templates/sk_learn_agent.svg", description: "Machine learning algorithms" },
+  { name: "XGBoost", category: "Data Modelling", icon: "/icons/templates/xgboost.svg", description: "Gradient boosting framework" },
+  { name: "Statistical Models", category: "Data Modelling", icon: "/icons/templates/statsmodels.svg", description: "Statistical analysis tools" },
+  { name: "Plotly", category: "Data Visualization", icon: "/icons/templates/data_viz_agent.svg", description: "Interactive visualizations" },
+  { name: "Matplotlib", category: "Data Visualization", icon: "/icons/templates/matplotlib.svg", description: "Static publication plots" },
+  { name: "Seaborn", category: "Data Visualization", icon: "/icons/templates/seaborn.svg", description: "Statistical visualizations" }
 ]
 
 export const supportedConnectors = [

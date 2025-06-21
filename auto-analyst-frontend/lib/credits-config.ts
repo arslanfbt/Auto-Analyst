@@ -26,7 +26,7 @@ export interface CreditThresholds {
   unlimitedThreshold: number
   /** Default credits for new users */
   defaultInitial: number
-  /** Warning threshold percentage (when to warn users about low credits) */
+/** Warning threshold percentage (when to warn users about low credits) */
   warningThreshold: number
 }
 

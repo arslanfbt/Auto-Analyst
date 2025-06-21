@@ -318,7 +318,8 @@ def execute_code_from_markdown(code_str, dataframe=None):
     import re
     import traceback
     import sys
-    from io import StringIO
+    from io import StringIO, BytesIO
+    import base64
 
     # Check for security concerns in the code
     security_concerns = check_security_concerns(code_str)
@@ -451,6 +452,34 @@ def execute_code_from_markdown(code_str, dataframe=None):
         
         # Also use original print for stdout capture
         original_print(*args, **kwargs)
+
+    # Custom matplotlib capture function
+    def capture_matplotlib_chart():
+        """Capture current matplotlib figure as base64 encoded image"""
+        try:
+            fig = plt.gcf()  # Get current figure
+            if fig.get_axes():  # Check if figure has any plots
+                buffer = BytesIO()
+                fig.savefig(buffer, format='png', dpi=150, bbox_inches='tight', 
+                           facecolor='white', edgecolor='none')
+                buffer.seek(0)
+                img_base64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
+                buffer.close()
+                plt.close(fig)  # Close the figure to free memory
+                return img_base64
+            return None
+        except Exception:
+            return None
+
+    # Store original plt.show function
+    original_plt_show = plt.show
+    
+    def custom_plt_show(*args, **kwargs):
+        """Custom plt.show that captures the chart instead of displaying it"""
+        img_base64 = capture_matplotlib_chart()
+        if img_base64:
+            matplotlib_outputs.append(img_base64)
+        # Don't call original show to prevent display
     
     context = {
         'pd': pd,
@@ -463,8 +492,15 @@ def execute_code_from_markdown(code_str, dataframe=None):
         'sns': sns,
         'np': np,
         'json_outputs': [],  # List to store multiple Plotly JSON outputs
+        'matplotlib_outputs': [],  # List to store matplotlib chart images as base64
         'print': enhanced_print  # Replace print with our enhanced version
     }
+    
+    # Add matplotlib_outputs to local scope for the custom show function
+    matplotlib_outputs = context['matplotlib_outputs']
+    
+    # Replace plt.show with our custom function
+    plt.show = custom_plt_show
     
     
 
@@ -479,8 +515,7 @@ def execute_code_from_markdown(code_str, dataframe=None):
         r'(\w*_?)fig(\w*)\.to_html\(.*?\)',
         r'json_outputs.append(plotly.io.to_json(\1fig\2, pretty=True))',
         modified_code
-    )
-    
+    )    
     # Remove reading the csv file if it's already in the context
     modified_code = re.sub(r"df\s*=\s*pd\.read_csv\([\"\'].*?[\"\']\).*?(\n|$)", '', modified_code)
     
@@ -526,9 +561,30 @@ def execute_code_from_markdown(code_str, dataframe=None):
 
     # Remove sample dataframe lines with multiple array values
     modified_code = re.sub(r"^# Sample DataFrames?.*?(\n|$)", '', modified_code, flags=re.MULTILINE | re.IGNORECASE)
+    
+    # Replace plt.savefig() calls with plt.show() to ensure plots are displayed
+    modified_code = re.sub(r'plt\.savefig\([^)]*\)', 'plt.show()', modified_code)
+    
+    # Instead of removing plt.show(), keep them - they'll be handled by our custom function
+    # Also handle seaborn plots that might not have explicit plt.show()
+    # Add plt.show() after seaborn plot functions if not already present
+    seaborn_plot_functions = [
+        'sns.scatterplot', 'sns.lineplot', 'sns.barplot', 'sns.boxplot', 'sns.violinplot',
+        'sns.stripplot', 'sns.swarmplot', 'sns.pointplot', 'sns.catplot', 'sns.relplot',
+        'sns.displot', 'sns.histplot', 'sns.kdeplot', 'sns.ecdfplot', 'sns.rugplot',
+        'sns.distplot', 'sns.jointplot', 'sns.pairplot', 'sns.FacetGrid', 'sns.PairGrid',
+        'sns.heatmap', 'sns.clustermap', 'sns.regplot', 'sns.lmplot', 'sns.residplot'
+    ]
+    
+    # Add automatic plt.show() after seaborn plots if not already present
+    for func in seaborn_plot_functions:
+        pattern = rf'({re.escape(func)}\([^)]*\)(?:\.[^(]*\([^)]*\))*)'
+        def add_show(match):
+            plot_call = match.group(1)
+            # Check if the next non-empty line already has plt.show()
+            return f'{plot_call}\nplt.show()'
         
-    # Remove plt.show() statements
-    modified_code = re.sub(r"plt\.show\(\).*?(\n|$)", '', modified_code)
+        modified_code = re.sub(pattern, add_show, modified_code)
     
     # Only add df = pd.read_csv() if no dataframe was provided and the code contains pd.read_csv
     if dataframe is None and 'pd.read_csv' not in modified_code:
@@ -590,6 +646,9 @@ def execute_code_from_markdown(code_str, dataframe=None):
             
             # Restore original DataFrame representation in case of error
             pd.DataFrame.__repr__ = original_repr
+            
+            # Restore original plt.show
+            plt.show = original_plt_show
             
             error_traceback = traceback.format_exc()
             
@@ -747,9 +806,13 @@ def execute_code_from_markdown(code_str, dataframe=None):
     # Restore original DataFrame representation
     pd.DataFrame.__repr__ = original_repr
     
+    # Restore original plt.show
+    plt.show = original_plt_show
+    
     # Compile all outputs and errors
     output_text = ""
     json_outputs = context.get('json_outputs', [])
+    matplotlib_outputs = context.get('matplotlib_outputs', [])
     error_found = False
     
     for block_name, output, error in all_outputs:
@@ -760,9 +823,9 @@ def execute_code_from_markdown(code_str, dataframe=None):
             output_text += f"\n\n=== OUTPUT FROM {block_name.upper()}_AGENT ===\n{output}\n"
     
     if error_found:
-        return output_text, []
+        return output_text, [], []
     else:
-        return output_text, json_outputs
+        return output_text, json_outputs, matplotlib_outputs
     
     
 def format_plan_instructions(plan_instructions):
@@ -961,14 +1024,17 @@ def format_response_to_markdown(api_response, agent_name = None, dataframe=None)
                     if content['refined_complete_code'] is not None and content['refined_complete_code'] != "":
                         clean_code = format_code_block(content['refined_complete_code']) 
                         markdown_code = format_code_backticked_block(content['refined_complete_code'])
-                        output, json_outputs = execute_code_from_markdown(clean_code, dataframe)
+                        output, json_outputs, matplotlib_outputs = execute_code_from_markdown(clean_code, dataframe)
                     elif "```python" in content['summary']:
                         clean_code = format_code_block(content['summary'])
                         markdown_code = format_code_backticked_block(content['summary'])
-                        output, json_outputs = execute_code_from_markdown(clean_code, dataframe)
+                        output, json_outputs, matplotlib_outputs = execute_code_from_markdown(clean_code, dataframe)
                 except Exception as e:
                     logger.log_message(f"Error in execute_code_from_markdown: {str(e)}", level=logging.ERROR)
                     markdown_code = f"**Error**: {str(e)}"
+                    output = None
+                    json_outputs = []
+                    matplotlib_outputs = []
                     # continue
                 
                 if markdown_code is not None:
@@ -982,6 +1048,11 @@ def format_response_to_markdown(api_response, agent_name = None, dataframe=None)
                     markdown.append("### Plotly JSON Outputs\n")
                     for idx, json_output in enumerate(json_outputs):
                         markdown.append(f"```plotly\n{json_output}\n```\n")
+                        
+                if matplotlib_outputs:
+                    markdown.append("### Matplotlib/Seaborn Charts\n")
+                    for idx, img_base64 in enumerate(matplotlib_outputs):
+                        markdown.append(f"```matplotlib\n{img_base64}\n```\n")
             # if agent_name is not None:  
             #     if f"memory_{agent_name}" in api_response:
             #         markdown.append(f"### Memory\n{api_response[f'memory_{agent_name}']}\n")

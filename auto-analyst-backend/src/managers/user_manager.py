@@ -1,12 +1,13 @@
 import logging
 import os
 from typing import Optional
+from datetime import datetime, UTC
 
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import APIKeyHeader
 
 from src.db.init_db import get_session
-from src.db.schemas.models import User as DBUser
+from src.db.schemas.models import User as DBUser, AgentTemplate, UserTemplatePreference
 from src.schemas.user_schemas import User
 from src.utils.logger import Logger
 
@@ -100,6 +101,9 @@ def create_user(username: str, email: str) -> User:
         session.commit()
         session.refresh(new_user)
         
+        # Enable default agents for the new user
+        _enable_default_agents_for_user(new_user.user_id, session)
+        
         return User(
             user_id=new_user.user_id,
             username=new_user.username,
@@ -131,3 +135,48 @@ def get_user_by_email(email: str) -> Optional[User]:
         return None
     finally:
         session.close()
+
+def _enable_default_agents_for_user(user_id: int, session):
+    """Enable default agents for a new user"""
+    try:
+        # Get all default agents (the 4 built-in agents)
+        default_agent_names = [
+            "preprocessing_agent",
+            "statistical_analytics_agent", 
+            "sk_learn_agent",
+            "data_viz_agent"
+        ]
+        
+        # Find these agents in the database
+        default_agents = session.query(AgentTemplate).filter(
+            AgentTemplate.template_name.in_(default_agent_names),
+            AgentTemplate.is_active == True
+        ).all()
+        
+        # Enable each default agent for the user
+        for agent in default_agents:
+            # Check if preference already exists
+            existing_pref = session.query(UserTemplatePreference).filter(
+                UserTemplatePreference.user_id == user_id,
+                UserTemplatePreference.template_id == agent.template_id
+            ).first()
+            
+            if not existing_pref:
+                # Create new preference with enabled=True
+                new_pref = UserTemplatePreference(
+                    user_id=user_id,
+                    template_id=agent.template_id,
+                    is_enabled=True,  # Enable by default
+                    usage_count=0,
+                    created_at=datetime.now(UTC),
+                    updated_at=datetime.now(UTC)
+                )
+                session.add(new_pref)
+        
+        session.commit()
+        logger.log_message(f"Enabled {len(default_agents)} default agents for user {user_id}", level=logging.INFO)
+        
+    except Exception as e:
+        session.rollback()
+        logger.log_message(f"Error enabling default agents for user {user_id}: {str(e)}", level=logging.ERROR)
+        raise

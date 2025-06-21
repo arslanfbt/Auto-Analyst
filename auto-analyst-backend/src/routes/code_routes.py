@@ -586,12 +586,13 @@ async def execute_code(
         # Execute the code with the dataframe from session state
         full_output = ""
         json_outputs = []
+        matplotlib_outputs = []
         is_successful = True
         failed_agents = None
         error_messages = None
         
         try:
-            full_output, json_outputs = execute_code_from_markdown(code, session_state["current_df"])
+            full_output, json_outputs, matplotlib_outputs = execute_code_from_markdown(code, session_state["current_df"])
             
             # Even with "successful" execution, check for agent failures in the output
             failed_blocks = identify_error_blocks(code, full_output)
@@ -607,6 +608,8 @@ async def execute_code(
             
         except Exception as exec_error:
             full_output = str(exec_error)
+            json_outputs = []
+            matplotlib_outputs = []
             is_successful = False
             
             # Identify which agents failed
@@ -664,10 +667,14 @@ async def execute_code(
         # Format plotly outputs for frontend
         plotly_outputs = [f"```plotly\n{json_output}\n```\n" for json_output in json_outputs]
         
+        # Format matplotlib outputs for frontend
+        matplotlib_chart_outputs = [f"```matplotlib\n{img_base64}\n```\n" for img_base64 in matplotlib_outputs]
+        
         # Include execution status in the response
         return {
             "output": full_output,
             "plotly_outputs": plotly_outputs if json_outputs else None,
+            "matplotlib_outputs": matplotlib_chart_outputs if matplotlib_outputs else None,
             "is_successful": is_successful,
             "failed_agents": failed_agents
         }

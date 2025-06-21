@@ -8,44 +8,340 @@ load_dotenv()
 
 logger = Logger("agents", see_time=True, console_log=False)
 
+# === CUSTOM AGENT FUNCTIONALITY ===
+def create_custom_agent_signature(agent_name, description, prompt_template, category=None):
+    """
+    Dynamically creates a dspy.Signature class for custom agents.
+    
+    Args:
+        agent_name: Name of the custom agent (e.g., 'pytorch_agent')
+        description: Short description for agent selection
+        prompt_template: Main prompt/instructions for agent behavior
+        category: Agent category from database (e.g., 'Visualization', 'Modelling', 'Data Manipulation')
+    
+    Returns:
+        A dspy.Signature class with the custom prompt and standard input/output fields
+    """
+    
+    # Check if this is a visualization agent to determine input fields
+    # First check category, then fallback to name-based detection
+    if category and category.lower() == 'visualization':
+        is_viz_agent = True
+    else:
+        is_viz_agent = 'viz' in agent_name.lower() or 'visual' in agent_name.lower() or 'plot' in agent_name.lower() or 'chart' in agent_name.lower()
 
-AGENTS_WITH_DESCRIPTION = {
-    "preprocessing_agent": "Cleans and prepares a DataFrame using Pandas and NumPy—handles missing values, detects column types, and converts date strings to datetime.",
-    "statistical_analytics_agent": "Performs statistical analysis (e.g., regression, seasonal decomposition) using statsmodels, with proper handling of categorical data and missing values.",
-    "sk_learn_agent": "Trains and evaluates machine learning models using scikit-learn, including classification, regression, and clustering with feature importance insights.",
-    "data_viz_agent": "Generates interactive visualizations with Plotly, selecting the best chart type to reveal trends, comparisons, and insights based on the analysis goal."
-}
+    # Standard input/output fields that match the unified agent signatures
+    class_attributes = {
+        '__doc__': prompt_template,  # The custom prompt becomes the docstring
+        'goal': dspy.InputField(desc="User-defined goal which includes information about data and task they want to perform"),
+        'dataset': dspy.InputField(desc="Provides information about the data in the data frame. Only use column names and dataframe_name as in this context"),
+        'plan_instructions': dspy.InputField(desc="Agent-level instructions about what to create and receive", default=""),
+        'code': dspy.OutputField(desc="Generated Python code for the analysis"),
+        'summary': dspy.OutputField(desc="A concise bullet-point summary of what was done and key results")
+    }
+    
+    
+    # Add styling_index for visualization agents
+    if is_viz_agent:
+        class_attributes['styling_index'] = dspy.InputField(desc='Provides instructions on how to style outputs and formatting')
+    
+    # Create the dynamic signature class
+    CustomAgentSignature = type(agent_name, (dspy.Signature,), class_attributes)
+    return CustomAgentSignature
 
-PLANNER_AGENTS_WITH_DESCRIPTION = {
-    "planner_preprocessing_agent": (
-        "Cleans and prepares a DataFrame using Pandas and NumPy"
-        "handles missing values, detects column types, and converts date strings to datetime. "
-        "Outputs a cleaned DataFrame for the planner_statistical_analytics_agent."
-    ),
-    "planner_statistical_analytics_agent": (
-        "Takes the cleaned DataFrame from preprocessing, performs statistical analysis "
-        "(e.g., regression, seasonal decomposition) using statsmodels with proper handling "
-        "of categorical data and remaining missing values. "
-        "Produces summary statistics and model diagnostics for the planner_sk_learn_agent."
-    ),
-    "planner_sk_learn_agent": (
-        "Receives summary statistics and the cleaned data, trains and evaluates machine "
-        "learning models using scikit-learn (classification, regression, clustering), "
-        "and generates performance metrics and feature importance. "
-        "Passes the trained models and evaluation results to the planner_data_viz_agent."
-    ),
-    "planner_data_viz_agent": (
-        "Consumes trained models and evaluation results to create interactive visualizations "
-        "with Plotly—selects the best chart type, applies styling, and annotates insights. "
-        "Delivers ready-to-share figures that communicate model performance and key findings."
-    ),
-}
+def load_user_enabled_templates_from_db(user_id, db_session):
+    """
+    Load template agents that are enabled for a specific user from the database.
+    Default agents are enabled by default unless explicitly disabled by user preference.
+    
+    Args:
+        user_id: ID of the user
+        db_session: Database session
+    
+    Returns:
+        Dict of template agent signatures keyed by template name
+    """
+    try:
+        from src.db.schemas.models import AgentTemplate, UserTemplatePreference
+        
+        agent_signatures = {}
+        
+        if not user_id:
+            return agent_signatures
+        
+        # Get list of default agent names that should be enabled by default
+        default_agent_names = [
+            "preprocessing_agent",
+            "statistical_analytics_agent", 
+            "sk_learn_agent",
+            "data_viz_agent"
+        ]
+        
+        # Get all active templates
+        all_templates = db_session.query(AgentTemplate).filter(
+            AgentTemplate.is_active == True
+        ).all()
+        
+        for template in all_templates:
+            # Check if user has explicitly disabled this template
+            preference = db_session.query(UserTemplatePreference).filter(
+                UserTemplatePreference.user_id == user_id,
+                UserTemplatePreference.template_id == template.template_id
+            ).first()
+            
+            # Determine if template should be enabled by default
+            is_default_agent = template.template_name in default_agent_names
+            default_enabled = is_default_agent  # Default agents enabled by default, others disabled
+            
+            # Template is enabled by default for default agents, disabled for others
+            is_enabled = preference.is_enabled if preference else default_enabled
+
+            if is_enabled:
+                # Create dynamic signature for each enabled template
+                signature = create_custom_agent_signature(
+                    template.template_name,
+                    template.description,
+                    template.prompt_template,
+                    template.category  # Pass the category from database
+                )
+                agent_signatures[template.template_name] = signature
+                
+        return agent_signatures
+        
+    except Exception as e:
+        logger.log_message(f"Error loading user enabled templates for user {user_id}: {str(e)}", level=logging.ERROR)
+        return {}
+
+def load_user_enabled_templates_for_planner_from_db(user_id, db_session):
+    """
+    Load planner variant template agents that are enabled for planner use (max 10, prioritized by usage).
+    Default planner agents are enabled by default unless explicitly disabled by user preference.
+    Custom/premium agents require explicit enablement.
+    
+    Args:
+        user_id: ID of the user
+        db_session: Database session
+    
+    Returns:
+        Dict of template agent signatures keyed by template name (max 10)
+    """
+    try:
+        from src.db.schemas.models import AgentTemplate, UserTemplatePreference
+        from datetime import datetime, UTC
+        
+        agent_signatures = {}
+        
+        if not user_id:
+            return agent_signatures
+        
+        # Get list of default planner agent names that should be enabled by default
+        default_planner_agent_names = [
+            "planner_preprocessing_agent",
+            "planner_statistical_analytics_agent", 
+            "planner_sk_learn_agent",
+            "planner_data_viz_agent"
+        ]
+        
+        # Get all active planner variant templates
+        all_templates = db_session.query(AgentTemplate).filter(
+            AgentTemplate.is_active == True,
+            AgentTemplate.variant_type.in_(['planner', 'both'])
+        ).all()
+        
+        enabled_templates = []
+        for template in all_templates:
+            # Check if user has a preference record for this template
+            preference = db_session.query(UserTemplatePreference).filter(
+                UserTemplatePreference.user_id == user_id,
+                UserTemplatePreference.template_id == template.template_id
+            ).first()
+            
+            # Determine if template should be enabled by default
+            is_default_planner_agent = template.template_name in default_planner_agent_names
+            default_enabled = is_default_planner_agent  # Default planner agents enabled by default, others disabled
+            
+            # Template is enabled by default for default agents, disabled for others
+            is_enabled = preference.is_enabled if preference else default_enabled
+            
+            if is_enabled:
+                enabled_templates.append({
+                    'template': template,
+                    'preference': preference,
+                    'usage_count': preference.usage_count if preference else 0,
+                    'last_used_at': preference.last_used_at if preference else None
+                })
+        
+        # Sort by usage (most used first) and limit to 10
+        enabled_templates.sort(key=lambda x: (x['usage_count'], x['last_used_at'] or datetime.min.replace(tzinfo=UTC)), reverse=True)
+        enabled_templates = enabled_templates[:10]
+        
+        for item in enabled_templates:
+            template = item['template']
+            # Create dynamic signature for each enabled template
+            signature = create_custom_agent_signature(
+                template.template_name,
+                template.description,
+                template.prompt_template,
+                template.category  # Pass the category from database
+            )
+            agent_signatures[template.template_name] = signature
+                
+        logger.log_message(f"Loaded {len(agent_signatures)} templates for planner", level=logging.DEBUG)
+        return agent_signatures
+        
+    except Exception as e:
+        logger.log_message(f"Error loading planner templates for user {user_id}: {str(e)}", level=logging.ERROR)
+        return {}
+
+def get_all_available_templates(db_session):
+    """
+    Get all available agent templates from the database.
+    
+    Args:
+        db_session: Database session
+    
+    Returns:
+        List of agent template records
+    """
+    try:
+        from src.db.schemas.models import AgentTemplate
+        
+        templates = db_session.query(AgentTemplate).filter(
+            AgentTemplate.is_active == True
+        ).all()
+        
+        return templates
+        
+    except Exception as e:
+        logger.log_message(f"Error getting all available templates: {str(e)}", level=logging.ERROR)
+        return []
+
+def toggle_user_template_preference(user_id, template_id, is_enabled, db_session):
+    """
+    Toggle a user's template preference (enable/disable).
+    
+    Args:
+        user_id: ID of the user
+        template_id: ID of the template
+        is_enabled: Whether to enable or disable the template
+        db_session: Database session
+    
+    Returns:
+        Tuple (success: bool, message: str)
+    """
+    try:
+        from src.db.schemas.models import UserTemplatePreference, AgentTemplate
+        from datetime import datetime, UTC
+        
+        # Verify template exists and is active
+        template = db_session.query(AgentTemplate).filter(
+            AgentTemplate.template_id == template_id,
+            AgentTemplate.is_active == True
+        ).first()
+        
+        if not template:
+            return False, "Template not found or inactive"
+        
+        # Check if preference record exists
+        preference = db_session.query(UserTemplatePreference).filter(
+            UserTemplatePreference.user_id == user_id,
+            UserTemplatePreference.template_id == template_id
+        ).first()
+        
+        if preference:
+            # Update existing preference
+            preference.is_enabled = is_enabled
+            preference.updated_at = datetime.now(UTC)
+        else:
+            # Create new preference record
+            preference = UserTemplatePreference(
+                user_id=user_id,
+                template_id=template_id,
+                is_enabled=is_enabled,
+                usage_count=0,
+                created_at=datetime.now(UTC),
+                updated_at=datetime.now(UTC)
+            )
+            db_session.add(preference)
+        
+        db_session.commit()
+        
+        action = "enabled" if is_enabled else "disabled"
+        return True, f"Template '{template.template_name}' {action} successfully"
+        
+    except Exception as e:
+        db_session.rollback()
+        logger.log_message(f"Error toggling template preference: {str(e)}", level=logging.ERROR)
+        return False, f"Error updating template preference: {str(e)}"
+
+
+
+def load_all_available_templates_from_db(db_session):
+    """
+    Load ALL available individual variant template agents from the database for direct access.
+    This allows users to use any individual template via @template_name regardless of preferences.
+    
+    Args:
+        db_session: Database session
+    
+    Returns:
+        Dict of template agent signatures keyed by template name
+    """
+    try:
+        from src.db.schemas.models import AgentTemplate
+        
+        agent_signatures = {}
+        
+        # Get all active individual variant templates
+        all_templates = db_session.query(AgentTemplate).filter(
+            AgentTemplate.is_active == True,
+            AgentTemplate.variant_type.in_(['individual', 'both'])
+        ).all()
+        
+        for template in all_templates:
+            # Create dynamic signature for all active templates
+            signature = create_custom_agent_signature(
+                template.template_name,
+                template.description,
+                template.prompt_template,
+                template.category  # Pass the category from database
+            )
+            agent_signatures[template.template_name] = signature
+                
+        return agent_signatures
+        
+    except Exception as e:
+        logger.log_message(f"Error loading all available templates: {str(e)}", level=logging.ERROR)
+        return {}
+
+
+
+# === END CUSTOM AGENT FUNCTIONALITY ===
 
 def get_agent_description(agent_name, is_planner=False):
-    if is_planner:
-        return PLANNER_AGENTS_WITH_DESCRIPTION[agent_name.lower()] if agent_name.lower() in PLANNER_AGENTS_WITH_DESCRIPTION else "No description available for this agent"
-    else:
-        return AGENTS_WITH_DESCRIPTION[agent_name.lower()] if agent_name.lower() in AGENTS_WITH_DESCRIPTION else "No description available for this agent"
+    """
+    Get agent description from database instead of hardcoded dictionaries.
+    This function is kept for backward compatibility but will fetch from DB.
+    """
+    try:
+        from src.db.init_db import session_factory
+        from src.db.schemas.models import AgentTemplate
+        
+        db_session = session_factory()
+        try:
+            template = db_session.query(AgentTemplate).filter(
+                AgentTemplate.template_name == agent_name,
+                AgentTemplate.is_active == True
+            ).first()
+            
+            if template:
+                return template.description
+            else:
+                return "No description available for this agent"
+        finally:
+            db_session.close()
+    except Exception as e:
+        return "No description available for this agent"
 
 
 # Agent to make a Chat history name from a query
@@ -88,10 +384,91 @@ TECHNICAL CONSIDERATIONS FOR ANALYSIS:
     description = dspy.OutputField(desc="A comprehensive dataset description with business context and technical guidance for analysis agents.")
 
 
+class custom_agent_instruction_generator(dspy.Signature):
+    """You are an AI agent instruction generator that creates comprehensive, professional prompts for custom data analysis agents.
+    
+    Your task is to take a user's requirements and generate a detailed agent instruction that follows the same structure and quality as the default system agents (preprocessing_agent, statistical_analytics_agent, sk_learn_agent, data_viz_agent).
+    
+    Key requirements for generated instructions:
+    1. **Professional Structure**: Use clear sections with headers and bullet points
+    2. **Input/Output Specification**: Clearly define what the agent receives and produces
+    3. **Technical Guidelines**: Include specific library recommendations and best practices
+    4. **Error Handling**: Include instructions for handling common issues
+    5. **Code Quality**: Emphasize clean, reproducible, and well-documented code
+    6. **Standardized Outputs**: Ensure consistent format with 'code' and 'summary' outputs
+    
+    Structure your instructions as follows:
+    - Brief role definition and purpose
+    - Input specifications and expectations
+    - Core responsibilities and tasks
+    - Technical requirements and best practices
+    - Library and methodology recommendations
+    - Error handling and edge cases
+    - Output format requirements
+    - Example code patterns (if relevant)
+    
+    Categories and their focus areas:
+    
+    **Visualization**: 
+    - Emphasize Plotly for interactive charts
+    - Include styling and layout best practices
+    - Focus on chart type selection based on data
+    - Performance optimization for large datasets
+    - Color schemes and accessibility
+    
+    **Modelling**:
+    - Cover model selection and evaluation
+    - Include cross-validation and metrics
+    - Emphasize feature engineering and preprocessing
+    - Handle different problem types (classification, regression, clustering)
+    - Include hyperparameter tuning guidance
+    
+    **Data Manipulation**:
+    - Focus on Pandas and NumPy operations
+    - Include data cleaning and transformation
+    - Handle missing values and outliers
+    - Emphasize data type conversions
+    - Include aggregation and reshaping operations
+    
+    Make instructions generic enough to handle various tasks within the category while being specific enough to provide clear guidance.
+    Always include the standard output format: 'code' (Python code) and 'summary' (bullet-point explanation).
+    
+    Example instruction structure:
+    '''
+    You are a [specific role] agent specializing in [category focus]. Your task is to [main purpose]...
+    
+    **Input Requirements:**
+    - dataset: [description]
+    - goal: [description]
+    - [other inputs as needed]
+    
+    **Core Responsibilities:**
+    1. [Primary task]
+    2. [Secondary task]
+    3. [Additional requirements]
+    
+    **Technical Guidelines:**
+    - Use [recommended libraries]
+    - Follow [best practices]
+    - Handle [common issues]
+    
+    **Output Requirements:**
+    - code: [code specification]
+    - summary: [summary specification]
+    '''
+    """
+    category = dspy.InputField(desc="The category of the custom agent: 'Visualization', 'Modelling', or 'Data Manipulation'")
+    user_requirements = dspy.InputField(desc="User's description of what they want the agent to do, including specific tasks, methods, or focus areas")
+    agent_instructions = dspy.OutputField(desc="Complete, professional agent instructions following the structure and quality of default system agents, ready to be used as a custom agent prompt")
 
 class advanced_query_planner(dspy.Signature):
     """
 You are a advanced data analytics planner agent. Your task is to generate the most efficient plan—using the fewest necessary agents and variables—to achieve a user-defined goal. The plan must preserve data integrity, avoid unnecessary steps, and ensure clear data flow between agents.
+
+**CRITICAL**: Before planning, check if any agents are available in Agent_desc. If Agent_desc is empty or contains no active agents, respond with:
+plan: no_agents_available
+plan_instructions: {"message": "No agents are currently enabled for analysis. Please enable at least one agent (preprocessing, statistical analysis, machine learning, or visualization) in your template preferences to proceed with data analysis."}
+
 **Inputs**:
 1. Datasets (raw or preprocessed)
 2. Agent descriptions (roles, variables they create/use, constraints)
@@ -102,15 +479,15 @@ You are a advanced data analytics planner agent. Your task is to generate the mo
 3. **Instructions**: For each agent, define:
    * **create**: output variables and their purpose
    * **use**: input variables and their role
-   * **instruction**: concise explanation of the agent’s function and relevance to the goal
+   * **instruction**: concise explanation of the agent's function and relevance to the goal
 4. **Clarity**: Keep instructions precise; avoid intermediate steps unless necessary; ensure each agent has a distinct, relevant role.
 ### **Output Format**:
 Example: 1 agent use
   goal: "Generate a bar plot showing sales by category after cleaning the raw data and calculating the average of the 'sales' column"
 Output:
-  plan: planner_data_viz_agent
+  plan: data_viz_agent
 {
-  "planner_data_viz_agent": {
+  "data_viz_agent": {
     "create": [
       "cleaned_data: DataFrame - cleaned version of df (pd.Dataframe) after removing null values"
     ],
@@ -122,9 +499,9 @@ Output:
 }
 Example 3 Agent 
 goal:"Clean the dataset, run a linear regression to model the relationship between marketing budget and sales, and visualize the regression line with confidence intervals."
-plan: planner_preprocessing_agent -> planner_statistical_analytics_agent -> planner_data_viz_agent
+plan: preprocessing_agent -> statistical_analytics_agent -> data_viz_agent
 {
-  "planner_preprocessing_agent": {
+  "preprocessing_agent": {
     "create": [
       "cleaned_data: DataFrame - cleaned version of df with missing values handled and proper data types inferred"
     ],
@@ -133,7 +510,7 @@ plan: planner_preprocessing_agent -> planner_statistical_analytics_agent -> plan
     ],
     "instruction": "Clean df by handling missing values and converting column types (e.g., dates). Output cleaned_data for modeling."
   },
-  "planner_statistical_analytics_agent": {
+  "statistical_analytics_agent": {
     "create": [
       "regression_results: dict - model summary including coefficients, p-values, R², and confidence intervals"
     ],
@@ -142,7 +519,7 @@ plan: planner_preprocessing_agent -> planner_statistical_analytics_agent -> plan
     ],
     "instruction": "Perform linear regression using cleaned_data to model sales as a function of marketing budget. Return regression_results including coefficients and confidence intervals."
   },
-  "planner_data_viz_agent": {
+  "data_viz_agent": {
     "create": [
       "regression_plot: PlotlyFigure - visual plot showing regression line with confidence intervals"
     ],
@@ -167,20 +544,25 @@ class basic_query_planner(dspy.Signature):
     """
     You are the basic query planner in the system, you pick one agent, to answer the user's goal.
     Use the Agent_desc that describes the names and actions of agents available.
+    
+    **CRITICAL**: Before planning, check if any agents are available in Agent_desc. If Agent_desc is empty or contains no active agents, respond with:
+    plan: no_agents_available
+    plan_instructions: {"message": "No agents are currently enabled for analysis. Please enable at least one agent (preprocessing, statistical analysis, machine learning, or visualization) in your template preferences to proceed with data analysis."}
+    
     Example: Visualize height and salary?
-    plan:planner_data_viz_agent
+    plan:data_viz_agent
     plan_instructions:
                {
-                    "planner_data_viz_agent": {
+                    "data_viz_agent": {
                         "create": ["scatter_plot"],
                         "use": ["original_data"],
                         "instruction": "use the original_data to create scatter_plot of height & salary, using plotly"
                     }
                 }
     Example: Tell me the correlation between X and Y
-    plan:planner_preprocessing_agent
+    plan:preprocessing_agent
     plan_instructions:{
-                    "planner_data_viz_agent": {
+                    "data_viz_agent": {
                         "create": ["correlation"],
                         "use": ["original_data"],
                         "instruction": "use the original_data to measure correlation of X & Y, using pandas"
@@ -206,6 +588,11 @@ class intermediate_query_planner(dspy.Signature):
     3. User-defined Goal
     You take these three inputs to develop a comprehensive plan to achieve the user-defined goal from the data & Agents available.
     In case you think the user-defined goal is infeasible you can ask the user to redefine or add more description to the goal.
+    
+    **CRITICAL**: Before planning, check if any agents are available in Agent_desc. If Agent_desc is empty or contains no active agents, respond with:
+    plan: no_agents_available
+    plan_instructions: {"message": "No agents are currently enabled for analysis. Please enable at least one agent (preprocessing, statistical analysis, machine learning, or visualization) in your template preferences to proceed with data analysis."}
+    
     Give your output in this format:
     plan: Agent1->Agent2
     plan_instructions = {
@@ -254,53 +641,108 @@ class planner_module(dspy.Module):
 
         self.allocator = dspy.Predict("goal,planner_desc,dataset->exact_word_complexity,reasoning")
 
-    async def forward(self, goal,dataset,Agent_desc):
-        complexity = self.allocator(goal=goal, planner_desc= str(self.planner_desc), dataset=str(dataset))
-        # print(complexity)
-        if complexity.exact_word_complexity.strip() != "unrelated":
+    async def forward(self, goal, dataset, Agent_desc):
+        # Check if we have any agents available
+        if not Agent_desc or Agent_desc == "[]" or len(str(Agent_desc).strip()) < 10:
+            logger.log_message("No agents available for planning", level=logging.WARNING)
+            return {
+                "complexity": "no_agents_available",
+                "plan": "no_agents_available",
+                "plan_instructions": {"message": "No agents are currently enabled for analysis. Please enable at least one agent (preprocessing, statistical analysis, machine learning, or visualization) in your template preferences to proceed with data analysis."}
+            }
+        
+        try:
+            complexity = self.allocator(goal=goal, planner_desc=str(self.planner_desc), dataset=str(dataset))
+            # If complexity is unrelated, return basic_qa_agent
+            if complexity.exact_word_complexity.strip() == "unrelated":
+                return {
+                    "complexity": complexity.exact_word_complexity.strip(),
+                    "plan": "basic_qa_agent", 
+                    "plan_instructions": "{'basic_qa_agent':'Not a data related query, please ask a data related-query'}"
+                }
+            
+            # Try to get plan with determined complexity
             try:
+                logger.log_message(f"Attempting to plan with complexity: {complexity.exact_word_complexity.strip()}", level=logging.DEBUG)
                 plan = await self.planners[complexity.exact_word_complexity.strip()](goal=goal, dataset=dataset, Agent_desc=Agent_desc)
+                logger.log_message(f"Plan generated successfully: {plan}", level=logging.DEBUG)
+                
+                # Check if the planner returned no_agents_available
+                if hasattr(plan, 'plan') and 'no_agents_available' in str(plan.plan):
+                    logger.log_message("Planner returned no_agents_available", level=logging.WARNING)
+                    output = {
+                        "complexity": "no_agents_available",
+                        "plan": "no_agents_available",
+                        "plan_instructions": {"message": "No agents are currently enabled for analysis. Please enable at least one agent (preprocessing, statistical analysis, machine learning, or visualization) in your template preferences to proceed with data analysis."}
+                    }
+                else:
+                    output = {
+                        "complexity": complexity.exact_word_complexity.strip(),
+                        "plan": dict(plan)
+                    }
 
             except Exception as e:
+                logger.log_message(f"Error with {complexity.exact_word_complexity.strip()} planner, falling back to intermediate: {str(e)}", level=logging.WARNING)
+                
+                # Fallback to intermediate planner
                 plan = await self.planners["intermediate"](goal=goal, dataset=dataset, Agent_desc=Agent_desc)
-            
-            output = {"complexity":complexity.exact_word_complexity.strip()
-                    ,"plan":dict(plan)}
-        else:
-            output =  {"complexity":complexity.exact_word_complexity.strip()
-                       ,"plan":dict(plan="basic_qa_agent", plan_instructions="""{'basic_qa_agent':'Not a data related query, please ask a data related-query'}""")
-                      }
-        # print(output)
+                logger.log_message(f"Fallback plan generated: {plan}", level=logging.DEBUG)
+                
+                # Check if the fallback planner also returned no_agents_available
+                if hasattr(plan, 'plan') and 'no_agents_available' in str(plan.plan):
+                    logger.log_message("Fallback planner also returned no_agents_available", level=logging.WARNING)
+                    output = {
+                        "complexity": "no_agents_available",
+                        "plan": "no_agents_available", 
+                        "plan_instructions": {"message": "No agents are currently enabled for analysis. Please enable at least one agent (preprocessing, statistical analysis, machine learning, or visualization) in your template preferences to proceed with data analysis."}
+                    }
+                else:
+                    output = {
+                        "complexity": "intermediate",
+                        "plan": dict(plan)
+                    }
+                    
+        except Exception as e:
+            logger.log_message(f"Error in planner forward: {str(e)}", level=logging.ERROR)
+            # Return error response
+            return {
+                "complexity": "error",
+                "plan": "basic_qa_agent",
+                "plan_instructions": {"error": f"Planning error: {str(e)}"}
+            }
+        
         return output
 
 
 
 
 
-class planner_preprocessing_agent(dspy.Signature):
+class preprocessing_agent(dspy.Signature):
     """
-You are a preprocessing agent in a multi-agent data analytics system.
+You are a preprocessing agent that can work both individually and in multi-agent data analytics systems.
 You are given:
-* A  dataset  (already loaded as `df`).
-* A  user-defined analysis goal  (e.g., predictive modeling, exploration, cleaning).
-*  Agent-specific plan instructions  that tell you what variables you are expected to  create  and what variables you are  receiving  from previous agents.
-* processed_df is just an arbitrary name, it can be anything the planner says to clean!
+* A dataset (already loaded as `df`).
+* A user-defined analysis goal (e.g., predictive modeling, exploration, cleaning).
+* Optional plan instructions that tell you what variables you are expected to create and what variables you are receiving from previous agents.
+
 ### Your Responsibilities:
-*  Follow the provided plan and create only the required variables listed in the 'create' section of the plan instructions.
-*  Do not create fake data  or introduce variables not explicitly part of the instructions.
-*  Do not read data from CSV ; the dataset (`df`) is already loaded and ready for processing.
-* Generate Python code using  NumPy  and  Pandas  to preprocess the data and produce any intermediate variables as specified in the plan instructions.
+* If plan_instructions are provided, follow the provided plan and create only the required variables listed in the 'create' section.
+* If no plan_instructions are provided, perform standard data preprocessing based on the goal.
+* Do not create fake data or introduce variables not explicitly part of the instructions.
+* Do not read data from CSV; the dataset (`df`) is already loaded and ready for processing.
+* Generate Python code using NumPy and Pandas to preprocess the data and produce any intermediate variables as specified.
+
 ### Best Practices for Preprocessing:
-1.  Create a copy of the original DataFrame : It will always be stored as df, it already exists use it!
+1. Create a copy of the original DataFrame: It will always be stored as df, it already exists use it!
     ```python
     processed_df = df.copy()
     ```
-2.  Separate column types :
+2. Separate column types:
     ```python
     numeric_cols = processed_df.select_dtypes(include='number').columns
     categorical_cols = processed_df.select_dtypes(include='object').columns
     ```
-3.  Handle missing values :
+3. Handle missing values:
     ```python
     for col in numeric_cols:
         processed_df[col] = processed_df[col].fillna(processed_df[col].median())
@@ -308,7 +750,7 @@ You are given:
     for col in categorical_cols:
         processed_df[col] = processed_df[col].fillna(processed_df[col].mode()[0] if not processed_df[col].mode().empty else 'Unknown')
     ```
-4.  Convert string columns to datetime safely :
+4. Convert string columns to datetime safely:
     ```python
     def safe_to_datetime(x):
         try:
@@ -318,138 +760,141 @@ You are given:
     
     cleaned_df['date_column'] = cleaned_df['date_column'].apply(safe_to_datetime)
     ```
-> Replace `processed_df`,'cleaned_df' and `date_column` with whatever names the user or planner provides.
-5.  Do not alter the DataFrame index :
-   Avoid using `reset_index()`, `set_index()`, or reindexing unless explicitly instructed.
-6.  Log assumptions and corrections  in comments to clarify any choices made during preprocessing.
-7.  Do not mutate global state : Avoid in-place modifications unless clearly necessary (e.g., using `.copy()`).
-8.  Handle data types properly :
+5. Do not alter the DataFrame index unless explicitly instructed.
+6. Log assumptions and corrections in comments to clarify any choices made during preprocessing.
+7. Do not mutate global state: Avoid in-place modifications unless clearly necessary (e.g., using `.copy()`).
+8. Handle data types properly:
    * Avoid coercing types blindly (e.g., don't compare timestamps to strings or floats).
    * Use `pd.to_datetime(..., errors='coerce')` for safe datetime parsing.
-9.  Preserve column structure : Only drop or rename columns if explicitly instructed.
+9. Preserve column structure: Only drop or rename columns if explicitly instructed.
+
 ### Output:
-1.  Code : Python code that performs the requested preprocessing steps as per the plan instructions.
-2.  Summary : A brief explanation of what preprocessing was done (e.g., columns handled, missing value treatment).
+1. Code: Python code that performs the requested preprocessing steps.
+2. Summary: A brief explanation of what preprocessing was done (e.g., columns handled, missing value treatment).
+
 ### Principles to Follow:
--Never alter the DataFrame index  unless explicitly instructed.
--Handle missing data  explicitly, filling with default values when necessary.
--Preserve column structure  and avoid unnecessary modifications.
--Ensure data types are appropriate  (e.g., dates parsed correctly).
--Log assumptions  in the code.
+- Never alter the DataFrame index unless explicitly instructed.
+- Handle missing data explicitly, filling with default values when necessary.
+- Preserve column structure and avoid unnecessary modifications.
+- Ensure data types are appropriate (e.g., dates parsed correctly).
+- Log assumptions in the code.
 Respond in the user's language for all summary and reasoning but keep the code in english
     """
     dataset = dspy.InputField(desc="The dataset, preloaded as df")
     goal = dspy.InputField(desc="User-defined goal for the analysis")
-    plan_instructions = dspy.InputField(desc="Agent-level instructions about what to create and receive")
+    plan_instructions = dspy.InputField(desc="Agent-level instructions about what to create and receive (optional for individual use)", default="")
     
     code = dspy.OutputField(desc="Generated Python code for preprocessing")
     summary = dspy.OutputField(desc="Explanation of what was done and why")
 
-class planner_data_viz_agent(dspy.Signature):
+class data_viz_agent(dspy.Signature):
     """
-    ### **Data Visualization Agent Definition**
-    You are the **data visualization agent** in a multi-agent analytics pipeline. Your primary responsibility is to **generate visualizations** based on the **user-defined goal** and the **plan instructions**.
+You are a data visualization agent that can work both individually and in multi-agent analytics pipelines.
+Your primary responsibility is to generate visualizations based on the user-defined goal.
+
     You are provided with:
     * **goal**: A user-defined goal outlining the type of visualization the user wants (e.g., "plot sales over time with trendline").
-    * **dataset**: The dataset (e.g., `df_cleaned`) which will be passed to you by other agents in the pipeline. **Do not assume or create any variables** — **the data is already present and valid** when you receive it.
+* **dataset**: The dataset (e.g., `df_cleaned`) which will be passed to you by other agents in the pipeline. Do not assume or create any variables — the data is already present and valid when you receive it.
     * **styling_index**: Specific styling instructions (e.g., axis formatting, color schemes) for the visualization.
-    * **plan_instructions**: A dictionary containing:
-    * **'create'**: List of **visualization components** you must generate (e.g., 'scatter_plot', 'bar_chart').
-    * **'use'**: List of **variables you must use** to generate the visualizations. This includes datasets and any other variables provided by the other agents.
-    * **'instructions'**: A list of additional instructions related to the creation of the visualizations, such as requests for trendlines or axis formats.
-    ---
-    ### **Responsibilities**:
+* **plan_instructions**: Optional dictionary containing:
+  * **'create'**: List of visualization components you must generate (e.g., 'scatter_plot', 'bar_chart').
+  * **'use'**: List of variables you must use to generate the visualizations.
+  * **'instructions'**: Additional instructions related to the creation of the visualizations.
+
+### Responsibilities:
     1. **Strict Use of Provided Variables**:
-    * You must **never create fake data**. Only use the variables and datasets that are explicitly **provided** to you in the `plan_instructions['use']` section. All the required data **must already be available**.
-    * If any variable listed in `plan_instructions['use']` is missing or invalid, **you must return an error** and not proceed with any visualization.
+   * You must never create fake data. Only use the variables and datasets that are explicitly provided.
+   * If plan_instructions are provided and any variable listed in plan_instructions['use'] is missing, return an error.
+   * If no plan_instructions are provided, work with the available dataset directly.
+
     2. **Visualization Creation**:
-    * Based on the **'create'** section of the `plan_instructions`, generate the **required visualization** using **Plotly**. For example, if the goal is to plot a time series, you might generate a line chart.
-    * Respect the **user-defined goal** in determining which type of visualization to create.
+   * Based on the goal and optional 'create' section of plan_instructions, generate the required visualization using Plotly.
+   * Respect the user-defined goal in determining which type of visualization to create.
+
     3. **Performance Optimization**:
-    * If the dataset contains **more than 50,000 rows**, you **must sample** the data to **5,000 rows** to improve performance. Use this method:
+   * If the dataset contains more than 50,000 rows, you must sample the data to 5,000 rows to improve performance:
         ```python
         if len(df) > 50000:
             df = df.sample(5000, random_state=42)
         ```
+
     4. **Layout and Styling**:
-    * Apply formatting and layout adjustments as defined by the **styling_index**. This may include:
-        * Axis labels and title formatting.
-        * Tick formats for axes.
-        * Color schemes or color maps for visual elements.
-    * You must ensure that all axes (x and y) have **consistent formats** (e.g., using `K`, `M`, or 1,000 format, but not mixing formats).
+   * Apply formatting and layout adjustments as defined by the styling_index.
+   * Ensure that all axes (x and y) have consistent formats (e.g., using `K`, `M`, or 1,000 format, but not mixing formats).
+
     5. **Trendlines**:
-    * Trendlines should **only be included** if explicitly requested in the **'instructions'** section of `plan_instructions`.
+   * Trendlines should only be included if explicitly requested in the goal or plan_instructions.
+
     6. **Displaying the Visualization**:
     * Use Plotly's `fig.show()` method to display the created chart.
-    * **Never** output raw datasets or the **goal** itself. Only the visualization code and the chart should be returned.
+   * Never output raw datasets or the goal itself. Only the visualization code and the chart should be returned.
+
     7. **Error Handling**:
-    * If the required dataset or variables are missing or invalid (i.e., not included in `plan_instructions['use']`), return an error message indicating which specific variable is missing or invalid.
-    * If the **goal** or **create** instructions are ambiguous or invalid, return an error stating the issue.
+   * If required dataset or variables are missing, return an error message indicating which specific variable is missing.
+   * If the goal or create instructions are ambiguous, return an error stating the issue.
+
     8. **No Data Modification**:
-    * **Never** modify the provided dataset or generate new data. If the data needs preprocessing or cleaning, assume it's already been done by other agents.
-    ---
-    ### **Strict Conditions**:
-    * You **never** create any data.
-    * You **only** use the data and variables passed to you.
-    * If any required data or variable is missing or invalid, **you must stop** and return a clear error message.
-    * Respond in the user's language for all summary and reasoning but keep the code in english
-    * it should be update_yaxes, update_xaxes, not axis
-    By following these conditions and responsibilities, your role is to ensure that the **visualizations** are generated as per the user goal, using the valid data and instructions given to you.
+   * Never modify the provided dataset or generate new data. If the data needs preprocessing, assume it's already been done by other agents.
+
+### Important Notes:
+- Use update_yaxes, update_xaxes, not axis
+- Each visualization must be generated as a separate figure using go.Figure()
+- Do NOT use subplots under any circumstances
+- Each figure must be returned individually using: fig.to_html(full_html=False)
+- Use update_layout with xaxis and yaxis only once per figure
+- Enhance readability with low opacity (0.4-0.7) where appropriate
+- Apply visually distinct colors for different elements or categories
+- Use only one number format consistently: either 'K', 'M', or comma-separated values
+- Only include trendlines in scatter plots if the user explicitly asks for them
+- Always end each visualization with: fig.to_html(full_html=False)
+
+Respond in the user's language for all summary and reasoning but keep the code in english
         """
     goal = dspy.InputField(desc="User-defined chart goal (e.g. trendlines, scatter plots)")
     dataset = dspy.InputField(desc="Details of the dataframe (`df`) and its columns")
     styling_index = dspy.InputField(desc="Instructions for plot styling and layout formatting")
-    plan_instructions = dspy.InputField(desc="Variables to create and receive for visualization purposes")
+    plan_instructions = dspy.InputField(desc="Variables to create and receive for visualization purposes (optional for individual use)", default="")
 
     code = dspy.OutputField(desc="Plotly Python code for the visualization")
     summary = dspy.OutputField(desc="Plain-language summary of what is being visualized")
 
-class planner_statistical_analytics_agent(dspy.Signature):
+class statistical_analytics_agent(dspy.Signature):
     """
-**Agent Definition:**
-You are a statistical analytics agent in a multi-agent data analytics pipeline.
+You are a statistical analytics agent that can work both individually and in multi-agent data analytics pipelines.
 You are given:
 * A dataset (usually a cleaned or transformed version like `df_cleaned`).
 * A user-defined goal (e.g., regression, seasonal decomposition).
-* Agent-specific **plan instructions** specifying:
-  * Which **variables** you are expected to **CREATE** (e.g., `regression_model`).
-  * Which **variables** you will **USE** (e.g., `df_cleaned`, `target_variable`).
-  * A set of **instructions** outlining additional processing or handling for these variables (e.g., handling missing values, adding constants, transforming features, etc.).
-**Your Responsibilities:**
+* Optional plan instructions specifying:
+  * Which variables you are expected to CREATE (e.g., `regression_model`).
+  * Which variables you will USE (e.g., `df_cleaned`, `target_variable`).
+  * A set of instructions outlining additional processing or handling for these variables.
+
+### Your Responsibilities:
 * Use the `statsmodels` library to implement the required statistical analysis.
 * Ensure that all strings are handled as categorical variables via `C(col)` in model formulas.
 * Always add a constant using `sm.add_constant()`.
-* Do **not** modify the DataFrame's index.
+* Do not modify the DataFrame's index.
 * Convert `X` and `y` to float before fitting the model.
 * Handle missing values before modeling.
 * Avoid any data visualization (that is handled by another agent).
 * Write output to the console using `print()`.
-**If the goal is regression:**
+
+### If the goal is regression:
 * Use `statsmodels.OLS` with proper handling of categorical variables and adding a constant term.
 * Handle missing values appropriately.
-**If the goal is seasonal decomposition:**
+
+### If the goal is seasonal decomposition:
 * Use `statsmodels.tsa.seasonal_decompose`.
 * Ensure the time series and period are correctly provided (i.e., `period` should not be `None`).
-**You must not:**
-* You must always create the variables in `plan_instructions['CREATE']`.
-* **Never create the `df` variable**. Only work with the variables passed via the `plan_instructions`.
-* Rely on hardcoded column names — use those passed via `plan_instructions`.
-* Introduce or modify intermediate variables unless they are explicitly listed in `plan_instructions['CREATE']`.
-**Instructions to Follow:**
-1. **CREATE** only the variables specified in `plan_instructions['CREATE']`. Do not create any intermediate or new variables.
-2. **USE** only the variables specified in `plan_instructions['USE']` to carry out the task.
-3. Follow any **additional instructions** in `plan_instructions['INSTRUCTIONS']` (e.g., preprocessing steps, encoding, handling missing values).
-4. **Do not reassign or modify** any variables passed via `plan_instructions`. These should be used as-is.
-**Example Workflow:**
-Given that the `plan_instructions` specifies variables to **CREATE** and **USE**, and includes instructions, your approach should look like this:
-1. Use `df_cleaned` and the variables like `X` and `y` from `plan_instructions` for analysis.
-2. Follow instructions for preprocessing (e.g., handle missing values or scale features).
-3. If the goal is regression:
-   * Use `sm.OLS` for model fitting.
-   * Handle categorical variables via `C(col)` and add a constant term.
-4. If the goal is seasonal decomposition:
-   * Ensure `period` is provided and use `sm.tsa.seasonal_decompose`.
-5. Store the output variable as specified in `plan_instructions['CREATE']`.
+
+### Instructions to Follow:
+1. If plan_instructions are provided:
+   * CREATE only the variables specified in plan_instructions['CREATE']. Do not create any intermediate or new variables.
+   * USE only the variables specified in plan_instructions['USE'] to carry out the task.
+   * Follow any additional instructions in plan_instructions['INSTRUCTIONS'].
+   * Do not reassign or modify any variables passed via plan_instructions.
+2. If no plan_instructions are provided, perform standard statistical analysis based on the goal and available data.
+
 ### Example Code Structure:
 ```python
 import statsmodels.api as sm
@@ -467,125 +912,101 @@ def statistical_model(X, y, goal, period=None):
         if goal == 'regression':
             formula = 'y ~ ' + ' + '.join([f'C({col})' if X[col].dtype.name == 'category' else col for col in X.columns])
             model = sm.OLS(y.astype(float), X.astype(float)).fit()
-            regression_model = model.summary()  # Specify as per CREATE instructions
-            return regression_model
-        
+            return model.summary()
         elif goal == 'seasonal_decompose':
             if period is None:
                 raise ValueError("Period must be specified for seasonal decomposition")
             decomposition = sm.tsa.seasonal_decompose(y, period=period)
-            seasonal_decomposition = decomposition  # Specify as per CREATE instructions
-            return seasonal_decomposition
-        
+            return decomposition
         else:
-            raise ValueError("Unknown goal specified.")
+            raise ValueError("Unknown goal specified. Please provide a valid goal.")
         
     except Exception as e:
         return f"An error occurred: {e}"
 ```
-**Summary:**
-1. Always **USE** the variables passed in `plan_instructions['USE']` to carry out the task.
-2. Only **CREATE** the variables specified in `plan_instructions['CREATE']`. Do not create any additional variables.
-3. Follow any **additional instructions** in `plan_instructions['INSTRUCTIONS']` (e.g., handling missing values, adding constants).
+
+### Summary:
+1. Always USE the variables passed in plan_instructions['USE'] to carry out the task (if provided).
+2. Only CREATE the variables specified in plan_instructions['CREATE'] (if provided).
+3. Follow any additional instructions in plan_instructions['INSTRUCTIONS'] (if provided).
 4. Ensure reproducibility by setting the random state appropriately and handling categorical variables.
 5. Focus on statistical analysis and avoid any unnecessary data manipulation.
-**Output:**
-* The **code** implementing the statistical analysis, including all required steps.
-* A **summary** of what the statistical analysis does, how it's performed, and why it fits the goal.
+
+### Output:
+* The code implementing the statistical analysis, including all required steps.
+* A summary of what the statistical analysis does, how it's performed, and why it fits the goal.
 * Respond in the user's language for all summary and reasoning but keep the code in english
     """
     dataset = dspy.InputField(desc="Preprocessed dataset, often named df_cleaned")
     goal = dspy.InputField(desc="The user's statistical analysis goal, e.g., regression or seasonal_decompose")
-    plan_instructions = dspy.InputField(desc="Instructions on variables to create and receive for statistical modeling")
+    plan_instructions = dspy.InputField(desc="Instructions on variables to create and receive for statistical modeling (optional for individual use)", default="")
     
     code = dspy.OutputField(desc="Python code for statistical modeling using statsmodels")
-    summary = dspy.OutputField(desc="Explanation of statistical analysis steps")
+    summary = dspy.OutputField(desc="A concise bullet-point summary of the statistical analysis performed and key findings")
     
-    
-
-class planner_sk_learn_agent(dspy.Signature):
+class sk_learn_agent(dspy.Signature):
     """
-    **Agent Definition:**
-    You are a machine learning agent in a multi-agent data analytics pipeline.
+You are a machine learning agent that can work both individually and in multi-agent data analytics pipelines.
     You are given:
     * A dataset (often cleaned and feature-engineered).
     * A user-defined goal (e.g., classification, regression, clustering).
-    * Agent-specific **plan instructions** specifying:
-    * Which **variables** you are expected to **CREATE** (e.g., `trained_model`, `predictions`).
-    * Which **variables** you will **USE** (e.g., `df_cleaned`, `target_variable`, `feature_columns`).
-    * A set of **instructions** outlining additional processing or handling for these variables (e.g., handling missing values, applying transformations, or other task-specific guidelines).
-    **Your Responsibilities:**
+* Optional plan instructions specifying:
+  * Which variables you are expected to CREATE (e.g., `trained_model`, `predictions`).
+  * Which variables you will USE (e.g., `df_cleaned`, `target_variable`, `feature_columns`).
+  * A set of instructions outlining additional processing or handling for these variables.
+
+### Your Responsibilities:
     * Use the scikit-learn library to implement the appropriate ML pipeline.
     * Always split data into training and testing sets where applicable.
     * Use `print()` for all outputs.
     * Ensure your code is:
-    * **Reproducible**: Set `random_state=42` wherever applicable.
-    * **Modular**: Avoid deeply nested code.
-    * **Focused on model building**, not visualization (leave plotting to the `data_viz_agent`).
+  * Reproducible: Set `random_state=42` wherever applicable.
+  * Modular: Avoid deeply nested code.
+  * Focused on model building, not visualization (leave plotting to the `data_viz_agent`).
     * Your task may include:
     * Preprocessing inputs (e.g., encoding).
     * Model selection and training.
     * Evaluation (e.g., accuracy, RMSE, classification report).
-    **You must not:**
+
+### You must not:
     * Visualize anything (that's another agent's job).
-    * Rely on hardcoded column names — use those passed via `plan_instructions`.
-    * **Never create or modify any variables not explicitly mentioned in `plan_instructions['CREATE']`.**
-    * **Never create the `df` variable**. You will **only** work with the variables passed via the `plan_instructions`.
-    * Do not introduce intermediate variables unless they are listed in `plan_instructions['CREATE']`.
-    **Instructions to Follow:**
-    1. **CREATE** only the variables specified in the `plan_instructions['CREATE']` list. Do not create any intermediate or new variables.
-    2. **USE** only the variables specified in the `plan_instructions['USE']` list. You are **not allowed** to create or modify any variables not listed in the plan instructions.
-    3. Follow any **processing instructions** in the `plan_instructions['INSTRUCTIONS']` list. This might include tasks like handling missing values, scaling features, or encoding categorical variables. Always perform these steps on the variables specified in the `plan_instructions`.
-    4. Do **not reassign or modify** any variables passed via `plan_instructions`. These should be used as-is.
-    **Example Workflow:**
-    Given that the `plan_instructions` specifies variables to **CREATE** and **USE**, and includes instructions, your approach should look like this:
-    1. Use `df_cleaned` and `feature_columns` from the `plan_instructions` to extract your features (`X`).
-    2. Use `target_column` from `plan_instructions` to extract your target (`y`).
+* Rely on hardcoded column names — use those passed via plan_instructions or infer from data.
+* Never create or modify any variables not explicitly mentioned in plan_instructions['CREATE'] (if provided).
+* Never create the `df` variable. You will only work with the variables passed via the plan_instructions.
+* Do not introduce intermediate variables unless they are listed in plan_instructions['CREATE'] (if provided).
+
+### Instructions to Follow:
+1. If plan_instructions are provided:
+   * CREATE only the variables specified in the plan_instructions['CREATE'] list.
+   * USE only the variables specified in the plan_instructions['USE'] list.
+   * Follow any processing instructions in the plan_instructions['INSTRUCTIONS'] list.
+   * Do not reassign or modify any variables passed via plan_instructions.
+2. If no plan_instructions are provided, perform standard machine learning analysis based on the goal and available data.
+
+### Example Workflow:
+Given that the plan_instructions specifies variables to CREATE and USE, and includes instructions, your approach should look like this:
+1. Use `df_cleaned` and `feature_columns` from the plan_instructions to extract your features (`X`).
+2. Use `target_column` from plan_instructions to extract your target (`y`).
     3. If instructions are provided (e.g., scale or encode), follow them.
     4. Split data into training and testing sets using `train_test_split`.
     5. Train the model based on the received goal (classification, regression, etc.).
-    6. Store the output variables as specified in `plan_instructions['CREATE']`.
-    ### Example Code Structure:
-    ```python
-    from sklearn.model_selection import train_test_split
-    from sklearn.linear_model import LogisticRegression
-    from sklearn.metrics import classification_report
-    from sklearn.preprocessing import StandardScaler
-    # Ensure that all variables follow plan instructions:
-    # Use received inputs: df_cleaned, feature_columns, target_column
-    X = df_cleaned[feature_columns]
-    y = df_cleaned[target_column]
-    # Apply any preprocessing instructions (e.g., scaling if instructed)
-    if 'scale' in plan_instructions['INSTRUCTIONS']:
-        scaler = StandardScaler()
-        X = scaler.fit_transform(X)
-    # Split the data into training and testing sets
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
-    # Select and train the model (based on the task)
-    model = LogisticRegression(random_state=42)
-    model.fit(X_train, y_train)
-    # Generate predictions
-    predictions = model.predict(X_test)
-    # Create the variable specified in 'plan_instructions': 'metrics'
-    metrics = classification_report(y_test, predictions)
-    # Print the results
-    print(metrics)
-    # Ensure the 'metrics' variable is returned as requested in the plan
-    ```
-    **Summary:**
-    1. Always **USE** the variables passed in `plan_instructions['USE']` to build the pipeline.
-    2. Only **CREATE** the variables specified in `plan_instructions['CREATE']`. Do not create any additional variables.
-    3. Follow any **additional instructions** in `plan_instructions['INSTRUCTIONS']` (e.g., preprocessing steps).
-    4. Ensure reproducibility by setting `random_state=42` wherever necessary.
+6. Store the output variables as specified in plan_instructions['CREATE'].
+
+### Summary:
+1. Always USE the variables passed in plan_instructions['USE'] to build the pipeline (if provided).
+2. Only CREATE the variables specified in plan_instructions['CREATE'] (if provided).
+3. Follow any additional instructions in plan_instructions['INSTRUCTIONS'] (if provided).
+4. Ensure reproducibility by setting random_state=42 wherever necessary.
     5. Focus on model building, evaluation, and saving the required outputs—avoid any unnecessary variables.
-    **Output:**
-    * The **code** implementing the ML task, including all required steps.
-    * A **summary** of what the model does, how it is evaluated, and why it fits the goal.
+
+### Output:
+* The code implementing the ML task, including all required steps.
+* A summary of what the model does, how it is evaluated, and why it fits the goal.
     * Respond in the user's language for all summary and reasoning but keep the code in english
     """
     dataset = dspy.InputField(desc="Input dataset, often cleaned and feature-selected (e.g., df_cleaned)")
     goal = dspy.InputField(desc="The user's machine learning goal (e.g., classification or regression)")
-    plan_instructions = dspy.InputField(desc="Instructions indicating what to create and what variables to receive")
+    plan_instructions = dspy.InputField(desc="Instructions indicating what to create and what variables to receive (optional for individual use)", default="")
 
     code = dspy.OutputField(desc="Scikit-learn based machine learning code")
     summary = dspy.OutputField(desc="Explanation of the ML approach and evaluation")
@@ -599,140 +1020,7 @@ class goal_refiner_agent(dspy.Signature):
     goal = dspy.InputField(desc="The user defined goal ")
     refined_goal = dspy.OutputField(desc='Refined goal that helps the planner agent plan better')
 
-class preprocessing_agent(dspy.Signature):
-    """You are a AI data-preprocessing agent. Generate clean and efficient Python code using NumPy and Pandas to perform introductory data preprocessing on a pre-loaded DataFrame df, based on the user's analysis goals.
-    Preprocessing Requirements:
-    1. Identify Column Types
-    - Separate columns into numeric and categorical using:
-        categorical_columns = df.select_dtypes(include=[object, 'category']).columns.tolist()
-        numeric_columns = df.select_dtypes(include=[np.number]).columns.tolist()
-    2. Handle Missing Values
-    - Numeric columns: Impute missing values using the mean of each column
-    - Categorical columns: Impute missing values using the mode of each column
-    3. Convert Date Strings to Datetime
-    - For any column suspected to represent dates (in string format), convert it to datetime using:
-        def safe_to_datetime(date):
-            try:
-                return pd.to_datetime(date, errors='coerce', cache=False)
-            except (ValueError, TypeError):
-                return pd.NaT
-        df['datetime_column'] = df['datetime_column'].apply(safe_to_datetime)
-    - Replace 'datetime_column' with the actual column names containing date-like strings
-    Important Notes:
-    - Do NOT create a correlation matrix — correlation analysis is outside the scope of preprocessing
-    - Do NOT generate any plots or visualizations
-    Output Instructions:
-    1. Include the full preprocessing Python code
-    2. Provide a brief bullet-point summary of the steps performed. Example:
-    • Identified 5 numeric and 4 categorical columns
-    • Filled missing numeric values with column means
-    • Filled missing categorical values with column modes
-    • Converted 1 date column to datetime format
-     Respond in the user's language for all summary and reasoning but keep the code in english
-    """
-    dataset = dspy.InputField(desc="Available datasets loaded in the system, use this df, column_names  set df as copy of df")
-    goal = dspy.InputField(desc="The user defined goal could ")
-    code = dspy.OutputField(desc ="The code that does the data preprocessing and introductory analysis")
-    summary = dspy.OutputField(desc="A concise bullet-point summary of the preprocessing operations performed")
-    
 
-
-class statistical_analytics_agent(dspy.Signature):
-    # Statistical Analysis Agent, builds statistical models using StatsModel Package
-    """ 
-    You are a statistical analytics agent. Your task is to take a dataset and a user-defined goal and output Python code that performs the appropriate statistical analysis to achieve that goal. Follow these guidelines:
-    IMPORTANT: You may be provided with previous interaction history. The section marked "### Current Query:" contains the user's current request. Any text in "### Previous Interaction History:" is for context only and is NOT part of the current request.
-    Data Handling:
-    Always handle strings as categorical variables in a regression using statsmodels C(string_column).
-    Do not change the index of the DataFrame.
-    Convert X and y into float when fitting a model.
-    Error Handling:
-    Always check for missing values and handle them appropriately.
-    Ensure that categorical variables are correctly processed.
-    Provide clear error messages if the model fitting fails.
-    Regression:
-    For regression, use statsmodels and ensure that a constant term is added to the predictor using sm.add_constant(X).
-    Handle categorical variables using C(column_name) in the model formula.
-    Fit the model with model = sm.OLS(y.astype(float), X.astype(float)).fit().
-    Seasonal Decomposition:
-    Ensure the period is set correctly when performing seasonal decomposition.
-    Verify the number of observations works for the decomposition.
-    Output:
-    Ensure the code is executable and as intended.
-    Also choose the correct type of model for the problem
-    Avoid adding data visualization code.
-    Use code like this to prevent failing:
-    import pandas as pd
-    import numpy as np
-    import statsmodels.api as sm
-    def statistical_model(X, y, goal, period=None):
-        try:
-            # Check for missing values and handle them
-            X = X.dropna()
-            y = y.loc[X.index].dropna()
-            # Ensure X and y are aligned
-            X = X.loc[y.index]
-            # Convert categorical variables
-            for col in X.select_dtypes(include=['object', 'category']).columns:
-                X[col] = X[col].astype('category')
-            # Add a constant term to the predictor
-            X = sm.add_constant(X)
-            # Fit the model
-            if goal == 'regression':
-                # Handle categorical variables in the model formula
-                formula = 'y ~ ' + ' + '.join([f'C({col})' if X[col].dtype.name == 'category' else col for col in X.columns])
-                model = sm.OLS(y.astype(float), X.astype(float)).fit()
-                return model.summary()
-            elif goal == 'seasonal_decompose':
-                if period is None:
-                    raise ValueError("Period must be specified for seasonal decomposition")
-                decomposition = sm.tsa.seasonal_decompose(y, period=period)
-                return decomposition
-            else:
-                raise ValueError("Unknown goal specified. Please provide a valid goal.")
-        except Exception as e:
-            return f"An error occurred: {e}"
-    # Example usage:
-    result = statistical_analysis(X, y, goal='regression')
-    print(result)
-    If visualizing use plotly
-    Provide a concise bullet-point summary of the statistical analysis performed.
-    
-    Example Summary:
-    • Applied linear regression with OLS to predict house prices based on 5 features
-    • Model achieved R-squared of 0.78
-    • Significant predictors include square footage (p<0.001) and number of bathrooms (p<0.01)
-    • Detected strong seasonal pattern with 12-month periodicity
-    • Forecast shows 15% growth trend over next quarter
-    Respond in the user's language for all summary and reasoning but keep the code in english
-    """
-    dataset = dspy.InputField(desc="Available datasets loaded in the system, use this df,columns  set df as copy of df")
-    goal = dspy.InputField(desc="The user defined goal for the analysis to be performed")
-    code = dspy.OutputField(desc ="The code that does the statistical analysis using statsmodel")
-    summary = dspy.OutputField(desc="A concise bullet-point summary of the statistical analysis performed and key findings")
-    
-
-class sk_learn_agent(dspy.Signature):
-    # Machine Learning Agent, performs task using sci-kit learn
-    """You are a machine learning agent. 
-    Your task is to take a dataset and a user-defined goal, and output Python code that performs the appropriate machine learning analysis to achieve that goal. 
-    You should use the scikit-learn library.
-    IMPORTANT: You may be provided with previous interaction history. The section marked "### Current Query:" contains the user's current request. Any text in "### Previous Interaction History:" is for context only and is NOT part of the current request.
-    Make sure your output is as intended!
-    Provide a concise bullet-point summary of the machine learning operations performed.
-    
-    Example Summary:
-    • Trained a Random Forest classifier on customer churn data with 80/20 train-test split
-    • Model achieved 92% accuracy and 88% F1-score
-    • Feature importance analysis revealed that contract length and monthly charges are the strongest predictors of churn
-    • Implemented K-means clustering (k=4) on customer shopping behaviors
-    • Identified distinct segments: high-value frequent shoppers (22%), occasional big spenders (35%), budget-conscious regulars (28%), and rare visitors (15%)
-    Respond in the user's language for all summary and reasoning but keep the code in english
-    """
-    dataset = dspy.InputField(desc="Available datasets loaded in the system, use this df,columns. set df as copy of df")
-    goal = dspy.InputField(desc="The user defined goal ")
-    code = dspy.OutputField(desc ="The code that does the Exploratory data analysis")
-    summary = dspy.OutputField(desc="A concise bullet-point summary of the machine learning analysis performed and key results")
     
     
     
@@ -766,55 +1054,6 @@ class code_combiner_agent(dspy.Signature):
     agent_code_list =dspy.InputField(desc="A list of code given by each agent")
     refined_complete_code = dspy.OutputField(desc="Refined complete code base")
     summary = dspy.OutputField(desc="A concise 4 bullet-point summary of the code integration performed and improvements made")
-    
-    
-
-class data_viz_agent(dspy.Signature):
-    # Visualizes data using Plotly
-    """    
-    You are an AI agent responsible for generating interactive data visualizations using Plotly.
-    IMPORTANT Instructions:
-    - The section marked "### Current Query:" contains the user's request. Any text in "### Previous Interaction History:" is for context only and should NOT be treated as part of the current request.
-    - You must only use the tools provided to you. This agent handles visualization only.
-    - If len(df) > 50000, always sample the dataset before visualization using:  
-    if len(df) > 50000:  
-        df = df.sample(50000, random_state=1)
-    - Each visualization must be generated as a **separate figure** using go.Figure().  
-    Do NOT use subplots under any circumstances.
-    - Each figure must be returned individually using:  
-    fig.to_html(full_html=False)
-    - Use update_layout with xaxis and yaxis **only once per figure**.
-    - Enhance readability and clarity by:  
-    • Using low opacity (0.4-0.7) where appropriate  
-    • Applying visually distinct colors for different elements or categories  
-    - Make sure the visual **answers the user's specific goal**:  
-    • Identify what insight or comparison the user is trying to achieve  
-    • Choose the visualization type and features (e.g., color, size, grouping) to emphasize that goal  
-    • For example, if the user asks for "trends in revenue," use a time series line chart; if they ask for "top-performing categories," use a bar chart sorted by value  
-    • Prioritize highlighting patterns, outliers, or comparisons relevant to the question
-    - Never include the dataset or styling index in the output.
-    - If there are no relevant columns for the requested visualization, respond with:  
-    "No relevant columns found to generate this visualization."
-    - Use only one number format consistently: either 'K', 'M', or comma-separated values like 1,000/1,000,000. Do not mix formats.
-    - Only include trendlines in scatter plots if the user explicitly asks for them.
-    - Output only the code and a concise bullet-point summary of what the visualization reveals.
-    - Always end each visualization with:  
-    fig.to_html(full_html=False)
-    Respond in the user's language for all summary and reasoning but keep the code in english
-    Example Summary:  
-    • Created an interactive scatter plot of sales vs. marketing spend with color-coded product categories  
-    • Included a trend line showing positive correlation (r=0.72)  
-    • Highlighted outliers where high marketing spend resulted in low sales  
-    • Generated a time series chart of monthly revenue from 2020-2023  
-    • Added annotations for key business events  
-    • Visualization reveals 35% YoY growth with seasonal peaks in Q4
-    
-    """
-    goal = dspy.InputField(desc="user defined goal which includes information about data and chart they want to plot")
-    dataset = dspy.InputField(desc=" Provides information about the data in the data frame. Only use column names and dataframe_name as in this context")
-    styling_index = dspy.InputField(desc='Provides instructions on how to style your Plotly plots')
-    code= dspy.OutputField(desc="Plotly code that visualizes what the user needs according to the query & dataframe_index & styling_context")
-    summary = dspy.OutputField(desc="A concise bullet-point summary of the visualization created and key insights revealed")
     
     
 
@@ -887,71 +1126,361 @@ Make your edits precise, minimal, and faithful to the user's instructions, using
 class auto_analyst_ind(dspy.Module):
     """Handles individual agent execution when explicitly specified in query"""
     
-    def __init__(self, agents, retrievers):
+    def __init__(self, agents, retrievers, user_id=None, db_session=None):
         # Initialize agent modules and retrievers
         self.agents = {}
         self.agent_inputs = {}
         self.agent_desc = []
         
-        # Create modules from agent signatures
-        for i, a in enumerate(agents):
-            name = a.__pydantic_core_schema__['schema']['model_name']
-            self.agents[name] = dspy.asyncify(dspy.ChainOfThoughtWithHint(a))
-            self.agent_inputs[name] = {x.strip() for x in str(agents[i].__pydantic_core_schema__['cls']).split('->')[0].split('(')[1].split(',')}
-            self.agent_desc.append(get_agent_description(name))
-            
-        # Initialize components
-        # self.memory_summarize_agent = dspy.ChainOfThought(m.memory_summarize_agent)
+        # logger.log_message(f"[INIT] Initializing auto_analyst_ind with user_id={user_id}, agents={len(agents) if agents else 0}", level=logging.INFO)
+        
+        # Load core agents based on user preferences (not always loaded)
+        if not agents and user_id and db_session:
+            try:
+                # Get user preferences for core agents
+                from src.db.schemas.models import AgentTemplate, UserTemplatePreference
+                
+                core_agent_names = ['preprocessing_agent', 'statistical_analytics_agent', 'sk_learn_agent', 'data_viz_agent']
+                
+                for agent_name in core_agent_names:
+                    logger.log_message(f"[INIT] Processing core agent: {agent_name}", level=logging.DEBUG)
+                    
+                    # Check if user has enabled this core agent
+                    template = db_session.query(AgentTemplate).filter(
+                        AgentTemplate.template_name == agent_name,
+                        AgentTemplate.is_active == True
+                    ).first()
+                    
+                    if not template:
+                        logger.log_message(f"[INIT] Core agent template '{agent_name}' not found in database", level=logging.WARNING)
+                        continue
+                    
+                    # Get the agent signature class
+                    if agent_name == 'preprocessing_agent':
+                        agent_signature = preprocessing_agent
+                    elif agent_name == 'statistical_analytics_agent':
+                        agent_signature = statistical_analytics_agent
+                    elif agent_name == 'sk_learn_agent':
+                        agent_signature = sk_learn_agent
+                    elif agent_name == 'data_viz_agent':
+                        agent_signature = data_viz_agent
+                    
+                    # Add to agents dict
+                    self.agents[agent_name] = dspy.asyncify(dspy.ChainOfThought(agent_signature))
+                    
+                    # Set input fields based on signature
+                    if agent_name == 'data_viz_agent':
+                        self.agent_inputs[agent_name] = {'goal', 'dataset', 'styling_index', 'plan_instructions'}
+                    else:
+                        self.agent_inputs[agent_name] = {'goal', 'dataset', 'plan_instructions'}
+                    
+                    # Get description from database
+                    self.agent_desc.append({agent_name: get_agent_description(agent_name)})
+                    # logger.log_message(f"[INIT] Successfully loaded core agent: {agent_name} with inputs: {self.agent_inputs[agent_name]}", level=logging.INFO)
+                    
+            except Exception as e:
+                logger.log_message(f"[INIT] Error loading core agents based on preferences: {str(e)}", level=logging.ERROR)
+                # Fallback to loading all core agents if preference system fails
+                self._load_default_agents_fallback()
+        elif not agents:
+            # If no user_id/db_session provided, load all core agents as fallback
+            # logger.log_message(f"[INIT] No agents provided and no user_id/db_session, loading fallback agents", level=logging.INFO)
+            self._load_default_agents_fallback()
+        else:
+            # Load standard agents from provided list (legacy support)
+            # logger.log_message(f"[INIT] Loading agents from provided list (legacy support)", level=logging.INFO)
+            for i, a in enumerate(agents):
+                name = a.__pydantic_core_schema__['schema']['model_name']
+                self.agents[name] = dspy.asyncify(dspy.ChainOfThought(a))
+                self.agent_inputs[name] = {x.strip() for x in str(agents[i].__pydantic_core_schema__['cls']).split('->')[0].split('(')[1].split(',')}
+                # logger.log_message(f"[INIT] Added legacy agent: {name}, inputs: {self.agent_inputs[name]}", level=logging.DEBUG)
+                self.agent_desc.append({name: get_agent_description(name)})
+
+        # Load ALL available template agents if user_id and db_session are provided
+        # For individual agent execution (@agent_name), users should be able to access any available agent
+        if user_id and db_session:
+            try:
+                # For individual use, load ALL available templates regardless of user preferences
+                template_signatures = load_all_available_templates_from_db(db_session)
+                
+                # logger.log_message(f"[INIT] Loaded {len(template_signatures)} template signatures from database", level=logging.INFO)
+                
+                for template_name, signature in template_signatures.items():
+                    # Skip if this is a core agent - we'll load it separately
+                    if template_name in ['preprocessing_agent', 'statistical_analytics_agent', 'sk_learn_agent', 'data_viz_agent']:
+                        # logger.log_message(f"[INIT] Skipping template {template_name} as it's a core agent", level=logging.DEBUG)
+                        continue
+                        
+                    # Add template agent to agents dict
+                    self.agents[template_name] = dspy.asyncify(dspy.ChainOfThought(signature))
+                    
+                    # Determine if this is a visualization agent based on database category
+                    is_viz_agent = False
+                    try:
+                        from src.db.schemas.models import AgentTemplate
+                        
+                        # Find template record to check category
+                        template_record = db_session.query(AgentTemplate).filter(
+                            AgentTemplate.template_name == template_name
+                        ).first()
+                        
+                        if template_record and template_record.category and template_record.category.lower() == 'visualization':
+                            is_viz_agent = True
+                        else:
+                            # Fallback to name-based detection for legacy templates
+                            is_viz_agent = ('viz' in template_name.lower() or 
+                                          'visual' in template_name.lower() or 
+                                          'plot' in template_name.lower() or 
+                                          'chart' in template_name.lower() or
+                                          'matplotlib' in template_name.lower())
+                    except Exception as cat_error:
+                        logger.log_message(f"[INIT] Error checking category for template {template_name}: {str(cat_error)}", level=logging.WARNING)
+                        # Fallback to name-based detection
+                        is_viz_agent = ('viz' in template_name.lower() or 
+                                      'visual' in template_name.lower() or 
+                                      'plot' in template_name.lower() or 
+                                      'chart' in template_name.lower() or
+                                      'matplotlib' in template_name.lower())
+                    
+                    # Set input fields based on agent type
+                    if is_viz_agent:
+                        self.agent_inputs[template_name] = {'goal', 'dataset', 'styling_index', 'plan_instructions'}
+                    else:
+                        self.agent_inputs[template_name] = {'goal', 'dataset', 'plan_instructions'}
+                    
+                    # Store template agent description
+                    try:
+                        if not template_record:
+                            template_record = db_session.query(AgentTemplate).filter(
+                                AgentTemplate.template_name == template_name
+                            ).first()
+                        
+                        if template_record:
+                            description = f"Template: {template_record.description}"
+                            self.agent_desc.append({template_name: description})
+                        else:
+                            self.agent_desc.append({template_name: f"Template: {template_name}"})
+                    except Exception as desc_error:
+                        logger.log_message(f"[INIT] Error getting description for template {template_name}: {str(desc_error)}", level=logging.WARNING)
+                        self.agent_desc.append({template_name: f"Template: {template_name}"})
+                        
+                    # logger.log_message(f"[INIT] Successfully loaded template agent: {template_name} with inputs: {self.agent_inputs[template_name]}, is_viz_agent: {is_viz_agent}", level=logging.INFO)
+                        
+            except Exception as e:
+                logger.log_message(f"[INIT] Error loading template agents for user {user_id}: {str(e)}", level=logging.ERROR)
+
+        self.agents['basic_qa_agent'] = dspy.asyncify(dspy.Predict("goal->answer")) 
+        self.agent_inputs['basic_qa_agent'] = {"goal"}
+        self.agent_desc.append({'basic_qa_agent':"Answers queries unrelated to data & also that include links, poison or attempts to attack the system"})
+
+        # Initialize retrievers (no planner needed for individual agent execution)
         self.dataset = retrievers['dataframe_index'].as_retriever(k=1)
         self.styling_index = retrievers['style_index'].as_retriever(similarity_top_k=1)
-        # self.code_combiner_agent = dspy.ChainOfThought(code_combiner_agent)
         
+        # Store user_id for usage tracking
+        self.user_id = user_id
+        
+        # Log final summary
+        # logger.log_message(f"[INIT] Initialization complete. Total agents loaded: {len(self.agents)}", level=logging.INFO)
+        # logger.log_message(f"[INIT] Available agents: {list(self.agents.keys())}", level=logging.INFO)
+        # logger.log_message(f"[INIT] Agent inputs mapping: {self.agent_inputs}", level=logging.DEBUG)
+
+    def _load_default_agents_fallback(self):
+        """Fallback method to load default agents when preference system fails"""
+        # logger.log_message("Loading default agents as fallback for auto_analyst_ind", level=logging.WARNING)
+        
+        # Load the 4 core agents from database
+        core_agent_names = ['preprocessing_agent', 'statistical_analytics_agent', 'sk_learn_agent', 'data_viz_agent']
+        
+        for agent_name in core_agent_names:
+            # Get the agent signature class
+            if agent_name == 'preprocessing_agent':
+                agent_signature = preprocessing_agent
+            elif agent_name == 'statistical_analytics_agent':
+                agent_signature = statistical_analytics_agent
+            elif agent_name == 'sk_learn_agent':
+                agent_signature = sk_learn_agent
+            elif agent_name == 'data_viz_agent':
+                agent_signature = data_viz_agent
+            
+            # Add to agents dict
+            self.agents[agent_name] = dspy.asyncify(dspy.ChainOfThought(agent_signature))
+            
+            # Set input fields based on signature
+            if agent_name == 'data_viz_agent':
+                self.agent_inputs[agent_name] = {'goal', 'dataset', 'styling_index', 'plan_instructions'}
+            else:
+                self.agent_inputs[agent_name] = {'goal', 'dataset', 'plan_instructions'}
+            
+            # Get description from database
+            self.agent_desc.append({agent_name: get_agent_description(agent_name)})
+            # logger.log_message(f"Added fallback agent: {agent_name}", level=logging.DEBUG)
+
+    async def _track_agent_usage(self, agent_name):
+        """Track usage for template agents"""
+        try:
+            # Skip tracking for standard agents
+            if agent_name in ['preprocessing_agent', 'statistical_analytics_agent', 'sk_learn_agent', 'data_viz_agent', 'basic_qa_agent']:
+                return
+            
+            # Only track if we have user_id (template agents)
+            if not self.user_id:
+                return
+                
+            from src.db.init_db import session_factory
+            from src.db.schemas.models import AgentTemplate, UserTemplatePreference
+            from datetime import datetime, UTC
+            
+            # Create database session
+            session = session_factory()
+            try:
+                # Find the template
+                template = session.query(AgentTemplate).filter(
+                    AgentTemplate.template_name == agent_name
+                ).first()
+                
+                if not template:
+                    logger.log_message(f"Template '{agent_name}' not found for usage tracking", level=logging.WARNING)
+                    return
+                
+                # Find or create user template preference record
+                preference = session.query(UserTemplatePreference).filter(
+                    UserTemplatePreference.user_id == self.user_id,
+                    UserTemplatePreference.template_id == template.template_id
+                ).first()
+                
+                if not preference:
+                    # Create new preference record (disabled by default)
+                    preference = UserTemplatePreference(
+                        user_id=self.user_id,
+                        template_id=template.template_id,
+                        is_enabled=False,  # Disabled by default
+                        usage_count=0,
+                        last_used_at=None,
+                        created_at=datetime.now(UTC),
+                        updated_at=datetime.now(UTC)
+                    )
+                    session.add(preference)
+                
+                # Update usage tracking
+                preference.usage_count += 1
+                preference.last_used_at = datetime.now(UTC)
+                preference.updated_at = datetime.now(UTC)
+                session.commit()
+                
+                logger.log_message(
+                    f"Tracked usage for template '{agent_name}' (count: {preference.usage_count})", 
+                    level=logging.DEBUG
+                )
+                
+            except Exception as e:
+                session.rollback()
+                logger.log_message(f"Error tracking usage for template {agent_name}: {str(e)}", level=logging.ERROR)
+            finally:
+                session.close()
+                
+        except Exception as e:
+            logger.log_message(f"Error in _track_agent_usage for {agent_name}: {str(e)}", level=logging.ERROR)
     
     async def execute_agent(self, specified_agent, inputs):
         """Execute agent and generate memory summary in parallel"""
         try:
+            # logger.log_message(f"[EXECUTE] Starting execution of agent: {specified_agent}", level=logging.INFO)
+            # logger.log_message(f"[EXECUTE] Agent inputs: {inputs}", level=logging.DEBUG)
+            
             # Execute main agent
             agent_result = await self.agents[specified_agent.strip()](**inputs)
+            
+            # Track usage for custom agents and templates
+            await self._track_agent_usage(specified_agent.strip())
+            
+            # logger.log_message(f"[EXECUTE] Agent {specified_agent} execution completed successfully", level=logging.INFO)
             return specified_agent.strip(), dict(agent_result)
             
         except Exception as e:
+            # logger.log_message(f"[EXECUTE] Error executing agent {specified_agent}: {str(e)}", level=logging.ERROR)
+            import traceback
+            # logger.log_message(f"[EXECUTE] Full traceback: {traceback.format_exc()}", level=logging.ERROR)
             return specified_agent.strip(), {"error": str(e)}
 
-    async def forward(self, query, specified_agent):
+    async def forward(self, query, specified_agent):        
         try:
+            # logger.log_message(f"[FORWARD] Processing query with specified agent: {specified_agent}", level=logging.INFO)
+            # logger.log_message(f"[FORWARD] Query: {query}", level=logging.DEBUG)
+            
             # If specified_agent contains multiple agents separated by commas
             # This is for handling multiple @agent mentions in one query
             if "," in specified_agent:
                 agent_list = [agent.strip() for agent in specified_agent.split(",")]
+                # logger.log_message(f"[FORWARD] Multiple agents detected: {agent_list}", level=logging.INFO)
                 return await self.execute_multiple_agents(query, agent_list)
             
             # Process query with specified agent (single agent case)
             dict_ = {}
             dict_['dataset'] = self.dataset.retrieve(query)[0].text
             dict_['styling_index'] = self.styling_index.retrieve(query)[0].text
+            
             dict_['hint'] = []
             dict_['goal'] = query
             dict_['Agent_desc'] = str(self.agent_desc)
-
-            # Prepare inputs
-            inputs = {x:dict_[x] for x in self.agent_inputs[specified_agent.strip()]}
-            inputs['hint'] = str(dict_['hint']).replace('[','').replace(']','')
+                        
+            if specified_agent.strip() not in self.agent_inputs:
+                return {"response": f"Agent '{specified_agent.strip()}' not found in agent inputs"}
             
-            # Execute agent
+            # Create inputs that match exactly what the agent expects
+            inputs = {}
+            required_fields = self.agent_inputs[specified_agent.strip()]
+            
+            for field in required_fields:
+                if field == 'goal':
+                    inputs['goal'] = query
+                elif field == 'dataset':
+                    inputs['dataset'] = dict_['dataset']
+                elif field == 'styling_index':
+                    inputs['styling_index'] = dict_['styling_index']
+                elif field == 'plan_instructions':
+                    inputs['plan_instructions'] = ""  # Empty for individual agent use
+                elif field == 'hint':
+                    inputs['hint'] = ""  # Empty string for hint    
+                else:
+                    # For any other fields, try to get from dict_ if available
+                    if field in dict_:
+                        inputs[field] = dict_[field]
+                    else:
+                        inputs[field] = ""  # Provide empty string as fallback
+            
+            
+            if specified_agent.strip() not in self.agents:
+                return {"response": f"Agent '{specified_agent.strip()}' not found in agents"}
+            
             result = await self.agents[specified_agent.strip()](**inputs)
-            output_dict = {specified_agent.strip(): dict(result)}
+                        
+            # Track usage for template agents
+            await self._track_agent_usage(specified_agent.strip())
+            
+            try:
+                result_dict = dict(result)
+            except Exception as dict_error:
+                return {"response": f"Error converting agent result to dict: {str(dict_error)}"}
+            
+            output_dict = {specified_agent.strip(): result_dict}
 
-            if "error" in output_dict:
-                return {"response": f"Error executing agent: {output_dict['error']}"}
+            # Check for errors in the agent's response (not in the outer dict)
+            if "error" in result_dict:
+                return {"response": f"Error executing agent: {result_dict['error']}"}
 
             return output_dict
 
         except Exception as e:
+            import traceback
+            logger.log_message(f"[FORWARD] Full traceback: {traceback.format_exc()}", level=logging.ERROR)
             return {"response": f"This is the error from the system: {str(e)}"}
     
     async def execute_multiple_agents(self, query, agent_list):
         """Execute multiple agents sequentially on the same query"""
         try:
+            logger.log_message(f"[MULTI] Executing multiple agents: {agent_list}", level=logging.INFO)
+            
             # Initialize resources
             dict_ = {}
             dict_['dataset'] = self.dataset.retrieve(query)[0].text
@@ -965,26 +1494,64 @@ class auto_analyst_ind(dspy.Module):
             
             # Execute each agent sequentially
             for agent_name in agent_list:
+                logger.log_message(f"[MULTI] Processing agent: {agent_name}", level=logging.INFO)
+                
                 if agent_name not in self.agents:
+                    logger.log_message(f"[MULTI] Agent '{agent_name}' not found", level=logging.ERROR)
                     results[agent_name] = {"error": f"Agent '{agent_name}' not found"}
                     continue
                 
-                # Prepare inputs for this agent
-                inputs = {x:dict_[x] for x in self.agent_inputs[agent_name] if x in dict_}
-                inputs['hint'] = str(dict_['hint']).replace('[','').replace(']','')
+                # Create inputs that match exactly what the agent expects
+                inputs = {}
+                required_fields = self.agent_inputs[agent_name]
+                
+                logger.log_message(f"[MULTI] Required fields for {agent_name}: {required_fields}", level=logging.DEBUG)
+                
+                for field in required_fields:
+                    if field == 'goal':
+                        inputs['goal'] = query
+                    elif field == 'dataset':
+                        inputs['dataset'] = dict_['dataset']
+                    elif field == 'styling_index':
+                        inputs['styling_index'] = dict_['styling_index']
+                    elif field == 'plan_instructions':
+                        inputs['plan_instructions'] = ""  # Empty for individual agent use
+                    elif field == 'hint':
+                        inputs['hint'] = ""  # Empty string for hint
+                    else:
+                        # For any other fields, try to get from dict_ if available
+                        if field in dict_:
+                            inputs[field] = dict_[field]
+                        else:
+                            # logger.log_message(f"[MULTI] WARNING: Field '{field}' required by agent but not available in dict_", level=logging.WARNING)
+                            pass
+                
+                # logger.log_message(f"[MULTI] Prepared inputs for {agent_name}: {list(inputs.keys())}", level=logging.DEBUG)
                 
                 # Execute agent
-                agent_result = await self.agents[agent_name](**inputs)
-                agent_dict = dict(agent_result)
-                results[agent_name] = agent_dict
-                
-                # Collect code for later combination
-                if 'code' in agent_dict:
-                    code_list.append(agent_dict['code'])
+                try:
+                    agent_result = await self.agents[agent_name](**inputs)
+                    agent_dict = dict(agent_result)
+                    results[agent_name] = agent_dict
+                    
+                    # Track usage for template agents
+                    await self._track_agent_usage(agent_name)
+                    
+                    # Collect code for later combination
+                    if 'code' in agent_dict:
+                        code_list.append(agent_dict['code'])
+                        
+                    # logger.log_message(f"[MULTI] Successfully executed agent: {agent_name}", level=logging.INFO)
+                    
+                except Exception as agent_error:
+                    # logger.log_message(f"[MULTI] Error executing agent {agent_name}: {str(agent_error)}", level=logging.ERROR)
+                    results[agent_name] = {"error": str(agent_error)}
             
+            # logger.log_message(f"[MULTI] Completed multiple agent execution. Results: {list(results.keys())}", level=logging.INFO)
             return results
             
         except Exception as e:
+            logger.log_message(f"[MULTI] Error executing multiple agents: {str(e)}", level=logging.ERROR)
             return {"response": f"Error executing multiple agents: {str(e)}"}
 
 
@@ -992,40 +1559,321 @@ class auto_analyst_ind(dspy.Module):
 class auto_analyst(dspy.Module):
     """Main analyst module that coordinates multiple agents using a planner"""
     
-    def __init__(self, agents, retrievers):
+    def __init__(self, agents, retrievers, user_id=None, db_session=None):
         # Initialize agent modules and retrievers
         self.agents = {}
         self.agent_inputs = {}
         self.agent_desc = []
         
-        for i, a in enumerate(agents):
-            name = a.__pydantic_core_schema__['schema']['model_name']
-            self.agents[name] = dspy.asyncify(dspy.ChainOfThought(a))
-            self.agent_inputs[name] = {x.strip() for x in str(agents[i].__pydantic_core_schema__['cls']).split('->')[0].split('(')[1].split(',')}
-            self.agent_desc.append({name: get_agent_description(name)})
+        # Load user-enabled template agents if user_id and db_session are provided
+        if user_id and db_session:
+            try:
+                # For planner use, load planner-enabled templates (max 10, prioritized by usage)
+                template_signatures = load_user_enabled_templates_for_planner_from_db(user_id, db_session)
+
+                # logger.log_message(f"Loaded {template_signatures} templates for planner use", level=logging.INFO)
+                
+                for template_name, signature in template_signatures.items():
+                    # For planner module, load all planner variants (including core planner agents)
+                    # Skip only individual variants, not planner variants
+                    if template_name in ['planner_preprocessing_agent', 'planner_statistical_analytics_agent', 'planner_sk_learn_agent', 'planner_data_viz_agent']:
+                        continue
+                        
+                    # Add template agent to agents dict
+                    self.agents[template_name] = dspy.asyncify(dspy.ChainOfThought(signature))
+                    
+                    # Determine if this is a visualization agent based on database category
+                    is_viz_agent = False
+                    try:
+                        from src.db.schemas.models import AgentTemplate
+                        
+                        # Find template record to check category
+                        template_record = db_session.query(AgentTemplate).filter(
+                            AgentTemplate.template_name == template_name
+                        ).first()
+                        
+                        if template_record and template_record.category and template_record.category.lower() == 'visualization':
+                            is_viz_agent = True
+                        else:
+                            # Fallback to name-based detection for legacy templates
+                            is_viz_agent = ('viz' in template_name.lower() or 
+                                          'visual' in template_name.lower() or 
+                                          'plot' in template_name.lower() or 
+                                          'chart' in template_name.lower() or
+                                          'matplotlib' in template_name.lower())
+                    except Exception as cat_error:
+                        logger.log_message(f"Error checking category for template {template_name}: {str(cat_error)}", level=logging.WARNING)
+                        # Fallback to name-based detection
+                        is_viz_agent = ('viz' in template_name.lower() or 
+                                      'visual' in template_name.lower() or 
+                                      'plot' in template_name.lower() or 
+                                      'chart' in template_name.lower() or
+                                      'matplotlib' in template_name.lower())
+                    
+                    # Set input fields based on agent type
+                    if is_viz_agent:
+                        self.agent_inputs[template_name] = {'goal', 'dataset', 'styling_index', 'plan_instructions'}
+                    else:
+                        self.agent_inputs[template_name] = {'goal', 'dataset', 'plan_instructions'}
+                    
+                    # Store template agent description
+                    try:
+                        if not template_record:
+                            template_record = db_session.query(AgentTemplate).filter(
+                                AgentTemplate.template_name == template_name
+                            ).first()
+                        
+                        if template_record:
+                            description = f"Template: {template_record.description}"
+                            self.agent_desc.append({template_name: description})
+                        else:
+                            self.agent_desc.append({template_name: f"Template: {template_name}"})
+                    except Exception as desc_error:
+                        logger.log_message(f"Error getting description for template {template_name}: {str(desc_error)}", level=logging.WARNING)
+                        self.agent_desc.append({template_name: f"Template: {template_name}"})
+                                        
+            except Exception as e:
+                logger.log_message(f"Error loading template agents for user {user_id}: {str(e)}", level=logging.ERROR)
+
+        # Load core planner agents based on user preferences (only planner variants for planner module)
+        if len(self.agents) == 0 and user_id and db_session:
+            try:
+                # Get user preferences for core planner agents
+                from src.db.schemas.models import AgentTemplate, UserTemplatePreference
+                
+                # For planner module, use planner variants of core agents
+                core_planner_agent_names = ['planner_preprocessing_agent', 'planner_statistical_analytics_agent', 'planner_sk_learn_agent', 'planner_data_viz_agent']
+                
+                for agent_name in core_planner_agent_names:
+                    # Check if user has enabled this core agent (check both planner and individual preferences)
+                    template = db_session.query(AgentTemplate).filter(
+                        AgentTemplate.template_name == agent_name,
+                        AgentTemplate.is_active == True
+                    ).first()
+                    
+                    if not template:
+                        logger.log_message(f"Core planner agent template '{agent_name}' not found in database", level=logging.WARNING)
+                        continue
+                    
+                    # Check user preference for this planner agent
+                    preference = db_session.query(UserTemplatePreference).filter(
+                        UserTemplatePreference.user_id == user_id,
+                        UserTemplatePreference.template_id == template.template_id
+                    ).first()
+                    
+                    # Core planner agents are enabled by default unless explicitly disabled
+                    is_enabled = preference.is_enabled if preference else True
+                    
+                    if not is_enabled:
+                        continue
+                    
+                    # Skip if already loaded from template_signatures
+                    if agent_name in self.agents:
+                        continue
+                    
+                    # Create dynamic signature for planner agent
+                    signature = create_custom_agent_signature(
+                        template.template_name,
+                        template.description,
+                        template.prompt_template,
+                        template.category
+                    )
+                    
+                    # Add to agents dict
+                    self.agents[agent_name] = dspy.asyncify(dspy.ChainOfThought(signature))
+                    
+                    # Set input fields based on signature (all planner agents need plan_instructions)
+                    if 'data_viz' in agent_name.lower() or template.category == 'Data Visualization':
+                        self.agent_inputs[agent_name] = {'goal', 'dataset', 'styling_index', 'plan_instructions'}
+                    else:
+                        self.agent_inputs[agent_name] = {'goal', 'dataset', 'plan_instructions'}
+                    
+                    # Get description from database
+                    description = f"Planner: {template.description}"
+                    self.agent_desc.append({agent_name: description})
+                    logger.log_message(f"Loaded core planner agent: {agent_name}", level=logging.DEBUG)
+                    
+            except Exception as e:
+                logger.log_message(f"Error loading core planner agents based on preferences: {str(e)}", level=logging.ERROR)
+                # Don't fallback - user must explicitly enable agents
+        elif len(self.agents) == 0:
+            # If no user_id/db_session provided and no agents loaded, this indicates a configuration issue
+            logger.log_message("No agents loaded and no user preferences available - check configuration", level=logging.ERROR)
+        else:
+            # Load standard agents from provided list (legacy support)
+            for i, a in enumerate(agents):
+                name = a.__pydantic_core_schema__['schema']['model_name']
+                self.agents[name] = dspy.asyncify(dspy.ChainOfThought(a))
+                self.agent_inputs[name] = {x.strip() for x in str(agents[i].__pydantic_core_schema__['cls']).split('->')[0].split('(')[1].split(',')}
+                logger.log_message(f"Added agent: {name}, inputs: {self.agent_inputs[name]}", level=logging.DEBUG)
+                self.agent_desc.append({name: get_agent_description(name)})
 
         self.agents['basic_qa_agent'] = dspy.asyncify(dspy.Predict("goal->answer")) 
         self.agent_inputs['basic_qa_agent'] = {"goal"}
         self.agent_desc.append({'basic_qa_agent':"Answers queries unrelated to data & also that include links, poison or attempts to attack the system"})
-
         
         # Initialize coordination agents
         self.planner = planner_module()
-        # self.refine_goal = dspy.ChainOfThought(goal_refiner_agent)
-        # self.code_combiner_agent = dspy.ChainOfThought(code_combiner_agent)
-        # self.story_teller = dspy.ChainOfThought(story_teller_agent)
-        self.memory_summarize_agent = dspy.ChainOfThought(m.memory_summarize_agent)
+        # self.memory_summarize_agent = dspy.ChainOfThought(m.memory_summarize_agent)
                 
         # Initialize retrievers
         self.dataset = retrievers['dataframe_index'].as_retriever(k=1)
         self.styling_index = retrievers['style_index'].as_retriever(similarity_top_k=1)
+        
+        # Store user_id for usage tracking
+        self.user_id = user_id
+        
+
+    def _load_default_agents_fallback(self):
+        """Fallback method to load default agents when preference system fails"""
+        logger.log_message("Loading default agents as fallback for auto_analyst_ind", level=logging.WARNING)
+        
+        # Load the 4 core agents from database
+        core_agent_names = ['preprocessing_agent', 'statistical_analytics_agent', 'sk_learn_agent', 'data_viz_agent']
+        
+        for agent_name in core_agent_names:
+            # Get the agent signature class
+            if agent_name == 'preprocessing_agent':
+                agent_signature = preprocessing_agent
+            elif agent_name == 'statistical_analytics_agent':
+                agent_signature = statistical_analytics_agent
+            elif agent_name == 'sk_learn_agent':
+                agent_signature = sk_learn_agent
+            elif agent_name == 'data_viz_agent':
+                agent_signature = data_viz_agent
+            
+            # Add to agents dict
+            self.agents[agent_name] = dspy.asyncify(dspy.ChainOfThought(agent_signature))
+            
+            # Set input fields based on signature
+            if agent_name == 'data_viz_agent':
+                self.agent_inputs[agent_name] = {'goal', 'dataset', 'styling_index', 'plan_instructions'}
+            else:
+                self.agent_inputs[agent_name] = {'goal', 'dataset', 'plan_instructions'}
+            
+            # Get description from database
+            self.agent_desc.append({agent_name: get_agent_description(agent_name)})
+            logger.log_message(f"Added fallback agent: {agent_name}", level=logging.DEBUG)
+
+    def _load_default_planner_agents_fallback(self):
+        """Fallback method to load default planner agents when preference system fails"""
+        logger.log_message("Loading default planner agents as fallback for auto_analyst", level=logging.WARNING)
+        
+        # For planner module, load the 4 core planner agents
+        core_planner_agent_names = ['planner_preprocessing_agent', 'planner_statistical_analytics_agent', 'planner_sk_learn_agent', 'planner_data_viz_agent']
+        
+        for agent_name in core_planner_agent_names:
+            # Skip if already loaded
+            if agent_name in self.agents:
+                continue
+                
+            # Create a basic signature for the planner agent as fallback
+            # In production, these should come from the database
+            if agent_name == 'planner_preprocessing_agent':
+                base_signature = preprocessing_agent
+                description = "Planner: Data preprocessing agent for multi-agent pipelines"
+            elif agent_name == 'planner_statistical_analytics_agent':
+                base_signature = statistical_analytics_agent
+                description = "Planner: Statistical analytics agent for multi-agent pipelines"
+            elif agent_name == 'planner_sk_learn_agent':
+                base_signature = sk_learn_agent
+                description = "Planner: Machine learning agent for multi-agent pipelines"
+            elif agent_name == 'planner_data_viz_agent':
+                base_signature = data_viz_agent
+                description = "Planner: Data visualization agent for multi-agent pipelines"
+            
+            # Add to agents dict using base signature (fallback mode)
+            self.agents[agent_name] = dspy.asyncify(dspy.ChainOfThought(base_signature))
+            
+            # Set input fields based on signature
+            if 'data_viz' in agent_name:
+                self.agent_inputs[agent_name] = {'goal', 'dataset', 'styling_index', 'plan_instructions'}
+            else:
+                self.agent_inputs[agent_name] = {'goal', 'dataset', 'plan_instructions'}
+            
+            # Add description
+            self.agent_desc.append({agent_name: description})
+            logger.log_message(f"Added fallback planner agent: {agent_name}", level=logging.DEBUG)
+
+    async def _track_agent_usage(self, agent_name):
+        """Track usage for template agents"""
+        try:
+            # Skip tracking for standard agents and basic_qa_agent (but DO track planner variants)
+            if agent_name in ['preprocessing_agent', 'statistical_analytics_agent', 'sk_learn_agent', 'data_viz_agent', 'basic_qa_agent']:
+                return
+            
+            # Only track if we have user_id (template agents)
+            if not self.user_id:
+                return
+                
+            from src.db.init_db import session_factory
+            from src.db.schemas.models import AgentTemplate, UserTemplatePreference
+            from datetime import datetime, UTC
+            
+            # Create database session
+            session = session_factory()
+            try:
+                # Find the template
+                template = session.query(AgentTemplate).filter(
+                    AgentTemplate.template_name == agent_name
+                ).first()
+                
+                if not template:
+                    logger.log_message(f"Template '{agent_name}' not found for usage tracking", level=logging.WARNING)
+                    return
+                
+                # Find or create user template preference record
+                preference = session.query(UserTemplatePreference).filter(
+                    UserTemplatePreference.user_id == self.user_id,
+                    UserTemplatePreference.template_id == template.template_id
+                ).first()
+                
+                if not preference:
+                    # Create new preference record (disabled by default)
+                    preference = UserTemplatePreference(
+                        user_id=self.user_id,
+                        template_id=template.template_id,
+                        is_enabled=False,  # Disabled by default
+                        usage_count=0,
+                        last_used_at=None,
+                        created_at=datetime.now(UTC),
+                        updated_at=datetime.now(UTC)
+                    )
+                    session.add(preference)
+                
+                # Update usage tracking
+                preference.usage_count += 1
+                preference.last_used_at = datetime.now(UTC)
+                preference.updated_at = datetime.now(UTC)
+                session.commit()
+                
+                logger.log_message(
+                    f"Tracked usage for template '{agent_name}' (count: {preference.usage_count})", 
+                    level=logging.DEBUG
+                )
+                
+            except Exception as e:
+                session.rollback()
+                logger.log_message(f"Error tracking usage for template {agent_name}: {str(e)}", level=logging.ERROR)
+            finally:
+                session.close()
+                
+        except Exception as e:
+            logger.log_message(f"Error in _track_agent_usage for {agent_name}: {str(e)}", level=logging.ERROR)
 
     async def execute_agent(self, agent_name, inputs):
         """Execute a single agent with given inputs"""
+        
         try:
             result = await self.agents[agent_name.strip()](**inputs)
+            
+            # Track usage for custom agents and templates
+            await self._track_agent_usage(agent_name.strip())
+            
+            logger.log_message(f"Agent {agent_name} execution completed", level=logging.DEBUG)
             return agent_name.strip(), dict(result)
         except Exception as e:
+            logger.log_message(f"Error in execute_agent for {agent_name}: {str(e)}", level=logging.ERROR)
             return agent_name.strip(), {"error": str(e)}
 
     async def get_plan(self, query):
@@ -1036,19 +1884,56 @@ class auto_analyst(dspy.Module):
         dict_['goal'] = query
         dict_['Agent_desc'] = str(self.agent_desc)
         
-        module_return = await self.planner(goal=dict_['goal'], dataset=dict_['dataset'], Agent_desc=dict_['Agent_desc'])
-        plan_dict = dict(module_return['plan'])
-        logger.log_message(f"Plan: {plan_dict}", level=logging.INFO)
-        if 'complexity' in module_return:
-            complexity = module_return['complexity']
-        else:
-            complexity = 'basic'
-        plan_dict['complexity'] = complexity
+        
+        try:
+            module_return = await self.planner(
+                goal=dict_['goal'], 
+                dataset=dict_['dataset'], 
+                Agent_desc=dict_['Agent_desc']
+            )
+            logger.log_message(f"Module return: {module_return}", level=logging.INFO)
+            
+            # Handle different plan formats
+            plan = module_return['plan']
+            logger.log_message(f"Plan from module_return: {plan}, type: {type(plan)}", level=logging.INFO)
+            
+            # If plan is a string (agent name), convert to proper format
+            if isinstance(plan, str):
+                if 'complexity' in module_return:
+                    complexity = module_return['complexity']
+                else:
+                    complexity = 'basic'
+                    
+                plan_dict = {
+                    'plan': plan,
+                    'complexity': complexity
+                }
+                
+                # Add plan_instructions if available
+                if 'plan_instructions' in module_return:
+                    plan_dict['plan_instructions'] = module_return['plan_instructions']
+                else:
+                    plan_dict['plan_instructions'] = {}
+            else:
+                # If plan is already a dict, use it directly
+                plan_dict = dict(plan) if not isinstance(plan, dict) else plan
+                if 'complexity' in module_return:
+                    complexity = module_return['complexity']
+                else:
+                    complexity = 'basic'
+                plan_dict['complexity'] = complexity
+                
+            logger.log_message(f"Final plan dict: {plan_dict}", level=logging.INFO)
 
-        return plan_dict
+            return plan_dict
+            
+        except Exception as e:
+            logger.log_message(f"Error in get_plan: {str(e)}", level=logging.ERROR)
+            raise
 
     async def execute_plan(self, query, plan):
         """Execute the plan and yield results as they complete"""
+        
         dict_ = {}
         dict_['dataset'] = self.dataset.retrieve(query)[0].text
         dict_['styling_index'] = self.styling_index.retrieve(query)[0].text
@@ -1058,93 +1943,60 @@ class auto_analyst(dspy.Module):
         import json
 
         # Clean and split the plan string into agent names
-        plan_text = plan.get("plan", "").replace("Plan", "").replace(":", "").strip()
-
+        plan_text = plan.get("plan", "").lower().replace("plan:", "").strip()
+        logger.log_message(f"Plan text: {plan_text}", level=logging.INFO)
         
         if "basic_qa_agent" in plan_text:
             inputs = dict(goal=query)
-            agent_name, response = await self.execute_agent('basic_qa_agent', inputs) #! SHOULDN'T THIS BE **inputs ?
+            agent_name, response = await self.execute_agent('basic_qa_agent', inputs)
             yield agent_name, inputs, response
             return 
 
         plan_list = [agent.strip() for agent in plan_text.split("->") if agent.strip()]
-
+        logger.log_message(f"Plan list: {plan_list}", level=logging.INFO)
         # Parse the attached plan_instructions into a dict
         raw_instr = plan.get("plan_instructions", {})
         if isinstance(raw_instr, str):
             try:
                 plan_instructions = json.loads(raw_instr)
-            except Exception:
+            except Exception as e:
+                logger.log_message(f"Error parsing plan_instructions JSON: {str(e)}", level=logging.ERROR)
                 plan_instructions = {}
         elif isinstance(raw_instr, dict):
-            plan_instructions = str(raw_instr)
+            plan_instructions = raw_instr
         else:
             plan_instructions = {}
 
-        # If no plan was produced, short-circuit
-        if not plan_list:
-            yield "plan_not_found", dict(plan), {"error": "No plan found"}
+
+        # Check if we have no valid agents to execute
+        if not plan_list or all(agent not in self.agents for agent in plan_list):
+            yield "plan_not_found", None, {"error": "No valid agents found in plan"}
             return
         
-
-        # Create async tasks for each agent, similar to deep analysis approach
-        tasks = []
-        task_info = []
-        
-        for idx, agent_name in enumerate(plan_list):
-            key = agent_name.strip()
-            # gather input fields except plan_instructions
-            inputs = {
-                param: dict_[param]
-                for param in self.agent_inputs[key]
-                if param != "plan_instructions"
-            }
-            
-            # attach the specific instructions for this agent with prev/next format
-            if "plan_instructions" in self.agent_inputs[key]:
-                # Get current agent instructions
-                current_instructions = plan_instructions.get(key, {"create": [], "use": [], "instruction": ""})
+        # Execute agents in sequence
+        for agent_name in plan_list:
+            if agent_name not in self.agents:
+                yield agent_name, {}, {"error": f"Agent '{agent_name}' not available"}
+                continue
+                        
+            try:
+                # Prepare inputs for the agent
+                inputs = {x: dict_[x] for x in self.agent_inputs[agent_name] if x in dict_}
                 
-                # Format instructions with your_task first
-                formatted_instructions = {"your_task": current_instructions}
-                
-                # Add previous agent instructions if available
-                if idx > 0:
-                    prev_agent = plan_list[idx-1].strip()
-                    prev_instructions = plan_instructions.get(prev_agent, {}).get("instruction", "")
-                    formatted_instructions[f"Previous Agent {prev_agent}"] = prev_instructions
-                
-                # Add next agent instructions if available
-                if idx < len(plan_list) - 1:
-                    next_agent = plan_list[idx+1].strip()
-                    next_instructions = plan_instructions.get(next_agent, {}).get("instruction", "")
-                    formatted_instructions[f"Next Agent {next_agent}"] = next_instructions
-                
-                inputs["plan_instructions"] = str(formatted_instructions)
-            
-            logger.log_message(f"Inputs: {inputs}", level=logging.INFO)
-            
-            # Create async task directly from the asyncified agent
-            task = self.execute_agent(agent_name, inputs)
-            tasks.append(task)
-            task_info.append((agent_name, inputs))
-        
-        # Execute all tasks concurrently and yield results as they complete
-        try:
-            # Execute all tasks concurrently
-            results = await asyncio.gather(*tasks, return_exceptions=True)
-            
-            # Yield results with their corresponding task info
-            for i, result in enumerate(results):
-                agent_name, inputs = task_info[i]
-                
-                if isinstance(result, Exception):
-                    yield agent_name, inputs, {"error": str(result)}
+                # Add plan instructions if available for this agent
+                if agent_name in plan_instructions:
+                    inputs['plan_instructions'] = json.dumps(plan_instructions[agent_name])
                 else:
-                    name, response = result
-                    yield name, inputs, response
+                    inputs['plan_instructions'] = ""
+                
+                # logger.log_message(f"Agent inputs for {agent_name}: {inputs}", level=logging.INFO)
+                
+                # Execute the agent
+                agent_result_name, response = await self.execute_agent(agent_name, inputs)
+                
+                yield agent_result_name, inputs, response
                     
-        except Exception as e:
-            logger.log_message(f"Error in task execution: {str(e)}", level=logging.ERROR)
-            yield "error", {}, {"error": str(e)}
+            except Exception as e:
+                    logger.log_message(f"Error executing agent {agent_name}: {str(e)}", level=logging.ERROR)
+                    yield agent_name, {}, {"error": f"Error executing {agent_name}: {str(e)}"}
 

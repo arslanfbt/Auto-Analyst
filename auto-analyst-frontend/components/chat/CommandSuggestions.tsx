@@ -2,7 +2,7 @@
 
 import React from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Brain, Lock } from 'lucide-react'
+import { Brain, Lock, Settings } from 'lucide-react'
 import { Badge } from '../ui/badge'
 import { hasFeatureAccess, UserSubscription } from '@/lib/features/feature-access'
 
@@ -30,6 +30,14 @@ const AVAILABLE_COMMANDS: Command[] = [
     description: 'Comprehensive multi-step analysis with automated planning',
     icon: <Brain className="w-4 h-4" />,
     featureId: 'DEEP_ANALYSIS',
+    isPremium: true
+  },
+  {
+    id: 'custom-agents',
+    name: 'custom-agents',
+    description: 'Create and manage your custom AI agents',
+    icon: <Settings className="w-4 h-4" />,
+    featureId: 'CUSTOM_AGENTS',
     isPremium: true
   }
 ]
