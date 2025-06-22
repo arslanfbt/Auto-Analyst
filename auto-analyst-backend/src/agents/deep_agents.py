@@ -726,9 +726,10 @@ Chart Styling Guidelines:
 
 
 
+
 class deep_analysis_module(dspy.Module):
     def __init__(self,agents, agents_desc):
-        logger.log_message(f"Initializing deep_analysis_module with {agents} agents: {list(agents.keys())}", level=logging.INFO)
+        # logger.log_message(f"Initializing deep_analysis_module with {agents} agents: {list(agents.keys())}", level=logging.INFO)
         
         self.agents = agents
         # Make all dspy operations async using asyncify
@@ -744,7 +745,7 @@ class deep_analysis_module(dspy.Module):
         self.agents_desc = agents_desc
         self.final_conclusion = dspy.asyncify(dspy.ChainOfThought(final_conclusion))
         
-        logger.log_message(f"Deep analysis module initialized successfully with agents: {list(self.agents.keys())}", level=logging.INFO)
+        # logger.log_message(f"Deep analysis module initialized successfully with agents: {list(self.agents.keys())}", level=logging.INFO)
 
     async def execute_deep_analysis_streaming(self, goal, dataset_info, session_df=None):
         """
@@ -808,8 +809,6 @@ class deep_analysis_module(dspy.Module):
                     if not isinstance(plan_instructions, dict):
                         plan_instructions = json.loads(deep_plan.fixed_plan)
                     keys = [key for key in plan_instructions.keys()]
-                    logger.log_message(f"Plan instructions fixed: {plan_instructions}", logging.INFO)
-                    logger.log_message(f"Keys: {keys}", logging.INFO)
                 except (ValueError, SyntaxError, json.JSONDecodeError) as e:
                     logger.log_message(f"Error parsing plan instructions: {e}", logging.ERROR)
                     raise e
