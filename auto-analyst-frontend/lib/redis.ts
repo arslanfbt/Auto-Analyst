@@ -344,7 +344,10 @@ export const subscriptionUtils = {
         (creditsData && creditsData.pendingDowngrade === 'true');
 
       // Check if subscription is canceled (including trial cancellations)
-      const isCanceled = subscriptionData && subscriptionData.status === 'canceled';
+      const isCanceled = subscriptionData && (
+        subscriptionData.status === 'canceled' ||
+        subscriptionData.status === 'canceling'
+      );
       
       // Process active subscriptions, trials, and pending downgrades/cancellations
       const shouldProcess = subscriptionData && (
@@ -356,9 +359,10 @@ export const subscriptionUtils = {
         isPendingDowngrade
       );
       
-      // Special handling for canceled subscriptions - immediately set to 0 credits
+      // Special handling for canceled/canceling subscriptions - immediately set to 0 credits
       if (isCanceled) {
         await creditUtils.setZeroCredits(userId);
+        console.log(`[Credits] Set zero credits for ${subscriptionData.status} user ${userId}`);
         return true;
       }
       
@@ -484,39 +488,31 @@ export const subscriptionUtils = {
   async downgradeToFreePlan(userId: string): Promise<boolean> {
     try {
       const now = new Date();
-      const resetDate = CreditConfig.getNextResetDate();
       
-      // Get current credits used to preserve them
-      const currentCredits = await redis.hgetall(KEYS.USER_CREDITS(userId));
-      const usedCredits = currentCredits && currentCredits.used 
-        ? parseInt(currentCredits.used as string) 
-        : 0;
-      
-      // Get Free plan configuration
-      const freeCredits = CreditConfig.getCreditsForPlan('Free');
-      
-      // Update subscription to Free plan
+      // Since we removed the free plan, downgraded users get 0 credits
       await redis.hset(KEYS.USER_SUBSCRIPTION(userId), {
-        plan: freeCredits.displayName,
-        planType: freeCredits.type,
-        status: 'active',
+        plan: 'No Active Plan',
+        planType: 'DOWNGRADED',
+        status: 'canceled',
         amount: '0',
         interval: 'month',
         renewalDate: '',
         lastUpdated: now.toISOString(),
         stripeCustomerId: '',
-        stripeSubscriptionId: ''
+        stripeSubscriptionId: '',
+        downgraded: 'true'
       });
       
-      // Update credits to Free plan level, but preserve used credits
+      // Set credits to 0 for downgraded users (no free plan anymore)
       await redis.hset(KEYS.USER_CREDITS(userId), {
-        total: freeCredits.total.toString(),
-        used: Math.min(usedCredits, freeCredits.total).toString(), // Used credits shouldn't exceed new total
-        resetDate: resetDate,
-        lastUpdate: now.toISOString()
+        total: '0',
+        used: '0',
+        resetDate: '',
+        lastUpdate: now.toISOString(),
+        downgraded: 'true'
       });
       
-      logger.log(`User ${userId} downgraded to Free plan with ${freeCredits.total} credits`);
+      logger.log(`User ${userId} downgraded to 0 credits (no free plan)`);
       return true;
     } catch (error) {
       console.error('Error downgrading to free plan:', error);

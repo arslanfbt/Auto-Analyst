@@ -72,6 +72,16 @@ export async function POST(request: NextRequest) {
     // Immediately set credits to 0 (lose access immediately as requested)
     await creditUtils.setZeroCredits(userId)
     
+    // Force additional credit zeroing to be absolutely sure
+    await redis.hset(KEYS.USER_CREDITS(userId), {
+      total: '0',
+      used: '0',
+      resetDate: '',
+      lastUpdate: now.toISOString(),
+      downgradedAt: now.toISOString(),
+      canceledAt: now.toISOString()
+    })
+    
     // Verify credits were actually set to 0
     const creditsAfterReset = await redis.hgetall(KEYS.USER_CREDITS(userId))
     console.log(`Credits after reset for user ${userId}:`, creditsAfterReset)

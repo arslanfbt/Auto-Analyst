@@ -191,6 +191,32 @@ export default function AccountPage() {
     }
   }, [searchParams, router, refreshUserData])
 
+  // Effect to emit credit update event when user navigates away from accounts page
+  useEffect(() => {
+    // Function to handle navigation away from accounts page
+    const handleBeforeUnload = () => {
+      // Emit custom event to notify other components that credits may have been updated
+      window.dispatchEvent(new CustomEvent('creditsUpdated'));
+    };
+
+    // Function to handle visibility change (user switches tabs/windows)
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        // User is leaving the page/tab, emit the event
+        window.dispatchEvent(new CustomEvent('creditsUpdated'));
+      }
+    };
+
+    // Add event listeners
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [])
+
   useEffect(() => {
     // Add CSS for custom toggle switches
     const style = document.createElement('style');
