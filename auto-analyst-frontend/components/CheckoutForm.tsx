@@ -17,9 +17,11 @@ interface CheckoutFormProps {
   amount: number
   interval: 'month' | 'year' | 'day'
   clientSecret: string
+  isTrialSetup?: boolean
+  subscriptionId?: string
 }
 
-export default function CheckoutForm({ planName, amount, interval, clientSecret }: CheckoutFormProps) {
+export default function CheckoutForm({ planName, amount, interval, clientSecret, isTrialSetup, subscriptionId }: CheckoutFormProps) {
   const router = useRouter()
   const { data: session } = useSession()
   const stripe = useStripe()
@@ -39,33 +41,63 @@ export default function CheckoutForm({ planName, amount, interval, clientSecret 
 
     setProcessing(true)
     
-    // Use the PaymentElement instead of CardElement
-    const { error: submitError, paymentIntent } = await stripe.confirmPayment({
-      elements,
-      confirmParams: {
-        return_url: `${window.location.origin}/checkout/success`,
-      },
-      redirect: 'if_required',
-    })
+    // Check if this is a SetupIntent (for trials) by looking at the client secret
+    const isSetupIntent = clientSecret?.startsWith('seti_') || isTrialSetup
+    
+    if (isSetupIntent) {
+      // For trial subscriptions, use confirmSetup to collect payment method
+      const { error: submitError, setupIntent } = await stripe.confirmSetup({
+        elements,
+        confirmParams: {
+          return_url: `${window.location.origin}/checkout/success`,
+        },
+        redirect: 'if_required',
+      })
 
-    setProcessing(false)
+      setProcessing(false)
 
-    if (submitError) {
-      setError(submitError.message || 'An error occurred when processing your payment')
-    } else if (paymentIntent && paymentIntent.status === 'succeeded') {
-      setError(null)
-      setSucceeded(true)
-      
-      // Show success animation for a second before redirecting
-      setTimeout(() => {
-        router.push(`/checkout/success?payment_intent=${paymentIntent.id}`)
-      }, 1500)
+      if (submitError) {
+        setError(submitError.message || 'An error occurred when setting up your payment method')
+      } else if (setupIntent && setupIntent.status === 'succeeded') {
+        setError(null)
+        setSucceeded(true)
+        
+        // Show success animation before redirecting
+        setTimeout(() => {
+          router.push(`/checkout/success?subscription_id=${subscriptionId}`)
+        }, 1500)
+      }
+    } else {
+      // For regular payments, use confirmPayment
+      const { error: submitError, paymentIntent } = await stripe.confirmPayment({
+        elements,
+        confirmParams: {
+          return_url: `${window.location.origin}/checkout/success`,
+        },
+        redirect: 'if_required',
+      })
+
+      setProcessing(false)
+
+      if (submitError) {
+        setError(submitError.message || 'An error occurred when processing your payment')
+      } else if (paymentIntent && (paymentIntent.status === 'succeeded' || paymentIntent.status === 'requires_capture')) {
+        // For manual capture (trial), status will be 'requires_capture'
+        // For normal payments, status will be 'succeeded'
+        setError(null)
+        setSucceeded(true)
+        
+        // Show success animation for a second before redirecting
+        setTimeout(() => {
+          router.push(`/checkout/success?payment_intent=${paymentIntent.id}`)
+        }, 1500)
+      }
     }
   }
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
-      <div className="bg-white p-6 rounded-lg shadow-md border border-gray-100">
+      <div className="bg-white p-6 rounded-lg shadow-md border border-gray-100 w-full">
         <div className="flex justify-between items-center mb-6">
           <h3 className="text-lg font-medium text-gray-900">{planName} Plan</h3>
           <div className="text-gray-900 font-medium">
@@ -81,7 +113,14 @@ export default function CheckoutForm({ planName, amount, interval, clientSecret 
             Payment Details
           </label>
           <div className="p-4 border border-gray-300 rounded-md focus-within:ring-2 focus-within:ring-[#FF7F7F] focus-within:border-[#FF7F7F] transition-all">
-            <PaymentElement />
+            <PaymentElement options={{
+              layout: 'accordion',
+              defaultValues: {
+                billingDetails: {
+                  email: ''
+                }
+              }
+            }} />
           </div>
         </div>
         

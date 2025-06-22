@@ -396,6 +396,90 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ received: true })
       }
         
+      case 'customer.subscription.trial_will_end': {
+        const subscription = event.data.object as Stripe.Subscription
+        // logger.log('Trial will end event received:', subscription.id)
+        
+        // Get the customer ID from the subscription
+        const customerId = subscription.customer as string
+        if (!customerId) {
+          console.error('No customer ID found in subscription')
+          return NextResponse.json({ error: 'No customer ID found' }, { status: 400 })
+        }
+        
+        // Look up the user by customer ID
+        const userKey = await redis.get(`stripe:customer:${customerId}`)
+        if (!userKey) {
+          console.error(`No user found for Stripe customer ${customerId}`)
+          return NextResponse.json({ received: true })
+        }
+        
+        const userId = userKey.toString()
+        
+        // Optional: Send reminder email about trial ending
+        // You can add email notification logic here
+        
+        return NextResponse.json({ received: true })
+      }
+
+      case 'invoice.payment_succeeded': {
+        const invoice = event.data.object as Stripe.Invoice
+        
+        // Check if this is for a subscription that just ended its trial
+        if (invoice.subscription && invoice.billing_reason === 'subscription_cycle') {
+          const subscription = await stripe.subscriptions.retrieve(invoice.subscription as string)
+          
+          // Get customer and user info
+          const customerId = subscription.customer as string
+          const userKey = await redis.get(`stripe:customer:${customerId}`)
+          
+          if (userKey) {
+            const userId = userKey.toString()
+            
+            // Update subscription status from trialing to active
+            await redis.hset(KEYS.USER_SUBSCRIPTION(userId), {
+              status: 'active',
+              lastUpdated: new Date().toISOString(),
+              trialEndedAt: new Date().toISOString()
+            })
+            
+            // logger.log(`User ${userId} trial ended successfully, subscription is now active`)
+          }
+        }
+        
+        return NextResponse.json({ received: true })
+      }
+
+      case 'invoice.payment_failed': {
+        const invoice = event.data.object as Stripe.Invoice
+        
+        // Handle failed payment after trial
+        if (invoice.subscription && invoice.billing_reason === 'subscription_cycle') {
+          const subscription = await stripe.subscriptions.retrieve(invoice.subscription as string)
+          
+          // Get customer and user info
+          const customerId = subscription.customer as string
+          const userKey = await redis.get(`stripe:customer:${customerId}`)
+          
+          if (userKey) {
+            const userId = userKey.toString()
+            
+            // Set credits to 0 and mark subscription as past_due
+            await creditUtils.setZeroCredits(userId)
+            
+            await redis.hset(KEYS.USER_SUBSCRIPTION(userId), {
+              status: 'past_due',
+              lastUpdated: new Date().toISOString(),
+              paymentFailedAt: new Date().toISOString()
+            })
+            
+            // logger.log(`User ${userId} payment failed after trial, access removed`)
+          }
+        }
+        
+        return NextResponse.json({ received: true })
+      }
+
       // Add more event types as needed
       
       default:

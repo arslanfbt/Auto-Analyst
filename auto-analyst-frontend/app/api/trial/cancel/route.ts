@@ -1,0 +1,123 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { getToken } from 'next-auth/jwt'
+import redis, { creditUtils, KEYS } from '@/lib/redis'
+import Stripe from 'stripe'
+
+export const dynamic = 'force-dynamic'
+
+// Initialize Stripe
+const stripe = process.env.STRIPE_SECRET_KEY 
+  ? new Stripe(process.env.STRIPE_SECRET_KEY, {
+      apiVersion: '2025-02-24.acacia',
+    })
+  : null
+
+export async function POST(request: NextRequest) {
+  try {
+    // Get the user token
+    const token = await getToken({ req: request })
+    if (!token?.sub) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    if (!stripe) {
+      return NextResponse.json({ error: 'Stripe configuration error' }, { status: 500 })
+    }
+
+    const userId = token.sub
+    
+    // Get user's current subscription data
+    const subscriptionData = await redis.hgetall(KEYS.USER_SUBSCRIPTION(userId))
+    
+    if (!subscriptionData || !['trialing', 'active'].includes(subscriptionData.status as string)) {
+      return NextResponse.json({ error: 'No active trial or subscription found' }, { status: 400 })
+    }
+
+    const stripeSubscriptionId = subscriptionData.stripeSubscriptionId as string
+    
+    if (!stripeSubscriptionId) {
+      return NextResponse.json({ error: 'No subscription found for trial' }, { status: 400 })
+    }
+
+    let stripeSubscription = null
+    try {
+      // First get the current subscription from Stripe
+      stripeSubscription = await stripe.subscriptions.retrieve(stripeSubscriptionId)
+      
+      if (stripeSubscription.status === 'trialing') {
+        // Cancel the subscription immediately for trials
+        await stripe.subscriptions.cancel(stripeSubscriptionId, {
+          prorate: false // Don't prorate since it's a trial cancellation
+        })
+        console.log(`Canceled trial subscription ${stripeSubscriptionId} for user ${userId}`)
+      } else if (stripeSubscription.status === 'active') {
+        // For active subscriptions, cancel at period end
+        await stripe.subscriptions.update(stripeSubscriptionId, {
+          cancel_at_period_end: true
+        })
+        console.log(`Scheduled cancellation for subscription ${stripeSubscriptionId} for user ${userId}`)
+      } else {
+        console.log(`Subscription ${stripeSubscriptionId} already in status: ${stripeSubscription.status}`)
+      }
+    } catch (stripeError: any) {
+      console.error('Error canceling subscription in Stripe:', stripeError)
+      // For trials, we still want to proceed with local cleanup even if Stripe fails
+      if (subscriptionData.status !== 'trialing') {
+        return NextResponse.json({ error: 'Failed to cancel subscription in Stripe' }, { status: 500 })
+      }
+    }
+
+    const now = new Date()
+
+    // Immediately set credits to 0 (lose access immediately as requested)
+    await creditUtils.setZeroCredits(userId)
+    
+    // Verify credits were actually set to 0
+    const creditsAfterReset = await redis.hgetall(KEYS.USER_CREDITS(userId))
+    console.log(`Credits after reset for user ${userId}:`, creditsAfterReset)
+    
+    // Update subscription to canceled status
+    const updatedSubscriptionData = {
+      ...subscriptionData,
+      status: 'canceled',
+      canceledAt: now.toISOString(),
+      lastUpdated: now.toISOString(),
+      subscriptionCanceled: 'true',
+      // Remove trial-specific fields
+      trialEndDate: '',
+      trialStartDate: ''
+    }
+    
+    await redis.hset(KEYS.USER_SUBSCRIPTION(userId), updatedSubscriptionData)
+    
+    // Remove any scheduled credit resets since user cancelled
+    await redis.hset(KEYS.USER_CREDITS(userId), {
+      resetDate: '', // No future resets for cancelled users
+      lastUpdate: now.toISOString(),
+      total: '0', // Explicitly ensure total is 0
+      used: '0',  // Reset used to 0 as well
+    })
+    
+    console.log(`Trial canceled for user ${userId}, access removed immediately`)
+    
+    return NextResponse.json({
+      success: true,
+      message: subscriptionData.status === 'trialing' 
+        ? 'Trial canceled successfully. Your subscription was canceled and access has been removed.'
+        : 'Subscription scheduled for cancellation at the end of the current billing period.',
+      subscription: updatedSubscriptionData,
+      credits: {
+        total: 0,
+        used: 0,
+        remaining: 0
+      },
+      stripeStatus: stripeSubscription?.status || 'unknown'
+    })
+    
+  } catch (error: any) {
+    console.error('Error canceling trial:', error)
+    return NextResponse.json({ 
+      error: error.message || 'Failed to cancel trial' 
+    }, { status: 500 })
+  }
+} 

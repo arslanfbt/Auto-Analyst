@@ -22,33 +22,69 @@ export default function CheckoutSuccess() {
   useEffect(() => {
     if (!session) return;
     
-    // Extract payment_intent from URL
+    // Extract subscription ID from URL (new approach) or payment_intent (legacy)
+    const subscription_id = searchParams?.get('subscription_id');
     const payment_intent = searchParams?.get('payment_intent');
     
-    if (payment_intent) {
+    if (subscription_id || payment_intent) {
       const processPayment = async () => {
         try {
-          // logger.log(`Processing payment intent: ${payment_intent}`)
+          let response, data;
           
-          // Send payment intent to our verification API
-          const response = await fetch('/api/verify-payment', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-              payment_intent,
-              // Include timestamp to prevent caching issues
-              timestamp: new Date().getTime() 
-            }),
-          });
+          if (subscription_id) {
+            // New subscription-based trial approach
+            response = await fetch('/api/trial/start', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ 
+                subscriptionId: subscription_id,
+                planName: 'Standard', // Default to Standard for trials
+                interval: 'month',
+                amount: 15,
+                timestamp: new Date().getTime() 
+              }),
+            });
+          } else if (payment_intent) {
+            // Legacy payment intent approach - check if it's a trial
+            const stripeResponse = await fetch(`/api/payment-intent-details?payment_intent=${payment_intent}`);
+            const stripeData = await stripeResponse.json();
+            
+            if (stripeData.metadata?.isTrial === 'true') {
+              // This is a trial payment - use the trial start endpoint
+              response = await fetch('/api/trial/start', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                  subscriptionId: payment_intent, // Legacy compatibility
+                  planName: stripeData.metadata?.planName || 'Standard',
+                  interval: stripeData.metadata?.interval || 'month',
+                  amount: stripeData.amount ? stripeData.amount / 100 : 15, // Convert from cents
+                  timestamp: new Date().getTime() 
+                }),
+              });
+            } else {
+              // This is a regular payment - use the verify payment endpoint
+              response = await fetch('/api/verify-payment', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ 
+                payment_intent,
+                timestamp: new Date().getTime() 
+              }),
+            });
+            }
+          }
           
-          const data = await response.json();
+          if (!response) {
+            throw new Error('No valid payment method found');
+          }
+          
+          data = await response.json();
           
           if (!response.ok) {
             setDebugInfo(data);
             throw new Error(data.error || 'Payment verification failed');
           }
-          
-          // logger.log('Payment verification successful:', data);
           
           // Check if it was already processed
           if (data.alreadyProcessed) {
@@ -56,9 +92,10 @@ export default function CheckoutSuccess() {
           }
           
           // Success! Show toast and redirect
+          const isTrialStart = subscription_id || data.subscription?.status === 'trialing';
           toast({
-            title: 'Subscription Activated!',
-            description: 'Your plan has been successfully activated.',
+            title: isTrialStart ? 'Trial Started!' : 'Subscription Activated!',
+            description: isTrialStart ? 'Your 7-day trial has started with full access.' : 'Your plan has been successfully activated.',
             duration: 4000
           });
           
@@ -77,8 +114,6 @@ export default function CheckoutSuccess() {
           // If we haven't tried too many times, retry
           if (retryCount < 3) {
             setRetryCount(prev => prev + 1);
-            // logger.log(`Retrying payment verification (${retryCount + 1}/3)...`);
-            
             // Wait 2 seconds before retrying
             setTimeout(() => {
               processPayment();

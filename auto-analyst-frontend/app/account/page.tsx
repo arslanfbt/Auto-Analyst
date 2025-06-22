@@ -237,7 +237,7 @@ export default function AccountPage() {
                   parseInt(String(credits.used || '0'));
     const total_remaining = typeof credits.total === 'number' ? 
                    credits.total : 
-                   parseInt(String(credits.total || CreditConfig.getDefaultInitialCredits()));
+                   parseInt(String(credits.total || 0)); // No free credits anymore
     
     // Use centralized config to check if unlimited
     const isUnlimited = CreditConfig.isUnlimitedTotal(total_remaining);
@@ -462,7 +462,7 @@ export default function AccountPage() {
   // Helper to determine if current subscription can be canceled
   const canCancel = () => {
     if (!subscription) return false
-    return subscription.status === 'active' && subscription.plan.toLowerCase() !== 'free'
+    return (subscription.status === 'active' || subscription.status === 'trialing') && subscription.plan.toLowerCase() !== 'free'
   }
 
   if (status === 'loading' || loading) {

@@ -58,9 +58,9 @@ export async function POST(request: NextRequest) {
       // Get current credit data
       const creditData = await redis.hgetall(KEYS.USER_CREDITS(userId))
       if (creditData && creditData.resetDate) {
-        // Mark the credits to be downgraded on next reset - using centralized config
+        // Mark the credits to be reset to 0 on next reset (since no more Free plan)
         await redis.hset(KEYS.USER_CREDITS(userId), {
-          nextTotalCredits: CreditConfig.getCreditsForPlan('Free').total.toString(), // This will be used at the next reset
+          nextTotalCredits: '0', // No credits after cancellation
           pendingDowngrade: 'true',
           lastUpdate: new Date().toISOString()
         })
