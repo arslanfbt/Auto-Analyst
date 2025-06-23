@@ -31,6 +31,8 @@ export default function CheckoutPage() {
   })
   
   const [clientSecret, setClientSecret] = useState('')
+  const [subscriptionId, setSubscriptionId] = useState('')
+  const [isTrialSetup, setIsTrialSetup] = useState(false)
   const [paymentLoading, setPaymentLoading] = useState(false)
   const [paymentError, setPaymentError] = useState('')
   const [promoError, setPromoError] = useState('')
@@ -70,6 +72,8 @@ export default function CheckoutPage() {
         }
       } else {
         setClientSecret(data.clientSecret)
+        setSubscriptionId(data.subscriptionId)
+        setIsTrialSetup(data.isTrialSetup || false)
         setDiscountApplied(data.discountApplied || false)
         setPaymentError('')
         setPromoError('')
@@ -204,7 +208,7 @@ export default function CheckoutPage() {
       </Head>
       
       <div className="min-h-screen bg-gray-50 py-16 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-2xl mx-auto">
+        <div className="max-w-5xl mx-auto">
           <div className="flex items-center justify-between mb-10">
             <Link href="/pricing" className="flex items-center text-gray-700 hover:text-[#FF7F7F] transition-colors cursor-pointer">
               <ArrowLeft size={16} className="mr-1" />
@@ -233,7 +237,7 @@ export default function CheckoutPage() {
               </div>
             )}
             
-            <div className="grid gap-6 lg:gap-10 md:grid-cols-1 lg:grid-cols-2">
+            <div className="grid gap-6 lg:gap-10 grid-cols-1 lg:grid-cols-2">
               <div className="order-2 lg:order-1">
                 {clientSecret && (
                   <Elements 
@@ -250,6 +254,8 @@ export default function CheckoutPage() {
                       amount={planDetails.amount}
                       interval={planDetails.cycle as 'month' | 'year' | 'day'}
                       clientSecret={clientSecret}
+                      isTrialSetup={isTrialSetup}
+                      subscriptionId={subscriptionId}
                     />
                   </Elements>
                 )}

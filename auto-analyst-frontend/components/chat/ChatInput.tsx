@@ -23,6 +23,7 @@ import { useCredits } from '@/lib/contexts/credit-context'
 import API_URL from '@/config/api'
 import Link from 'next/link'
 import DatasetResetPopup from './DatasetResetPopup'
+import CreditExhaustedModal from './CreditExhaustedModal'
 import ReactMarkdown from 'react-markdown'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import logger from '@/lib/utils/logger'
@@ -234,6 +235,9 @@ const ChatInput = forwardRef<
   // Get subscription from store instead of manual construction
   const { subscription } = useUserSubscriptionStore()
   const deepAnalysisAccess = useFeatureAccess('DEEP_ANALYSIS', subscription)
+  
+  // Credit exhausted modal state
+  const [showCreditExhaustedModal, setShowCreditExhaustedModal] = useState(false)
 
   // Expose handlePreviewDefaultDataset to parent
   useImperativeHandle(ref, () => ({
@@ -251,6 +255,55 @@ const ChatInput = forwardRef<
     };
     checkDisabledStatus();
   }, []);
+
+  // Enhanced credit refresh on navigation from accounts page
+  useEffect(() => {
+    // Listen for focus events to detect when user returns from accounts page
+    const handleWindowFocus = () => {
+      // Check navigation flags and referrer
+      const navigationFlag = localStorage.getItem('navigateFromAccount') === 'true'
+      const referrer = document.referrer;
+      const isFromAccountsPage = referrer.includes('/account') || referrer.includes('/pricing');
+      
+      if ((navigationFlag || isFromAccountsPage) && session) {
+        console.log('Refreshing credits due to navigation from account page (focus event)')
+        // Refresh credits when coming back from accounts/pricing page
+        setTimeout(() => {
+          checkCredits();
+        }, 800); // Small delay to ensure any backend processes have completed
+        
+        // Clear the navigation flag
+        localStorage.removeItem('navigateFromAccount')
+      }
+    };
+
+    // Also listen for storage events (in case accounts page updates localStorage)
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key?.includes('credits') || e.key?.includes('subscription')) {
+        // Credits or subscription data changed, refresh
+        setTimeout(() => {
+          checkCredits();
+        }, 500);
+      }
+    };
+
+    // Listen for custom events from other parts of the app
+    const handleCreditUpdate = () => {
+      setTimeout(() => {
+        checkCredits();
+      }, 500);
+    };
+
+    window.addEventListener('focus', handleWindowFocus);
+    window.addEventListener('storage', handleStorageChange);
+    window.addEventListener('creditsUpdated', handleCreditUpdate);
+
+    return () => {
+      window.removeEventListener('focus', handleWindowFocus);
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('creditsUpdated', handleCreditUpdate);
+    };
+  }, [session, checkCredits]);
 
   // Add a periodic check for credit state to ensure UI is consistent
   useEffect(() => {
@@ -273,6 +326,18 @@ const ChatInput = forwardRef<
     
     return () => clearInterval(intervalId);
   }, [session, isChatBlocked]);
+
+  // Auto-show credit exhausted modal when credits become 0
+  useEffect(() => {
+    if (isChatBlocked && remainingCredits <= 0 && session) {
+      // Auto-show modal after a short delay when chat becomes blocked
+      const timer = setTimeout(() => {
+        setShowCreditExhaustedModal(true);
+      }, 1000);
+      
+      return () => clearTimeout(timer);
+    }
+  }, [isChatBlocked, remainingCredits, session]);
 
   // Add an improved effect to handle chat switches and preserve dataset info
   useEffect(() => {
@@ -1915,30 +1980,24 @@ const ChatInput = forwardRef<
                 
               </div>
 
-              {/* Credit exhaustion message with reset date */}
-              {isChatBlocked && (
+              {/* Show credit exhausted modal when chat is blocked */}
+              {isChatBlocked && !showCreditExhaustedModal && (
                 <div className="max-w-3xl mx-auto mb-4">
-                  <div className="bg-orange-50 border border-orange-200 rounded-md p-4 flex flex-col gap-3">
+                  <div className="bg-gradient-to-r from-red-50 to-orange-50 border border-[#FF7F7F]/20 rounded-md p-4 flex flex-col gap-3">
                     <div className="flex items-center gap-2">
-                      <AlertCircle className="w-5 h-5 text-orange-500" />
-                      <span className="text-orange-700 font-medium">You've used all your tokens for this month</span>
+                      <AlertCircle className="w-5 h-5 text-[#FF7F7F]" />
+                      <span className="text-gray-900 font-medium">Credits Required</span>
                     </div>
-                    <p className="text-sm text-orange-600 ml-7">
-                      Upgrade your plan to get more tokens immediately, or wait until <strong>{getResetDate()}</strong> when your free tokens will reset.
+                    <p className="text-sm text-gray-700 ml-7">
+                      You need credits to continue using Auto-Analyst. 
                     </p>
                     <div className="flex gap-3 ml-7">
-                      <Link href="/pricing" passHref>
-                        <Button className="bg-[#FF7F7F] hover:bg-[#FF6666] text-white">
-                          <CreditCard className="w-4 h-4 mr-2" />
-                          Upgrade Plan
-                        </Button>
-                      </Link>
                       <Button 
-                        variant="outline" 
-                        className="text-gray-700" 
-                        onClick={() => setShowCreditInfo(true)}
+                        className="bg-[#FF7F7F] hover:bg-[#FF6666] text-white"
+                        onClick={() => setShowCreditExhaustedModal(true)}
                       >
-                        Learn More
+                        <CreditCard className="w-4 h-4 mr-2" />
+                        View Options
                       </Button>
                     </div>
                   </div>
@@ -2384,6 +2443,12 @@ const ChatInput = forwardRef<
         userId={userId}
         forceExpanded={shouldForceExpanded}
       /> */}
+
+      {/* Credit Exhausted Modal */}
+      <CreditExhaustedModal
+        isOpen={showCreditExhaustedModal}
+        onClose={() => setShowCreditExhaustedModal(false)}
+      />
     </>
   )
 })

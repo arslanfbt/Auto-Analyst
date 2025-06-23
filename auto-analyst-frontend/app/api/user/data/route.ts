@@ -31,12 +31,17 @@ export async function GET(request: NextRequest) {
     const subscriptionData = await redis.hgetall(KEYS.USER_SUBSCRIPTION(userId)) || {}
     
     // Determine plan using centralized config
-    let planType = subscriptionData.planType || 'FREE'
+    let planType = subscriptionData.planType || 'STANDARD'
     let planCredits = CreditConfig.getCreditsByType(planType as any)
     
     // Fallback to plan name if planType not found
-    if (!planCredits || planCredits.type === 'FREE' && subscriptionData.plan) {
+    if (!planCredits && subscriptionData.plan) {
       planCredits = CreditConfig.getCreditsForPlan(subscriptionData.plan as string)
+    }
+    
+    // Final fallback to ensure we always have valid plan data
+    if (!planCredits) {
+      planCredits = CreditConfig.getCreditsByType('STANDARD')
     }
     
     // Get subscription values from Redis with defaults from centralized config
@@ -44,11 +49,6 @@ export async function GET(request: NextRequest) {
     const purchaseDate = subscriptionData.purchaseDate || new Date().toISOString()
     const interval = subscriptionData.interval || 'month'
     let status = subscriptionData.status || 'inactive'
-    
-    // Override status for Free plans - Free plans should always be active
-    if (planCredits.type === 'FREE') {
-      status = 'active'
-    }
     
     const stripeCustomerId = subscriptionData.stripeCustomerId || ''
     const stripeSubscriptionId = subscriptionData.stripeSubscriptionId || ''
@@ -59,8 +59,8 @@ export async function GET(request: NextRequest) {
     // Get credit data from Redis
     const creditsData = await redis.hgetall(KEYS.USER_CREDITS(userId)) || {}
     
-    // Parse credits with fallback using centralized config
-    const creditsTotal = parseInt(creditsData.total as string || CreditConfig.getDefaultInitialCredits().toString())
+    // Parse credits with fallback - no free credits anymore
+    const creditsTotal = parseInt(creditsData.total as string || '0')
     const creditsUsed = parseInt(creditsData.used as string || '0')
     const resetDate = creditsData.resetDate as string || CreditConfig.getNextResetDate()
     const lastUpdate = creditsData.lastUpdate as string || new Date().toISOString()
@@ -115,6 +115,7 @@ export async function GET(request: NextRequest) {
         plan: planCredits.displayName,
         planType: planCredits.type,
         status: status,
+        displayStatus: subscriptionData.displayStatus as string || status,
         amount: parseFloat(subscriptionData.amount as string) || amount,
         interval: subscriptionData.interval || interval,
         renewalDate: renewalDate,

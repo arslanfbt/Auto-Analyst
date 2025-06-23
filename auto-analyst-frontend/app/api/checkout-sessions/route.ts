@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import Stripe from 'stripe'
+import { TrialUtils } from '@/lib/credits-config'
 
 export const dynamic = 'force-dynamic'
 
@@ -86,41 +87,114 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Prepare subscription creation parameters
+    // Calculate trial end date using centralized config
+    const trialEndTimestamp = TrialUtils.getTrialEndTimestamp()
+
+    // Create subscription with trial period instead of PaymentIntent
     const subscriptionParams: Stripe.SubscriptionCreateParams = {
       customer: customerId,
       items: [{ price: priceId }],
-      payment_behavior: 'default_incomplete',
-      payment_settings: { save_default_payment_method: 'on_subscription' },
+      trial_end: trialEndTimestamp,
       expand: ['latest_invoice.payment_intent'],
+      payment_behavior: 'default_incomplete', // Ensure we get a setup intent for trial
+      payment_settings: {
+        save_default_payment_method: 'on_subscription', // Save payment method for after trial
+      },
       metadata: {
         userId: userId || 'anonymous',
         planName,
         interval,
+        priceId,
+        isTrial: 'true',
+        trialEndDate: TrialUtils.getTrialEndDate(),
         ...(promoCode && { promoCode }),
       },
     }
 
-    // Apply coupon if valid promo code was found
+    // Apply discount if coupon is valid
     if (couponId) {
       subscriptionParams.coupon = couponId
     }
 
-    // Create a subscription with the provided price ID and optional coupon
+    // Create subscription with trial
     const subscription = await stripe.subscriptions.create(subscriptionParams)
 
-    // Get the client secret from the payment intent
-    // @ts-ignore - We know this exists because we expanded it
-    const clientSecret = subscription.latest_invoice.payment_intent.client_secret
+    if (!subscription?.latest_invoice) {
+      return NextResponse.json({ message: 'Failed to create trial subscription' }, { status: 500 })
+    }
+
+    // For trials, the latest_invoice should have $0 amount but still need payment method
+    const invoice = subscription.latest_invoice as Stripe.Invoice
+    const paymentIntent = invoice.payment_intent as Stripe.PaymentIntent
+
+    // If there's a payment intent, update its metadata for webhook handling
+    if (paymentIntent && paymentIntent.id) {
+      await stripe.paymentIntents.update(paymentIntent.id, {
+        metadata: {
+          userId: userId || 'anonymous',
+          isTrial: 'true',
+          planName,
+          interval,
+          subscription_id: subscription.id,
+        },
+      })
+    }
+
+    // If no payment intent, create a setup intent for payment method collection
+    let clientSecret = paymentIntent?.client_secret
+    let paymentIntentId = paymentIntent?.id
+
+    if (!clientSecret && subscription.status === 'trialing') {
+      // Create a setup intent to collect payment method for trial
+      const setupIntent = await stripe.setupIntents.create({
+        customer: customerId,
+        usage: 'off_session',
+        metadata: {
+          subscription_id: subscription.id,
+          is_trial_setup: 'true',
+          userId: userId || 'anonymous',
+          isTrial: 'true',
+          planName,
+          interval,
+        },
+      })
+      clientSecret = setupIntent.client_secret
+      paymentIntentId = setupIntent.id
+    }
 
     return NextResponse.json({ 
-      clientSecret,
       subscriptionId: subscription.id,
+      clientSecret: clientSecret,
+      paymentIntentId: paymentIntentId,
+      setupIntent: !paymentIntent ? paymentIntentId : null,
       discountApplied: !!couponId,
+      trialEnd: subscription.trial_end,
+      invoiceAmount: invoice.amount_due, // Should be 0 for trial
+      isTrialSetup: !paymentIntent,
       ...(couponId && { couponId })
     })
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred'
     return NextResponse.json({ message: `Stripe error: ${errorMessage}` }, { status: 500 })
+  }
+}
+
+// Helper function to calculate discounted amount
+async function calculateDiscountedAmount(amount: number, couponId: string): Promise<number> {
+  if (!stripe) return amount
+  
+  try {
+    const coupon = await stripe.coupons.retrieve(couponId)
+    
+    if (coupon.percent_off) {
+      return Math.round(amount * (1 - coupon.percent_off / 100))
+    } else if (coupon.amount_off) {
+      return Math.max(0, amount - coupon.amount_off)
+    }
+    
+    return amount
+  } catch (error) {
+    console.error('Error calculating discount:', error)
+    return amount
   }
 } 

@@ -7,6 +7,7 @@ import { useToast } from '@/components/ui/use-toast';
 import { Loader2, ShieldAlert, CheckCircle } from 'lucide-react'
 import Layout from '@/components/layout'
 import logger from '@/lib/utils/logger'
+import { TrialUtils } from '@/lib/credits-config';
 
 export default function CheckoutSuccess() {
   const router = useRouter()
@@ -22,33 +23,42 @@ export default function CheckoutSuccess() {
   useEffect(() => {
     if (!session) return;
     
-    // Extract payment_intent from URL
+    // Extract subscription ID from URL (new approach) or payment_intent (legacy)
+    const subscription_id = searchParams?.get('subscription_id');
     const payment_intent = searchParams?.get('payment_intent');
     
-    if (payment_intent) {
+    if (subscription_id || payment_intent) {
       const processPayment = async () => {
         try {
-          // logger.log(`Processing payment intent: ${payment_intent}`)
+          let response, data;
           
-          // Send payment intent to our verification API
-          const response = await fetch('/api/verify-payment', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-              payment_intent,
-              // Include timestamp to prevent caching issues
-              timestamp: new Date().getTime() 
-            }),
-          });
+          if (subscription_id) {
+            // All checkouts now use trial subscriptions
+            response = await fetch('/api/trial/start', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ 
+                subscriptionId: subscription_id,
+                planName: 'Standard', // Default to Standard for trials
+                interval: 'month',
+                amount: 15,
+                timestamp: new Date().getTime() 
+              }),
+            });
+          } else {
+            throw new Error('No subscription ID found - all payments should now use trial subscriptions');
+          }
           
-          const data = await response.json();
+          if (!response) {
+            throw new Error('No valid payment method found');
+          }
+          
+          data = await response.json();
           
           if (!response.ok) {
             setDebugInfo(data);
             throw new Error(data.error || 'Payment verification failed');
           }
-          
-          // logger.log('Payment verification successful:', data);
           
           // Check if it was already processed
           if (data.alreadyProcessed) {
@@ -56,9 +66,10 @@ export default function CheckoutSuccess() {
           }
           
           // Success! Show toast and redirect
+          const isTrialStart = subscription_id || data.subscription?.status === 'trialing';
           toast({
-            title: 'Subscription Activated!',
-            description: 'Your plan has been successfully activated.',
+            title: isTrialStart ? 'Trial Started!' : 'Subscription Activated!',
+            description: isTrialStart ? `Your ${TrialUtils.getTrialDisplayText()} has started with full access.` : 'Your plan has been successfully activated.',
             duration: 4000
           });
           
@@ -77,8 +88,6 @@ export default function CheckoutSuccess() {
           // If we haven't tried too many times, retry
           if (retryCount < 3) {
             setRetryCount(prev => prev + 1);
-            // logger.log(`Retrying payment verification (${retryCount + 1}/3)...`);
-            
             // Wait 2 seconds before retrying
             setTimeout(() => {
               processPayment();

@@ -52,6 +52,7 @@
     "crypto-js": "^4.2.0",
     "date-fns": "^4.1.0",
     "diff-match-patch": "^1.0.5",
+    "dotenv": "^16.5.0",
     "firebase": "^11.3.1",
     "framer-motion": "^10.18.0",
     "lucide-react": "^0.474.0",
