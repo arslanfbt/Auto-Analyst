@@ -653,10 +653,10 @@ export default function AccountPage() {
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
                         <Button
                           className="w-full bg-[#FF7F7F] hover:bg-[#FF6666] text-white"
-                                                      onClick={() => router.push('/pricing')}
-                          >
+                          onClick={() => router.push('/pricing')}
+                        >
                             {getCurrentSubscriptionStatus() === 'active' || getCurrentSubscriptionStatus() === 'canceling' ? 'Change Plan' : 'Upgrade Now'}
-                          </Button>
+                        </Button>
 
                         <Button
                           onClick={refreshUserData}

@@ -31,7 +31,7 @@ export default function CheckoutPage() {
   })
   
   const [clientSecret, setClientSecret] = useState('')
-  const [subscriptionId, setSubscriptionId] = useState('')
+  const [setupIntentId, setSetupIntentId] = useState('')
   const [isTrialSetup, setIsTrialSetup] = useState(false)
   const [paymentLoading, setPaymentLoading] = useState(false)
   const [paymentError, setPaymentError] = useState('')
@@ -72,7 +72,7 @@ export default function CheckoutPage() {
         }
       } else {
         setClientSecret(data.clientSecret)
-        setSubscriptionId(data.subscriptionId)
+        setSetupIntentId(data.setupIntentId)
         setIsTrialSetup(data.isTrialSetup || false)
         setDiscountApplied(data.discountApplied || false)
         setPaymentError('')
@@ -255,7 +255,7 @@ export default function CheckoutPage() {
                       interval={planDetails.cycle as 'month' | 'year' | 'day'}
                       clientSecret={clientSecret}
                       isTrialSetup={isTrialSetup}
-                      subscriptionId={subscriptionId}
+                      setupIntentId={setupIntentId}
                     />
                   </Elements>
                 )}

@@ -36,7 +36,16 @@ export async function POST(request: NextRequest) {
     const stripeSubscriptionId = subscriptionData.stripeSubscriptionId as string
     
     if (!stripeSubscriptionId) {
-      return NextResponse.json({ error: 'No subscription found for trial' }, { status: 400 })
+      return NextResponse.json({ error: 'No subscription found' }, { status: 400 })
+    }
+
+    // Validate that we have a proper Subscription ID (not Payment Intent)
+    if (!stripeSubscriptionId.startsWith('sub_')) {
+      console.error(`Invalid subscription ID format for user ${userId}: ${stripeSubscriptionId}`)
+      return NextResponse.json({ 
+        error: 'Invalid subscription data. Please contact support for assistance.',
+        code: 'INVALID_SUBSCRIPTION_FORMAT'
+      }, { status: 400 })
     }
 
     let stripeSubscription = null

@@ -87,19 +87,11 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Calculate trial end date using centralized config
-    const trialEndTimestamp = TrialUtils.getTrialEndTimestamp()
-
-    // Create subscription with trial period instead of PaymentIntent
-    const subscriptionParams: Stripe.SubscriptionCreateParams = {
+    // CHANGED: Create only a setup intent for payment method collection
+    // Do NOT create subscription until user confirms payment
+    const setupIntent = await stripe.setupIntents.create({
       customer: customerId,
-      items: [{ price: priceId }],
-      trial_end: trialEndTimestamp,
-      expand: ['latest_invoice.payment_intent'],
-      payment_behavior: 'default_incomplete', // Ensure we get a setup intent for trial
-      payment_settings: {
-        save_default_payment_method: 'on_subscription', // Save payment method for after trial
-      },
+      usage: 'off_session',
       metadata: {
         userId: userId || 'anonymous',
         planName,
@@ -108,69 +100,19 @@ export async function POST(request: NextRequest) {
         isTrial: 'true',
         trialEndDate: TrialUtils.getTrialEndDate(),
         ...(promoCode && { promoCode }),
+        ...(couponId && { couponId }),
       },
-    }
-
-    // Apply discount if coupon is valid
-    if (couponId) {
-      subscriptionParams.coupon = couponId
-    }
-
-    // Create subscription with trial
-    const subscription = await stripe.subscriptions.create(subscriptionParams)
-
-    if (!subscription?.latest_invoice) {
-      return NextResponse.json({ message: 'Failed to create trial subscription' }, { status: 500 })
-    }
-
-    // For trials, the latest_invoice should have $0 amount but still need payment method
-    const invoice = subscription.latest_invoice as Stripe.Invoice
-    const paymentIntent = invoice.payment_intent as Stripe.PaymentIntent
-
-    // If there's a payment intent, update its metadata for webhook handling
-    if (paymentIntent && paymentIntent.id) {
-      await stripe.paymentIntents.update(paymentIntent.id, {
-        metadata: {
-          userId: userId || 'anonymous',
-          isTrial: 'true',
-          planName,
-          interval,
-          subscription_id: subscription.id,
-        },
-      })
-    }
-
-    // If no payment intent, create a setup intent for payment method collection
-    let clientSecret = paymentIntent?.client_secret
-    let paymentIntentId = paymentIntent?.id
-
-    if (!clientSecret && subscription.status === 'trialing') {
-      // Create a setup intent to collect payment method for trial
-      const setupIntent = await stripe.setupIntents.create({
-        customer: customerId,
-        usage: 'off_session',
-        metadata: {
-          subscription_id: subscription.id,
-          is_trial_setup: 'true',
-          userId: userId || 'anonymous',
-          isTrial: 'true',
-          planName,
-          interval,
-        },
-      })
-      clientSecret = setupIntent.client_secret
-      paymentIntentId = setupIntent.id
-    }
+    })
 
     return NextResponse.json({ 
-      subscriptionId: subscription.id,
-      clientSecret: clientSecret,
-      paymentIntentId: paymentIntentId,
-      setupIntent: !paymentIntent ? paymentIntentId : null,
+      setupIntentId: setupIntent.id,
+      clientSecret: setupIntent.client_secret,
+      customerId: customerId,
       discountApplied: !!couponId,
-      trialEnd: subscription.trial_end,
-      invoiceAmount: invoice.amount_due, // Should be 0 for trial
-      isTrialSetup: !paymentIntent,
+      isTrialSetup: true,
+      planName,
+      interval,
+      priceId,
       ...(couponId && { couponId })
     })
   } catch (error) {
