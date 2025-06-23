@@ -352,9 +352,9 @@ export const subscriptionUtils = {
       
       // Process active subscriptions, trials, and pending downgrades/cancellations
       const shouldProcess = subscriptionData && (
-        subscriptionData.status === 'active' || 
+                           subscriptionData.status === 'active' || 
         subscriptionData.status === 'trialing' || 
-        subscriptionData.status === 'canceling' ||
+                           subscriptionData.status === 'canceling' ||
         subscriptionData.status === 'inactive' ||
         isPendingDowngrade
       );

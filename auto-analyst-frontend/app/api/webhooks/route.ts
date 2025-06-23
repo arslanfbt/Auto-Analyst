@@ -176,19 +176,19 @@ export async function POST(request: NextRequest) {
         const subscription = event.data.object as Stripe.Subscription
         console.log(`Subscription updated: ${subscription.id}, status: ${subscription.status}`)
         
-        const customerId = subscription.customer as string
-        if (!customerId) {
-          console.error('No customer ID found in subscription')
-          return NextResponse.json({ error: 'No customer ID found' }, { status: 400 })
-        }
-        
-        const userKey = await redis.get(`stripe:customer:${customerId}`)
-        if (!userKey) {
-          console.error(`No user found for Stripe customer ${customerId}`)
-          return NextResponse.json({ received: true })
-        }
-        
-        const userId = userKey.toString()
+          const customerId = subscription.customer as string
+          if (!customerId) {
+            console.error('No customer ID found in subscription')
+            return NextResponse.json({ error: 'No customer ID found' }, { status: 400 })
+          }
+          
+          const userKey = await redis.get(`stripe:customer:${customerId}`)
+          if (!userKey) {
+            console.error(`No user found for Stripe customer ${customerId}`)
+            return NextResponse.json({ received: true })
+          }
+          
+          const userId = userKey.toString()
         
         // Get current subscription data from Redis
         const currentSubscriptionData = await redis.hgetall(KEYS.USER_SUBSCRIPTION(userId))
@@ -199,7 +199,7 @@ export async function POST(request: NextRequest) {
         // Always sync the status with Stripe, but handle special cases
         const updateData: any = {
           status: subscription.status,
-          lastUpdated: new Date().toISOString(),
+              lastUpdated: new Date().toISOString(),
           stripeSubscriptionStatus: subscription.status
         }
         
@@ -525,7 +525,7 @@ export async function POST(request: NextRequest) {
         
         return NextResponse.json({ received: true })
       }
-
+        
       // Add more event types as needed
       
       default:

@@ -74,9 +74,7 @@ export default function AccountPage() {
   const { toast } = useToast()
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [lastUpdated, setLastUpdated] = useState<Date>(new Date())
-  const [confirmDowngradeOpen, setConfirmDowngradeOpen] = useState(false)
   const [confirmCancelOpen, setConfirmCancelOpen] = useState(false)
-  const [targetPlan, setTargetPlan] = useState<string>('free')
 
   // Main heading styles - Updated for consistency
   const mainHeadingStyle = "text-2xl font-bold text-gray-900 mb-2"
@@ -402,76 +400,7 @@ export default function AccountPage() {
     );
   };
 
-  // Add a function to handle plan downgrade
-  const handlePlanDowngrade = async (targetPlan: string) => {
-    // Set the target plan and open confirmation dialog
-    setTargetPlan(targetPlan)
-    setConfirmDowngradeOpen(true)
-  }
-  
-  // Add function to execute the downgrade after confirmation
-  const executeDowngrade = async () => {
-    setIsRefreshing(true)
-    try {
-      const response = await fetch('/api/user/downgrade-plan', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ targetPlan }),
-      })
-      
-      if (!response.ok) {
-        throw new Error('Failed to downgrade plan')
-      }
-      
-      const result = await response.json()
-      // logger.log('Plan downgrade result:', result)
-      
-      // Refresh user data to reflect the changes
-      await refreshUserData()
-      
-      toast({
-        title: 'Plan downgraded successfully',
-        description: `Your subscription has been changed to ${result.subscription.plan}`,
-        duration: 3000
-      })
-    } catch (error) {
-      console.error('Error downgrading plan:', error)
-      toast({
-        title: 'Failed to downgrade plan',
-        description: 'Please try again later or contact support',
-        variant: 'destructive',
-        duration: 3000
-      })
-    } finally {
-      setIsRefreshing(false)
-      setConfirmDowngradeOpen(false)
-    }
-  }
-  
-  // Helper to determine if current plan can be downgraded
-  const canDowngrade = () => {
-    if (!subscription) return false
-    const planName = subscription.plan.toLowerCase()
-    return planName.includes('standard')
-  }
-  
-  // Helper to get the next lower plan using centralized config
-  const getDowngradePlanName = () => {
-    if (!subscription) return 'Free Plan'
-    const currentPlan = CreditConfig.getCreditsForPlan(subscription.plan)
-    
-    // Get available plans and find the next lower one
-    const allPlans = CreditConfig.getAllPlans().sort((a, b) => a.total - b.total)
-    const currentIndex = allPlans.findIndex(p => p.type === currentPlan.type)
-    
-    if (currentIndex > 0) {
-      return allPlans[currentIndex - 1].displayName
-    }
-    
-    return 'Free Plan'
-  }
+
 
   // Add function to handle subscription cancellation
   const handleCancelSubscription = () => {
@@ -902,19 +831,7 @@ export default function AccountPage() {
                           >
                             Update Payment Method
                           </Button> */}
-                          {canDowngrade() && (
-                            <Button
-                              variant="default"
-                              className="bg-[#FF7F7F] hover:bg-[#FF6666] text-white"
-                              onClick={() => handlePlanDowngrade(getDowngradePlanName().toLowerCase())}
-                              disabled={isRefreshing}
-                            >
-                              {isRefreshing ? (
-                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                              ) : null}
-                              Downgrade to {getDowngradePlanName()}
-                            </Button>
-                          )}
+
                           <Button
                             variant="ghost"
                             className="text-white bg-[#FF7F7F] hover:bg-[#FF6666]"
@@ -1083,48 +1000,7 @@ export default function AccountPage() {
           {renderDebugInfo()}
         </div>
 
-        {/* Add the downgrade confirmation dialog */}
-        <AlertDialog open={confirmDowngradeOpen} onOpenChange={setConfirmDowngradeOpen}>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>Confirm Subscription Downgrade</AlertDialogTitle>
-              <AlertDialogDescription>
-                You are about to downgrade from {subscription?.plan || 'your current plan'} to {targetPlan === 'standard' ? 'Standard Plan' : 'Free Plan'}.
-                {targetPlan === 'free' ? (
-                  <p className="mt-2 text-red-600 font-medium">
-                    This will cancel your paid subscription and reduce your available credits to {CreditConfig.getCreditsForPlan('Free').total}.
-                  </p>
-                ) : (
-                  <p className="mt-2">
-                    Your credits will be adjusted to {CreditConfig.getCreditsForPlan('Standard').total} and your monthly payment will be reduced.
-                  </p>
-                )}
-                <p className="mt-2">
-                  Are you sure you want to continue?
-                </p>
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel disabled={isRefreshing}>Cancel</AlertDialogCancel>
-              <AlertDialogAction
-                onClick={executeDowngrade}
-                disabled={isRefreshing}
-                className="bg-[#FF7F7F] hover:bg-[#FF6666] text-white"
-              >
-                {isRefreshing ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Please wait...
-                  </>
-                ) : (
-                  <>
-                    Confirm Downgrade
-                  </>
-                )}
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
+
 
         {/* Add confirmation dialog for cancellation */}
         <AlertDialog open={confirmCancelOpen} onOpenChange={setConfirmCancelOpen}>
