@@ -256,19 +256,24 @@ const ChatInput = forwardRef<
     checkDisabledStatus();
   }, []);
 
-  // Add credit refresh on navigation from accounts page
+  // Enhanced credit refresh on navigation from accounts page
   useEffect(() => {
     // Listen for focus events to detect when user returns from accounts page
     const handleWindowFocus = () => {
-      // Check if we just came from accounts page by checking document referrer
+      // Check navigation flags and referrer
+      const navigationFlag = localStorage.getItem('navigateFromAccount') === 'true'
       const referrer = document.referrer;
       const isFromAccountsPage = referrer.includes('/account') || referrer.includes('/pricing');
       
-      if (isFromAccountsPage && session) {
+      if ((navigationFlag || isFromAccountsPage) && session) {
+        console.log('Refreshing credits due to navigation from account page (focus event)')
         // Refresh credits when coming back from accounts/pricing page
         setTimeout(() => {
           checkCredits();
-        }, 1000); // Small delay to ensure any backend processes have completed
+        }, 800); // Small delay to ensure any backend processes have completed
+        
+        // Clear the navigation flag
+        localStorage.removeItem('navigateFromAccount')
       }
     };
 

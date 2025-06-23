@@ -7,6 +7,7 @@ import { useToast } from '@/components/ui/use-toast';
 import { Loader2, ShieldAlert, CheckCircle } from 'lucide-react'
 import Layout from '@/components/layout'
 import logger from '@/lib/utils/logger'
+import { TrialUtils } from '@/lib/credits-config';
 
 export default function CheckoutSuccess() {
   const router = useRouter()
@@ -32,7 +33,7 @@ export default function CheckoutSuccess() {
           let response, data;
           
           if (subscription_id) {
-            // New subscription-based trial approach
+            // All checkouts now use trial subscriptions
             response = await fetch('/api/trial/start', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
@@ -44,35 +45,8 @@ export default function CheckoutSuccess() {
                 timestamp: new Date().getTime() 
               }),
             });
-          } else if (payment_intent) {
-            // Legacy payment intent approach - check if it's a trial
-            const stripeResponse = await fetch(`/api/payment-intent-details?payment_intent=${payment_intent}`);
-            const stripeData = await stripeResponse.json();
-            
-            if (stripeData.metadata?.isTrial === 'true') {
-              // This is a trial payment - use the trial start endpoint
-              response = await fetch('/api/trial/start', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
-                  subscriptionId: payment_intent, // Legacy compatibility
-                  planName: stripeData.metadata?.planName || 'Standard',
-                  interval: stripeData.metadata?.interval || 'month',
-                  amount: stripeData.amount ? stripeData.amount / 100 : 15, // Convert from cents
-                  timestamp: new Date().getTime() 
-                }),
-              });
-            } else {
-              // This is a regular payment - use the verify payment endpoint
-              response = await fetch('/api/verify-payment', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ 
-                payment_intent,
-                timestamp: new Date().getTime() 
-              }),
-            });
-            }
+          } else {
+            throw new Error('No subscription ID found - all payments should now use trial subscriptions');
           }
           
           if (!response) {
@@ -95,7 +69,7 @@ export default function CheckoutSuccess() {
           const isTrialStart = subscription_id || data.subscription?.status === 'trialing';
           toast({
             title: isTrialStart ? 'Trial Started!' : 'Subscription Activated!',
-            description: isTrialStart ? 'Your 7-day trial has started with full access.' : 'Your plan has been successfully activated.',
+            description: isTrialStart ? `Your ${TrialUtils.getTrialDisplayText()} has started with full access.` : 'Your plan has been successfully activated.',
             duration: 4000
           });
           

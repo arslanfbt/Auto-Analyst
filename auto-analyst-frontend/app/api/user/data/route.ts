@@ -115,6 +115,7 @@ export async function GET(request: NextRequest) {
         plan: planCredits.displayName,
         planType: planCredits.type,
         status: status,
+        displayStatus: subscriptionData.displayStatus as string || status,
         amount: parseFloat(subscriptionData.amount as string) || amount,
         interval: subscriptionData.interval || interval,
         renewalDate: renewalDate,

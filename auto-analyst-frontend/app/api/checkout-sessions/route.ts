@@ -127,6 +127,19 @@ export async function POST(request: NextRequest) {
     const invoice = subscription.latest_invoice as Stripe.Invoice
     const paymentIntent = invoice.payment_intent as Stripe.PaymentIntent
 
+    // If there's a payment intent, update its metadata for webhook handling
+    if (paymentIntent && paymentIntent.id) {
+      await stripe.paymentIntents.update(paymentIntent.id, {
+        metadata: {
+          userId: userId || 'anonymous',
+          isTrial: 'true',
+          planName,
+          interval,
+          subscription_id: subscription.id,
+        },
+      })
+    }
+
     // If no payment intent, create a setup intent for payment method collection
     let clientSecret = paymentIntent?.client_secret
     let paymentIntentId = paymentIntent?.id
@@ -139,6 +152,10 @@ export async function POST(request: NextRequest) {
         metadata: {
           subscription_id: subscription.id,
           is_trial_setup: 'true',
+          userId: userId || 'anonymous',
+          isTrial: 'true',
+          planName,
+          interval,
         },
       })
       clientSecret = setupIntent.client_secret

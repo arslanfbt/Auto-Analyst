@@ -342,8 +342,9 @@ export const subscriptionUtils = {
           subscriptionData.status === 'inactive'
         )) ||
         (creditsData && creditsData.pendingDowngrade === 'true');
-
+      
       // Check if subscription is canceled (including trial cancellations)
+      // IMPORTANT: Only zero out credits if user actually canceled, not during successful transitions
       const isCanceled = subscriptionData && (
         subscriptionData.status === 'canceled' ||
         subscriptionData.status === 'canceling'
@@ -352,18 +353,28 @@ export const subscriptionUtils = {
       // Process active subscriptions, trials, and pending downgrades/cancellations
       const shouldProcess = subscriptionData && (
         subscriptionData.status === 'active' || 
-        subscriptionData.status === 'trialing' || // Fixed: was 'trial' 
+        subscriptionData.status === 'trialing' || 
         subscriptionData.status === 'canceling' ||
         subscriptionData.status === 'inactive' ||
-        subscriptionData.status === 'canceled' || // Added: handle canceled trials
         isPendingDowngrade
       );
       
-      // Special handling for canceled/canceling subscriptions - immediately set to 0 credits
+      // Special handling for canceled/canceling subscriptions
+      // BUT: Only zero credits if this is a genuine cancellation, not a successful trial conversion
       if (isCanceled) {
-        await creditUtils.setZeroCredits(userId);
-        console.log(`[Credits] Set zero credits for ${subscriptionData.status} user ${userId}`);
-        return true;
+        // Check if this is a trial that was explicitly canceled vs. a successful conversion
+        const wasCanceledDuringTrial = creditsData && creditsData.trialCanceled === 'true';
+        const wasSubscriptionDeleted = creditsData && creditsData.subscriptionDeleted === 'true';
+        const hasExplicitCancelation = subscriptionData.canceledAt || subscriptionData.subscriptionCanceled === 'true';
+        const isGenuineCancellation = wasCanceledDuringTrial || wasSubscriptionDeleted || hasExplicitCancelation;
+        
+        if (isGenuineCancellation) {
+          await creditUtils.setZeroCredits(userId);
+          console.log(`[Credits] Set zero credits for genuinely canceled user ${userId} (status: ${subscriptionData.status})`);
+          return true;
+        } else {
+          console.log(`[Credits] Skipping credit reset for user ${userId} - appears to be successful trial conversion, not cancellation`);
+        }
       }
       
       // Treat all plans (including Free) similarly for credit refreshes

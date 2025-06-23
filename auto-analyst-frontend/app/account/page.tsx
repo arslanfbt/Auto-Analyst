@@ -40,6 +40,7 @@ interface UserProfile {
 interface Subscription {
   plan: string;
   status: string;
+  displayStatus?: string;
   renewalDate?: string;
   amount: number;
   interval: string;
@@ -137,6 +138,23 @@ export default function AccountPage() {
   const refreshUserData = async () => {
     setIsRefreshing(true)
     try {
+      // First sync subscription status from Stripe if available
+      let syncResult = null
+      try {
+        const syncRes = await fetch('/api/debug/sync-subscription', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' }
+        })
+        syncResult = await syncRes.json()
+        
+        if (syncResult.success) {
+          console.log(`Subscription synced: ${syncResult.before.redisStatus} → ${syncResult.after.stripeStatus}`)
+        }
+      } catch (syncError) {
+        console.log('Subscription sync not available or failed:', syncError)
+        // Continue with regular refresh even if sync fails
+      }
+      
       // Add a timestamp parameter to bypass cache
       const timestamp = new Date().getTime()
       const response = await fetch(`/api/user/data?_t=${timestamp}&refresh=true`)
@@ -151,10 +169,15 @@ export default function AccountPage() {
       setCredits(freshData.credits)
       setLastUpdated(new Date())
       
+      // Enhanced toast message if subscription was synced
+      const syncMessage = syncResult && syncResult.success 
+        ? ` Subscription status synced: ${syncResult.before.redisStatus} → ${syncResult.after.stripeStatus}`
+        : ''
+      
       toast({
         title: 'Data refreshed',
-        description: 'Your account information has been updated',
-        duration: 3000
+        description: `Your account information has been updated.${syncMessage}`,
+        duration: 4000
       })
     } catch (error) {
       console.error('Error refreshing user data:', error)
@@ -242,9 +265,17 @@ export default function AccountPage() {
       return <span className="text-gray-600 font-medium">Inactive</span>
     } else if (status === 'canceling') {
       return <span className="text-amber-600 font-medium">Canceling</span>
+    } else if (status === 'trialing') {
+      return <span className="text-blue-600 font-medium">Trial</span>
+    } else if (status === 'canceled') {
+      return <span className="text-red-600 font-medium">Canceled</span>
     } else {
       return <span className="text-gray-600 font-medium">{status}</span>
     }
+  };
+
+  const getCurrentSubscriptionStatus = () => {
+    return subscription?.displayStatus || subscription?.status || 'inactive'
   };
 
   const renderCreditsOverview = () => {
@@ -331,6 +362,8 @@ export default function AccountPage() {
           >
             Check Redis Data
           </Button>
+          
+
           
           <Button
             variant="outline"
@@ -449,7 +482,7 @@ export default function AccountPage() {
   const executeCancellation = async () => {
     setIsRefreshing(true)
     try {
-      const response = await fetch('/api/user/cancel-subscription', {
+      const response = await fetch('/api/trial/cancel', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -468,7 +501,7 @@ export default function AccountPage() {
       
       toast({
         title: 'Subscription canceled',
-        description: 'Your subscription will remain active until the end of your current billing period',
+        description: result.message || 'Your subscription has been canceled',
         duration: 5000
       })
     } catch (error) {
@@ -488,7 +521,8 @@ export default function AccountPage() {
   // Helper to determine if current subscription can be canceled
   const canCancel = () => {
     if (!subscription) return false
-    return (subscription.status === 'active' || subscription.status === 'trialing') && subscription.plan.toLowerCase() !== 'free'
+    const currentStatus = getCurrentSubscriptionStatus()
+    return (currentStatus === 'active' || currentStatus === 'trialing') && subscription.plan.toLowerCase() !== 'free'
   }
 
   if (status === 'loading' || loading) {
@@ -624,7 +658,7 @@ export default function AccountPage() {
                             </div>
                             <div className="flex justify-between mb-2">
                               <span className="text-gray-600">Status:</span>
-                              {getSubscriptionStatusDisplay(subscription?.status || 'active')}
+                              {getSubscriptionStatusDisplay(getCurrentSubscriptionStatus())}
                             </div>
                             <div className="flex justify-between mb-2">
                               <span className="text-gray-600">Price:</span>
@@ -690,10 +724,10 @@ export default function AccountPage() {
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
                         <Button
                           className="w-full bg-[#FF7F7F] hover:bg-[#FF6666] text-white"
-                          onClick={() => router.push('/pricing')}
-                        >
-                          {subscription?.status === 'active' ? 'Change Plan' : 'Upgrade Now'}
-                        </Button>
+                                                      onClick={() => router.push('/pricing')}
+                          >
+                            {getCurrentSubscriptionStatus() === 'active' || getCurrentSubscriptionStatus() === 'canceling' ? 'Change Plan' : 'Upgrade Now'}
+                          </Button>
 
                         <Button
                           onClick={refreshUserData}
@@ -731,7 +765,12 @@ export default function AccountPage() {
                     <CardFooter className="flex justify-center bg-white border-t border-gray-100">
                       <Button 
                         className="w-full bg-[#FF7F7F] hover:bg-[#FF6666] text-white"
-                        onClick={() => router.push('/chat')}
+                        // refreshed credits will be added here
+                        onClick={() => {
+                          // Set flag for credit refresh detection
+                          localStorage.setItem('navigateFromAccount', 'true')
+                          router.push(`/chat?from=account&refresh=${Date.now()}`)
+                        }}
                       >
                         Start Analyzing
                       </Button>
@@ -787,11 +826,17 @@ export default function AccountPage() {
                               </p>
                             </div>
                             <div className={`px-3 py-1 rounded-full text-sm font-medium ${
-                              subscription?.status === 'active' 
+                              getCurrentSubscriptionStatus() === 'active' 
                                 ? 'bg-green-100 text-green-800' 
-                                : 'bg-amber-100 text-amber-800'
+                                : getCurrentSubscriptionStatus() === 'canceling'
+                                ? 'bg-amber-100 text-amber-800'
+                                : getCurrentSubscriptionStatus() === 'trialing'
+                                ? 'bg-blue-100 text-blue-800'
+                                : 'bg-red-100 text-red-800'
                             }`}>
-                              {subscription?.status === 'active' ? 'Active' : 'Inactive'}
+                              {getCurrentSubscriptionStatus() === 'active' ? 'Active' : 
+                               getCurrentSubscriptionStatus() === 'canceling' ? 'Canceling' :
+                               getCurrentSubscriptionStatus() === 'trialing' ? 'Trial' : 'Inactive'}
                             </div>
                           </div>
                           

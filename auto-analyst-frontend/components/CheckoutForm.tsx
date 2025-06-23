@@ -69,28 +69,28 @@ export default function CheckoutForm({ planName, amount, interval, clientSecret,
       }
     } else {
       // For regular payments, use confirmPayment
-      const { error: submitError, paymentIntent } = await stripe.confirmPayment({
-        elements,
-        confirmParams: {
-          return_url: `${window.location.origin}/checkout/success`,
-        },
-        redirect: 'if_required',
-      })
+    const { error: submitError, paymentIntent } = await stripe.confirmPayment({
+      elements,
+      confirmParams: {
+        return_url: `${window.location.origin}/checkout/success`,
+      },
+      redirect: 'if_required',
+    })
 
-      setProcessing(false)
+    setProcessing(false)
 
-      if (submitError) {
-        setError(submitError.message || 'An error occurred when processing your payment')
+    if (submitError) {
+      setError(submitError.message || 'An error occurred when processing your payment')
       } else if (paymentIntent && (paymentIntent.status === 'succeeded' || paymentIntent.status === 'requires_capture')) {
         // For manual capture (trial), status will be 'requires_capture'
         // For normal payments, status will be 'succeeded'
-        setError(null)
-        setSucceeded(true)
-        
-        // Show success animation for a second before redirecting
-        setTimeout(() => {
-          router.push(`/checkout/success?payment_intent=${paymentIntent.id}`)
-        }, 1500)
+      setError(null)
+      setSucceeded(true)
+      
+      // Show success animation for a second before redirecting
+      setTimeout(() => {
+        router.push(`/checkout/success?payment_intent=${paymentIntent.id}`)
+      }, 1500)
       }
     }
   }

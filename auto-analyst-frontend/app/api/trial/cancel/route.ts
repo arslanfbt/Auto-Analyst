@@ -68,60 +68,73 @@ export async function POST(request: NextRequest) {
     }
 
     const now = new Date()
+    const isTrial = subscriptionData.status === 'trialing'
 
-    // Immediately set credits to 0 (lose access immediately as requested)
-    await creditUtils.setZeroCredits(userId)
-    
-    // Force additional credit zeroing to be absolutely sure
-    await redis.hset(KEYS.USER_CREDITS(userId), {
-      total: '0',
-      used: '0',
-      resetDate: '',
-      lastUpdate: now.toISOString(),
-      downgradedAt: now.toISOString(),
-      canceledAt: now.toISOString()
-    })
-    
-    // Verify credits were actually set to 0
-    const creditsAfterReset = await redis.hgetall(KEYS.USER_CREDITS(userId))
-    console.log(`Credits after reset for user ${userId}:`, creditsAfterReset)
-    
-    // Update subscription to canceled status
-    const updatedSubscriptionData = {
-      ...subscriptionData,
-      status: 'canceled',
-      canceledAt: now.toISOString(),
-      lastUpdated: now.toISOString(),
-      subscriptionCanceled: 'true',
-      // Remove trial-specific fields
-      trialEndDate: '',
-      trialStartDate: ''
+    if (isTrial) {
+      // For trial cancellations: Immediate access removal
+      await creditUtils.setZeroCredits(userId)
+      
+      await redis.hset(KEYS.USER_CREDITS(userId), {
+        total: '0',
+        used: '0',
+        resetDate: '',
+        lastUpdate: now.toISOString(),
+        downgradedAt: now.toISOString(),
+        canceledAt: now.toISOString(),
+        trialCanceled: 'true' // Mark this as a genuine trial cancellation
+      })
+      
+      // Update subscription to canceled status immediately
+      await redis.hset(KEYS.USER_SUBSCRIPTION(userId), {
+        ...subscriptionData,
+        status: 'canceled',
+        canceledAt: now.toISOString(),
+        lastUpdated: now.toISOString(),
+        subscriptionCanceled: 'true',
+        trialEndDate: '',
+        trialStartDate: ''
+      })
+      
+      console.log(`Trial canceled for user ${userId}, access removed immediately`)
+    } else {
+      // For post-trial cancellations: Maintain access until period end
+      // Don't change credits - let them keep access until billing cycle ends
+      // The customer.subscription.deleted webhook will handle final cleanup
+      
+      await redis.hset(KEYS.USER_SUBSCRIPTION(userId), {
+        ...subscriptionData,
+        status: 'cancel_at_period_end',
+        canceledAt: now.toISOString(),
+        lastUpdated: now.toISOString(),
+        subscriptionCanceled: 'true',
+        willCancelAt: stripeSubscription?.current_period_end 
+          ? new Date(stripeSubscription.current_period_end * 1000).toISOString()
+          : now.toISOString()
+      })
+      
+      console.log(`Subscription scheduled for cancellation at period end for user ${userId}`)
     }
     
-    await redis.hset(KEYS.USER_SUBSCRIPTION(userId), updatedSubscriptionData)
-    
-    // Remove any scheduled credit resets since user cancelled
-    await redis.hset(KEYS.USER_CREDITS(userId), {
-      resetDate: '', // No future resets for cancelled users
-      lastUpdate: now.toISOString(),
-      total: '0', // Explicitly ensure total is 0
-      used: '0',  // Reset used to 0 as well
-    })
-    
-    console.log(`Trial canceled for user ${userId}, access removed immediately`)
     
     return NextResponse.json({
       success: true,
-      message: subscriptionData.status === 'trialing' 
+      message: isTrial 
         ? 'Trial canceled successfully. Your subscription was canceled and access has been removed.'
         : 'Subscription scheduled for cancellation at the end of the current billing period.',
-      subscription: updatedSubscriptionData,
-      credits: {
+      subscription: subscriptionData,
+      credits: isTrial ? {
         total: 0,
         used: 0,
         remaining: 0
+      } : {
+        total: parseInt(subscriptionData.total as string || '0'),
+        used: parseInt(subscriptionData.used as string || '0'),
+        remaining: Math.max(0, parseInt(subscriptionData.total as string || '0') - parseInt(subscriptionData.used as string || '0'))
       },
-      stripeStatus: stripeSubscription?.status || 'unknown'
+      stripeStatus: stripeSubscription?.status || 'unknown',
+      willCancelAt: !isTrial && stripeSubscription?.current_period_end 
+        ? new Date(stripeSubscription.current_period_end * 1000).toISOString()
+        : undefined
     })
     
   } catch (error: any) {

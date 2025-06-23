@@ -40,6 +40,12 @@ export default function Layout({ children }: LayoutProps) {
               className={`text-gray-600 hover:text-[#FF7F7F] ${
                 pathname === '/chat' ? 'text-[#FF7F7F] font-medium' : ''
               }`}
+              onClick={() => {
+                // Set flag if coming from account or pricing page
+                if (pathname === '/account' || pathname === '/pricing') {
+                  localStorage.setItem('navigateFromAccount', 'true')
+                }
+              }}
             >
               Chat
             </Link>
@@ -106,7 +112,13 @@ export default function Layout({ children }: LayoutProps) {
                 className={`text-gray-600 hover:text-[#FF7F7F] py-2 ${
                   pathname === '/chat' ? 'text-[#FF7F7F] font-medium' : ''
                 }`}
-                onClick={() => setMobileMenuOpen(false)}
+                onClick={() => {
+                  setMobileMenuOpen(false)
+                  // Set flag if coming from account or pricing page
+                  if (pathname === '/account' || pathname === '/pricing') {
+                    localStorage.setItem('navigateFromAccount', 'true')
+                  }
+                }}
               >
                 Chat
               </Link>

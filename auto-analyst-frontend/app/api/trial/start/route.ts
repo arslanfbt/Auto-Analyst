@@ -1,9 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getToken } from 'next-auth/jwt'
+import Stripe from 'stripe'
 import redis, { creditUtils, KEYS } from '@/lib/redis'
 import { CreditConfig, TrialUtils } from '@/lib/credits-config'
 
 export const dynamic = 'force-dynamic'
+
+// Initialize Stripe
+const stripe = process.env.STRIPE_SECRET_KEY 
+  ? new Stripe(process.env.STRIPE_SECRET_KEY, {
+      apiVersion: '2025-02-24.acacia',
+    })
+  : null
 
 export async function POST(request: NextRequest) {
   try {
@@ -13,12 +21,101 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    if (!stripe) {
+      return NextResponse.json({ error: 'Stripe configuration error' }, { status: 500 })
+    }
+
     const userId = token.sub
     const body = await request.json()
     const { subscriptionId, planName, interval, amount } = body
     
     if (!subscriptionId || !planName) {
       return NextResponse.json({ error: 'Subscription ID and plan name are required' }, { status: 400 })
+    }
+
+    // CRITICAL: Verify subscription status in Stripe before granting trial access
+    try {
+      const subscription = await stripe.subscriptions.retrieve(subscriptionId)
+      
+      // Check if subscription is valid and active/trialing
+      if (!subscription || !['trialing', 'active'].includes(subscription.status)) {
+        console.log(`Trial access denied for user ${userId}: subscription status is ${subscription?.status || 'not found'}`)
+        return NextResponse.json({ 
+          error: 'Subscription is not active or trialing. Trial access denied.',
+          subscriptionStatus: subscription?.status || 'not found'
+        }, { status: 400 })
+      }
+
+      // For trialing subscriptions, verify payment method is attached (more lenient for test mode)
+      if (subscription.status === 'trialing') {
+        // Check if subscription has a default payment method
+        const hasSubscriptionPaymentMethod = subscription.default_payment_method != null
+        
+        // Check customer's default payment method as fallback
+        let hasCustomerPaymentMethod = false
+        if (!hasSubscriptionPaymentMethod) {
+          const customer = await stripe.customers.retrieve(subscription.customer as string)
+          if (typeof customer !== 'string' && !customer.deleted) {
+            hasCustomerPaymentMethod = !!(
+              customer.default_source || 
+              customer.invoice_settings?.default_payment_method
+            )
+          }
+        }
+        
+        // Check for successful setup intents as final fallback
+        let hasSuccessfulSetup = false
+        if (!hasSubscriptionPaymentMethod && !hasCustomerPaymentMethod) {
+          const setupIntents = await stripe.setupIntents.list({
+            customer: subscription.customer as string,
+            limit: 5,
+          })
+          
+          hasSuccessfulSetup = setupIntents.data.some(si => 
+            si.status === 'succeeded' && 
+            (si.metadata?.subscription_id === subscriptionId || si.metadata?.is_trial_setup === 'true')
+          )
+        }
+        
+        // Check if we're in test mode for more lenient validation
+        const isTestMode = process.env.STRIPE_SECRET_KEY?.includes('sk_test_') || false
+        const allowTestModeTrials = isTestMode && subscription.status === 'trialing'
+        
+        // Allow trial if any payment method is found OR if in test mode with valid trialing subscription
+        if (!hasSubscriptionPaymentMethod && !hasCustomerPaymentMethod && !hasSuccessfulSetup && !allowTestModeTrials) {
+          console.log(`Trial access denied for user ${userId}: no payment method found`)
+          console.log(`Subscription payment method: ${hasSubscriptionPaymentMethod}`)
+          console.log(`Customer payment method: ${hasCustomerPaymentMethod}`) 
+          console.log(`Setup intent: ${hasSuccessfulSetup}`)
+          console.log(`Test mode allowed: ${allowTestModeTrials}`)
+          
+          return NextResponse.json({ 
+            error: 'Payment method setup required. Please complete payment method verification.',
+            requiresSetup: true,
+            debug: {
+              subscriptionPaymentMethod: hasSubscriptionPaymentMethod,
+              customerPaymentMethod: hasCustomerPaymentMethod,
+              setupIntentSuccess: hasSuccessfulSetup,
+              testModeAllowed: allowTestModeTrials,
+              isTestMode: isTestMode
+            }
+          }, { status: 400 })
+        }
+        
+        if (allowTestModeTrials && !hasSubscriptionPaymentMethod && !hasCustomerPaymentMethod && !hasSuccessfulSetup) {
+          console.log(`Allowing trial for user ${userId} in test mode despite no payment method found`)
+        } else {
+          console.log(`Payment method verified for user ${userId}`)
+        }
+      }
+      
+      console.log(`Subscription verified for user ${userId}: status=${subscription.status}`)
+    } catch (stripeError: any) {
+      console.error('Error verifying subscription:', stripeError)
+      return NextResponse.json({ 
+        error: 'Unable to verify subscription status. Please try again.',
+        stripeError: stripeError.message 
+      }, { status: 500 })
     }
 
     const now = new Date()
