@@ -34,53 +34,62 @@ export async function POST(request: NextRequest) {
     }
 
     const stripeSubscriptionId = subscriptionData.stripeSubscriptionId as string
+    const isLegacyUser = !stripeSubscriptionId || !stripeSubscriptionId.startsWith('sub_')
     
-    if (!stripeSubscriptionId) {
-      return NextResponse.json({ error: 'No subscription found' }, { status: 400 })
-    }
-
-    // Validate that we have a proper Subscription ID (not Payment Intent)
-    if (!stripeSubscriptionId.startsWith('sub_')) {
-      console.error(`Invalid subscription ID format for user ${userId}: ${stripeSubscriptionId}`)
-      return NextResponse.json({ 
-        error: 'Invalid subscription data. Please contact support for assistance.',
-        code: 'INVALID_SUBSCRIPTION_FORMAT'
-      }, { status: 400 })
+    // For legacy users, we'll skip Stripe API calls and just update Redis
+    if (isLegacyUser) {
+      console.log(`Legacy user ${userId} canceling - using Redis-only flow`)
+    } else {
+      // Validate that we have a proper Subscription ID for new users
+      if (!stripeSubscriptionId.startsWith('sub_')) {
+        console.error(`Invalid subscription ID format for user ${userId}: ${stripeSubscriptionId}`)
+        return NextResponse.json({ 
+          error: 'Invalid subscription data. Please contact support for assistance.',
+          code: 'INVALID_SUBSCRIPTION_FORMAT'
+        }, { status: 400 })
+      }
     }
 
     let stripeSubscription = null
-    try {
-      // First get the current subscription from Stripe
-      stripeSubscription = await stripe.subscriptions.retrieve(stripeSubscriptionId)
-      
-      if (stripeSubscription.status === 'trialing') {
-        // Cancel the subscription immediately for trials
-        await stripe.subscriptions.cancel(stripeSubscriptionId, {
-          prorate: false // Don't prorate since it's a trial cancellation
-        })
-        console.log(`Canceled trial subscription ${stripeSubscriptionId} for user ${userId}`)
-      } else if (stripeSubscription.status === 'active') {
-        // For active subscriptions, cancel at period end
-        await stripe.subscriptions.update(stripeSubscriptionId, {
-          cancel_at_period_end: true
-        })
-        console.log(`Scheduled cancellation for subscription ${stripeSubscriptionId} for user ${userId}`)
-      } else {
-        console.log(`Subscription ${stripeSubscriptionId} already in status: ${stripeSubscription.status}`)
+    
+    // Only make Stripe API calls for new users with proper subscription IDs
+    if (!isLegacyUser) {
+      try {
+        // First get the current subscription from Stripe
+        stripeSubscription = await stripe.subscriptions.retrieve(stripeSubscriptionId)
+        
+        if (stripeSubscription.status === 'trialing') {
+          // Cancel the subscription immediately for trials
+          await stripe.subscriptions.cancel(stripeSubscriptionId, {
+            prorate: false // Don't prorate since it's a trial cancellation
+          })
+          console.log(`Canceled trial subscription ${stripeSubscriptionId} for user ${userId}`)
+        } else if (stripeSubscription.status === 'active') {
+          // For active subscriptions, cancel at period end
+          await stripe.subscriptions.update(stripeSubscriptionId, {
+            cancel_at_period_end: true
+          })
+          console.log(`Scheduled cancellation for subscription ${stripeSubscriptionId} for user ${userId}`)
+        } else {
+          console.log(`Subscription ${stripeSubscriptionId} already in status: ${stripeSubscription.status}`)
+        }
+      } catch (stripeError: any) {
+        console.error('Error canceling subscription in Stripe:', stripeError)
+        // For trials, we still want to proceed with local cleanup even if Stripe fails
+        if (subscriptionData.status !== 'trialing') {
+          return NextResponse.json({ error: 'Failed to cancel subscription in Stripe' }, { status: 500 })
+        }
       }
-    } catch (stripeError: any) {
-      console.error('Error canceling subscription in Stripe:', stripeError)
-      // For trials, we still want to proceed with local cleanup even if Stripe fails
-      if (subscriptionData.status !== 'trialing') {
-        return NextResponse.json({ error: 'Failed to cancel subscription in Stripe' }, { status: 500 })
-      }
+    } else {
+      console.log(`Legacy user ${userId} - skipping Stripe API calls, updating Redis only`)
     }
 
     const now = new Date()
     const isTrial = subscriptionData.status === 'trialing'
+    const isLegacyActive = isLegacyUser && subscriptionData.status === 'active'
 
-    if (isTrial) {
-      // For trial cancellations: Immediate access removal
+    if (isTrial || isLegacyActive) {
+      // For trial cancellations OR legacy user cancellations: Immediate access removal
       await creditUtils.setZeroCredits(userId)
       
       await redis.hset(KEYS.USER_CREDITS(userId), {
@@ -90,7 +99,8 @@ export async function POST(request: NextRequest) {
         lastUpdate: now.toISOString(),
         downgradedAt: now.toISOString(),
         canceledAt: now.toISOString(),
-        trialCanceled: 'true' // Mark this as a genuine trial cancellation
+        trialCanceled: isTrial ? 'true' : 'false',
+        legacyCanceled: isLegacyActive ? 'true' : 'false'
       })
       
       // Update subscription to canceled status immediately
@@ -100,11 +110,11 @@ export async function POST(request: NextRequest) {
         canceledAt: now.toISOString(),
         lastUpdated: now.toISOString(),
         subscriptionCanceled: 'true',
-        trialEndDate: '',
-        trialStartDate: ''
+        trialEndDate: isTrial ? '' : subscriptionData.trialEndDate || '',
+        trialStartDate: isTrial ? '' : subscriptionData.trialStartDate || ''
       })
       
-      console.log(`Trial canceled for user ${userId}, access removed immediately`)
+      console.log(`${isTrial ? 'Trial' : 'Legacy subscription'} canceled for user ${userId}, access removed immediately`)
     } else {
       // For post-trial cancellations: Maintain access until period end
       // Don't change credits - let them keep access until billing cycle ends
@@ -127,11 +137,11 @@ export async function POST(request: NextRequest) {
     
     return NextResponse.json({
       success: true,
-      message: isTrial 
-        ? 'Trial canceled successfully. Your subscription was canceled and access has been removed.'
+      message: (isTrial || isLegacyActive)
+        ? `${isTrial ? 'Trial' : 'Subscription'} canceled successfully. Your subscription was canceled and access has been removed.`
         : 'Subscription scheduled for cancellation at the end of the current billing period.',
       subscription: subscriptionData,
-      credits: isTrial ? {
+      credits: (isTrial || isLegacyActive) ? {
         total: 0,
         used: 0,
         remaining: 0
@@ -140,8 +150,8 @@ export async function POST(request: NextRequest) {
         used: parseInt(subscriptionData.used as string || '0'),
         remaining: Math.max(0, parseInt(subscriptionData.total as string || '0') - parseInt(subscriptionData.used as string || '0'))
       },
-      stripeStatus: stripeSubscription?.status || 'unknown',
-      willCancelAt: !isTrial && stripeSubscription?.current_period_end 
+      stripeStatus: stripeSubscription?.status || (isLegacyUser ? 'legacy' : 'unknown'),
+      willCancelAt: !(isTrial || isLegacyActive) && stripeSubscription?.current_period_end 
         ? new Date(stripeSubscription.current_period_end * 1000).toISOString()
         : undefined
     })

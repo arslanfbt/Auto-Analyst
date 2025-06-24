@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { headers } from 'next/headers'
 import Stripe from 'stripe'
+import { Readable } from 'stream'
 import redis, { creditUtils, KEYS, profileUtils } from '@/lib/redis'
 import { sendSubscriptionConfirmation, sendPaymentConfirmationEmail } from '@/lib/email'
 import logger from '@/lib/utils/logger'
@@ -17,6 +17,15 @@ const stripe = process.env.STRIPE_SECRET_KEY
   : null
 
 const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET || ''
+
+// Helper function to read the raw request body as text
+async function getRawBody(readable: Readable): Promise<Buffer> {
+  const chunks: Buffer[] = []
+  for await (const chunk of readable) {
+    chunks.push(typeof chunk === 'string' ? Buffer.from(chunk) : chunk)
+  }
+  return Buffer.concat(chunks)
+}
 
 // Helper function to update a user's subscription information
 async function updateUserSubscription(userId: string, session: Stripe.Checkout.Session) {
@@ -139,8 +148,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Webhook secret not configured' }, { status: 500 })
     }
     
-    const headersList = await headers()
-    const signature = headersList.get('stripe-signature')
+    const signature = request.headers.get('stripe-signature')
     
     if (!signature) {
       console.error('❌ No Stripe signature found in request headers')
@@ -148,10 +156,10 @@ export async function POST(request: NextRequest) {
     }
     
     // Get the raw request body
-    let body: string
+    let rawBody: Buffer
     try {
-      body = await request.text()
-      console.log(`📨 Webhook received: body length=${body.length}, signature present=${!!signature}`)
+      rawBody = await getRawBody(request.body as unknown as Readable)
+      console.log(`📨 Webhook received: body length=${rawBody.length}, signature present=${!!signature}`)
     } catch (bodyError) {
       console.error('❌ Failed to read webhook body:', bodyError)
       return NextResponse.json({ error: 'Failed to read request body' }, { status: 400 })
@@ -160,13 +168,13 @@ export async function POST(request: NextRequest) {
     // Verify the webhook signature
     let event
     try {
-      event = stripe.webhooks.constructEvent(body, signature, webhookSecret)
+      event = stripe.webhooks.constructEvent(rawBody, signature, webhookSecret)
       console.log(`✅ Webhook signature verified: event=${event.type}, id=${event.id}`)
     } catch (err: any) {
       console.error(`❌ Webhook signature verification failed:`)
       console.error(`   Error: ${err.message}`)
       console.error(`   Signature: ${signature?.substring(0, 50)}...`)
-      console.error(`   Body length: ${body.length}`)
+      console.error(`   Body length: ${rawBody.length}`)
       console.error(`   Webhook secret set: ${!!webhookSecret}`)
       console.error(`   Webhook secret prefix: ${webhookSecret?.substring(0, 10)}...`)
       
@@ -181,7 +189,7 @@ export async function POST(request: NextRequest) {
         debug: {
           hasSignature: !!signature,
           hasSecret: !!webhookSecret,
-          bodyLength: body.length,
+          bodyLength: rawBody.length,
           secretPrefix: webhookSecret?.substring(0, 10)
         }
       }, { status: 400 })

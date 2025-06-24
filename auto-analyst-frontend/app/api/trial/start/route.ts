@@ -26,14 +26,6 @@ export async function POST(request: NextRequest) {
     }
 
     const userId = token.sub
-    
-    // DEBUG: Log the actual userId values
-    console.log('🔍 DEBUG - User ID values:')
-    console.log('  token.sub type:', typeof token.sub)
-    console.log('  token.sub value:', token.sub)
-    console.log('  String(token.sub):', String(token.sub))
-    console.log('  JSON.stringify(token.sub):', JSON.stringify(token.sub))
-    
     const body = await request.json()
     
     // Handle both setupIntentId (new flow) and legacy parameters
@@ -95,22 +87,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Store customer mapping for webhooks
-    // IMPORTANT: Ensure userId is treated as string to prevent precision loss for large numbers
-    const userIdAsString = String(userId)
-    console.log('🔍 DEBUG - Before Redis save:')
-    console.log('  userId original:', userId)
-    console.log('  userIdAsString:', userIdAsString)
-    console.log('  customerId:', customerId)
-    
-    await redis.set(`stripe:customer:${customerId}`, userIdAsString)
-    
-    // Immediately verify what was stored
-    const storedValue = await redis.get(`stripe:customer:${customerId}`)
-    console.log('🔍 DEBUG - After Redis save:')
-    console.log('  stored value:', storedValue)
-    console.log('  stored value type:', typeof storedValue)
-    console.log('  matches original?', storedValue === userId)
-    console.log('  matches string?', storedValue === userIdAsString)
+    await redis.set(`stripe:customer:${customerId}`, String(userId))
 
     // NOW create the subscription (after payment method is confirmed)
     const trialEndTimestamp = TrialUtils.getTrialEndTimestamp()
