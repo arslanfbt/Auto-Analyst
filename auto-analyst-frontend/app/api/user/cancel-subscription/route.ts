@@ -48,11 +48,11 @@ export async function POST(request: NextRequest) {
       
       // Only make Stripe API calls for new users with proper subscription IDs
       if (!isLegacyUser) {
-        // Cancel the subscription in Stripe
-        // Using cancel_at_period_end: true to let the user keep access until the end of their current billing period
+      // Cancel the subscription in Stripe
+      // Using cancel_at_period_end: true to let the user keep access until the end of their current billing period
         canceledSubscription = await stripe.subscriptions.update(stripeSubscriptionId, {
-          cancel_at_period_end: true,
-        })
+        cancel_at_period_end: true,
+      })
         console.log(`Scheduled Stripe cancellation for subscription ${stripeSubscriptionId} for user ${userId}`)
       } else {
         console.log(`Legacy user ${userId} - skipping Stripe API calls, updating Redis only`)
@@ -85,10 +85,10 @@ export async function POST(request: NextRequest) {
         if (creditData && creditData.resetDate) {
           await redis.hset(KEYS.USER_CREDITS(userId), {
             nextTotalCredits: '0', // No credits after cancellation
-            pendingDowngrade: 'true',
+          pendingDowngrade: 'true',
             lastUpdate: now.toISOString()
-          })
-        }
+        })
+      }
       }
       
       return NextResponse.json({
