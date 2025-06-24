@@ -142,22 +142,57 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Stripe configuration error' }, { status: 500 })
     }
     
+    // Debug webhook secret availability
+    if (!webhookSecret) {
+      console.error('❌ STRIPE_WEBHOOK_SECRET is not set in environment variables')
+      return NextResponse.json({ error: 'Webhook secret not configured' }, { status: 500 })
+    }
+    
     const signature = request.headers.get('stripe-signature')
     
     if (!signature) {
+      console.error('❌ No Stripe signature found in request headers')
       return NextResponse.json({ error: 'No Stripe signature found' }, { status: 400 })
     }
     
     // Get the raw request body
-    const rawBody = await getRawBody(request.body as unknown as Readable)
+    let rawBody: Buffer
+    try {
+      rawBody = await getRawBody(request.body as unknown as Readable)
+      console.log(`📨 Webhook received: body length=${rawBody.length}, signature present=${!!signature}`)
+    } catch (bodyError) {
+      console.error('❌ Failed to read webhook body:', bodyError)
+      return NextResponse.json({ error: 'Failed to read request body' }, { status: 400 })
+    }
     
     // Verify the webhook signature
     let event
     try {
       event = stripe.webhooks.constructEvent(rawBody, signature, webhookSecret)
+      console.log(`✅ Webhook signature verified: event=${event.type}, id=${event.id}`)
     } catch (err: any) {
-      console.error(`⚠️ Webhook signature verification failed.`, err.message)
-      return NextResponse.json({ error: `Webhook Error: ${err.message}` }, { status: 400 })
+      console.error(`❌ Webhook signature verification failed:`)
+      console.error(`   Error: ${err.message}`)
+      console.error(`   Signature: ${signature?.substring(0, 50)}...`)
+      console.error(`   Body length: ${rawBody.length}`)
+      console.error(`   Webhook secret set: ${!!webhookSecret}`)
+      console.error(`   Webhook secret prefix: ${webhookSecret?.substring(0, 10)}...`)
+      
+      // Check if this is a common signature verification issue
+      if (err.message.includes('No signatures found')) {
+        console.error('   ⚠️  This usually means the request body was modified by a proxy/CDN')
+        console.error('   ⚠️  Or the webhook secret is incorrect')
+      }
+      
+      return NextResponse.json({ 
+        error: `Webhook Error: ${err.message}`,
+        debug: {
+          hasSignature: !!signature,
+          hasSecret: !!webhookSecret,
+          bodyLength: rawBody.length,
+          secretPrefix: webhookSecret?.substring(0, 10)
+        }
+      }, { status: 400 })
     }
     
     // logger.log(`Event received: ${event.type}`)
@@ -189,13 +224,13 @@ export async function POST(request: NextRequest) {
           }
           
           const userId = userKey.toString()
-        
+          
         // Get current subscription data from Redis
         const currentSubscriptionData = await redis.hgetall(KEYS.USER_SUBSCRIPTION(userId))
         const currentStatus = currentSubscriptionData?.status
         
         console.log(`Subscription status change for user ${userId}: ${currentStatus} -> ${subscription.status}`)
-        
+            
         // Always sync the status with Stripe, but handle special cases
         const updateData: any = {
           status: subscription.status,
@@ -217,7 +252,7 @@ export async function POST(request: NextRequest) {
         if (subscription.status === 'unpaid' || subscription.status === 'past_due') {
           updateData.unpaidAt = new Date().toISOString()
         }
-        
+          
         // Update subscription data
         await redis.hset(KEYS.USER_SUBSCRIPTION(userId), updateData)
         

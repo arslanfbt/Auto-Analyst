@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getToken } from 'next-auth/jwt'
 import Stripe from 'stripe'
 import redis, { creditUtils, KEYS } from '@/lib/redis'
-import { CreditConfig, TrialUtils } from '@/lib/credits-config'
+import { TrialUtils, CreditConfig } from '@/lib/credits-config'
 
 export const dynamic = 'force-dynamic'
 
@@ -27,94 +27,103 @@ export async function POST(request: NextRequest) {
 
     const userId = token.sub
     const body = await request.json()
-    const { subscriptionId, planName, interval, amount } = body
     
-    if (!subscriptionId || !planName) {
-      return NextResponse.json({ error: 'Subscription ID and plan name are required' }, { status: 400 })
+    // Handle both setupIntentId (new flow) and legacy parameters
+    const { setupIntentId, subscriptionId, paymentIntentId, planName, interval, amount } = body
+    
+    // Check if user already has an active trial/subscription first
+    const existingSubscription = await redis.hgetall(KEYS.USER_SUBSCRIPTION(userId))
+    if (existingSubscription && ['trialing', 'active'].includes(existingSubscription.status as string)) {
+      // Return success if already processed to avoid duplicate processing
+      return NextResponse.json({ 
+        success: true,
+        alreadyProcessed: true,
+        subscriptionId: existingSubscription.stripeSubscriptionId || subscriptionId,
+        message: 'Trial already active',
+        subscription: existingSubscription,
+        credits: {
+          total: TrialUtils.getTrialCredits(),
+          used: parseInt(existingSubscription.creditsUsed as string || '0'),
+          remaining: TrialUtils.getTrialCredits() - parseInt(existingSubscription.creditsUsed as string || '0')
+        }
+      })
     }
 
-    // CRITICAL: Verify subscription status in Stripe before granting trial access
-    try {
-      const subscription = await stripe.subscriptions.retrieve(subscriptionId)
-      
-      // Check if subscription is valid and active/trialing
-      if (!subscription || !['trialing', 'active'].includes(subscription.status)) {
-        console.log(`Trial access denied for user ${userId}: subscription status is ${subscription?.status || 'not found'}`)
-        return NextResponse.json({ 
-          error: 'Subscription is not active or trialing. Trial access denied.',
-          subscriptionStatus: subscription?.status || 'not found'
-        }, { status: 400 })
-      }
-
-      // For trialing subscriptions, verify payment method is attached (more lenient for test mode)
-      if (subscription.status === 'trialing') {
-        // Check if subscription has a default payment method
-        const hasSubscriptionPaymentMethod = subscription.default_payment_method != null
-        
-        // Check customer's default payment method as fallback
-        let hasCustomerPaymentMethod = false
-        if (!hasSubscriptionPaymentMethod) {
-          const customer = await stripe.customers.retrieve(subscription.customer as string)
-          if (typeof customer !== 'string' && !customer.deleted) {
-            hasCustomerPaymentMethod = !!(
-              customer.default_source || 
-              customer.invoice_settings?.default_payment_method
-            )
-          }
-        }
-        
-        // Check for successful setup intents as final fallback
-        let hasSuccessfulSetup = false
-        if (!hasSubscriptionPaymentMethod && !hasCustomerPaymentMethod) {
-          const setupIntents = await stripe.setupIntents.list({
-            customer: subscription.customer as string,
-            limit: 5,
-          })
-          
-          hasSuccessfulSetup = setupIntents.data.some(si => 
-            si.status === 'succeeded' && 
-            (si.metadata?.subscription_id === subscriptionId || si.metadata?.is_trial_setup === 'true')
-          )
-        }
-        
-        // Check if we're in test mode for more lenient validation
-        const isTestMode = process.env.STRIPE_SECRET_KEY?.includes('sk_test_') || false
-        const allowTestModeTrials = isTestMode && subscription.status === 'trialing'
-        
-        // Allow trial if any payment method is found OR if in test mode with valid trialing subscription
-        if (!hasSubscriptionPaymentMethod && !hasCustomerPaymentMethod && !hasSuccessfulSetup && !allowTestModeTrials) {
-          console.log(`Trial access denied for user ${userId}: no payment method found`)
-          console.log(`Subscription payment method: ${hasSubscriptionPaymentMethod}`)
-          console.log(`Customer payment method: ${hasCustomerPaymentMethod}`) 
-          console.log(`Setup intent: ${hasSuccessfulSetup}`)
-          console.log(`Test mode allowed: ${allowTestModeTrials}`)
-          
-          return NextResponse.json({ 
-            error: 'Payment method setup required. Please complete payment method verification.',
-            requiresSetup: true,
-            debug: {
-              subscriptionPaymentMethod: hasSubscriptionPaymentMethod,
-              customerPaymentMethod: hasCustomerPaymentMethod,
-              setupIntentSuccess: hasSuccessfulSetup,
-              testModeAllowed: allowTestModeTrials,
-              isTestMode: isTestMode
-            }
-          }, { status: 400 })
-        }
-        
-        if (allowTestModeTrials && !hasSubscriptionPaymentMethod && !hasCustomerPaymentMethod && !hasSuccessfulSetup) {
-          console.log(`Allowing trial for user ${userId} in test mode despite no payment method found`)
-        } else {
-          console.log(`Payment method verified for user ${userId}`)
-        }
-      }
-      
-      console.log(`Subscription verified for user ${userId}: status=${subscription.status}`)
-    } catch (stripeError: any) {
-      console.error('Error verifying subscription:', stripeError)
+    // If we have a subscriptionId but no setupIntentId, this might be a re-call from success page
+    if (subscriptionId && !setupIntentId) {
       return NextResponse.json({ 
-        error: 'Unable to verify subscription status. Please try again.',
-        stripeError: stripeError.message 
+        error: 'Trial was already processed successfully. Please check your account page.',
+        alreadyProcessed: true 
+      }, { status: 400 })
+    }
+
+    // NEW FLOW: Require setupIntentId for proper payment method verification
+    if (!setupIntentId) {
+      return NextResponse.json({ error: 'Setup Intent ID is required for trial signup' }, { status: 400 })
+    }
+
+    // Verify the setup intent is successful
+    const setupIntent = await stripe.setupIntents.retrieve(setupIntentId)
+    
+    if (setupIntent.status !== 'succeeded') {
+      return NextResponse.json({ 
+        error: 'Payment method setup not completed. Please complete payment method verification.',
+        setupStatus: setupIntent.status 
+      }, { status: 400 })
+    }
+
+    // Extract metadata from setup intent
+    const metadata = setupIntent.metadata
+    if (!metadata) {
+      return NextResponse.json({ error: 'Missing setup intent metadata' }, { status: 400 })
+    }
+    
+    const priceId = metadata.priceId
+    const customerId = setupIntent.customer as string
+    const couponId = metadata.couponId
+
+    if (!priceId || !customerId) {
+      return NextResponse.json({ error: 'Missing required payment information' }, { status: 400 })
+    }
+
+    // Store customer mapping for webhooks
+    await redis.set(`stripe:customer:${customerId}`, String(userId))
+
+    // NOW create the subscription (after payment method is confirmed)
+    const trialEndTimestamp = TrialUtils.getTrialEndTimestamp()
+    
+    const subscriptionParams: Stripe.SubscriptionCreateParams = {
+      customer: customerId,
+      items: [{ price: priceId }],
+      trial_end: trialEndTimestamp,
+      expand: ['latest_invoice.payment_intent'],
+      payment_behavior: 'default_incomplete',
+      payment_settings: {
+        save_default_payment_method: 'on_subscription',
+      },
+      metadata: {
+        userId: userId || 'anonymous',
+        planName: metadata.planName || planName || 'Standard',
+        interval: metadata.interval || interval || 'month',
+        priceId,
+        isTrial: 'true',
+        trialEndDate: TrialUtils.getTrialEndDate(),
+        createdFromSetupIntent: setupIntentId,
+      },
+    }
+
+    // Apply discount if coupon is valid
+    if (couponId) {
+      subscriptionParams.coupon = couponId
+    }
+
+    // Create subscription with trial
+    const subscription = await stripe.subscriptions.create(subscriptionParams)
+
+    if (subscription.status !== 'trialing') {
+      return NextResponse.json({ 
+        error: 'Failed to create trial subscription',
+        subscriptionStatus: subscription.status 
       }, { status: 500 })
     }
 
@@ -137,12 +146,13 @@ export async function POST(request: NextRequest) {
       trialEndDate: trialEndDate,
       creditResetDate: creditResetDate.toISOString().split('T')[0], // Store reset date
       lastUpdated: now.toISOString(),
-      stripeSubscriptionId: subscriptionId, // Store subscription ID instead of payment intent
+      stripeCustomerId: customerId,
+      stripeSubscriptionId: subscription.id, // Store actual subscription ID
       willChargeOn: trialEndDate
     }
     
     // Initialize trial credits (500 credits immediately) with custom reset date
-    await creditUtils.initializeTrialCredits(userId, subscriptionId, trialEndDate)
+    await creditUtils.initializeTrialCredits(userId, subscription.id, trialEndDate)
     
     // Set custom credit reset date (1 month from checkout)
     await redis.hset(KEYS.USER_CREDITS(userId), {
@@ -152,10 +162,11 @@ export async function POST(request: NextRequest) {
     // Store subscription data in Redis
     await redis.hset(KEYS.USER_SUBSCRIPTION(userId), subscriptionData)
     
-    console.log(`Started trial for user ${userId} with subscription ${subscriptionId}`)
+    console.log(`Started trial for user ${userId} with subscription ${subscription.id}`)
     
     return NextResponse.json({
       success: true,
+      subscriptionId: subscription.id,
       subscription: subscriptionData,
       credits: {
         total: TrialUtils.getTrialCredits(),

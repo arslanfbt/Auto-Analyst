@@ -18,10 +18,10 @@ interface CheckoutFormProps {
   interval: 'month' | 'year' | 'day'
   clientSecret: string
   isTrialSetup?: boolean
-  subscriptionId?: string
+  setupIntentId?: string
 }
 
-export default function CheckoutForm({ planName, amount, interval, clientSecret, isTrialSetup, subscriptionId }: CheckoutFormProps) {
+export default function CheckoutForm({ planName, amount, interval, clientSecret, isTrialSetup, setupIntentId }: CheckoutFormProps) {
   const router = useRouter()
   const { data: session } = useSession()
   const stripe = useStripe()
@@ -41,35 +41,8 @@ export default function CheckoutForm({ planName, amount, interval, clientSecret,
 
     setProcessing(true)
     
-    // Check if this is a SetupIntent (for trials) by looking at the client secret
-    const isSetupIntent = clientSecret?.startsWith('seti_') || isTrialSetup
-    
-    if (isSetupIntent) {
-      // For trial subscriptions, use confirmSetup to collect payment method
-      const { error: submitError, setupIntent } = await stripe.confirmSetup({
-        elements,
-        confirmParams: {
-          return_url: `${window.location.origin}/checkout/success`,
-        },
-        redirect: 'if_required',
-      })
-
-      setProcessing(false)
-
-      if (submitError) {
-        setError(submitError.message || 'An error occurred when setting up your payment method')
-      } else if (setupIntent && setupIntent.status === 'succeeded') {
-        setError(null)
-        setSucceeded(true)
-        
-        // Show success animation before redirecting
-        setTimeout(() => {
-          router.push(`/checkout/success?subscription_id=${subscriptionId}`)
-        }, 1500)
-      }
-    } else {
-      // For regular payments, use confirmPayment
-    const { error: submitError, paymentIntent } = await stripe.confirmPayment({
+    // NEW FLOW: Always use confirmSetup for trial signups
+    const { error: submitError, setupIntent } = await stripe.confirmSetup({
       elements,
       confirmParams: {
         return_url: `${window.location.origin}/checkout/success`,
@@ -77,21 +50,48 @@ export default function CheckoutForm({ planName, amount, interval, clientSecret,
       redirect: 'if_required',
     })
 
-    setProcessing(false)
-
     if (submitError) {
-      setError(submitError.message || 'An error occurred when processing your payment')
-      } else if (paymentIntent && (paymentIntent.status === 'succeeded' || paymentIntent.status === 'requires_capture')) {
-        // For manual capture (trial), status will be 'requires_capture'
-        // For normal payments, status will be 'succeeded'
+      setProcessing(false)
+      setError(submitError.message || 'An error occurred when setting up your payment method')
+      return
+    }
+
+    if (setupIntent && setupIntent.status === 'succeeded') {
       setError(null)
+      
+      // Now call our trial/start endpoint to create the subscription
+      try {
+        const response = await fetch('/api/trial/start', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            setupIntentId: setupIntent.id,
+            planName,
+            interval,
+            amount
+          }),
+        })
+
+        const data = await response.json()
+
+        if (!response.ok) {
+          throw new Error(data.error || 'Failed to start trial')
+        }
+
       setSucceeded(true)
       
-      // Show success animation for a second before redirecting
+        // Show success animation before redirecting
       setTimeout(() => {
-        router.push(`/checkout/success?payment_intent=${paymentIntent.id}`)
+          router.push(`/checkout/success?subscription_id=${data.subscriptionId}`)
       }, 1500)
+
+      } catch (trialError: any) {
+        setProcessing(false)
+        setError(trialError.message || 'Failed to start trial after payment setup')
       }
+    } else {
+      setProcessing(false)
+      setError('Payment setup was not completed successfully')
     }
   }
 

@@ -212,10 +212,10 @@ export const subscriptionUtils = {
       const creditsData = await redis.hgetall(KEYS.USER_CREDITS(userId));
       
       // Default values using centralized config
-      const defaultCredits = CreditConfig.getCreditsForPlan('Free')
+      const defaultCredits = CreditConfig.getCreditsByType('STANDARD')
       let plan = defaultCredits.displayName;
       let isPro = false;
-      let creditsTotal = defaultCredits.total;
+      let creditsTotal = 0; // No more free credits
       let creditsUsed = 0;
       
       // Parse subscription data if found
@@ -248,13 +248,12 @@ export const subscriptionUtils = {
     } catch (error) {
       console.error('Error getting user subscription data:', error);
       // Return fallback defaults using centralized config
-      const defaultCredits = CreditConfig.getCreditsForPlan('Free')
       return {
-        plan: defaultCredits.displayName,
+        plan: 'No Plan',
         credits: {
           used: 0,
-          total: defaultCredits.total, 
-          remaining: defaultCredits.total
+          total: 0, 
+          remaining: 0
         },
         isPro: false
       };
@@ -266,16 +265,9 @@ export const subscriptionUtils = {
     try {
       const subscriptionData = await redis.hgetall(KEYS.USER_SUBSCRIPTION(userId));
       
-      // Check if this is a Free plan (missing data is treated as Free)
-      const isFree = 
-        !subscriptionData || 
-        !subscriptionData.planType || 
-        subscriptionData.planType === 'FREE' || 
-        (subscriptionData.plan && (subscriptionData.plan as string).includes('Free'));
-      
-      // Free plans are always considered active
-      if (isFree) {
-        return true;
+      // No free plans anymore - users without valid subscription are inactive
+      if (!subscriptionData || !subscriptionData.planType || !subscriptionData.status) {
+        return false;
       }
       
       // For paid plans, check status and expiration
