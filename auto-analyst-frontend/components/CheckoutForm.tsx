@@ -78,12 +78,12 @@ export default function CheckoutForm({ planName, amount, interval, clientSecret,
           throw new Error(data.error || 'Failed to start trial')
         }
 
-        setSucceeded(true)
-        
+      setSucceeded(true)
+      
         // Show success animation before redirecting
-        setTimeout(() => {
+      setTimeout(() => {
           router.push(`/checkout/success?subscription_id=${data.subscriptionId}`)
-        }, 1500)
+      }, 1500)
 
       } catch (trialError: any) {
         setProcessing(false)

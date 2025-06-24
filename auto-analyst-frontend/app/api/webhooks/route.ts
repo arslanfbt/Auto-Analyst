@@ -224,13 +224,13 @@ export async function POST(request: NextRequest) {
           }
           
           const userId = userKey.toString()
-        
+          
         // Get current subscription data from Redis
         const currentSubscriptionData = await redis.hgetall(KEYS.USER_SUBSCRIPTION(userId))
         const currentStatus = currentSubscriptionData?.status
         
         console.log(`Subscription status change for user ${userId}: ${currentStatus} -> ${subscription.status}`)
-        
+            
         // Always sync the status with Stripe, but handle special cases
         const updateData: any = {
           status: subscription.status,
@@ -252,7 +252,7 @@ export async function POST(request: NextRequest) {
         if (subscription.status === 'unpaid' || subscription.status === 'past_due') {
           updateData.unpaidAt = new Date().toISOString()
         }
-        
+          
         // Update subscription data
         await redis.hset(KEYS.USER_SUBSCRIPTION(userId), updateData)
         

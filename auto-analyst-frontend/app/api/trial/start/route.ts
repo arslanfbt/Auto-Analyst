@@ -28,11 +28,38 @@ export async function POST(request: NextRequest) {
     const userId = token.sub
     const body = await request.json()
     
-    // NEW FLOW: Receive setupIntentId and create subscription after payment confirmation
-    const { setupIntentId, planName, interval, amount } = body
+    // Handle both setupIntentId (new flow) and legacy parameters
+    const { setupIntentId, subscriptionId, paymentIntentId, planName, interval, amount } = body
     
+    // Check if user already has an active trial/subscription first
+    const existingSubscription = await redis.hgetall(KEYS.USER_SUBSCRIPTION(userId))
+    if (existingSubscription && ['trialing', 'active'].includes(existingSubscription.status as string)) {
+      // Return success if already processed to avoid duplicate processing
+      return NextResponse.json({ 
+        success: true,
+        alreadyProcessed: true,
+        subscriptionId: existingSubscription.stripeSubscriptionId || subscriptionId,
+        message: 'Trial already active',
+        subscription: existingSubscription,
+        credits: {
+          total: TrialUtils.getTrialCredits(),
+          used: parseInt(existingSubscription.creditsUsed as string || '0'),
+          remaining: TrialUtils.getTrialCredits() - parseInt(existingSubscription.creditsUsed as string || '0')
+        }
+      })
+    }
+
+    // If we have a subscriptionId but no setupIntentId, this might be a re-call from success page
+    if (subscriptionId && !setupIntentId) {
+      return NextResponse.json({ 
+        error: 'Trial was already processed successfully. Please check your account page.',
+        alreadyProcessed: true 
+      }, { status: 400 })
+    }
+
+    // NEW FLOW: Require setupIntentId for proper payment method verification
     if (!setupIntentId) {
-      return NextResponse.json({ error: 'Setup Intent ID is required' }, { status: 400 })
+      return NextResponse.json({ error: 'Setup Intent ID is required for trial signup' }, { status: 400 })
     }
 
     // Verify the setup intent is successful
@@ -57,15 +84,6 @@ export async function POST(request: NextRequest) {
 
     if (!priceId || !customerId) {
       return NextResponse.json({ error: 'Missing required payment information' }, { status: 400 })
-    }
-
-    // Check if user already has an active trial/subscription
-    const existingSubscription = await redis.hgetall(KEYS.USER_SUBSCRIPTION(userId))
-    if (existingSubscription && ['trialing', 'active'].includes(existingSubscription.status as string)) {
-      return NextResponse.json({ 
-        error: 'You already have an active trial or subscription',
-        alreadyProcessed: true 
-      }, { status: 400 })
     }
 
     // Store customer mapping for webhooks
@@ -148,6 +166,7 @@ export async function POST(request: NextRequest) {
     
     return NextResponse.json({
       success: true,
+      subscriptionId: subscription.id,
       subscription: subscriptionData,
       credits: {
         total: TrialUtils.getTrialCredits(),
@@ -155,7 +174,6 @@ export async function POST(request: NextRequest) {
         remaining: TrialUtils.getTrialCredits()
       },
       trialEndDate: trialEndDate,
-      subscriptionId: subscription.id,
       message: 'Trial started successfully! You have immediate access to 500 credits.'
     })
     
