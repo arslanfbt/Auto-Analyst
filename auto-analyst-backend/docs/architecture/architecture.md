@@ -141,13 +141,15 @@ Users (1) ──────── (Many) Chats
 
 | Module | Purpose | Key Endpoints |
 |--------|---------|---------------|
-| `core_routes.py` | Core functionality | `/upload_excel`, `/session_info`, `/health` |
+| `session_routes.py` | Core functionality | `/upload_excel`, `/session_info` |
 | `chat_routes.py` | Chat management | `/chats`, `/messages`, `/delete_chat` |
 | `code_routes.py` | Code operations | `/execute_code`, `/get_latest_code` |
 | `templates_routes.py` | Agent templates | `/templates`, `/user/{id}/enabled` |
 | `deep_analysis_routes.py` | Deep analysis | `/reports`, `/download_from_db` |
 | `analytics_routes.py` | System analytics | `/usage`, `/feedback`, `/costs` |
 | `feedback_routes.py` | User feedback | `/feedback`, `/message/{id}/feedback` |
+
+NOTE: Make sure to add a router prefix when calling these endpoints, such as to get dashboard, you'll use `http://localhost:8000/templates/dashboard`
 
 ### 5. Business Logic Layer (`src/managers/`)
 
@@ -238,11 +240,6 @@ Capability Mapping → Execution Routing → Usage Tracking
 - Usage tracking and analytics
 - Event-driven model updates
 - Real-time progress notifications
-
-### 5. **Factory Pattern**
-- Agent creation based on template configurations
-- Session factory for database connections
-- Dynamic model instantiation
 
 ## 🔧 Configuration Management
 
@@ -399,7 +396,7 @@ FROM python:3.11-slim as base
 
 ### Third-Party Integration
 
-1. **Python Data Science Stack**:
+1. **Python Data Science Stack (For Agentic Use only)**:
    - Pandas for data manipulation
    - NumPy for numerical computing
    - Scikit-learn for machine learning

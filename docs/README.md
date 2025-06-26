@@ -8,7 +8,7 @@ Auto-Analyst is an AI-powered analytics platform that enables users to analyze d
 
 ```
 Auto-Analyst Platform Architecture
-├── Frontend (Next.js 14)
+├── Frontend
 │   ├── Chat Interface with AI Agents
 │   ├── Credit Management System
 │   ├── User Authentication & Authorization
@@ -21,9 +21,8 @@ Auto-Analyst Platform Architecture
 │   ├── Database Integration (PostgreSQL/SQLite)
 │   └── Analytics & Usage Tracking
 └── Infrastructure
-    ├── Redis (Caching & Sessions)
+    ├── Redis (Credits and Subscriptions Tracking)
     ├── Stripe (Payments & Subscriptions)
-    ├── Cloud Storage (AWS S3/Vercel Blob)
     └── AI Models (OpenAI, Anthropic, Google, etc.)
 ```
 
@@ -161,15 +160,14 @@ cd auto-analyst-frontend
 npm run dev          # Start development server
 npm run build        # Build for production
 npm run lint         # Run ESLint
-npm run type-check   # TypeScript checking
 ```
 
 ### **Backend Development**
 ```bash
 cd auto-analyst-backend
-uvicorn app:app --reload        # Start with hot reload
-python -m pytest               # Run tests
-python scripts/init_db.py      # Initialize database
+python -m app              # Start with hot reload
+python -m src.db.init_db   # Initialize database
+python -m scripts.populate_agent_templates #  Fill DB with custom + default agents
 ```
 
 ### **Full Stack Development**
@@ -184,7 +182,7 @@ npm run dev:all    # If configured in root package.json
 ## 🏗️ Architecture Decisions
 
 ### **Frontend Architecture**
-- **Next.js 14**: App Router for modern React patterns
+- **Next.js 13**: App Router for modern React patterns
 - **TypeScript**: Full type safety across the application
 - **Tailwind CSS**: Utility-first styling with custom components
 - **Zustand**: Lightweight state management for complex UI state
@@ -200,7 +198,6 @@ npm run dev:all    # If configured in root package.json
 ### **Data Architecture**
 - **PostgreSQL**: Primary database for production
 - **Redis**: Caching, session storage, and real-time data
-- **S3/Blob Storage**: File uploads and static assets
 - **Real-time Updates**: WebSocket connections for live data
 
 ## 🔗 Integration Points
@@ -220,7 +217,7 @@ npm run dev:all    # If configured in root package.json
 - **Vercel**: Frontend hosting and edge functions
 - **Upstash**: Managed Redis service
 - **HuggingFace**: AI model hosting and deployment
-- **AWS**: Cloud infrastructure and storage
+- **AWS**: Cloud infrastructure and storage (AWS RDS)
 
 ## 📈 Monitoring & Analytics
 
@@ -278,4 +275,4 @@ npm run dev:all    # If configured in root package.json
 
 ---
 
-This documentation serves as the central hub for understanding and working with the Auto-Analyst platform. For specific implementation details, refer to the frontend and backend documentation in their respective directories. 
+This documentation serves as the central hub for understanding and working with the Auto-Analyst. For specific implementation details, refer to the frontend and backend documentation in their respective directories. 

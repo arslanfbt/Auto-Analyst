@@ -1,6 +1,6 @@
 # Frontend Architecture Overview
 
-The Auto-Analyst frontend is built with **Next.js 14** using the App Router pattern, providing a modern, scalable architecture for an AI-powered analytics platform.
+The Auto-Analyst frontend is built with **Next.js 13** using the App Router pattern, providing a modern, scalable architecture for an AI-powered analytics platform.
 
 ## 🏗️ Tech Stack
 
@@ -18,7 +18,6 @@ The Auto-Analyst frontend is built with **Next.js 14** using the App Router patt
 ### **State Management**
 - **React Context** - Global state for auth, credits
 - **Zustand** - Client-side state store
-- **SWR** - Data fetching and caching
 
 ### **Authentication**
 - **NextAuth.js** - Authentication framework
@@ -214,7 +213,6 @@ eventSource.onmessage = (event) => {
 ### **Caching**
 - Redis for session data
 - Browser caching for static assets
-- SWR for API response caching
 
 ### **Bundle Optimization**
 - Next.js built-in optimizations

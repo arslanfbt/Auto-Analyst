@@ -2,7 +2,7 @@
 
 The **Auto-Analyst** backend provides a comprehensive API for data analysis, AI-powered insights, and real-time analytics. The API is organized into specialized route categories, each documented separately for better modularity:  
 
-1. **[Core Application Routes](auto-analyst-backend/docs/api/routes/core.md)** – Data management, session control, model configurations, and basic AI analysis.  
+1. **[Core Application Routes](auto-analyst-backend/docs/api/routes/session.md)** – Data management, session control, model configurations, and basic AI analysis.  
 2. **[Chat Management Routes](auto-analyst-backend/docs/api/routes/chats.md)** – Chat sessions, message handling, and user management.  
 3. **[Code Execution Routes](auto-analyst-backend/docs/api/routes/code.md)** – Python code execution, editing, fixing, and cleaning operations.  
 4. **[Deep Analysis Routes](auto-analyst-backend/docs/api/routes/deep_analysis.md)** – Advanced multi-agent analysis and comprehensive reporting.  
@@ -13,7 +13,7 @@ The **Auto-Analyst** backend provides a comprehensive API for data analysis, AI-
 ## **1. Core Application Routes**
 
 **Purpose**: Foundation for data management and basic AI analysis  
-**Documentation**: [auto-analyst-backend/docs/api/routes/core.md](auto-analyst-backend/docs/api/routes/core.md)
+**Documentation**: [auto-analyst-backend/docs/api/routes/session.md](auto-analyst-backend/docs/api/routes/session.md)
 
 **Key Features**:
 - **Data Management**: Upload CSV/Excel files, preview datasets, reset sessions

@@ -17,7 +17,7 @@ This directory contains comprehensive documentation for the Auto-Analyst backend
 ### **🌐 API** (`/api/`)
 - **[API Endpoints Overview](./api/endpoints.md)** - Main API reference hub
 - **[Route Documentation](./api/routes/)** - Detailed endpoint documentation:
-  - **[Core Routes](./api/routes/core.md)** - File uploads, sessions, authentication
+  - **[Core Routes](./api/routes/session.md)** - File uploads, sessions, authentication
   - **[Chat Routes](./api/routes/chats.md)** - Chat and messaging endpoints
   - **[Code Routes](./api/routes/code.md)** - Code execution and processing
   - **[Analytics Routes](./api/routes/analytics.md)** - Usage analytics and monitoring
@@ -105,9 +105,9 @@ FRONTEND_URL=http://localhost:3000/
 ```bash
 # Initialize database and default agents
 python -c "
-from src.db.init_db import init_database
+from src.db.init_db import init_db
 from src.db.init_default_agents import initialize_default_agents
-init_database()
+init_db()
 initialize_default_agents()
 print('✅ Database and agents initialized successfully')
 "
@@ -117,7 +117,7 @@ print('✅ Database and agents initialized successfully')
 
 ```bash
 # Start the FastAPI server
-python app.py
+python -m app
 
 # Or with uvicorn for more control
 uvicorn app:app --reload --host 0.0.0.0 --port 8000
@@ -127,7 +127,6 @@ uvicorn app:app --reload --host 0.0.0.0 --port 8000
 
 - **API Documentation**: `http://localhost:8000/docs`
 - **Health Check**: `http://localhost:8000/health`
-- **Interactive API**: `http://localhost:8000/redoc`
 
 ## 🔧 Development Workflow
 

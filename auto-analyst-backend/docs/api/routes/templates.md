@@ -54,7 +54,7 @@ The system includes four core default agents that are **enabled by default** for
     "icon_url": "/icons/templates/preprocessing_agent.svg",
     "is_premium_only": false,
     "is_active": true,
-    "usage_count": 1234,
+    "usage_count": 12,
     "created_at": "2023-05-01T12:00:00Z",
     "updated_at": "2023-05-01T12:00:00Z"
   }

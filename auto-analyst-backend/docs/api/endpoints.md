@@ -14,7 +14,7 @@ For more specific details regarding the various functionalities offered by the A
 
 ## 🛠️ API Reference
 
-- **[Core Endpoints](./routes/core.md)**: Review the core endpoints that handle fundamental operations within the application, including data uploads, AI analysis, model settings, and session management.
+- **[Core Endpoints](./routes/session.md)**: Review the core endpoints that handle fundamental operations within the application, including data uploads, AI analysis, model settings, and session management.
 - **[Analytics Endpoints](./routes/analytics.md)**: Explore the endpoints dedicated to analytics, providing insights into usage statistics, performance metrics, cost analysis, and real-time monitoring.
 - **[Chat Endpoints](./routes/chats.md)**: Discover the endpoints that manage chat interactions, enabling users to create, retrieve, and manage chat sessions effectively.
 - **[Code Endpoints](./routes/code.md)**: Learn about the endpoints for code execution, editing, fixing, and cleaning operations with advanced AI assistance.

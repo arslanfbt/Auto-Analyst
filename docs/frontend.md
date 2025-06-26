@@ -1,10 +1,10 @@
 # Auto-Analyst Frontend Overview
 
 ## 1. Frontend Architecture
-The Auto-Analyst frontend is built using **Next.js 14** with the **App Router** pattern. The application follows a component-based architecture with clear separation of concerns between UI, business logic, and data management.
+The Auto-Analyst frontend is built using **Next.js 13** with the **App Router** pattern. The application follows a component-based architecture with clear separation of concerns between UI, business logic, and data management.
 
 ### Tech Stack
-- **Framework**: Next.js 14 with App Router
+- **Framework**: Next.js 13 with App Router
 - **Language**: TypeScript for full type safety
 - **Styling**: Tailwind CSS with shadcn/ui components
 - **Authentication**: NextAuth.js with Google OAuth
@@ -162,7 +162,6 @@ npm run type-check   # TypeScript validation
 ### Caching Strategy
 - **Redis caching** for user sessions and data
 - **Browser caching** for static assets
-- **SWR/React Query** for API response caching
 
 ---
 
