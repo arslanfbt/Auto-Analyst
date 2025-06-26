@@ -1,14 +1,10 @@
-from sqlalchemy import create_engine, desc, func, exists
+from sqlalchemy import create_engine, func, exists
 from sqlalchemy.orm import sessionmaker, scoped_session
 from sqlalchemy.exc import SQLAlchemyError
 from src.db.schemas.models import Base, User, Chat, Message, ModelUsage, MessageFeedback
 import logging
-import requests
-import json
-from typing import List, Dict, Optional, Tuple, Any
+from typing import List, Dict, Optional, Any
 from datetime import datetime, UTC
-import time
-import tiktoken
 from src.utils.logger import Logger
 import re
 

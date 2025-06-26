@@ -35,13 +35,10 @@ export async function POST(request: NextRequest) {
 
     const stripeSubscriptionId = currentSubscriptionData.stripeSubscriptionId as string
     
-    console.log(`Syncing subscription ${stripeSubscriptionId} for user ${userId}`)
     
     // Get current status from Stripe
     const subscription = await stripe.subscriptions.retrieve(stripeSubscriptionId)
     
-    console.log(`Stripe subscription status: ${subscription.status}`)
-    console.log(`Redis subscription status: ${currentSubscriptionData.status}`)
     
     // Check if subscription is scheduled for cancellation
     const isCancelingAtPeriodEnd = subscription.cancel_at_period_end && subscription.status === 'active'
@@ -74,14 +71,13 @@ export async function POST(request: NextRequest) {
     
     // Handle specific status transitions
     if (currentSubscriptionData.status === 'trialing' && subscription.status === 'active') {
-      console.log(`Trial to active transition detected during sync for user ${userId}`)
       updateData.trialEndedAt = new Date().toISOString()
       updateData.trialToActiveDate = new Date().toISOString()
     }
     
     await redis.hset(KEYS.USER_SUBSCRIPTION(userId), updateData)
     
-    console.log(`Successfully synced subscription status for user ${userId}`)
+    // console.log(`Successfully synced subscription status for user ${userId}`)
     
     return NextResponse.json({
       success: true,

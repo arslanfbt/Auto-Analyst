@@ -38,11 +38,6 @@ export async function POST(request: NextRequest) {
     const stripeSubscriptionId = subscriptionData.stripeSubscriptionId as string
     const isLegacyUser = !stripeSubscriptionId || !stripeSubscriptionId.startsWith('sub_')
     
-    // For legacy users, we'll skip Stripe API calls and just update Redis
-    if (isLegacyUser) {
-      console.log(`Legacy user ${userId} canceling - using Redis-only flow`)
-    }
-    
     try {
       let canceledSubscription = null
       
@@ -53,7 +48,6 @@ export async function POST(request: NextRequest) {
         canceledSubscription = await stripe.subscriptions.update(stripeSubscriptionId, {
         cancel_at_period_end: true,
       })
-        console.log(`Scheduled Stripe cancellation for subscription ${stripeSubscriptionId} for user ${userId}`)
       } else {
         console.log(`Legacy user ${userId} - skipping Stripe API calls, updating Redis only`)
       }

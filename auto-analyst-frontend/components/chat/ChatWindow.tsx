@@ -110,12 +110,10 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
   // Add the fetchLatestCode function before extractCodeFromMessages
   const fetchLatestCode = useCallback(async (messageId: number) => {
     if (!messageId) {
-      console.log("No message_id provided, skipping latest code fetch");
       return null;
     }
     
     try {
-      console.log(`Fetching latest code for message_id: ${messageId}`);
       
       const response = await axios.post(`${API_URL}/code/get-latest-code`, {
         message_id: messageId
@@ -125,7 +123,6 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
         },
       });
       
-      console.log("Latest code response:", response.data);
       
       if (response.data.found) {
         return response.data;
@@ -140,7 +137,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
   
   // Extract code blocks from messages with support for latest code
   const extractCodeFromMessages = useCallback(async (messagesToExtract: ChatMessage[], messageIndex: number) => {
-    logger.log("messagesToExtract", messagesToExtract);
+    // logger.log("messagesToExtract", messagesToExtract);
     
     // First, try to fetch the latest code if we have a message_id
     const message = messagesToExtract[0];
@@ -151,7 +148,6 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
       
       // If we have latest code from a previous execution, use it
       if (latestCodeData && latestCodeData.latest_code) {
-        console.log(`Using latest code from database for message_id: ${actualMessageId}`);
         
         // Get the language from the code (assuming Python for now)
         const language = 'python'; // Default to Python
@@ -295,7 +291,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
     // If we have a current message with a message_id, make sure it's set in the canvas
     if (currentMessageIndex !== null && messages[currentMessageIndex] && messages[currentMessageIndex].message_id) {
       // Log to debug
-      logger.log(`Setting message_id in canvas: ${messages[currentMessageIndex].message_id} for message index ${currentMessageIndex}`);
+      // logger.log(`Setting message_id in canvas: ${messages[currentMessageIndex].message_id} for message index ${currentMessageIndex}`);
       
       // Fetch the latest code for this message_id
       const messageId = messages[currentMessageIndex].message_id;
@@ -326,14 +322,13 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
     
     // Log the message ID for debugging
     const messageId = currentMessage.message_id;
-    logger.log(`Processing AI message at index ${lastAiMessageIndex} with message_id: ${messageId}`);
+    // logger.log(`Processing AI message at index ${lastAiMessageIndex} with message_id: ${messageId}`);
     
     // Skip if this is an empty message
     if (!currentMessage.text || 
         (typeof currentMessage.text === 'string' && currentMessage.text.trim() === '') ||
         (typeof currentMessage.text === 'object' && currentMessage.text.type === 'plotly')) {
       // Skip empty text messages or plotly messages (which don't contain code)
-      logger.log("Skipping empty message or plotly chart");
       return;
     }
     
@@ -555,8 +550,8 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
       return;
     }
     
-    console.log("Code canvas executed with result:", result);
-    console.log("For code entry:", codeEntry);
+    // console.log("Code canvas executed with result:", result);
+    // console.log("For code entry:", codeEntry);
     
     // Get the unique message identifier
     const messageId = codeEntry.messageIndex;
@@ -616,7 +611,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
     // Add output if available
     if (result.error) {
       // Add error output
-      console.log("Adding error output:", result.error);
+      // console.log("Adding error output:", result.error);
       newOutputs[messageId] = [
         {
           type: 'error',
@@ -627,7 +622,6 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
       ];
     } else if (result.output) {
       // Add text output
-      console.log("Adding text output:", result.output);
       newOutputs[messageId] = [
         {
           type: 'output',
@@ -640,7 +634,6 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
     
     // Add plotly outputs if any
     if (result.plotly_outputs && result.plotly_outputs.length > 0) {
-      console.log("Adding plotly outputs:", result.plotly_outputs);
       
       // Process all plotly outputs
       const plotlyOutputItems: CodeOutput[] = [];
@@ -648,7 +641,6 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
       result.plotly_outputs.forEach((plotlyOutput: string) => {
         try {
           const plotlyContent = plotlyOutput.replace(/```plotly\n|\n```/g, "");
-          console.log("Parsed plotly content:", plotlyContent);
           
           const plotlyData = JSON.parse(plotlyContent);
           plotlyOutputItems.push({
@@ -673,7 +665,6 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
 
     // Add matplotlib outputs if any
     if (result.matplotlib_outputs && result.matplotlib_outputs.length > 0) {
-      console.log("Adding matplotlib outputs:", result.matplotlib_outputs);
       
       // Process all matplotlib outputs
       const matplotlibOutputItems: CodeOutput[] = [];
@@ -681,7 +672,6 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
       result.matplotlib_outputs.forEach((matplotlibOutput: string) => {
         try {
           const matplotlibContent = matplotlibOutput.replace(/```matplotlib\n|\n```/g, "");
-          console.log("Parsed matplotlib content length:", matplotlibContent.length);
           
           matplotlibOutputItems.push({
             type: 'matplotlib',
@@ -756,7 +746,6 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
       // Set the message ID in the session first so the backend knows which message this code belongs to
       if (messageId) {
         try {
-          console.log(`Setting message_id in backend: ${messageId}`);
           await axios.post(`${API_URL}/set-message-info`, {
             message_id: messageId
           }, {
@@ -780,7 +769,6 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
         },
       })
       
-      console.log("Code execution response:", response.data);
       
       // Pass execution result to handleCodeCanvasExecute
       handleCodeCanvasExecute(entryId, response.data);
@@ -800,7 +788,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
     setCodeFixes(prev => {
       const updatedFixes = { ...prev };
       updatedFixes[codeId] = (prev[codeId] || 0) + 1;
-      console.log("ChatWindow: Updated fix counts:", updatedFixes);
+      // console.log("ChatWindow: Updated fix counts:", updatedFixes);
       return updatedFixes;
     });
 
@@ -844,7 +832,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
       // Auto-run the fixed code after a short delay to ensure state is updated
       setTimeout(() => {
         if (codeEntry.language === "python") {
-          console.log("Auto-running fixed code for entry:", codeId);
+          // console.log("Auto-running fixed code for entry:", codeId);
           executeCodeFromChatWindow(codeId, fixedCode, codeEntry.language);
           
           toast({

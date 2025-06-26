@@ -145,9 +145,6 @@ export default function AccountPage() {
         })
         syncResult = await syncRes.json()
         
-        if (syncResult.success) {
-          console.log(`Subscription synced: ${syncResult.before.redisStatus} → ${syncResult.after.stripeStatus}`)
-        }
       } catch (syncError) {
         console.log('Subscription sync not available or failed:', syncError)
         // Continue with regular refresh even if sync fails

@@ -1,10 +1,8 @@
 import logging
 from typing import Optional, Dict, Any
-import time
 from src.db.schemas.models import ModelUsage
 from src.db.init_db import session_factory
 from datetime import datetime, UTC
-import tiktoken
 from src.routes.analytics_routes import handle_new_model_usage
 import asyncio
 

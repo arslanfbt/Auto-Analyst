@@ -14,15 +14,11 @@ export async function POST(request: NextRequest) {
 
     const userId = token.sub
     
-    console.log(`[DEBUG] Force zeroing credits for user ${userId}`)
     
     // Get current state before
     const beforeCredits = await redis.hgetall(KEYS.USER_CREDITS(userId))
     const beforeSubscription = await redis.hgetall(KEYS.USER_SUBSCRIPTION(userId))
-    
-    console.log('Before - Credits:', beforeCredits)
-    console.log('Before - Subscription:', beforeSubscription)
-    
+        
     // Force set zero credits multiple ways
     await creditUtils.setZeroCredits(userId)
     
@@ -41,16 +37,11 @@ export async function POST(request: NextRequest) {
     const afterCredits = await redis.hgetall(KEYS.USER_CREDITS(userId))
     const afterSubscription = await redis.hgetall(KEYS.USER_SUBSCRIPTION(userId))
     
-    console.log('After - Credits:', afterCredits)
-    console.log('After - Subscription:', afterSubscription)
-    
     // Test the refresh logic
     const refreshResult = await subscriptionUtils.refreshCreditsIfNeeded(userId)
-    console.log('Refresh result:', refreshResult)
     
     // Get final state
     const finalCredits = await redis.hgetall(KEYS.USER_CREDITS(userId))
-    console.log('Final - Credits:', finalCredits)
     
     return NextResponse.json({
       success: true,

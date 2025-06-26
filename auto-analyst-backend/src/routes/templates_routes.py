@@ -736,7 +736,7 @@ async def get_templates_by_category(category: str):
                 icon_url=template.icon_url,
                 is_premium_only=template.is_premium_only,
                 is_active=template.is_active,
-                usage_count=global_usage.get(template.template_id, 0),  # Global usage count
+                usage_count=global_usage.get(template.template_id, 0),  # Global usage count (shows how many times this template has been used overall by users)
                 created_at=template.created_at,
                 updated_at=template.updated_at
             ) for template in templates]

@@ -266,7 +266,6 @@ const ChatInput = forwardRef<
       const isFromAccountsPage = referrer.includes('/account') || referrer.includes('/pricing');
       
       if ((navigationFlag || isFromAccountsPage) && session) {
-        console.log('Refreshing credits due to navigation from account page (focus event)')
         // Refresh credits when coming back from accounts/pricing page
         setTimeout(() => {
           checkCredits();

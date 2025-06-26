@@ -69,9 +69,9 @@ ADMIN_API_KEY=your_admin_key_here
 ```bash
 # Initialize database and default agents
 python -c "
-from src.db.init_db import init_database
+from src.db.init_db import init_db
 from src.db.init_default_agents import initialize_default_agents
-init_database()
+init_db()
 initialize_default_agents()
 print('✅ Database initialized successfully')
 "
@@ -103,7 +103,7 @@ Visit: `http://localhost:8000/docs` for interactive API documentation
 
 ### Route Files (API Endpoints)
 
-- **`src/routes/core_routes.py`** - File uploads, sessions, authentication
+- **`src/routes/session_routes.py`** - File uploads, sessions, authentication
 - **`src/routes/chat_routes.py`** - Chat and messaging
 - **`src/routes/code_routes.py`** - Code execution and processing
 - **`src/routes/templates_routes.py`** - Agent template management

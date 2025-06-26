@@ -254,7 +254,6 @@ export default function DeepAnalysisSidebar({
     
     // Check if user has access to Deep Analysis feature
     if (!deepAnalysisAccess.hasAccess) {
-      console.log('[Deep Analysis] Feature access denied:', deepAnalysisAccess.reason)
       setShowPremiumUpgradeModal(true)
       return
     }
@@ -268,7 +267,6 @@ export default function DeepAnalysisSidebar({
         const hasEnough = await hasEnoughCredits(deepAnalysisCost)
         
         if (!hasEnough) {
-          console.log(`[Deep Analysis] Insufficient credits. Required: ${deepAnalysisCost}, Available: ${remainingCredits}`)
           
           // Store the required credits amount for the modal
           setRequiredCredits(deepAnalysisCost)
@@ -359,7 +357,6 @@ export default function DeepAnalysisSidebar({
             } else if (trimmedLine.startsWith('{')) {
               data = JSON.parse(trimmedLine)
             } else {
-              console.log('Skipping non-JSON line:', trimmedLine)
               continue
             }
             
@@ -471,7 +468,6 @@ export default function DeepAnalysisSidebar({
                     }
                     
                     if (userIdForCredits) {
-                      console.log(`[Deep Analysis] Deducting ${deepAnalysisCost} credits for user ${userIdForCredits}`)
                       
                       // Deduct credits through API call
                       const response = await fetch('/api/user/deduct-credits', {
@@ -487,7 +483,6 @@ export default function DeepAnalysisSidebar({
                       })
                       
                       if (response.ok) {
-                        console.log('[Deep Analysis] Credits deducted successfully')
                         
                         // Refresh the credits display in the UI
                         if (checkCredits) {
@@ -648,7 +643,7 @@ export default function DeepAnalysisSidebar({
                   }
                   
                   if (userIdForCredits) {
-                    console.log(`[Deep Analysis] Deducting ${deepAnalysisCost} credits for user ${userIdForCredits}`)
+                    // console.log(`[Deep Analysis] Deducting ${deepAnalysisCost} credits for user ${userIdForCredits}`)
                     
                     // Deduct credits through API call
                     const response = await fetch('/api/user/deduct-credits', {
@@ -664,7 +659,7 @@ export default function DeepAnalysisSidebar({
                     })
                     
                     if (response.ok) {
-                      console.log('[Deep Analysis] Credits deducted successfully')
+                      // console.log('[Deep Analysis] Credits deducted successfully')
                       
                       // Refresh the credits display in the UI
                       if (checkCredits) {
@@ -866,7 +861,7 @@ export default function DeepAnalysisSidebar({
       if (buffer.trim()) {
         try {
           const data = JSON.parse(buffer.trim())
-          console.log('Processing final buffer data:', data)
+          // console.log('Processing final buffer data:', data)
         } catch (error) {
           console.warn('Failed to parse final buffer:', error)
         }
@@ -1090,7 +1085,7 @@ export default function DeepAnalysisSidebar({
         requestData.report_uuid = currentReport.id;
       }
 
-      console.log('Sending analysis data to backend:', requestData);
+      // console.log('Sending analysis data to backend:', requestData);
 
       const response = await fetch(`${API_URL}/deep_analysis/download_report`, {
         method: 'POST',

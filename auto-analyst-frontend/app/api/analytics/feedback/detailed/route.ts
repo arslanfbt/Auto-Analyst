@@ -11,7 +11,6 @@ export async function GET(request: NextRequest) {
     // Create the backend URL with query parameters
     const backendEndpoint = `${backendUrl}/analytics/feedback/detailed?${searchParams.toString()}`
     
-    console.log(`Proxying request to: ${backendEndpoint}`)
     
     // Make the request to the backend
     const response = await fetch(backendEndpoint, {

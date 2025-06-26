@@ -73,7 +73,7 @@ export default function StatsTicker() {
         throw new Error('Failed to fetch ticker data')
       }
       const data = await response.json()
-      console.log('Ticker data fetched:', data) // Debug log
+      // console.log('Ticker data fetched:', data) // Debug log
       setTickerData(data)
       setError(null)
     } catch (err) {

@@ -163,7 +163,6 @@ const CodeCanvas: React.FC<CodeCanvasProps> = ({
           
           if (sessionResponse.data && sessionResponse.data.current_message_id) {
             sessionMessageId = sessionResponse.data.current_message_id;
-            console.log(`Using current message ID from session: ${sessionMessageId}`);
             
             // Set this message ID for the current execution
             await axios.post(`${API_URL}/set-message-info`, {
@@ -190,7 +189,7 @@ const CodeCanvas: React.FC<CodeCanvasProps> = ({
         },
       })
       
-      console.log("Code execution response:", response.data);
+      // console.log("Code execution response:", response.data);
       
       // Mark execution as complete
       const updatedEntries = [...codeEntries];
@@ -236,7 +235,7 @@ const CodeCanvas: React.FC<CodeCanvasProps> = ({
       
       // Pass execution result to parent component
       if (onCodeExecute) {
-        console.log("Passing execution results to parent:", response.data);
+        // console.log("Passing execution results to parent:", response.data);
         onCodeExecute(entryId, response.data);
       }
       
@@ -384,7 +383,6 @@ const CodeCanvas: React.FC<CodeCanvasProps> = ({
       
       // Update the backend with message ID if available
       if (messageId) {
-        console.log(`Setting message_id in backend for edit: ${messageId}`);
         axios.post(`${API_URL}/set-message-info`, {
           message_id: messageId
         }, {
@@ -421,7 +419,6 @@ const CodeCanvas: React.FC<CodeCanvasProps> = ({
         .then(sessionResponse => {
           const sessionMessageId = sessionResponse.data?.current_message_id;
           if (sessionMessageId) {
-            console.log(`Using current message ID from session for edit: ${sessionMessageId}`);
             
             // Update the session with this message ID
             axios.post(`${API_URL}/set-message-info`, {
