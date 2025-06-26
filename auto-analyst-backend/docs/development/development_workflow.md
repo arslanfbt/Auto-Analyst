@@ -28,7 +28,7 @@ src/
 │   ├── ai_manager.py      # AI model management
 │   └── session_manager.py # Session lifecycle
 ├── routes/          # FastAPI route handlers
-│   ├── core_routes.py     # Core functionality
+│   ├── session_routes.py     # Core functionality
 │   ├── chat_routes.py     # Chat endpoints
 │   └── [feature]_routes.py # Feature-specific routes
 ├── utils/           # Shared utilities
@@ -89,7 +89,7 @@ class new_analysis_agent(dspy.Signature):
   "template_name": "new_analysis_agent",
   "description": "Performs specialized analysis on datasets",
   "variant_type": "both",  # individual, planner, or both
-  "is_premium": false,
+  "is_premium": false, # Will be active by default
   "usage_count": 0,
   "icon_url": "analysis.svg"
 }
@@ -390,89 +390,6 @@ async def async_database_operation(session: Session) -> Any:
         session.close()
 ```
 
-## 🧪 Testing Patterns
-
-### 1. **Unit Testing Structure**
-
-```python
-# tests/test_feature_manager.py
-import pytest
-from unittest.mock import Mock, patch
-from src.managers.feature_manager import FeatureManager
-from src.db.schemas.models import FeatureModel
-
-class TestFeatureManager:
-    """Test cases for FeatureManager class."""
-    
-    @pytest.fixture
-    def mock_session(self):
-        """Create a mock database session."""
-        return Mock()
-    
-    @pytest.fixture
-    def feature_manager(self, mock_session):
-        """Create FeatureManager instance with mock session."""
-        return FeatureManager(mock_session)
-    
-    async def test_create_feature_success(self, feature_manager, mock_session):
-        """Test successful feature creation."""
-        # Arrange
-        mock_session.query.return_value.filter_by.return_value.first.return_value = None
-        
-        # Act
-        result = await feature_manager.create_feature("test_feature", "Test description")
-        
-        # Assert
-        assert isinstance(result, FeatureModel)
-        mock_session.add.assert_called_once()
-        mock_session.commit.assert_called_once()
-    
-    async def test_create_feature_duplicate_name(self, feature_manager, mock_session):
-        """Test feature creation with duplicate name."""
-        # Arrange
-        existing_feature = FeatureModel(name="test_feature")
-        mock_session.query.return_value.filter_by.return_value.first.return_value = existing_feature
-        
-        # Act & Assert
-        with pytest.raises(ValueError, match="already exists"):
-            await feature_manager.create_feature("test_feature")
-```
-
-### 2. **Integration Testing**
-
-```python
-# tests/integration/test_api_endpoints.py
-import pytest
-from fastapi.testclient import TestClient
-from src.app import app
-from src.db.init_db import session_factory
-
-client = TestClient(app)
-
-class TestFeatureAPI:
-    """Integration tests for feature API endpoints."""
-    
-    def test_create_feature_endpoint(self):
-        """Test feature creation through API."""
-        response = client.post(
-            "/feature/",
-            json={"name": "test_feature", "description": "Test description"}
-        )
-        
-        assert response.status_code == 200
-        data = response.json()
-        assert data["name"] == "test_feature"
-        assert "id" in data
-    
-    def test_get_features_endpoint(self):
-        """Test feature retrieval through API."""
-        response = client.get("/feature/")
-        
-        assert response.status_code == 200
-        data = response.json()
-        assert isinstance(data, list)
-```
-
 ## 🔧 Development Workflow
 
 ### 1. **Feature Development Process**
@@ -500,37 +417,6 @@ class TestFeatureAPI:
    alembic revision --autogenerate -m "Add new analysis tables"
    alembic upgrade head
    ```
-
-4. **Testing**:
-   ```bash
-   # Run unit tests
-   pytest tests/unit/
-   
-   # Run integration tests
-   pytest tests/integration/
-   
-   # Test API endpoints
-   curl -X POST "http://localhost:8000/feature/test"
-   ```
-
-5. **Documentation**:
-   ```bash
-   # Update API documentation
-   # Add to troubleshooting guide if needed
-   # Update getting started guide
-   ```
-
-### 2. **Code Review Checklist**
-
-- [ ] **Type Hints**: All functions have proper type annotations
-- [ ] **Documentation**: Docstrings for all public functions and classes
-- [ ] **Error Handling**: Comprehensive exception handling with logging
-- [ ] **Testing**: Unit tests cover all new functionality
-- [ ] **Database**: Proper session management and transaction handling
-- [ ] **Async**: Appropriate use of async/await patterns
-- [ ] **Logging**: Meaningful log messages at appropriate levels
-- [ ] **Security**: Input validation and authorization checks
-- [ ] **Performance**: Efficient database queries and memory usage
 
 ### 3. **Release Process**
 
@@ -561,8 +447,6 @@ class TestFeatureAPI:
    # Test container build
    docker build -t auto-analyst-backend .
    
-   # Verify environment variables
-   python scripts/verify_env.py
    ```
 
 ## 📊 Performance Considerations
@@ -589,28 +473,8 @@ def get_paginated_results(session, model, page=1, per_page=20):
     return session.query(model).offset(offset).limit(per_page).all()
 ```
 
-### 2. **Memory Management**
 
-```python
-# Efficient data processing
-def process_large_dataset(file_path: str):
-    # Bad: Load entire file into memory
-    # df = pd.read_csv(file_path)
-    
-    # Good: Process in chunks
-    chunk_size = 1000
-    for chunk in pd.read_csv(file_path, chunksize=chunk_size):
-        process_chunk(chunk)
-        # Memory is freed after each chunk
-
-# Clean up resources
-def cleanup_session_data(session_id: str):
-    if session_id in global_session_data:
-        del global_session_data[session_id]
-    gc.collect()  # Force garbage collection
-```
-
-### 3. **Async Optimization**
+### 2. **Async Optimization**
 
 ```python
 # Use connection pooling

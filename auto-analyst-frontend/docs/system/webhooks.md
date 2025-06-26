@@ -16,7 +16,7 @@ Auto-Analyst processes webhooks from Stripe to handle subscription and payment e
 // app/api/webhooks/route.ts
 export async function POST(request: Request) {
   const body = await request.text()
-  const sig = request.headers.get('stripe-signature')
+  const sig = headers().get('Stripe-Signature')
   
   let event: Stripe.Event
   

@@ -88,7 +88,7 @@ await redis.hset(KEYS.USER_SUBSCRIPTION(userId), {
   plan: "pro",
   status: "active",
   interval: "month",
-  amount: "29.99",
+  amount: "15",
   stripeSubscriptionId: "sub_...",
   nextBilling: "2024-02-01"
 })

@@ -238,21 +238,6 @@ const userId = token?.sub;
 
 ## 📡 Data Fetching Patterns
 
-### **SWR for Client-side Fetching**
-```typescript
-import useSWR from 'swr';
-
-const fetcher = (url: string) => fetch(url).then(res => res.json());
-
-function UserCredits() {
-  const { data, error, isLoading } = useSWR('/api/user/credits', fetcher);
-  
-  if (error) return <div>Failed to load credits</div>;
-  if (isLoading) return <div>Loading...</div>;
-  
-  return <div>Credits: {data.remaining}</div>;
-}
-```
 
 ### **React Query Alternative**
 ```typescript

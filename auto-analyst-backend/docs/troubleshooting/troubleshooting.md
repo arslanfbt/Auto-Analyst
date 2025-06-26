@@ -13,9 +13,9 @@
 1. **Initialize Database**:
    ```bash
    python -c "
-   from src.db.init_db import init_database
+   from src.db.init_db import init_db
    from src.db.init_default_agents import initialize_default_agents
-   init_database()
+   init_db()
    initialize_default_agents()
    print('✅ Database initialized')
    "
@@ -305,7 +305,7 @@
    ```bash
    # For SQLite (development)
    rm auto_analyst.db
-   python -c "from src.db.init_db import init_database; init_database()"
+   python -c "from src.db.init_db import init_db; init_db()"
    ```
 
 #### Problem: Constraint Violations

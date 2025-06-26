@@ -4,12 +4,12 @@ import time
 import uuid
 import logging
 import pandas as pd
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List
 
 from llama_index.core import Document, VectorStoreIndex
 from src.utils.logger import Logger
-from src.managers.user_manager import create_user, get_current_user, get_user_by_email
-from src.agents.agents import auto_analyst, auto_analyst_ind
+from src.managers.user_manager import get_current_user
+from src.agents.agents import auto_analyst
 from src.agents.retrievers.retrievers import make_data
 from src.managers.chat_manager import ChatManager
 from dotenv import load_dotenv

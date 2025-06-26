@@ -138,7 +138,7 @@ components/
 ## 🏗️ Frontend Architecture
 
 ### **Tech Stack**
-- **Next.js 14** - React framework with App Router
+- **Next.js 13** - React framework with App Router
 - **TypeScript** - Full type safety
 - **Tailwind CSS** - Styling framework
 - **NextAuth.js** - Authentication
