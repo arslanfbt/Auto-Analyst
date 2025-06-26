@@ -4,6 +4,7 @@ import { Readable } from 'stream'
 import redis, { creditUtils, KEYS, profileUtils } from '@/lib/redis'
 import { sendSubscriptionConfirmation, sendPaymentConfirmationEmail } from '@/lib/email'
 import logger from '@/lib/utils/logger'
+import { headers } from 'next/headers'
 import { CreditConfig } from '@/lib/credits-config'
 
 // Use the correct App Router configuration instead of the default body parser
@@ -17,122 +18,6 @@ const stripe = process.env.STRIPE_SECRET_KEY
   : null
 
 const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET || ''
-
-// Helper function to read the raw request body as text
-async function getRawBody(readable: Readable): Promise<Buffer> {
-  const chunks: Buffer[] = []
-  for await (const chunk of readable) {
-    chunks.push(typeof chunk === 'string' ? Buffer.from(chunk) : chunk)
-  }
-  return Buffer.concat(chunks)
-}
-
-// Helper function to update a user's subscription information
-async function updateUserSubscription(userId: string, session: Stripe.Checkout.Session) {
-  try {
-    // Retrieve the complete line items to get product details
-    const lineItems = await stripe!.checkout.sessions.listLineItems(session.id)
-    if (!lineItems.data.length) return false
-
-    // Get the price ID from the line item
-    const priceId = lineItems.data[0].price?.id
-    if (!priceId) return false
-
-    // Retrieve price to get recurring interval and product ID
-    const price = await stripe!.prices.retrieve(priceId)
-    
-    // Retrieve product details
-    const product = await stripe!.products.retrieve(price.product as string)
-
-    // Extract subscription details
-    const planName = product.name
-    let interval = 'month'
-    if (planName.toLowerCase().includes('yearly') || price?.recurring?.interval === 'year') {
-      interval = 'year'
-    } else if (planName.toLowerCase().includes('daily') || price?.recurring?.interval === 'day') {
-      interval = 'day'
-    }
-    const amount = price.unit_amount! / 100 // Convert from cents to dollars
-    
-    // Calculate next renewal date
-    const now = new Date()
-    let renewalDate = new Date()
-    if (interval === 'month') {
-      renewalDate.setMonth(now.getMonth() + 1)
-    } else if (interval === 'year') {
-      renewalDate.setFullYear(now.getFullYear() + 1)
-    } else if (interval === 'day') {
-      renewalDate.setDate(now.getDate() + 1)
-    }
-    
-    // Determine credit amounts based on plan using centralized config
-    const planCredits = CreditConfig.getCreditsForPlan(planName)
-    const creditAmount = planCredits.total
-    const planType = planCredits.type
-    
-    // Update subscription data
-    await redis.hset(KEYS.USER_SUBSCRIPTION(userId), {
-      plan: planName,
-      planType,
-      status: 'active',
-      amount: amount.toString(),
-      interval,
-      purchaseDate: now.toISOString(),
-      renewalDate: renewalDate.toISOString().split('T')[0],
-      lastUpdated: now.toISOString(),
-      stripeCustomerId: session.customer || '',
-      stripeSubscriptionId: session.subscription || ''
-    })
-    
-    // Update credit information
-    let resetDate = creditUtils.getNextMonthFirstDay();
-    
-    // For daily plans, set reset date to tomorrow
-    if (interval === 'day') {
-      const tomorrow = new Date();
-      tomorrow.setDate(tomorrow.getDate() + 1);
-      resetDate = tomorrow.toISOString().split('T')[0];
-    }
-    
-    await redis.hset(KEYS.USER_CREDITS(userId), {
-      total: creditAmount.toString(),
-      used: '0',
-      resetDate: resetDate,
-      lastUpdate: now.toISOString()
-    })
-    
-    // Get user email from session or lookup in Redis
-    let userEmail = session.customer_email || ''
-    if (!userEmail && userId) {
-      // Try to fetch email from Redis user profile
-      const userProfile = await profileUtils.getUserProfile(userId)
-      if (userProfile && userProfile.email) {
-        userEmail = userProfile.email as string
-      }
-    }
-    
-    // Send confirmation email if we have the user's email
-    if (userEmail) {
-      await sendSubscriptionConfirmation(
-        userEmail,
-        planName,
-        planType,
-        amount,
-        interval,
-        renewalDate.toISOString().split('T')[0],
-        creditAmount,
-        resetDate
-      )
-    } else {
-      logger.log(`No email found for user ${userId}, cannot send confirmation email`)
-    }
-    
-    return true
-  } catch (error) {
-    console.error('Error updating user subscription:', error)
-    return false
-  }
-}
 
 export async function POST(request: NextRequest) {
   try {
@@ -148,33 +33,24 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Webhook secret not configured' }, { status: 500 })
     }
     
-    const signature = request.headers.get('stripe-signature')
+    const signature = headers().get('Stripe-Signature') as string
     
     if (!signature) {
       console.error('❌ No Stripe signature found in request headers')
       return NextResponse.json({ error: 'No Stripe signature found' }, { status: 400 })
     }
     
-    // Get the raw request body
-    let rawBody: Buffer
-    try {
-      rawBody = await getRawBody(request.body as unknown as Readable)
-      console.log(`📨 Webhook received: body length=${rawBody.length}, signature present=${!!signature}`)
-    } catch (bodyError) {
-      console.error('❌ Failed to read webhook body:', bodyError)
-      return NextResponse.json({ error: 'Failed to read request body' }, { status: 400 })
-    }
+    const body = await request.text()
     
     // Verify the webhook signature
     let event
     try {
-      event = stripe.webhooks.constructEvent(rawBody, signature, webhookSecret)
-      console.log(`✅ Webhook signature verified: event=${event.type}, id=${event.id}`)
+      event = stripe.webhooks.constructEvent(body, signature, webhookSecret)
     } catch (err: any) {
       console.error(`❌ Webhook signature verification failed:`)
       console.error(`   Error: ${err.message}`)
       console.error(`   Signature: ${signature?.substring(0, 50)}...`)
-      console.error(`   Body length: ${rawBody.length}`)
+      console.error(`   Body length: ${body.length}`)
       console.error(`   Webhook secret set: ${!!webhookSecret}`)
       console.error(`   Webhook secret prefix: ${webhookSecret?.substring(0, 10)}...`)
       
@@ -189,7 +65,7 @@ export async function POST(request: NextRequest) {
         debug: {
           hasSignature: !!signature,
           hasSecret: !!webhookSecret,
-          bodyLength: rawBody.length,
+          bodyLength: body.length,
           secretPrefix: webhookSecret?.substring(0, 10)
         }
       }, { status: 400 })
@@ -203,13 +79,11 @@ export async function POST(request: NextRequest) {
         // All checkouts now use trial subscriptions, handled by trial/start endpoint
         // This webhook is kept for logging purposes only
         const session = event.data.object as Stripe.Checkout.Session
-        console.log(`Checkout session completed: ${session.id} - handled by trial flow`)
         return NextResponse.json({ received: true })
       }
         
       case 'customer.subscription.updated': {
         const subscription = event.data.object as Stripe.Subscription
-        console.log(`Subscription updated: ${subscription.id}, status: ${subscription.status}`)
         
           const customerId = subscription.customer as string
           if (!customerId) {
@@ -229,7 +103,6 @@ export async function POST(request: NextRequest) {
         const currentSubscriptionData = await redis.hgetall(KEYS.USER_SUBSCRIPTION(userId))
         const currentStatus = currentSubscriptionData?.status
         
-        console.log(`Subscription status change for user ${userId}: ${currentStatus} -> ${subscription.status}`)
             
         // Always sync the status with Stripe, but handle special cases
         const updateData: any = {
@@ -240,7 +113,6 @@ export async function POST(request: NextRequest) {
         
         // Handle specific status transitions
         if (currentStatus === 'trialing' && subscription.status === 'active') {
-          console.log(`Trial to active transition detected for user ${userId}`)
           updateData.trialEndedAt = new Date().toISOString()
           updateData.trialToActiveDate = new Date().toISOString()
         }
@@ -256,7 +128,6 @@ export async function POST(request: NextRequest) {
         // Update subscription data
         await redis.hset(KEYS.USER_SUBSCRIPTION(userId), updateData)
         
-        console.log(`Updated subscription status to ${subscription.status} for user ${userId}`)
         
         return NextResponse.json({ received: true })
       }
@@ -352,7 +223,6 @@ export async function POST(request: NextRequest) {
 
       case 'invoice.payment_succeeded': {
         const invoice = event.data.object as Stripe.Invoice
-        console.log(`Invoice payment succeeded: ${invoice.id}, billing_reason: ${invoice.billing_reason}`)
         
         // Check if this is for a subscription payment
         if (invoice.subscription) {
@@ -382,10 +252,8 @@ export async function POST(request: NextRequest) {
                 stripeSubscriptionStatus: subscription.status // Keep Stripe status in sync
               })
               
-              console.log(`User ${userId} trial ended successfully, subscription is now active`)
             } else if (invoice.billing_reason === 'subscription_create') {
               // This is the initial subscription creation payment (if any)
-              console.log(`Initial subscription payment for user ${userId}`)
               
               await redis.hset(KEYS.USER_SUBSCRIPTION(userId), {
                 status: subscription.status, // Use Stripe's status
@@ -444,15 +312,12 @@ export async function POST(request: NextRequest) {
 
       case 'payment_intent.payment_failed': {
         const paymentIntent = event.data.object as Stripe.PaymentIntent
-        console.log(`Payment intent failed: ${paymentIntent.id}`)
         
         // Check if this is a trial payment intent by looking at metadata
         if (paymentIntent.metadata?.isTrial === 'true') {
           const userId = paymentIntent.metadata?.userId
           
           if (userId) {
-            console.log(`Trial payment authorization failed for user ${userId}`)
-            
             // Prevent trial access by ensuring credits remain at 0
             await creditUtils.setZeroCredits(userId)
             
@@ -463,8 +328,6 @@ export async function POST(request: NextRequest) {
               paymentFailedAt: new Date().toISOString(),
               failureReason: 'Payment authorization failed during trial signup'
             })
-            
-            console.log(`Trial access prevented for user ${userId} due to payment authorization failure`)
           }
         }
         
@@ -473,14 +336,12 @@ export async function POST(request: NextRequest) {
 
       case 'payment_intent.canceled': {
         const paymentIntent = event.data.object as Stripe.PaymentIntent
-        console.log(`Payment intent canceled: ${paymentIntent.id}`)
         
         // Check if this is a trial payment intent
         if (paymentIntent.metadata?.isTrial === 'true') {
           const userId = paymentIntent.metadata?.userId
           
           if (userId) {
-            console.log(`Trial payment intent canceled for user ${userId}`)
             
             // Ensure user doesn't get trial access
             await creditUtils.setZeroCredits(userId)
@@ -493,7 +354,7 @@ export async function POST(request: NextRequest) {
               cancelReason: 'Payment intent canceled during trial signup'
             })
             
-            console.log(`Trial access prevented for user ${userId} due to payment intent cancellation`)
+            // console.log(`Trial access prevented for user ${userId} due to payment intent cancellation`)
           }
         }
         
@@ -517,7 +378,7 @@ export async function POST(request: NextRequest) {
               
               if (userKey) {
                 const userId = userKey.toString()
-                console.log(`Trial setup failed for user ${userId}`)
+                // console.log(`Trial setup failed for user ${userId}`)
                 
                 // Cancel the trial subscription since setup failed
                 await stripe.subscriptions.cancel(subscriptionId)
@@ -533,7 +394,7 @@ export async function POST(request: NextRequest) {
                   failureReason: 'Payment method setup failed during trial signup'
                 })
                 
-                console.log(`Trial access prevented for user ${userId} due to setup failure`)
+                // console.log(`Trial access prevented for user ${userId} due to setup failure`)
               }
             } catch (error) {
               console.error('Error handling setup intent failure:', error)
@@ -546,12 +407,11 @@ export async function POST(request: NextRequest) {
 
       case 'payment_intent.requires_action': {
         const paymentIntent = event.data.object as Stripe.PaymentIntent
-        console.log(`Payment intent requires action (3D Secure): ${paymentIntent.id}`)
+        // console.log(`Payment intent requires action (3D Secure): ${paymentIntent.id}`)
         
         // For trial payment intents, log the authentication requirement
         if (paymentIntent.metadata?.isTrial === 'true') {
           const userId = paymentIntent.metadata?.userId
-          console.log(`Trial payment requires 3D Secure authentication for user ${userId}`)
           
           // Don't grant trial access until authentication is complete
           // The payment will either succeed (triggering payment_intent.succeeded) 

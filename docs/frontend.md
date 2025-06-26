@@ -1,232 +1,245 @@
-# Auto-Analyst Frontend Architecture Documentation
+# Auto-Analyst Frontend Overview
 
-## 1. Overall Architecture
-The Auto-Analyst frontend is built using **Next.js** with a combination of **App Router** and **Pages Router** patterns. The application follows a component-based architecture with a clear separation of concerns:
+## 1. Frontend Architecture
+The Auto-Analyst frontend is built using **Next.js 13** with the **App Router** pattern. The application follows a component-based architecture with clear separation of concerns between UI, business logic, and data management.
 
-- **App Directory**: Utilizes Next.js 13+ App Router for newer features.
-- **Pages Directory**: Uses traditional Next.js Pages Router for some analytics features.
-- **Components**: Reusable UI elements organized by feature and functionality.
-- **State Management**: Combination of local state and custom stores.
-- **UI Framework**: Tailwind CSS with custom components.
+### Tech Stack
+- **Framework**: Next.js 13 with App Router
+- **Language**: TypeScript for full type safety
+- **Styling**: Tailwind CSS with shadcn/ui components
+- **Authentication**: NextAuth.js with Google OAuth
+- **State Management**: Zustand stores + React Context
+- **Data Fetching**: React Query + custom API clients
+- **Payment Integration**: Stripe for subscriptions and billing
 
 ---
 
-## 2. Directory Structure
+## 2. Key Frontend Features
+
+### 🤖 AI Chat Interface
+- **Real-time messaging** with AI agents via WebSocket
+- **Code execution** with syntax highlighting and live results
+- **File upload** support for CSV/Excel data analysis
+- **Message persistence** with Redis-backed chat history
+- **Multi-agent** conversations with specialized AI assistants
+
+### 🔐 Authentication & Security
+- **Google OAuth** primary authentication
+- **Session management** with NextAuth.js and Redis
+- **Admin dashboard** access with temporary login
+- **Route protection** via Next.js middleware
+- **Guest mode** with limited trial access
+
+### 💳 Credit & Billing System
+- **Real-time credit tracking** with usage monitoring
+- **Tier-based pricing** (1-20 credits per AI model)
+- **2-day trial** with 500 credits for new users
+- **Stripe integration** for subscription management
+- **Usage analytics** and cost breakdown
+
+### 📊 Admin Dashboard
+- **User analytics** and platform statistics
+- **Cost analysis** per model and user
+- **Real-time metrics** and performance monitoring
+- **User management** and activity tracking
+
+---
+
+## 3. Component Architecture
+
+### Core Components
 ```
-auto-analyst-frontend/
-├── app/                    # Next.js App Router pages & layouts
-│   ├── admin/              # Admin-related pages
-│   ├── analytics/          # Analytics pages (App Router version)
-│   ├── api/                # API routes for server-side operations
-│   ├── chat/               # Chat interface pages
-│   ├── contact/            # Contact form pages
-│   ├── enterprise/         # Enterprise features pages
-│   ├── login/              # Authentication pages
-│   └── layout.tsx          # Root layout for App Router
-├── components/             # Reusable components
-│   ├── admin/              # Admin dashboard components
-│   ├── analytics/          # Analytics visualization components
-│   ├── chat/               # Chat-related components
-│   ├── ui/                 # General UI components (shadcn/ui based)
-│   └── [feature].tsx       # Feature-specific components
-├── config/                 # Configuration files
-├── lib/                    # Utility functions and libraries
-│   ├── api/                # API client functions
-│   ├── store/              # State management stores
-│   └── utils/              # Utility functions
-├── pages/                  # Traditional Next.js Pages Router
-│   └── analytics/          # Analytics dashboard pages
-├── public/                 # Static assets
-├── styles/                 # Global styles
-└── types/                  # TypeScript type definitions
+components/
+├── ui/                 # shadcn/ui base components
+├── chat/               # Chat interface components
+│   ├── ChatInterface.tsx    # Main chat container
+│   ├── ChatInput.tsx        # User input handling
+│   ├── ChatWindow.tsx       # Message display
+│   └── MessageContent.tsx   # Message rendering
+├── admin/              # Admin dashboard components
+├── analytics/          # Analytics visualization
+└── landing/            # Landing page sections
 ```
 
----
-
-## 3. Key Component Breakdown
-
-### 3.1 Core Components
-
-#### Chat Interface Components
-| Component          | Purpose                                    | Location |
-|-------------------|---------------------------------|------------|
-| `ChatInterface.tsx` | Main container for chat functionality | [View File](/auto-analyst-frontend/components/ChatInterface.tsx) |
-| `ChatInput.tsx`  | User input area for chat          | [View File](/auto-analyst-frontend/components/ChatInput.tsx) |
-| `ChatWindow.tsx` | Display area for chat messages   | [View File](/auto-analyst-frontend/components/ChatWindow.tsx) |
-| `MessageContent.tsx` | Renders individual messages   | [View File](/auto-analyst-frontend/components/chat/MessageContent.tsx) |
-| `CodeBlocker.tsx` | Syntax highlighting for code blocks | [View File](/auto-analyst-frontend/components/chat/CodeBlocker.tsx) |
-| `LoadingIndicator.tsx` | Loading state visualization | [View File](/auto-analyst-frontend/components/chat/LoadingIndicator.tsx) |
-| `AgentHint.tsx` | Agent hint component | [View File](/auto-analyst-frontend/components/chat/AgentHint.tsx) |
-| `FreeTrialOverlay.tsx` | Free trial overlay component | [View File](/auto-analyst-frontend/components/chat/FreeTrialOverlay.tsx) |
-| `WelcomeSection.tsx` | Welcome section for landing page | [View File](/auto-analyst-frontend/components/WelcomeSection.tsx) |
-| `Sidebar.tsx` | Sidebar component | [View File](/auto-analyst-frontend/components/Sidebar.tsx) |
-| `PlotlyChart.tsx` | Plotly chart component | [View File](/auto-analyst-frontend/components/PlotlyChart.tsx) |
-
-#### Analytics Dashboard Components
-| Component          | Purpose                                | Location |
-|-------------------|--------------------------------|------------|
-| `AnalyticsLayout.tsx` | Layout wrapper for analytics pages | [View File](/auto-analyst-frontend/components/analytics/AnalyticsLayout.tsx) |
-| `Charts.tsx` | Visualization components  | [View File](/auto-analyst-frontend/components/admin/Charts.tsx) |
-| `UsageTable.tsx` | Tabular data presentation | [View File](/auto-analyst-frontend/components/admin/UsageTable.tsx) |
-| `DateRangePicker.tsx` | Date range selection for filtering | [View File](/auto-analyst-frontend/components/admin/DateRangePicker.tsx) |
-
-#### UI Components
-| Component | Purpose | Location |
-|-----------|---------|----------|
-| `alert.tsx` | Alert component | [View File](/auto-analyst-frontend/components/ui/alert.tsx) |
-| `button.tsx` | Reusable button component | [View File](/auto-analyst-frontend/components/ui/button.tsx) |
-| `calendar.tsx` | Calendar component | [View File](/auto-analyst-frontend/components/ui/calendar.tsx) |
-| `card.tsx` | Card container component | [View File](/auto-analyst-frontend/components/ui/card.tsx) |
-| `CopyButton.tsx` | Copy button component | [View File](/auto-analyst-frontend/components/ui/CopyButton.tsx) |
-| `dialog.tsx` | Modal dialog component | [View File](/auto-analyst-frontend/components/ui/dialog.tsx) |
-| `input.tsx` | Input component | [View File](/auto-analyst-frontend/components/ui/input.tsx) |
-| `popover.tsx` | Popover component | [View File](/auto-analyst-frontend/components/ui/popover.tsx) |
-| `scroll-area.tsx` | Scrollable area component | [View File](/auto-analyst-frontend/components/ui/scroll-area.tsx) |
-| `table.tsx` | Data table component | [View File](/auto-analyst-frontend/components/ui/table.tsx) |
-| `tabs.tsx` | Tab navigation component | [View File](/auto-analyst-frontend/components/ui/tabs.tsx) |
-| `textarea.tsx` | Textarea component | [View File](/auto-analyst-frontend/components/ui/textarea.tsx) |
-| `tooltip.tsx` | Tooltip component | [View File](/auto-analyst-frontend/components/ui/tooltip.tsx) |
-
-#### Landing Page Components
-| Component | Purpose | Location |
-|-----------|---------|----------|
-| `LandingPage.tsx` | Main landing page layout | [View File](/auto-analyst-frontend/components/LandingPage.tsx) |
-| `HeroSection.tsx` | Hero section for landing page | [View File](/auto-analyst-frontend/components/HeroSection.tsx) |
-| `FeatureSection.tsx` | Features showcase section | [View File](/auto-analyst-frontend/components/FeatureSection.tsx) |
-| `TestimonialsSection.tsx` | Customer testimonials | [View File](/auto-analyst-frontend/components/TestimonialsSection.tsx) |
-
----
-
-### 3.2 Pages Structure
-
-#### App Router Pages (New Architecture)
+### Page Structure (App Router)
 ```
 app/
-├── page.tsx              # Landing page
-├── chat/                 # Chat application
-│   └── page.tsx          # Main chat interface
-├── analytics/            # Analytics overview
-│   └── page.tsx          # Analytics summary page
-├── admin/                # Admin section
-│   └── page.tsx          # Admin dashboard
-├── enterprise/           # Enterprise features
-│   └── page.tsx          # Enterprise page
-└── layout.tsx            # Root layout with navigation
-```
-
-#### Pages Router (Legacy)
-```
-pages/
-├── _app.tsx              # App wrapper for Pages Router
-└── analytics/            # Detailed analytics pages
-    ├── costs.tsx         # Cost analysis page
-    ├── dashboard.tsx     # Main analytics dashboard
-    ├── models.tsx        # Model performance analysis
-    └── users.tsx         # User activity analysis
+├── page.tsx            # Landing page
+├── chat/page.tsx       # Main chat interface
+├── admin/page.tsx      # Admin dashboard
+├── analytics/          # Analytics pages
+├── login/page.tsx      # Authentication
+├── api/                # API routes (Next.js)
+└── layout.tsx          # Root layout
 ```
 
 ---
 
 ## 4. State Management
 
-### 4.1 Local Component State
-- Uses React's `useState` and `useEffect` for local UI state.
+### Global State
+- **Credit Context**: Real-time credit tracking and billing state
+- **Deep Analysis Context**: Long-running analysis progress
+- **Session Store**: User authentication and preferences
+- **Chat History Store**: Message persistence and retrieval
 
-### 4.2 Custom Stores
-Custom state management is implemented in `/lib/store/`:
-| Store | Purpose |
-|-------|---------|
-| `chatHistoryStore.ts` | Manages chat history |
-| `cookieConsentStore.ts` | Manages cookie consent |
-| `freeTrialStore.ts` | Tracks trial usage |
-| `sessionStore.ts` | Manages user authentication state |
-
----
-
-## 5. Key Features Implementation
-
-### 5.1 Chat Interface
-- **Handles:** message history, API communication, streaming response, and error handling.
-- **Features:** syntax highlighting, loading indicators, Markdown rendering.
-
-### 5.2 Analytics Dashboard
-- **Dashboard Features:**
-  - Summary statistics, usage trends, real-time updates.
-- **Model Analysis:**
-  - Model performance, cost tracking, user insights.
-
-### 5.3 Authentication
-- **Components:**
-  - `AuthProvider.tsx`: Authentication context.
-  - `lib/api/auth.ts`: API integrations.
-  - `sessionStore.ts`: Session persistence.
+### Local State
+- Component-level state with React hooks
+- Form state management with controlled components
+- UI state (modals, dropdowns, loading states)
 
 ---
 
-## 6. UI Design Patterns
+## 5. API Integration
 
-### 6.1 Component Library
-- Built on `shadcn/ui` components.
-- **Ensures:** consistency, accessibility, responsiveness.
+### Communication Patterns
+1. **Direct Backend Calls**: Real-time chat and data operations
+2. **Next.js API Routes**: Authentication, payments, and Redis operations
+3. **WebSocket**: Live chat streaming and real-time updates
 
-### 6.2 Layouts
-| Layout File | Purpose |
-|-------------|---------|
-| `app/layout.tsx` | Root layout (App Router) |
-| `components/layout.tsx` | Main layout |
-| `components/analytics/AnalyticsLayout.tsx` | Analytics layout |
-| `components/admin/AdminLayout.tsx` | Admin layout |
-
----
-
-## 7. API Integration
-API clients are located in `/lib/api/`:
-| Module | Purpose |
-|--------|---------|
-| `analytics.ts` | Fetch analytics data |
-| `auth.ts` | Handle authentication |
-
-Configuration in `/config/api.ts` manages:
-- Base URL
-- Environment variables
-- API versioning
+### API Client Structure
+```
+lib/api/
+├── auth.ts            # Authentication API calls
+├── analytics.ts       # Admin analytics data
+└── chat.ts            # Chat and AI interactions
+```
 
 ---
 
-## 8. Development and Build Process
-| Command | Purpose |
-|---------|---------|
-| `npm run dev` | Start the development server |
-| `npm run build` | Build the production app |
-| `npm start` | Start the production server |
+## 6. Environment Configuration
 
-Build artifacts are stored in `.next/` (ignored in `.gitignore`).
+### Required Variables
+```bash
+# Core Configuration
+NEXT_PUBLIC_API_URL=http://localhost:8000
+NEXTAUTH_URL=http://localhost:3000
+NEXTAUTH_SECRET=your-secret-key
 
----
+# Authentication
+GOOGLE_CLIENT_ID=your-google-client-id
+GOOGLE_CLIENT_SECRET=your-google-client-secret
 
-## 9. Environment Configuration
-Environment variables are stored in `.env.local`:
-| Variable | Purpose |
-|----------|---------|
-| `NEXT_PUBLIC_API_URL` | Backend API endpoint |
-| `NEXT_PUBLIC_ADMIN_PASSWORD` | Admin password |
-| `NEXT_PUBLIC_ADMIN_EMAIL` | Admin email |
-| `NEXT_PUBLIC_FREE_TRIAL_LIMIT` | Free trial limit (Production: 2, Development: 20000)|
-| `AUTH_SECRET` | Authentication secret |
-| `ANALYTICS_CONFIG` | Analytics settings |
-| `NEXTAUTH_URL` | Authentication URL (http://localhost:3000) |
-| `NEXTAUTH_SECRET` | Authentication secret |
-| `GOOGLE_CLIENT_ID` | Google OAuth client ID |
-| `GOOGLE_CLIENT_SECRET` | Google OAuth client secret |
-| `SMTP_HOST` | SMTP server host |
-| `SMTP_PORT` | SMTP server port |
-| `SMTP_USER` | SMTP server username |
-| `SMTP_PASS` | SMTP server password |
-| `ADMIN_API_KEY` | Admin API key |
+# Redis & Caching
+UPSTASH_REDIS_REST_URL=your-redis-url
+UPSTASH_REDIS_REST_TOKEN=your-redis-token
 
-For security, `.env.local` is not committed to Git.
+# Stripe Payments
+NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_test_...
+STRIPE_SECRET_KEY=sk_test_...
+STRIPE_WEBHOOK_SECRET=whsec_...
+```
 
 ---
 
-## 10. Conclusion
-This documentation provides an in-depth overview of the Auto-Analyst frontend architecture, covering components, state management, API integration, and development workflows. 🚀
+## 7. Development Workflow
+
+### Available Scripts
+```bash
+npm run dev          # Start development server
+npm run build        # Build for production
+npm run start        # Start production server
+npm run lint         # ESLint code checking
+npm run type-check   # TypeScript validation
+```
+
+### Development Environment
+1. **Frontend Server**: `http://localhost:3000`
+2. **Backend API**: `http://localhost:8000`
+3. **Hot Reload**: Automatic code reloading
+4. **Error Overlay**: Development error reporting
+
+---
+
+## 8. Performance & Optimization
+
+### Next.js Features
+- **Automatic code splitting** by route
+- **Image optimization** with Next.js Image component
+- **Bundle analysis** for size optimization
+- **Edge runtime** support for API routes
+
+### Caching Strategy
+- **Redis caching** for user sessions and data
+- **Browser caching** for static assets
+
+---
+
+## 9. Security Implementation
+
+### Frontend Security
+- **Environment variable** protection (NEXT_PUBLIC_ prefix for client-side)
+- **API route protection** with authentication middleware
+- **XSS protection** via input sanitization
+- **CSRF protection** built into NextAuth.js
+
+### Authentication Flow
+```
+User Login → Google OAuth → NextAuth.js → Session Creation → Redis Storage
+↓
+Route Protection → Middleware Check → API Authentication → Backend Access
+```
+
+---
+
+## 10. Deployment Options
+
+### Vercel (Recommended)
+- **Automatic deployments** from GitHub
+- **Environment variables** configuration
+- **Preview deployments** for pull requests
+- **Edge functions** for global performance
+
+### Alternative Platforms
+- **AWS Amplify** with Terraform configuration
+- **Docker containers** for custom hosting
+- **Static export** for CDN deployment
+
+---
+
+## 📖 Detailed Documentation
+
+For comprehensive frontend documentation, see:
+
+### **[Frontend Documentation Hub](../auto-analyst-frontend/docs/README.md)**
+
+**Architecture & Development**
+- [Environment Setup Guide](../auto-analyst-frontend/docs/development/environment-setup.md)
+- [Component Architecture](../auto-analyst-frontend/docs/architecture/)
+- [API Integration](../auto-analyst-frontend/docs/communication/)
+
+**System Configuration**
+- [Authentication System](../auto-analyst-frontend/docs/system/authentication.md)
+- [Middleware Configuration](../auto-analyst-frontend/docs/system/middleware.md)
+- [Model Registry](../auto-analyst-frontend/docs/system/model-registry.md)
+
+**Business Logic**
+- [Credit Configuration](../auto-analyst-frontend/docs/billing/credit-configuration.md)
+- [Trial System](../auto-analyst-frontend/docs/billing/trial-system.md)
+- [Stripe Integration](../auto-analyst-frontend/docs/billing/stripe-integration.md)
+
+---
+
+## 🔧 Quick Start
+
+```bash
+# Clone and setup
+git clone <repository>
+cd Auto-Analyst-CS/auto-analyst-frontend
+
+# Install dependencies
+npm install
+
+# Configure environment
+cp .env.example .env.local
+# Edit .env.local with your configuration
+
+# Start development
+npm run dev
+```
+
+Visit `http://localhost:3000` to see the application.
+
+---
+
+This overview provides the essential information about the Auto-Analyst frontend. For detailed implementation guides, component documentation, and development workflows, refer to the [comprehensive frontend documentation](../auto-analyst-frontend/docs/README.md).

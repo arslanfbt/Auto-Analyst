@@ -41,10 +41,10 @@ const MessageFeedback = ({ messageId, chatId }: MessageFeedbackProps) => {
       }
 
       try {
-        console.log(`Fetching feedback from ${API_URL}/feedback/message/${messageId}`)
+        // console.log(`Fetching feedback from ${API_URL}/feedback/message/${messageId}`)
         const response = await axios.get(`${API_URL}/feedback/message/${messageId}`)
         if (response.data) {
-          console.log("Received existing feedback:", response.data)
+          // console.log("Received existing feedback:", response.data)
           setExistingFeedback(response.data)
           setRating(response.data.rating)
           setIsLocked(true) // Lock the feedback if it already exists
@@ -54,7 +54,7 @@ const MessageFeedback = ({ messageId, chatId }: MessageFeedbackProps) => {
         // Handle 404 (no feedback yet) differently than other errors
         if (axios.isAxiosError(error)) {
           if (error.response?.status === 404) {
-            console.log("No existing feedback found (404 is expected)")
+            // console.log("No existing feedback found (404 is expected)")
             setHasError(false)
           } else {
             console.error("Error fetching feedback:", error)
@@ -114,7 +114,7 @@ const MessageFeedback = ({ messageId, chatId }: MessageFeedbackProps) => {
     setIsSubmitting(true)
     setRating(selectedRating)
     setHasError(false)
-    console.log(`Submitting rating ${selectedRating} for message ${messageId}`)
+    // console.log(`Submitting rating ${selectedRating} for message ${messageId}`)
 
     try {
       console.log(`POST to ${API_URL}/feedback/message/${messageId}`, {
@@ -135,7 +135,7 @@ const MessageFeedback = ({ messageId, chatId }: MessageFeedbackProps) => {
         max_tokens: modelSettings?.max_tokens
       })
       
-      console.log("Rating submitted successfully:", response.data)
+      // console.log("Rating submitted successfully:", response.data)
       setExistingFeedback(response.data)
       setShowThankYou(true)
       setIsLocked(true) // Lock feedback after submission
