@@ -15,7 +15,7 @@ This directory contains comprehensive documentation for the Auto-Analyst backend
 - **[Shared DataFrame System](./system/shared_dataframe.md)** - Inter-agent data sharing and session management
 
 ### **🌐 API** (`/api/`)
-- **[API Endpoints Overview](./api/endpoints.md)** - Main API reference hub
+- **[API Endpoints Overview](./api/README.md)** - Main API reference hub
 - **[Route Documentation](./api/routes/)** - Detailed endpoint documentation:
   - **[Core Routes](./api/routes/session.md)** - File uploads, sessions, authentication
   - **[Chat Routes](./api/routes/chats.md)** - Chat and messaging endpoints
