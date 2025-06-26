@@ -29,23 +29,26 @@ Auto-Analyst Platform Architecture
 
 ## 📁 Documentation Structure
 
-### **📖 Project Documentation** (`/docs/`)
-- **[Backend Documentation](./backend.md)** - Python FastAPI backend architecture and API reference
+### **📖 Main Documentation** (`/docs/`)
+- **[Backend Documentation](./backend.md)** - Python FastAPI backend API overview and route categories
 - **[Frontend Documentation](./frontend.md)** - Next.js frontend overview and component structure
-- **[Database Schema](./db_schema.md)** - Database structure and relationships
-- **[Redis Setup](./redis-setup.md)** - Redis configuration and usage patterns
 
 ### **🎨 Frontend Specific** (`/auto-analyst-frontend/docs/`)
-- **[Frontend README](../auto-analyst-frontend/docs/README.md)** - Frontend-specific documentation
-- **Architecture & Components** - Detailed frontend implementation guides
-- **Development Setup** - Frontend development environment setup
-- **API Integration** - Frontend-backend communication patterns
+- **[Frontend Documentation Hub](../auto-analyst-frontend/docs/README.md)** - Comprehensive frontend guides
+- **[Development Environment Setup](../auto-analyst-frontend/docs/development/environment-setup.md)** - Complete environment configuration
+- **[Default Agents System](../auto-analyst-frontend/docs/features/default-agents.md)** - AI agent setup and configuration
+- **[Credit Configuration Guide](../auto-analyst-frontend/docs/billing/credit-configuration.md)** - Centralized credit and trial management
+- **[Trial System Architecture](../auto-analyst-frontend/docs/billing/trial-system.md)** - 2-day trial implementation
+- **[Model Registry](../auto-analyst-frontend/docs/system/model-registry.md)** - AI model management
+- **[Middleware Guide](../auto-analyst-frontend/docs/system/middleware.md)** - Route protection and request handling
 
 ### **🔧 Backend Specific** (`/auto-analyst-backend/docs/`)
-- **[API Endpoints](../auto-analyst-backend/docs/endpoints.md)** - Complete API reference
-- **[Architecture](../auto-analyst-backend/docs/architecture.md)** - Backend system design
-- **Agent System** - AI agent configuration and management
-- **Database Integration** - Data models and migrations
+- **[Getting Started Guide](../auto-analyst-backend/docs/getting_started.md)** - Backend setup and deployment
+- **[API Endpoints Reference](../auto-analyst-backend/docs/api/endpoints.md)** - Complete API documentation
+- **[Architecture Overview](../auto-analyst-backend/docs/architecture/architecture.md)** - Backend system design
+- **[Development Workflow](../auto-analyst-backend/docs/development/development_workflow.md)** - Backend development guide
+- **[Database Schema](../auto-analyst-backend/docs/system/database-schema.md)** - Data models and relationships
+- **[Shared DataFrame System](../auto-analyst-backend/docs/system/shared_dataframe.md)** - Session data management
 
 ## 🚀 Quick Start Guide
 
@@ -90,18 +93,18 @@ Auto-Analyst Platform Architecture
 1. **Understanding the Platform**
    - Review [Frontend Documentation](./frontend.md) for user-facing features
    - Check [Backend Documentation](./backend.md) for API capabilities
-   - Understand the [Database Schema](./db_schema.md) for data structure
+   - Understand the [Database Schema](../auto-analyst-backend/docs/system/database-schema.md) for data structure
 
 2. **Key Business Features**
    - **Credit System**: Usage-based billing with model tiers (1-20 credits per query)
-   - **Trial System**: 2-day free trial with 500 credits
+   - **Trial System**: 2-day free trial with 500 credits (configurable)
    - **Subscription Management**: Stripe-powered recurring billing
    - **Multi-Agent AI**: Specialized agents for different data tasks
 
-3. **Analytics & Monitoring**
-   - User engagement tracking
-   - Model usage and cost analysis
-   - Real-time platform statistics
+3. **Configuration Management**
+   - **Credit Configuration**: Centralized in [credits-config.ts](../auto-analyst-frontend/docs/billing/credit-configuration.md)
+   - **Trial Settings**: Adjustable duration and credit allocation
+   - **Model Pricing**: Different AI models with varying credit costs
 
 ### **For DevOps Engineers**
 
@@ -112,15 +115,16 @@ Auto-Analyst Platform Architecture
    - **Caching**: Redis/Upstash
 
 2. **Infrastructure Setup**
-   - Review [Redis Setup Guide](./redis-setup.md)
    - Configure monitoring and logging
    - Set up CI/CD pipelines
+   - Environment variable management
+   - Database migrations and backups
 
 3. **Security Considerations**
-   - Environment variable management
-   - API key rotation
-   - Database security
+   - API key rotation and management
+   - Database security and access control
    - Rate limiting and DDoS protection
+   - SSL/TLS certificate management
 
 ## 🎯 Key Features
 
@@ -129,21 +133,22 @@ Auto-Analyst Platform Architecture
 - **Natural Language Interface**: Chat-based interaction with data
 - **Code Generation**: Automatic Python code generation for analysis
 - **Real-time Execution**: Live code execution with results visualization
+- **Deep Analysis**: Comprehensive multi-agent analysis with detailed reporting
 
 ### **💳 Business Model**
 - **Credit-Based Pricing**: Pay-per-query model with different AI model tiers
 - **Subscription Plans**: Monthly/yearly plans with credit allocations
-- **Free Trial**: 2-day trial with 500 credits
+- **Free Trial**: 2-day trial with 500 credits (configurable)
 - **Enterprise Features**: Custom solutions and dedicated support
 
 ### **🔐 Authentication & Security**
-- **Google OAuth**: Primary authentication method
+- **Google OAuth**: Primary authentication method via NextAuth.js
 - **Session Management**: Redis-based session storage
-- **Admin Dashboard**: Analytics and user management
+- **Admin Dashboard**: Analytics and user management interface
 - **API Security**: Rate limiting and authentication tokens
 
 ### **📊 Analytics & Monitoring**
-- **Usage Tracking**: Detailed analytics on user behavior
+- **Usage Tracking**: Detailed analytics on user behavior and feature usage
 - **Cost Analysis**: Real-time cost tracking per model and user
 - **Performance Metrics**: Response times and success rates
 - **Business Intelligence**: Revenue and subscription analytics
@@ -182,19 +187,19 @@ npm run dev:all    # If configured in root package.json
 - **Next.js 14**: App Router for modern React patterns
 - **TypeScript**: Full type safety across the application
 - **Tailwind CSS**: Utility-first styling with custom components
-- **Zustand**: Lightweight state management
-- **NextAuth.js**: Authentication framework
+- **Zustand**: Lightweight state management for complex UI state
+- **NextAuth.js**: Authentication framework with Google OAuth
 
 ### **Backend Architecture**
 - **FastAPI**: Modern Python web framework with automatic OpenAPI
 - **SQLAlchemy**: Database ORM with migration support
-- **DSPy**: AI agent framework for model interactions
+- **DSPy**: AI agent framework for model interactions and orchestration
 - **Pydantic**: Data validation and serialization
 - **Async/Await**: Non-blocking I/O for better performance
 
 ### **Data Architecture**
 - **PostgreSQL**: Primary database for production
-- **Redis**: Caching and session storage
+- **Redis**: Caching, session storage, and real-time data
 - **S3/Blob Storage**: File uploads and static assets
 - **Real-time Updates**: WebSocket connections for live data
 
@@ -209,7 +214,7 @@ npm run dev:all    # If configured in root package.json
 ### **Payment Processing**
 - **Stripe**: Subscription management and payments
 - **Webhooks**: Real-time payment event processing
-- **Credit System**: Usage tracking and billing
+- **Credit System**: Usage tracking and billing automation
 
 ### **Third-Party Services**
 - **Vercel**: Frontend hosting and edge functions
@@ -220,55 +225,56 @@ npm run dev:all    # If configured in root package.json
 ## 📈 Monitoring & Analytics
 
 ### **Application Monitoring**
-- **Error Tracking**: Comprehensive error logging
-- **Performance Metrics**: Response time monitoring
-- **Usage Analytics**: User behavior tracking
-- **Cost Tracking**: Real-time cost analysis per feature
+- **Error Tracking**: Comprehensive error logging and reporting
+- **Performance Metrics**: Response time monitoring and optimization
+- **Usage Analytics**: User behavior tracking and feature usage
+- **Cost Tracking**: Real-time cost analysis per feature and user
 
 ### **Business Metrics**
-- **User Acquisition**: Registration and trial conversion
-- **Revenue Tracking**: Subscription and usage revenue
+- **User Acquisition**: Registration and trial conversion tracking
+- **Revenue Tracking**: Subscription and usage revenue analytics
 - **Feature Usage**: Most popular AI agents and features
-- **Support Metrics**: User satisfaction and support tickets
+- **Support Metrics**: User satisfaction and support ticket analytics
 
 ## 🤝 Contributing
 
 ### **Code Standards**
 - Follow TypeScript/Python best practices
 - Use consistent naming conventions
-- Write comprehensive tests
-- Document new features and APIs
+- Write comprehensive tests for new features
+- Document new features and APIs thoroughly
 
 ### **Documentation Standards**
 - Keep documentation up-to-date with code changes
-- Use clear, concise language with examples
-- Organize documentation logically
-- Link related concepts and features
+- Use clear, concise language with practical examples
+- Organize documentation logically with proper linking
+- Include configuration examples and troubleshooting guides
 
 ### **Development Process**
-1. Fork the repository
-2. Create a feature branch
-3. Make changes with tests
-4. Update relevant documentation
-5. Submit a pull request with clear description
+1. Fork the repository and create a feature branch
+2. Make changes with appropriate tests
+3. Update relevant documentation
+4. Submit a pull request with clear description
+5. Address code review feedback promptly
 
 ## 📞 Support & Resources
 
 ### **Internal Resources**
-- **Development Team**: Technical implementation questions
-- **Product Team**: Feature requirements and business logic
+- **Development Team**: Technical implementation questions and code reviews
+- **Product Team**: Feature requirements and business logic discussions
 - **DevOps Team**: Infrastructure and deployment issues
 
 ### **External Documentation**
-- [Next.js Documentation](https://nextjs.org/docs)
-- [FastAPI Documentation](https://fastapi.tiangolo.com/)
-- [Stripe API Reference](https://stripe.com/docs/api)
-- [Redis Documentation](https://redis.io/docs)
+- [Next.js Documentation](https://nextjs.org/docs) - Frontend framework
+- [FastAPI Documentation](https://fastapi.tiangolo.com/) - Backend framework
+- [Stripe API Reference](https://stripe.com/docs/api) - Payment processing
+- [Redis Documentation](https://redis.io/docs) - Caching and sessions
 
 ### **Community**
 - GitHub Issues for bug reports and feature requests
 - Internal Slack channels for development discussions
 - Code review process for quality assurance
+- Documentation updates and improvements
 
 ---
 
