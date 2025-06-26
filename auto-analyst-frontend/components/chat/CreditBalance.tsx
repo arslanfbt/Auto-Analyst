@@ -11,6 +11,7 @@ const CreditBalance = () => {
   const { remainingCredits, isLoading, checkCredits, creditResetDate } = useCredits()
   const [isHovering, setIsHovering] = useState(false)
   const [daysToReset, setDaysToReset] = useState<number | null>(null)
+  const [isRefreshing, setIsRefreshing] = useState(false)
   
   // Check if credits represent unlimited (Pro plan)
   const isUnlimited = remainingCredits > 999998;
@@ -25,6 +26,21 @@ const CreditBalance = () => {
       setDaysToReset(diffDays > 0 ? diffDays : null);
     }
   }, [creditResetDate]);
+
+  // Enhanced credit refresh detection
+  useEffect(() => {
+    // Listen for navigation events that might trigger credit refresh
+    const handleCreditRefresh = () => {
+      setIsRefreshing(true)
+      setTimeout(() => setIsRefreshing(false), 2000) // Show refreshing for 2 seconds
+    }
+
+    window.addEventListener('creditsUpdated', handleCreditRefresh)
+    
+    return () => {
+      window.removeEventListener('creditsUpdated', handleCreditRefresh)
+    }
+  }, [])
   
   // Display for credits
   const creditsDisplay = isUnlimited ? (
@@ -65,7 +81,14 @@ const CreditBalance = () => {
                 transition={{ duration: 0.2 }}
               >
                 <Coins className="h-4 w-4 text-[#FF7F7F]" />
-                <span className="ml-1">{isLoading ? '...' : creditsDisplay}</span>
+                <span className="ml-1">
+                  {isLoading || isRefreshing ? (
+                    <span className="flex items-center">
+                      <RefreshCcw className="h-3 w-3 mr-1 animate-spin" />
+                      ...
+                    </span>
+                  ) : creditsDisplay}
+                </span>
                 {!isUnlimited && daysToReset && daysToReset <= 7 && (
                   <span className="ml-1 text-xs text-gray-500 flex items-center">
                     <RefreshCcw className="h-3 w-3 mr-0.5" />

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import Stripe from 'stripe'
+import { TrialUtils } from '@/lib/credits-config'
 
 export const dynamic = 'force-dynamic'
 
@@ -86,41 +87,56 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Prepare subscription creation parameters
-    const subscriptionParams: Stripe.SubscriptionCreateParams = {
+    // CHANGED: Create only a setup intent for payment method collection
+    // Do NOT create subscription until user confirms payment
+    const setupIntent = await stripe.setupIntents.create({
       customer: customerId,
-      items: [{ price: priceId }],
-      payment_behavior: 'default_incomplete',
-      payment_settings: { save_default_payment_method: 'on_subscription' },
-      expand: ['latest_invoice.payment_intent'],
+      usage: 'off_session',
       metadata: {
         userId: userId || 'anonymous',
         planName,
         interval,
+        priceId,
+        isTrial: 'true',
+        trialEndDate: TrialUtils.getTrialEndDate(),
         ...(promoCode && { promoCode }),
+        ...(couponId && { couponId }),
       },
-    }
-
-    // Apply coupon if valid promo code was found
-    if (couponId) {
-      subscriptionParams.coupon = couponId
-    }
-
-    // Create a subscription with the provided price ID and optional coupon
-    const subscription = await stripe.subscriptions.create(subscriptionParams)
-
-    // Get the client secret from the payment intent
-    // @ts-ignore - We know this exists because we expanded it
-    const clientSecret = subscription.latest_invoice.payment_intent.client_secret
+    })
 
     return NextResponse.json({ 
-      clientSecret,
-      subscriptionId: subscription.id,
+      setupIntentId: setupIntent.id,
+      clientSecret: setupIntent.client_secret,
+      customerId: customerId,
       discountApplied: !!couponId,
+      isTrialSetup: true,
+      planName,
+      interval,
+      priceId,
       ...(couponId && { couponId })
     })
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred'
     return NextResponse.json({ message: `Stripe error: ${errorMessage}` }, { status: 500 })
+  }
+}
+
+// Helper function to calculate discounted amount
+async function calculateDiscountedAmount(amount: number, couponId: string): Promise<number> {
+  if (!stripe) return amount
+  
+  try {
+    const coupon = await stripe.coupons.retrieve(couponId)
+    
+    if (coupon.percent_off) {
+      return Math.round(amount * (1 - coupon.percent_off / 100))
+    } else if (coupon.amount_off) {
+      return Math.max(0, amount - coupon.amount_off)
+    }
+    
+    return amount
+  } catch (error) {
+    console.error('Error calculating discount:', error)
+    return amount
   }
 } 

@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getToken } from 'next-auth/jwt';
 import { creditUtils } from '@/lib/redis';
-import { CreditConfig } from '@/lib/credits-config';
 
 export async function GET(request: NextRequest) {
   try {
@@ -13,27 +12,21 @@ export async function GET(request: NextRequest) {
     
     const userId = token.sub;
     
-    // Allow custom amount via query param for testing
-    const searchParams = request.nextUrl.searchParams;
-    const amount = searchParams.get('amount')
-      ? parseInt(searchParams.get('amount') as string) 
-      : CreditConfig.getDefaultInitialCredits();
+    // This endpoint is for debugging/testing only
+    // Don't automatically initialize credits anymore since we removed free plan
     
-    // Initialize credits for the user
-    await creditUtils.initializeCredits(userId, amount);
-    
-    // Check if credits were properly set
+    // Check current credits
     const currentCredits = await creditUtils.getRemainingCredits(userId);
     
     return NextResponse.json({
       success: true,
       userId,
-      initializedAmount: amount,
+      message: 'Credits not initialized - use trial signup or subscription to get credits',
       currentCredits,
       timestamp: new Date().toISOString()
     });
   } catch (error) {
-    console.error('Error initializing credits:', error);
+    console.error('Error checking credits:', error);
     return NextResponse.json(
       {
         success: false,

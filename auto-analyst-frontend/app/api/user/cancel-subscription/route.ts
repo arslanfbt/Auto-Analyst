@@ -31,50 +31,74 @@ export async function POST(request: NextRequest) {
     // Get current subscription data from Redis
     const subscriptionData = await redis.hgetall(KEYS.USER_SUBSCRIPTION(userId))
     
-    if (!subscriptionData || !subscriptionData.stripeSubscriptionId) {
+    if (!subscriptionData) {
       return NextResponse.json({ error: 'No active subscription found' }, { status: 400 })
     }
 
     const stripeSubscriptionId = subscriptionData.stripeSubscriptionId as string
+    const isLegacyUser = !stripeSubscriptionId || !stripeSubscriptionId.startsWith('sub_')
+    
+    // For legacy users, we'll skip Stripe API calls and just update Redis
+    if (isLegacyUser) {
+      console.log(`Legacy user ${userId} canceling - using Redis-only flow`)
+    }
     
     try {
+      let canceledSubscription = null
+      
+      // Only make Stripe API calls for new users with proper subscription IDs
+      if (!isLegacyUser) {
       // Cancel the subscription in Stripe
       // Using cancel_at_period_end: true to let the user keep access until the end of their current billing period
-      const canceledSubscription = await stripe.subscriptions.update(stripeSubscriptionId, {
+        canceledSubscription = await stripe.subscriptions.update(stripeSubscriptionId, {
         cancel_at_period_end: true,
       })
-      
-      // Update the subscription data in Redis with cancellation info
-      const now = new Date()
-      await redis.hset(KEYS.USER_SUBSCRIPTION(userId), {
-        status: 'canceling', // 'canceling' means it will end at period end
-        canceledAt: now.toISOString(),
-        lastUpdated: now.toISOString(),
-        // Add a flag to indicate this is pending cancellation and should get free credits next reset
-        pendingDowngrade: 'true',
-        nextPlanType: 'FREE'
-      })
-      
-      // Get current credit data
-      const creditData = await redis.hgetall(KEYS.USER_CREDITS(userId))
-      if (creditData && creditData.resetDate) {
-        // Mark the credits to be downgraded on next reset - using centralized config
-        await redis.hset(KEYS.USER_CREDITS(userId), {
-          nextTotalCredits: CreditConfig.getCreditsForPlan('Free').total.toString(), // This will be used at the next reset
-          pendingDowngrade: 'true',
-          lastUpdate: new Date().toISOString()
-        })
+        console.log(`Scheduled Stripe cancellation for subscription ${stripeSubscriptionId} for user ${userId}`)
+      } else {
+        console.log(`Legacy user ${userId} - skipping Stripe API calls, updating Redis only`)
       }
       
-      // Send cancellation confirmation email
-      // This would be implemented in a real application
+      // Update the subscription data in Redis with cancellation info (for both legacy and new users)
+      const now = new Date()
+      await redis.hset(KEYS.USER_SUBSCRIPTION(userId), {
+        status: isLegacyUser ? 'canceled' : 'canceling', // Legacy users get immediate cancellation
+        canceledAt: now.toISOString(),
+        lastUpdated: now.toISOString(),
+        pendingDowngrade: 'true',
+        nextPlanType: 'STANDARD' // Changed from FREE to STANDARD since no more free plan
+      })
+      
+      // Handle credits based on user type
+      if (isLegacyUser) {
+        // Legacy users: Set credits to 0 immediately
+        await redis.hset(KEYS.USER_CREDITS(userId), {
+          total: '0',
+          used: '0',
+          resetDate: '',
+          lastUpdate: now.toISOString(),
+          downgradedAt: now.toISOString(),
+          canceledAt: now.toISOString()
+        })
+      } else {
+        // New users: Mark for downgrade at period end
+        const creditData = await redis.hgetall(KEYS.USER_CREDITS(userId))
+        if (creditData && creditData.resetDate) {
+          await redis.hset(KEYS.USER_CREDITS(userId), {
+            nextTotalCredits: '0', // No credits after cancellation
+          pendingDowngrade: 'true',
+            lastUpdate: now.toISOString()
+        })
+      }
+      }
       
       return NextResponse.json({
         success: true,
-        message: 'Subscription will be canceled at the end of the current billing period',
+        message: isLegacyUser 
+          ? 'Subscription canceled successfully. Your access has been removed.'
+          : 'Subscription will be canceled at the end of the current billing period',
         subscription: {
           ...subscriptionData,
-          status: 'canceling',
+          status: isLegacyUser ? 'canceled' : 'canceling',
           canceledAt: now.toISOString(),
         }
       })

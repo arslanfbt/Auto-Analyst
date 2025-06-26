@@ -17,9 +17,11 @@ interface CheckoutFormProps {
   amount: number
   interval: 'month' | 'year' | 'day'
   clientSecret: string
+  isTrialSetup?: boolean
+  setupIntentId?: string
 }
 
-export default function CheckoutForm({ planName, amount, interval, clientSecret }: CheckoutFormProps) {
+export default function CheckoutForm({ planName, amount, interval, clientSecret, isTrialSetup, setupIntentId }: CheckoutFormProps) {
   const router = useRouter()
   const { data: session } = useSession()
   const stripe = useStripe()
@@ -39,8 +41,8 @@ export default function CheckoutForm({ planName, amount, interval, clientSecret 
 
     setProcessing(true)
     
-    // Use the PaymentElement instead of CardElement
-    const { error: submitError, paymentIntent } = await stripe.confirmPayment({
+    // NEW FLOW: Always use confirmSetup for trial signups
+    const { error: submitError, setupIntent } = await stripe.confirmSetup({
       elements,
       confirmParams: {
         return_url: `${window.location.origin}/checkout/success`,
@@ -48,24 +50,54 @@ export default function CheckoutForm({ planName, amount, interval, clientSecret 
       redirect: 'if_required',
     })
 
-    setProcessing(false)
-
     if (submitError) {
-      setError(submitError.message || 'An error occurred when processing your payment')
-    } else if (paymentIntent && paymentIntent.status === 'succeeded') {
+      setProcessing(false)
+      setError(submitError.message || 'An error occurred when setting up your payment method')
+      return
+    }
+
+    if (setupIntent && setupIntent.status === 'succeeded') {
       setError(null)
+      
+      // Now call our trial/start endpoint to create the subscription
+      try {
+        const response = await fetch('/api/trial/start', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            setupIntentId: setupIntent.id,
+            planName,
+            interval,
+            amount
+          }),
+        })
+
+        const data = await response.json()
+
+        if (!response.ok) {
+          throw new Error(data.error || 'Failed to start trial')
+        }
+
       setSucceeded(true)
       
-      // Show success animation for a second before redirecting
+        // Show success animation before redirecting
       setTimeout(() => {
-        router.push(`/checkout/success?payment_intent=${paymentIntent.id}`)
+          router.push(`/checkout/success?subscription_id=${data.subscriptionId}`)
       }, 1500)
+
+      } catch (trialError: any) {
+        setProcessing(false)
+        setError(trialError.message || 'Failed to start trial after payment setup')
+      }
+    } else {
+      setProcessing(false)
+      setError('Payment setup was not completed successfully')
     }
   }
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
-      <div className="bg-white p-6 rounded-lg shadow-md border border-gray-100">
+      <div className="bg-white p-6 rounded-lg shadow-md border border-gray-100 w-full">
         <div className="flex justify-between items-center mb-6">
           <h3 className="text-lg font-medium text-gray-900">{planName} Plan</h3>
           <div className="text-gray-900 font-medium">
@@ -81,7 +113,14 @@ export default function CheckoutForm({ planName, amount, interval, clientSecret 
             Payment Details
           </label>
           <div className="p-4 border border-gray-300 rounded-md focus-within:ring-2 focus-within:ring-[#FF7F7F] focus-within:border-[#FF7F7F] transition-all">
-            <PaymentElement />
+            <PaymentElement options={{
+              layout: 'accordion',
+              defaultValues: {
+                billingDetails: {
+                  email: ''
+                }
+              }
+            }} />
           </div>
         </div>
         

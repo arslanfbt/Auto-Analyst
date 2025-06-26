@@ -28,7 +28,7 @@ export async function GET(request: NextRequest) {
       planName = subscriptionHash?.plan || 'Free Plan'
     } else {
       // Initialize default values for new users using centralized config
-      creditsTotal = CreditConfig.getDefaultInitialCredits()
+      creditsTotal = 0 // No free credits anymore
       creditsUsed = 0
       resetDate = CreditConfig.getNextResetDate()
       lastUpdate = new Date().toISOString()
