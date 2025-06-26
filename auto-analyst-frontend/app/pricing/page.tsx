@@ -32,7 +32,7 @@ const pricingTiers = [
       'Advanced data analysis',
       'Access to all models',
       'Priority support',
-      `${TrialUtils.getTrialDisplayText()} free trial`,
+      `${TrialUtils.getTrialDisplayText()}`,
     ],
     highlight: true,
     trial: true,
