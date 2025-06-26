@@ -11,6 +11,7 @@ This directory contains comprehensive guides for understanding, developing, and 
 
 ### **🎨 Features** (`/features/`)
 - **Chat System** - AI conversation interface implementation
+- **Default Agents** - [Automated agent setup and configuration](./features/default-agents.md)
 - **User Interface** - Component library and design patterns
 - **Real-time Features** - WebSocket integration and live updates
 
@@ -32,7 +33,7 @@ This directory contains comprehensive guides for understanding, developing, and 
 
 ### **💳 Billing** (`/billing/`)
 - **Credit System** - Usage tracking and credit management
-- **Trial System** - 2-day trial implementation and flows  
+- **Trial System** - [Complete 2-day trial architecture with Stripe](./billing/trial-system.md)
 - **Credit Configuration** - [Centralized credit and trial management](./billing/credit-configuration.md)
 - **Stripe Integration** - Payment processing and subscriptions
 
