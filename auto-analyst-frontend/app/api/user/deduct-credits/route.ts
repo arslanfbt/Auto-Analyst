@@ -19,25 +19,33 @@ export async function POST(request: NextRequest) {
     const creditsHash = await redis.hgetall(KEYS.USER_CREDITS(userId))
     
     if (!creditsHash || !creditsHash.total) {
-      // Initialize new user with default credits using centralized config
-      const defaultCredits = CreditConfig.getDefaultInitialCredits()
-      await redis.hset(KEYS.USER_CREDITS(userId), {
-        total: defaultCredits.toString(),
-        used: credits.toString(),
-        resetDate: CreditConfig.getNextResetDate(),
-        lastUpdate: new Date().toISOString()
-      })
-      
+      // No credits for users without subscription - require upgrade
       return NextResponse.json({
-        success: true,
-        remaining: defaultCredits - credits,
-        deducted: credits
-      })
+        success: false,
+        error: 'UPGRADE_REQUIRED',
+        message: 'Please start your trial or upgrade your plan to continue.',
+        remaining: 0,
+        needsUpgrade: true
+      }, { status: 402 }) // Payment Required status code
     }
     
     // Calculate new used amount
     const total = parseInt(creditsHash.total as string)
     const currentUsed = creditsHash.used ? parseInt(creditsHash.used as string) : 0
+    const remaining = total - currentUsed
+    
+    // Check if user has enough credits
+    if (remaining < credits) {
+      return NextResponse.json({
+        success: false,
+        error: 'INSUFFICIENT_CREDITS',
+        message: 'Not enough credits remaining. Please upgrade your plan.',
+        remaining: remaining,
+        required: credits,
+        needsUpgrade: true
+      }, { status: 402 }) // Payment Required status code
+    }
+    
     const newUsed = currentUsed + credits
     
     // Update the credits hash
@@ -46,7 +54,7 @@ export async function POST(request: NextRequest) {
       lastUpdate: new Date().toISOString()
     })
     
-    // logger.log(`Deducted ${credits} credits for user ${userId}. New total: ${total - newUsed}`)
+    console.log(`Deducted ${credits} credits for user ${userId}. Remaining: ${total - newUsed}`)
     
     // Return updated credit information
     return NextResponse.json({

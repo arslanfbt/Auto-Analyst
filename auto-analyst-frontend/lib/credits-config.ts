@@ -5,8 +5,8 @@
  * Update credit values here to apply changes across the entire application.
  */
 
-export type PlanType = 'FREE' | 'STANDARD' | 'PRO'
-export type PlanName = 'Free' | 'Standard' | 'Pro'
+export type PlanType = 'TRIAL' | 'STANDARD' | 'PRO'
+export type PlanName = 'Trial' | 'Standard' | 'Pro'
 
 export interface PlanCredits {
   /** Total credits allocated per billing period */
@@ -24,20 +24,142 @@ export interface PlanCredits {
 export interface CreditThresholds {
   /** Threshold for considering a plan unlimited (for UI display) */
   unlimitedThreshold: number
-  /** Default credits for new users */
-  defaultInitial: number
+  /** Default credits for trial users */
+  defaultTrial: number
 /** Warning threshold percentage (when to warn users about low credits) */
   warningThreshold: number
+}
+
+/**
+ * Trial Configuration
+ * Centralized place to manage trial duration and messaging
+ */
+export interface TrialConfig {
+  /** Trial duration amount */
+  duration: number
+  /** Unit of time for trial ('days' | 'hours' | 'minutes' | 'weeks') */
+  unit: 'days' | 'hours' | 'minutes' | 'weeks'
+  /** Display string for the trial period */
+  displayText: string
+  /** Credits given during trial */
+  credits: number
+}
+
+/**
+ * Trial period configuration - Change here to update across the entire app
+ */
+export const TRIAL_CONFIG: TrialConfig = {
+  duration: 2,
+  unit: 'days',
+  displayText: '2-Day Free Trial',
+  credits: 500
+}
+
+/**
+ * Utility class for trial management
+ */
+export class TrialUtils {
+  /**
+   * Get trial duration in milliseconds
+   */
+  static getTrialDurationMs(): number {
+    const { duration, unit } = TRIAL_CONFIG
+    
+    switch (unit) {
+      case 'minutes':
+        return duration * 60 * 1000
+      case 'hours':
+        return duration * 60 * 60 * 1000
+      case 'days':
+        return duration * 24 * 60 * 60 * 1000
+      case 'weeks':
+        return duration * 7 * 24 * 60 * 60 * 1000
+      default:
+        return duration * 24 * 60 * 60 * 1000 // Default to days
+    }
+  }
+
+  /**
+   * Get trial duration in seconds (for Stripe)
+   */
+  static getTrialDurationSeconds(): number {
+    return Math.floor(this.getTrialDurationMs() / 1000)
+  }
+
+  /**
+   * Get trial end timestamp (Unix timestamp for Stripe)
+   */
+  static getTrialEndTimestamp(startDate?: Date): number {
+    const start = startDate || new Date()
+    return Math.floor((start.getTime() + this.getTrialDurationMs()) / 1000)
+  }
+
+  /**
+   * Get trial end date string (ISO format)
+   */
+  static getTrialEndDate(startDate?: Date): string {
+    const start = startDate || new Date()
+    const endDate = new Date(start.getTime() + this.getTrialDurationMs())
+    return endDate.toISOString()
+  }
+
+  /**
+   * Get trial end date for display (YYYY-MM-DD)
+   */
+  static getTrialEndDateString(startDate?: Date): string {
+    const start = startDate || new Date()
+    const endDate = new Date(start.getTime() + this.getTrialDurationMs())
+    return endDate.toISOString().split('T')[0]
+  }
+
+  /**
+   * Check if trial has expired
+   */
+  static isTrialExpired(trialEndDate: string): boolean {
+    const now = new Date()
+    const endDate = new Date(trialEndDate)
+    return now > endDate
+  }
+
+  /**
+   * Get display text for trial period
+   */
+  static getTrialDisplayText(): string {
+    return TRIAL_CONFIG.displayText
+  }
+
+  /**
+   * Get trial credits
+   */
+  static getTrialCredits(): number {
+    return TRIAL_CONFIG.credits
+  }
+
+  /**
+   * Get human-readable duration description
+   */
+  static getDurationDescription(): string {
+    const { duration, unit } = TRIAL_CONFIG
+    const unitText = duration === 1 ? unit.slice(0, -1) : unit // Remove 's' for singular
+    return `${duration} ${unitText}`
+  }
+
+  /**
+   * Get trial configuration
+   */
+  static getTrialConfig(): TrialConfig {
+    return TRIAL_CONFIG
+  }
 }
 
 /**
  * Credit allocation per plan
  */
 export const PLAN_CREDITS: Record<PlanName, PlanCredits> = {
-  'Free': {
-    total: 50,
-    displayName: 'Free Plan',
-    type: 'FREE',
+  'Trial': {
+    total: 500,
+    displayName: 'Trial Plan',
+    type: 'TRIAL',
     isUnlimited: false,
     minimum: 0
   },
@@ -70,7 +192,7 @@ export const FEATURE_COSTS = {
  */
 export const CREDIT_THRESHOLDS: CreditThresholds = {
   unlimitedThreshold: 99999,
-  defaultInitial: 50,
+  defaultTrial: 500,
   warningThreshold: 80 // Warn when user has used 80% of credits
 }
 
@@ -84,7 +206,7 @@ export class CreditConfig {
   static getCreditsForPlan(planName: string): PlanCredits {
     // Normalize plan name to match our config keys
     const normalizedName = this.normalizePlanName(planName)
-    return PLAN_CREDITS[normalizedName] || PLAN_CREDITS.Free
+    return PLAN_CREDITS[normalizedName] || PLAN_CREDITS.Standard // Default to Standard instead of Free
   }
 
   /**
@@ -92,7 +214,7 @@ export class CreditConfig {
    */
   static getCreditsByType(planType: PlanType): PlanCredits {
     const plan = Object.values(PLAN_CREDITS).find(p => p.type === planType)
-    return plan || PLAN_CREDITS.Free
+    return plan || PLAN_CREDITS.Standard // Default to Standard instead of Free
   }
 
   /**
@@ -193,14 +315,17 @@ export class CreditConfig {
   private static normalizePlanName(planName: string): PlanName {
     const normalized = planName.toLowerCase().trim()
     
+    if (normalized.includes('trial')) {
+      return 'Trial'
+    }
     if (normalized.includes('standard')) {
       return 'Standard'
     }
     if (normalized.includes('pro')) {
       return 'Pro'
     }
-    // Default to Free for any unrecognized plan
-    return 'Free'
+    // Default to Standard (no more Free fallback)
+    return 'Standard'
   }
 
   /**
@@ -219,10 +344,24 @@ export class CreditConfig {
   }
 
   /**
-   * Get the default initial credits for new users
+   * Get the default trial credits for new users
    */
-  static getDefaultInitialCredits(): number {
-    return CREDIT_THRESHOLDS.defaultInitial
+  static getDefaultTrialCredits(): number {
+    return TrialUtils.getTrialCredits()
+  }
+
+  /**
+   * Get trial end date (delegates to TrialUtils)
+   */
+  static getTrialEndDate(startDate?: Date): string {
+    return TrialUtils.getTrialEndDateString(startDate)
+  }
+
+  /**
+   * Check if trial has expired (delegates to TrialUtils)
+   */
+  static isTrialExpired(trialEndDate: string): boolean {
+    return TrialUtils.isTrialExpired(trialEndDate)
   }
 
   /**
@@ -237,6 +376,16 @@ export class CreditConfig {
    */
   static getPlanName(planType: PlanType): PlanName {
     const plan = Object.entries(PLAN_CREDITS).find(([_, config]) => config.type === planType)
-    return plan ? plan[0] as PlanName : 'Free'
+    return plan ? plan[0] as PlanName : 'Standard'
+  }
+
+  /**
+   * Check if user has any credits remaining
+   */
+  static hasCreditsRemaining(used: number, total: number): boolean {
+    if (this.isUnlimitedTotal(total)) {
+      return true
+    }
+    return (total - used) > 0
   }
 } 

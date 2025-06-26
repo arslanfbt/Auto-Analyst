@@ -21,11 +21,11 @@ export const serverCreditUtils = {
         return total - used;
       }
       
-      // Default for new users using centralized config
-      return CreditConfig.getDefaultInitialCredits();
+      // No free credits anymore - users need to pay for trial
+      return 0;
     } catch (error) {
       console.error('Server Redis error fetching credits:', error);
-      return CreditConfig.getDefaultInitialCredits(); // Default fallback using centralized config
+      return 0; // No free credits anymore - users need to pay for trial
     }
   }
 };

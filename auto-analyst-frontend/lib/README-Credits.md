@@ -95,7 +95,7 @@ const shouldWarn = CreditConfig.shouldWarnLowCredits(85, 100) // true (85% usage
 ```
 
 ## Files Updated
-
+git 
 The following files have been updated to use the centralized configuration:
 
 ### Frontend
@@ -105,7 +105,6 @@ The following files have been updated to use the centralized configuration:
 ### Backend APIs
 - `app/api/user/data/route.ts` - User data retrieval
 - `app/api/update-credits/route.ts` - Credit updates after payment
-- `app/api/user/downgrade-plan/route.ts` - Plan downgrades
 - `app/api/webhooks/route.ts` - Stripe webhook handling
 - `app/api/user/cancel-subscription/route.ts` - Subscription cancellation
 - `app/api/initialize-credits/route.ts` - Credit initialization

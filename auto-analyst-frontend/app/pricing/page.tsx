@@ -9,31 +9,10 @@ import Link from 'next/link';
 import { Infinity as InfinityIcon } from 'lucide-react';
 import { MODEL_TIERS } from '@/lib/model-tiers';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { TrialUtils } from '@/lib/credits-config';
 
 // Define pricing tiers with both monthly and yearly options
 const pricingTiers = [
-  {
-    name: 'Free',
-    monthly: {
-      price: 0,
-      priceId: null, // No price ID for free tier
-    },
-    yearly: {
-      price: 0,
-      priceId: null, // No price ID for free tier
-    },
-    credits: {
-      monthly: 50,
-      yearly: 50,
-    },
-    features: [
-      'Basic data analysis',
-      'Standard models only',
-      'Community support',
-      'Limited credit usage',
-    ],
-    highlight: false,
-  },
   {
     name: 'Standard',
     monthly: {
@@ -53,8 +32,10 @@ const pricingTiers = [
       'Advanced data analysis',
       'Access to all models',
       'Priority support',
+      `${TrialUtils.getTrialDisplayText()}`,
     ],
     highlight: true,
+    trial: true,
   },
   {
     name: 'Enterprise',
@@ -77,7 +58,6 @@ const pricingTiers = [
       'Priority processing',
       'Custom integrations',
       'Tailored solutions',
-      'Custom Agents',
       'Marketing Analytics APIs',
     ],
     highlight: false,
@@ -151,11 +131,6 @@ export default function PricingPage() {
   };
 
   const handleSubscribe = (plan: string, cycle: string) => {
-    if (plan === 'free') {
-      router.push('/chat');
-      return;
-    }
-    
     if (plan === 'enterprise') {
       router.push('/contact?subject=Enterprise%20Plan%20Inquiry');
       return;
@@ -168,6 +143,7 @@ export default function PricingPage() {
       return;
     }
     
+    // All plans now require checkout (trial for Standard)
     router.push(`/checkout?plan=${plan}&cycle=${cycle}`);
   };
 
@@ -237,7 +213,7 @@ export default function PricingPage() {
         </div>
         
         {/* Pricing cards */}
-        <div className="mt-16 grid grid-cols-1 gap-8 md:grid-cols-3">
+        <div className="mt-16 grid grid-cols-1 gap-8 md:grid-cols-2 max-w-4xl mx-auto">
           {pricingTiers.map((tier) => (
             <motion.div
               key={tier.name}
@@ -308,8 +284,8 @@ export default function PricingPage() {
                       : 'bg-white text-gray-900 border border-gray-300 hover:bg-gray-50'
                   }`}
                 >
-                  {tier.name === 'Free' 
-                    ? 'Get Started' 
+                  {tier.trial
+                    ? `Start ${TrialUtils.getTrialDisplayText()}`
                     : tier.name === 'Enterprise'
                       ? 'Contact Sales'
                       : 'Subscribe'}
@@ -349,13 +325,9 @@ export default function PricingPage() {
                   <td className="py-4 px-6 border-b text-gray-700 font-medium">Data Analysis</td>
                   <td className="py-4 px-6 border-b text-center">Advanced</td>
                   <td className="py-4 px-6 border-b text-center">Advanced</td>
-                  <td className="py-4 px-6 border-b text-center">Advanced</td>
                 </tr>
                 <tr>
                   <td className="py-4 px-6 border-b text-gray-700 font-medium">Custom API Access</td>
-                  <td className="py-4 px-6 border-b text-center">
-                    <Check className="h-5 w-5 text-green-500 mx-auto" />
-                  </td>
                   <td className="py-4 px-6 border-b text-center">
                     <Check className="h-5 w-5 text-green-500 mx-auto" />
                   </td>
@@ -369,9 +341,6 @@ export default function PricingPage() {
                     <X className="h-5 w-5 text-red-500 mx-auto" />
                   </td>
                   <td className="py-4 px-6 border-b text-center">
-                    <X className="h-5 w-5 text-red-500 mx-auto" />
-                  </td>
-                  <td className="py-4 px-6 border-b text-center">
                     <Check className="h-5 w-5 text-green-500 mx-auto" />
                   </td>
                 </tr>
@@ -381,15 +350,11 @@ export default function PricingPage() {
                     <X className="h-5 w-5 text-red-500 mx-auto" />
                   </td>
                   <td className="py-4 px-6 border-b text-center">
-                    <X className="h-5 w-5 text-red-500 mx-auto" />
-                  </td>
-                  <td className="py-4 px-6 border-b text-center">
                     <Check className="h-5 w-5 text-green-500 mx-auto" />
                   </td>
                 </tr>
                 <tr>
                   <td className="py-4 px-6 border-b text-gray-700 font-medium">Support Level</td>
-                  <td className="py-4 px-6 border-b text-center">Community</td>
                   <td className="py-4 px-6 border-b text-center">Priority</td>
                   <td className="py-4 px-6 border-b text-center">Dedicated</td>
                 </tr>
@@ -502,7 +467,11 @@ export default function PricingPage() {
             </div>
             <div className="py-6">
               <h3 className="text-lg font-medium text-gray-900">How are credits reset?</h3>
-              <p className="mt-2 text-gray-600">Credits are reset each month from the purchase date.</p>
+              <p className="mt-2 text-gray-600">Credits are reset each month from your individual checkout date, not on the first of the month.</p>
+            </div>
+            <div className="py-6">
+              <h3 className="text-lg font-medium text-gray-900">What happens during the {TrialUtils.getDurationDescription()} trial?</h3>
+              <p className="mt-2 text-gray-600">You get immediate access to {TrialUtils.getTrialCredits()} credits and all Standard plan features. Your card is authorized but not charged until day {TrialUtils.getTrialConfig().duration}. You can cancel anytime during the trial without being charged.</p>
             </div>
             <div className="py-6">
               <h3 className="text-lg font-medium text-gray-900">Can I upgrade or downgrade my plan?</h3>

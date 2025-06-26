@@ -7,6 +7,7 @@ import { useToast } from '@/components/ui/use-toast';
 import { Loader2, ShieldAlert, CheckCircle } from 'lucide-react'
 import Layout from '@/components/layout'
 import logger from '@/lib/utils/logger'
+import { TrialUtils } from '@/lib/credits-config';
 
 export default function CheckoutSuccess() {
   const router = useRouter()
@@ -22,24 +23,48 @@ export default function CheckoutSuccess() {
   useEffect(() => {
     if (!session) return;
     
-    // Extract payment_intent from URL
+    // Extract subscription ID from URL (trial already started) or payment_intent (legacy)
+    const subscription_id = searchParams?.get('subscription_id');
     const payment_intent = searchParams?.get('payment_intent');
     
-    if (payment_intent) {
+    if (subscription_id) {
+      // Trial was already started in CheckoutForm - just show success and redirect
+      logger.log('Trial already started, showing success message');
+      
+      toast({
+        title: 'Trial Started!',
+        description: `Your ${TrialUtils.getTrialDisplayText()} has started with full access.`,
+        duration: 4000
+      });
+      
+      // Wait 1 second before redirecting to account page
+      setTimeout(() => {
+        setIsProcessing(false);
+        setIsRedirecting(true);
+        setTimeout(() => {
+          router.push(`/account?refresh=${Date.now()}`);
+        }, 1500);
+      }, 1000);
+      
+    } else if (payment_intent) {
+      // Legacy payment intent processing for old flows
       const processPayment = async () => {
         try {
-          // logger.log(`Processing payment intent: ${payment_intent}`)
-          
-          // Send payment intent to our verification API
-          const response = await fetch('/api/verify-payment', {
+          const response = await fetch('/api/trial/start', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ 
-              payment_intent,
-              // Include timestamp to prevent caching issues
+              paymentIntentId: payment_intent,
+              planName: 'Standard',
+              interval: 'month',
+              amount: 15,
               timestamp: new Date().getTime() 
             }),
           });
+          
+          if (!response) {
+            throw new Error('No valid payment method found');
+          }
           
           const data = await response.json();
           
@@ -47,8 +72,6 @@ export default function CheckoutSuccess() {
             setDebugInfo(data);
             throw new Error(data.error || 'Payment verification failed');
           }
-          
-          // logger.log('Payment verification successful:', data);
           
           // Check if it was already processed
           if (data.alreadyProcessed) {
@@ -66,7 +89,6 @@ export default function CheckoutSuccess() {
           setTimeout(() => {
             setIsProcessing(false);
             setIsRedirecting(true);
-            // Add special parameter to force account page refresh
             setTimeout(() => {
               router.push(`/account?refresh=${Date.now()}`);
             }, 1500);
@@ -77,8 +99,6 @@ export default function CheckoutSuccess() {
           // If we haven't tried too many times, retry
           if (retryCount < 3) {
             setRetryCount(prev => prev + 1);
-            // logger.log(`Retrying payment verification (${retryCount + 1}/3)...`);
-            
             // Wait 2 seconds before retrying
             setTimeout(() => {
               processPayment();
@@ -113,10 +133,10 @@ export default function CheckoutSuccess() {
             <div className="text-center bg-white p-8 rounded-lg shadow-lg">
               <Loader2 className="w-16 h-16 mx-auto text-[#FF7F7F] animate-spin" />
               <h1 className="mt-6 text-2xl font-bold text-black">
-                Activating Your Subscription
+                Finalizing Your Trial
               </h1>
               <p className="mt-3 text-lg text-black font-semibold status-message">
-                Please wait while we set up your new plan...
+                Almost ready! Setting up your account...
               </p>
               {retryCount > 0 && (
                 <div className="mt-4 py-3 px-4 bg-amber-100 border-2 border-amber-300 rounded-md">
@@ -135,7 +155,7 @@ export default function CheckoutSuccess() {
                 Success!
               </h1>
               <p className="mt-2 text-gray-600">
-                Your subscription has been activated. Taking you to your account...
+                Your trial has been activated. Taking you to your account...
               </p>
             </div>
           )}

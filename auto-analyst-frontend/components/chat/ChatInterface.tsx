@@ -1480,6 +1480,8 @@ const ChatInterface: React.FC = () => {
   }, [activeChatId, chatHistories, clearMessages, createNewChat, loadChat, userId, sessionId]);
 
   const handleNavigateToAccount = useCallback(() => {
+    // Emit event that user is going to accounts page (may update credits there)
+    window.dispatchEvent(new CustomEvent('navigatingToAccounts'));
     router.push('/account');
     setIsUserProfileOpen(false);
   }, [router, setIsUserProfileOpen]);

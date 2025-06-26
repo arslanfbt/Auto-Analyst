@@ -142,22 +142,57 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Stripe configuration error' }, { status: 500 })
     }
     
+    // Debug webhook secret availability
+    if (!webhookSecret) {
+      console.error('❌ STRIPE_WEBHOOK_SECRET is not set in environment variables')
+      return NextResponse.json({ error: 'Webhook secret not configured' }, { status: 500 })
+    }
+    
     const signature = request.headers.get('stripe-signature')
     
     if (!signature) {
+      console.error('❌ No Stripe signature found in request headers')
       return NextResponse.json({ error: 'No Stripe signature found' }, { status: 400 })
     }
     
     // Get the raw request body
-    const rawBody = await getRawBody(request.body as unknown as Readable)
+    let rawBody: Buffer
+    try {
+      rawBody = await getRawBody(request.body as unknown as Readable)
+      console.log(`📨 Webhook received: body length=${rawBody.length}, signature present=${!!signature}`)
+    } catch (bodyError) {
+      console.error('❌ Failed to read webhook body:', bodyError)
+      return NextResponse.json({ error: 'Failed to read request body' }, { status: 400 })
+    }
     
     // Verify the webhook signature
     let event
     try {
       event = stripe.webhooks.constructEvent(rawBody, signature, webhookSecret)
+      console.log(`✅ Webhook signature verified: event=${event.type}, id=${event.id}`)
     } catch (err: any) {
-      console.error(`⚠️ Webhook signature verification failed.`, err.message)
-      return NextResponse.json({ error: `Webhook Error: ${err.message}` }, { status: 400 })
+      console.error(`❌ Webhook signature verification failed:`)
+      console.error(`   Error: ${err.message}`)
+      console.error(`   Signature: ${signature?.substring(0, 50)}...`)
+      console.error(`   Body length: ${rawBody.length}`)
+      console.error(`   Webhook secret set: ${!!webhookSecret}`)
+      console.error(`   Webhook secret prefix: ${webhookSecret?.substring(0, 10)}...`)
+      
+      // Check if this is a common signature verification issue
+      if (err.message.includes('No signatures found')) {
+        console.error('   ⚠️  This usually means the request body was modified by a proxy/CDN')
+        console.error('   ⚠️  Or the webhook secret is incorrect')
+      }
+      
+      return NextResponse.json({ 
+        error: `Webhook Error: ${err.message}`,
+        debug: {
+          hasSignature: !!signature,
+          hasSecret: !!webhookSecret,
+          bodyLength: rawBody.length,
+          secretPrefix: webhookSecret?.substring(0, 10)
+        }
+      }, { status: 400 })
     }
     
     // logger.log(`Event received: ${event.type}`)
@@ -165,78 +200,23 @@ export async function POST(request: NextRequest) {
     // Handle different event types
     switch (event.type) {
       case 'checkout.session.completed': {
+        // All checkouts now use trial subscriptions, handled by trial/start endpoint
+        // This webhook is kept for logging purposes only
         const session = event.data.object as Stripe.Checkout.Session
-        
-        // Extract the user ID from metadata
-        const userId = session.metadata?.userId
-
-        if (!userId) {
-          console.error('No user ID found in session metadata')
-          return NextResponse.json({ error: 'User ID missing from session metadata' }, { status: 400 })
-        }
-
-        // Update the user's subscription
-        const updated = await updateUserSubscription(userId, session)
-        
-        if (!updated) {
-          console.error('Failed to update user subscription')
-          return NextResponse.json({ error: 'Failed to update subscription' }, { status: 500 })
-        }
-        
-        // Get customer details and subscription info
-        const customerEmail = session.customer_email || session.customer_details?.email;
-        const customerName = session.customer_details?.name || '';
-        
-        // Get metadata from the session
-        const plan = session.metadata?.plan || 'Standard';
-        const cycle = session.metadata?.cycle || 'monthly';
-        
-        // Format amount
-        const amount = ((session.amount_total || 0) / 100).toFixed(2);
-        
-        // Format date
-        const date = new Date().toLocaleString('en-US', {
-          year: 'numeric',
-          month: 'long',
-          day: 'numeric'
-        });
-        
-        // Send confirmation email
-        if (customerEmail) {
-          try {
-            await sendPaymentConfirmationEmail({
-              email: customerEmail,
-              name: customerName,
-              plan: plan,
-              amount: amount,
-              billingCycle: cycle === 'yearly' ? 'Annual' : 'Monthly',
-              date: date
-            });
-            // logger.log(`Payment confirmation email sent to ${customerEmail}`);
-          } catch (error) {
-            console.error('Failed to send payment confirmation email:', error);
-            // Continue processing - don't fail the webhook due to email issues
-          }
-        }
-        
+        console.log(`Checkout session completed: ${session.id} - handled by trial flow`)
         return NextResponse.json({ received: true })
       }
         
       case 'customer.subscription.updated': {
         const subscription = event.data.object as Stripe.Subscription
-        // Handle subscription update logic
-        // logger.log('Subscription updated event received:', subscription.id)
+        console.log(`Subscription updated: ${subscription.id}, status: ${subscription.status}`)
         
-        // Check if the subscription status has changed to canceled or unpaid
-        if (subscription.status === 'canceled' || subscription.status === 'unpaid') {
-          // Get the customer ID from the subscription
           const customerId = subscription.customer as string
           if (!customerId) {
             console.error('No customer ID found in subscription')
             return NextResponse.json({ error: 'No customer ID found' }, { status: 400 })
           }
           
-          // Look up the user by customer ID in our database
           const userKey = await redis.get(`stripe:customer:${customerId}`)
           if (!userKey) {
             console.error(`No user found for Stripe customer ${customerId}`)
@@ -244,83 +224,39 @@ export async function POST(request: NextRequest) {
           }
           
           const userId = userKey.toString()
-          // logger.log(`Found user ${userId} for Stripe customer ${customerId}`)
           
-          // Get current subscription data
-          const subscriptionData = await redis.hgetall(KEYS.USER_SUBSCRIPTION(userId))
-          
-          // If the subscription is canceled, mark it as such in our database
-          if (subscription.status === 'canceled') {
-            // Update subscription status to indicate it's being canceled
-            await redis.hset(KEYS.USER_SUBSCRIPTION(userId), {
-              status: 'canceling',
+        // Get current subscription data from Redis
+        const currentSubscriptionData = await redis.hgetall(KEYS.USER_SUBSCRIPTION(userId))
+        const currentStatus = currentSubscriptionData?.status
+        
+        console.log(`Subscription status change for user ${userId}: ${currentStatus} -> ${subscription.status}`)
+            
+        // Always sync the status with Stripe, but handle special cases
+        const updateData: any = {
+          status: subscription.status,
               lastUpdated: new Date().toISOString(),
-              // Add flags to ensure next month they only get free tier credits
-              pendingDowngrade: 'true',
-              nextPlanType: 'FREE'
-            })
-            
-            // Mark the credits to be downgraded on next reset
-            await redis.hset(KEYS.USER_CREDITS(userId), {
-              nextTotalCredits: CreditConfig.getCreditsForPlan('Free').total.toString(),
-              pendingDowngrade: 'true',
-              lastUpdate: new Date().toISOString()
-            })
-            
-            // logger.log(`Updated subscription status to canceling for user ${userId}`)
-          } else if (subscription.status === 'unpaid') {
-            // Handle unpaid subscriptions by marking them as inactive
-            await redis.hset(KEYS.USER_SUBSCRIPTION(userId), {
-              status: 'inactive',
-              lastUpdated: new Date().toISOString(),
-              // Add flags to ensure next reset they only get free tier credits
-              pendingDowngrade: 'true',
-              nextPlanType: 'FREE'
-            })
-            
-            // Mark the credits to be downgraded on next reset
-            await redis.hset(KEYS.USER_CREDITS(userId), {
-              nextTotalCredits: CreditConfig.getCreditsForPlan('Free').total.toString(),
-              pendingDowngrade: 'true',
-              lastUpdate: new Date().toISOString()
-            })
-            
-            // logger.log(`Updated subscription status to inactive for user ${userId} due to unpaid status`)
-          }
-        } 
-        // Check if the subscription has changed plans
-        else if (subscription.items && subscription.items.data.length > 0) {
-          // Get the customer ID from the subscription
-          const customerId = subscription.customer as string
-          
-          // Look up the user by customer ID in our database
-          const userKey = await redis.get(`stripe:customer:${customerId}`)
-          if (!userKey) {
-            // logger.log(`No user found for Stripe customer ${customerId}`)
-            return NextResponse.json({ received: true })
-          }
-          
-          const userId = userKey.toString()
-          
-          // Get the price ID from the subscription item
-          const priceId = subscription.items.data[0].price.id
-          
-          // Fetch price and product details to determine the plan
-          const price = await stripe.prices.retrieve(priceId)
-          const product = await stripe.products.retrieve(price.product as string)
-          
-          // Update subscription with new plan details - this will be used at next credit reset
-          await updateUserSubscription(userId, {
-            id: subscription.id,
-            customer: customerId,
-            customer_email: '',
-            // Add metadata to help with plan identification
-            metadata: {
-              userId: userId,
-              planName: product.name
-            }
-          } as any)
+          stripeSubscriptionStatus: subscription.status
         }
+        
+        // Handle specific status transitions
+        if (currentStatus === 'trialing' && subscription.status === 'active') {
+          console.log(`Trial to active transition detected for user ${userId}`)
+          updateData.trialEndedAt = new Date().toISOString()
+          updateData.trialToActiveDate = new Date().toISOString()
+        }
+        
+        if (subscription.status === 'canceled') {
+          updateData.canceledAt = new Date().toISOString()
+        }
+        
+        if (subscription.status === 'unpaid' || subscription.status === 'past_due') {
+          updateData.unpaidAt = new Date().toISOString()
+        }
+          
+        // Update subscription data
+        await redis.hset(KEYS.USER_SUBSCRIPTION(userId), updateData)
+        
+        console.log(`Updated subscription status to ${subscription.status} for user ${userId}`)
         
         return NextResponse.json({ received: true })
       }
@@ -354,44 +290,273 @@ export async function POST(request: NextRequest) {
           return NextResponse.json({ received: true })
         }
         
-        // Downgrade to Free plan
+        // Handle subscription cancellation - set credits to 0 (no free plan anymore)
         const now = new Date()
         
-        // Calculate next reset date (1 month from now)
-        const resetDate = new Date(now)
-        resetDate.setMonth(resetDate.getMonth() + 1)
+        // Set credits to 0 immediately when subscription is canceled
+        await creditUtils.setZeroCredits(userId)
         
-        // Get Free plan configuration
-        const freeCredits = CreditConfig.getCreditsForPlan('Free')
-        
-        // Update subscription data
+        // Update subscription data to reflect cancellation
         await redis.hset(KEYS.USER_SUBSCRIPTION(userId), {
-          plan: freeCredits.displayName,
-          planType: freeCredits.type,
-          status: 'active', // Free plan is always active
+          plan: 'No Active Plan',
+          planType: 'NONE',
+          status: 'canceled',
           amount: '0',
           interval: 'month',
           lastUpdated: now.toISOString(),
+          canceledAt: now.toISOString(),
           // Clear Stripe IDs as they're no longer valid
           stripeCustomerId: '',
           stripeSubscriptionId: ''
         })
         
-        // Get current used credits to preserve them
-        const currentCredits = await redis.hgetall(KEYS.USER_CREDITS(userId))
-        const usedCredits = currentCredits && currentCredits.used 
-          ? parseInt(currentCredits.used as string) 
-          : 0
-        
-        // Set credits to Free plan level using centralized config, but preserve used credits
+        // Remove any scheduled credit resets since user has no plan
         await redis.hset(KEYS.USER_CREDITS(userId), {
-          total: freeCredits.total.toString(),
-          used: Math.min(usedCredits, freeCredits.total).toString(), // Used credits shouldn't exceed new total
-          resetDate: resetDate.toISOString().split('T')[0],
-          lastUpdate: now.toISOString()
+          total: '0',
+          used: '0',
+          resetDate: '', // No resets for users without subscription
+          lastUpdate: now.toISOString(),
+          subscriptionDeleted: 'true' // Mark this as a genuine subscription deletion
         })
         
         // logger.log(`User ${userId} downgraded to Free plan after subscription cancellation`)
+        
+        return NextResponse.json({ received: true })
+      }
+        
+      case 'customer.subscription.trial_will_end': {
+        const subscription = event.data.object as Stripe.Subscription
+        // logger.log('Trial will end event received:', subscription.id)
+        
+        // Get the customer ID from the subscription
+        const customerId = subscription.customer as string
+        if (!customerId) {
+          console.error('No customer ID found in subscription')
+          return NextResponse.json({ error: 'No customer ID found' }, { status: 400 })
+        }
+        
+        // Look up the user by customer ID
+        const userKey = await redis.get(`stripe:customer:${customerId}`)
+        if (!userKey) {
+          console.error(`No user found for Stripe customer ${customerId}`)
+          return NextResponse.json({ received: true })
+        }
+        
+        const userId = userKey.toString()
+        
+        // Optional: Send reminder email about trial ending
+        // You can add email notification logic here
+        
+        return NextResponse.json({ received: true })
+      }
+
+      case 'invoice.payment_succeeded': {
+        const invoice = event.data.object as Stripe.Invoice
+        console.log(`Invoice payment succeeded: ${invoice.id}, billing_reason: ${invoice.billing_reason}`)
+        
+        // Check if this is for a subscription payment
+        if (invoice.subscription) {
+          const subscription = await stripe.subscriptions.retrieve(invoice.subscription as string)
+          
+          // Get customer and user info
+          const customerId = subscription.customer as string
+          const userKey = await redis.get(`stripe:customer:${customerId}`)
+          
+          if (userKey) {
+            const userId = userKey.toString()
+            console.log(`Processing payment success for user ${userId}, subscription status: ${subscription.status}`)
+            
+            // Get current subscription data from Redis
+            const currentSubscriptionData = await redis.hgetall(KEYS.USER_SUBSCRIPTION(userId))
+            
+            // Handle different payment scenarios
+            if (invoice.billing_reason === 'subscription_cycle') {
+              // This is a regular billing cycle payment (trial ended or monthly renewal)
+              console.log(`Subscription cycle payment for user ${userId} - updating status to active`)
+              
+              await redis.hset(KEYS.USER_SUBSCRIPTION(userId), {
+                status: 'active',
+                lastUpdated: new Date().toISOString(),
+                trialEndedAt: new Date().toISOString(),
+                lastPaymentDate: new Date().toISOString(),
+                stripeSubscriptionStatus: subscription.status // Keep Stripe status in sync
+              })
+              
+              console.log(`User ${userId} trial ended successfully, subscription is now active`)
+            } else if (invoice.billing_reason === 'subscription_create') {
+              // This is the initial subscription creation payment (if any)
+              console.log(`Initial subscription payment for user ${userId}`)
+              
+              await redis.hset(KEYS.USER_SUBSCRIPTION(userId), {
+                status: subscription.status, // Use Stripe's status
+                lastUpdated: new Date().toISOString(),
+                initialPaymentDate: new Date().toISOString(),
+                stripeSubscriptionStatus: subscription.status
+              })
+            } else {
+              // Other billing reasons (proration, etc.)
+              console.log(`Other payment type for user ${userId}: ${invoice.billing_reason}`)
+              
+              await redis.hset(KEYS.USER_SUBSCRIPTION(userId), {
+                status: subscription.status, // Always sync with Stripe status
+                lastUpdated: new Date().toISOString(),
+                lastPaymentDate: new Date().toISOString(),
+                stripeSubscriptionStatus: subscription.status
+              })
+            }
+          } else {
+            console.log(`No user found for Stripe customer ${customerId}`)
+          }
+        }
+        
+        return NextResponse.json({ received: true })
+      }
+
+      case 'invoice.payment_failed': {
+        const invoice = event.data.object as Stripe.Invoice
+        
+        // Handle failed payment after trial
+        if (invoice.subscription && invoice.billing_reason === 'subscription_cycle') {
+          const subscription = await stripe.subscriptions.retrieve(invoice.subscription as string)
+          
+          // Get customer and user info
+          const customerId = subscription.customer as string
+          const userKey = await redis.get(`stripe:customer:${customerId}`)
+          
+          if (userKey) {
+            const userId = userKey.toString()
+            
+            // Set credits to 0 and mark subscription as past_due
+            await creditUtils.setZeroCredits(userId)
+            
+            await redis.hset(KEYS.USER_SUBSCRIPTION(userId), {
+              status: 'past_due',
+              lastUpdated: new Date().toISOString(),
+              paymentFailedAt: new Date().toISOString()
+            })
+            
+            // logger.log(`User ${userId} payment failed after trial, access removed`)
+          }
+        }
+        
+        return NextResponse.json({ received: true })
+      }
+
+      case 'payment_intent.payment_failed': {
+        const paymentIntent = event.data.object as Stripe.PaymentIntent
+        console.log(`Payment intent failed: ${paymentIntent.id}`)
+        
+        // Check if this is a trial payment intent by looking at metadata
+        if (paymentIntent.metadata?.isTrial === 'true') {
+          const userId = paymentIntent.metadata?.userId
+          
+          if (userId) {
+            console.log(`Trial payment authorization failed for user ${userId}`)
+            
+            // Prevent trial access by ensuring credits remain at 0
+            await creditUtils.setZeroCredits(userId)
+            
+            // Mark the attempt as failed in subscription data
+            await redis.hset(KEYS.USER_SUBSCRIPTION(userId), {
+              status: 'payment_failed',
+              lastUpdated: new Date().toISOString(),
+              paymentFailedAt: new Date().toISOString(),
+              failureReason: 'Payment authorization failed during trial signup'
+            })
+            
+            console.log(`Trial access prevented for user ${userId} due to payment authorization failure`)
+          }
+        }
+        
+        return NextResponse.json({ received: true })
+      }
+
+      case 'payment_intent.canceled': {
+        const paymentIntent = event.data.object as Stripe.PaymentIntent
+        console.log(`Payment intent canceled: ${paymentIntent.id}`)
+        
+        // Check if this is a trial payment intent
+        if (paymentIntent.metadata?.isTrial === 'true') {
+          const userId = paymentIntent.metadata?.userId
+          
+          if (userId) {
+            console.log(`Trial payment intent canceled for user ${userId}`)
+            
+            // Ensure user doesn't get trial access
+            await creditUtils.setZeroCredits(userId)
+            
+            // Update subscription data to reflect cancellation
+            await redis.hset(KEYS.USER_SUBSCRIPTION(userId), {
+              status: 'canceled',
+              lastUpdated: new Date().toISOString(),
+              canceledAt: new Date().toISOString(),
+              cancelReason: 'Payment intent canceled during trial signup'
+            })
+            
+            console.log(`Trial access prevented for user ${userId} due to payment intent cancellation`)
+          }
+        }
+        
+        return NextResponse.json({ received: true })
+      }
+
+      case 'setup_intent.setup_failed': {
+        const setupIntent = event.data.object as Stripe.SetupIntent
+        console.log(`Setup intent failed: ${setupIntent.id}`)
+        
+        // Check if this is a trial setup intent
+        if (setupIntent.metadata?.is_trial_setup === 'true') {
+          const subscriptionId = setupIntent.metadata?.subscription_id
+          
+          if (subscriptionId) {
+            // Get the subscription to find the customer
+            try {
+              const subscription = await stripe.subscriptions.retrieve(subscriptionId)
+              const customerId = subscription.customer as string
+              const userKey = await redis.get(`stripe:customer:${customerId}`)
+              
+              if (userKey) {
+                const userId = userKey.toString()
+                console.log(`Trial setup failed for user ${userId}`)
+                
+                // Cancel the trial subscription since setup failed
+                await stripe.subscriptions.cancel(subscriptionId)
+                
+                // Ensure user doesn't get trial access
+                await creditUtils.setZeroCredits(userId)
+                
+                // Update subscription data
+                await redis.hset(KEYS.USER_SUBSCRIPTION(userId), {
+                  status: 'setup_failed',
+                  lastUpdated: new Date().toISOString(),
+                  setupFailedAt: new Date().toISOString(),
+                  failureReason: 'Payment method setup failed during trial signup'
+                })
+                
+                console.log(`Trial access prevented for user ${userId} due to setup failure`)
+              }
+            } catch (error) {
+              console.error('Error handling setup intent failure:', error)
+            }
+          }
+        }
+        
+        return NextResponse.json({ received: true })
+      }
+
+      case 'payment_intent.requires_action': {
+        const paymentIntent = event.data.object as Stripe.PaymentIntent
+        console.log(`Payment intent requires action (3D Secure): ${paymentIntent.id}`)
+        
+        // For trial payment intents, log the authentication requirement
+        if (paymentIntent.metadata?.isTrial === 'true') {
+          const userId = paymentIntent.metadata?.userId
+          console.log(`Trial payment requires 3D Secure authentication for user ${userId}`)
+          
+          // Don't grant trial access until authentication is complete
+          // The payment will either succeed (triggering payment_intent.succeeded) 
+          // or fail (triggering payment_intent.payment_failed)
+        }
         
         return NextResponse.json({ received: true })
       }
