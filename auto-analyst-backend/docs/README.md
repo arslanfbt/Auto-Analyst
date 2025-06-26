@@ -11,7 +11,7 @@ This directory contains comprehensive documentation for the Auto-Analyst backend
 - **[Development Workflow](./development/development_workflow.md)** - Complete development guide with patterns, best practices, and code organization principles
 
 ### **🔧 System** (`/system/`)
-- **[Database Schema](./system/schema-priv.md)** - Database models and relationships overview
+- **[Database Schema](./system/database-schema.md)** - Complete database schema with all tables, relationships, and performance optimization
 - **[Shared DataFrame System](./system/shared_dataframe.md)** - Inter-agent data sharing and session management
 
 ### **🌐 API** (`/api/`)
