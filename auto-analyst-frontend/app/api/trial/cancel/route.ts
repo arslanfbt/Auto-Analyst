@@ -63,13 +63,13 @@ export async function POST(request: NextRequest) {
           await stripe.subscriptions.cancel(stripeSubscriptionId, {
             prorate: false // Don't prorate since it's a trial cancellation
           })
-          console.log(`Canceled trial subscription ${stripeSubscriptionId} for user ${userId}`)
+          // console.log(`Canceled trial subscription ${stripeSubscriptionId} for user ${userId}`)
         } else if (stripeSubscription.status === 'active') {
           // For active subscriptions, cancel at period end
           await stripe.subscriptions.update(stripeSubscriptionId, {
             cancel_at_period_end: true
           })
-          console.log(`Scheduled cancellation for subscription ${stripeSubscriptionId} for user ${userId}`)
+          // console.log(`Scheduled cancellation for subscription ${stripeSubscriptionId} for user ${userId}`)
         } else {
           console.log(`Subscription ${stripeSubscriptionId} already in status: ${stripeSubscription.status}`)
         }
@@ -114,7 +114,7 @@ export async function POST(request: NextRequest) {
         trialStartDate: isTrial ? '' : subscriptionData.trialStartDate || ''
       })
       
-      console.log(`${isTrial ? 'Trial' : 'Legacy subscription'} canceled for user ${userId}, access removed immediately`)
+      // console.log(`${isTrial ? 'Trial' : 'Legacy subscription'} canceled for user ${userId}, access removed immediately`)
     } else {
       // For post-trial cancellations: Maintain access until period end
       // Don't change credits - let them keep access until billing cycle ends
@@ -131,7 +131,7 @@ export async function POST(request: NextRequest) {
           : now.toISOString()
       })
       
-      console.log(`Subscription scheduled for cancellation at period end for user ${userId}`)
+      // console.log(`Subscription scheduled for cancellation at period end for user ${userId}`)
     }
     
     

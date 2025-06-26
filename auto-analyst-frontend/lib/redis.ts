@@ -362,7 +362,7 @@ export const subscriptionUtils = {
         
         if (isGenuineCancellation) {
           await creditUtils.setZeroCredits(userId);
-          console.log(`[Credits] Set zero credits for genuinely canceled user ${userId} (status: ${subscriptionData.status})`);
+          // console.log(`[Credits] Set zero credits for genuinely canceled user ${userId} (status: ${subscriptionData.status})`);
           return true;
         } else {
           console.log(`[Credits] Skipping credit reset for user ${userId} - appears to be successful trial conversion, not cancellation`);

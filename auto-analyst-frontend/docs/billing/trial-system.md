@@ -2,10 +2,10 @@
 
 ## 📋 **System Overview**
 
-The Auto-Analyst app now uses a **7-day trial system** where:
+The Auto-Analyst app now uses a **2-day trial system** where:
 - ❌ **No Free Plan** - Users get 0 credits without subscription
 - ✅ **Trial Required** - All new users must authorize payment to access features
-- 💳 **Payment After Trial** - Stripe charges at day 7 unless canceled
+- 💳 **Payment After Trial** - Stripe charges at day 2 unless canceled
 - 🛡️ **Webhook Protected** - All logic handled via Stripe webhooks
 
 ---
@@ -18,7 +18,7 @@ User clicks "Start Trial"
     ↓
 Checkout page (/checkout)
     ↓ 
-Stripe subscription with 7-day trial
+Stripe subscription with 2-day trial
     ↓
 Payment method authorization (no charge)
     ↓
@@ -33,16 +33,16 @@ Redirect to /account
 
 ### **2. Trial Cancellation Flow**
 ```
-During Trial (0-7 days):
+During Trial (0-2 days):
 User cancels → Credits = 0 immediately → No charge ever
 
-After Trial (7+ days):
+After Trial (2+ days):
 User cancels → Keep access until month end → Final cleanup via webhook
 ```
 
 ### **3. Payment Capture Flow**
 ```
-Day 7: Stripe auto-captures payment
+Day 2: Stripe auto-captures payment
     ↓
 invoice.payment_succeeded webhook
     ↓
@@ -152,7 +152,7 @@ User keeps 500 credits for full month
 | 💳 Card declined during signup | `payment_intent.payment_failed` | No trial access |
 | ❌ User cancels payment | `payment_intent.canceled` | No trial access |
 | 🔐 3D Secure fails | `setup_intent.setup_failed` | No trial access |
-| ⏰ Day 7 payment fails | `invoice.payment_failed` | Credits → 0 |
+| ⏰ Day 2 payment fails | `invoice.payment_failed` | Credits → 0 |
 | 🚫 User cancels trial | `/api/trial/cancel` | Immediate access removal |
 | 📅 User cancels after trial | `/api/trial/cancel` | Access until period end |
 
