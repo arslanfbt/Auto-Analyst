@@ -99,7 +99,6 @@ export default function CheckoutPage() {
   const handleBillingCycleChange = (newCycle: 'monthly' | 'yearly') => {
     if (newCycle === billingCycle || paymentLoading) return
     
-    console.log(`🔄 Billing cycle change: ${billingCycle} → ${newCycle}`)
     
     setPaymentLoading(true)
     setBillingCycle(newCycle)
@@ -115,7 +114,6 @@ export default function CheckoutPage() {
     setPaymentError('')
     setPromoError('')
     
-    console.log(`🧹 Cleared old setup intent, creating new one for ${newCycle} plan`)
     
     // Add a small delay to show loading state
     setTimeout(() => {
@@ -180,7 +178,7 @@ export default function CheckoutPage() {
           setDiscountInfo(null)
         }
         
-        console.log(`Created new setup intent: ${data.setupIntentId} for ${planData.name} ${planData.cycle} plan ($${planData.amount})`)
+        
       }
     } catch (err) {
       console.error('Error creating payment intent:', err)

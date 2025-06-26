@@ -66,7 +66,6 @@ const FeedbackAnalytics = () => {
     setLoading(true)
     try {
       const apiKey = getAPIKey()
-      console.log('Fetching feedback summary with API key:', apiKey ? 'Key provided' : 'No key')
       
       // Check if API key is missing
       if (!apiKey) {
@@ -88,7 +87,6 @@ const FeedbackAnalytics = () => {
       }
       
       const data = await response.json()
-      console.log('Received feedback summary data:', data)
       setSummary(data)
     } catch (error) {
       console.error('Error fetching feedback summary:', error)
@@ -107,7 +105,6 @@ const FeedbackAnalytics = () => {
     setLoadingDetailed(true)
     try {
       const apiKey = getAPIKey()
-      console.log('Fetching detailed feedback with API key:', apiKey ? 'Key provided' : 'No key')
       
       // Check if API key is missing
       if (!apiKey) {
@@ -134,7 +131,6 @@ const FeedbackAnalytics = () => {
         url += `&model_name=${encodeURIComponent(selectedModel)}`
       }
       
-      console.log('Fetching detailed feedback from URL:', url)
       const response = await fetch(url)
       
       if (!response.ok) {
@@ -144,7 +140,6 @@ const FeedbackAnalytics = () => {
       }
       
       const data = await response.json()
-      console.log('Received detailed feedback data:', data)
       
       if (!data.feedback || !Array.isArray(data.feedback)) {
         console.warn('Feedback data is missing or not an array', data)

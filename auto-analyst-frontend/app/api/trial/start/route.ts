@@ -162,7 +162,6 @@ export async function POST(request: NextRequest) {
     // Store subscription data in Redis
     await redis.hset(KEYS.USER_SUBSCRIPTION(userId), subscriptionData)
     
-    console.log(`Started trial for user ${userId} with subscription ${subscription.id}`)
     
     return NextResponse.json({
       success: true,
