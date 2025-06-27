@@ -70,9 +70,7 @@ ADMIN_API_KEY=your_admin_key_here
 # Initialize database and default agents
 python -c "
 from src.db.init_db import init_db
-from src.db.init_default_agents import initialize_default_agents
 init_db()
-initialize_default_agents()
 print('✅ Database initialized successfully')
 "
 ```
