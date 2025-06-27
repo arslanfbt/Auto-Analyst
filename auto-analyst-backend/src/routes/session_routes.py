@@ -11,7 +11,7 @@ from fastapi.security import APIKeyHeader
 from pydantic import BaseModel
 
 from src.managers.session_manager import get_session_id
-from src.schemas.model_settings import ModelSettings
+from src.schemas.model_settings_schema import ModelSettings
 from src.utils.logger import Logger
 from src.agents.agents import dataset_description_agent
 import dspy
