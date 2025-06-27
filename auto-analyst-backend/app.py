@@ -43,7 +43,7 @@ from src.routes.feedback_routes import router as feedback_router
 from src.routes.session_routes import router as session_router, get_session_id_dependency
 from src.routes.deep_analysis_routes import router as deep_analysis_router
 from src.routes.templates_routes import router as templates_router
-from src.schemas.query_schemas import QueryRequest
+from src.schemas.query_schema import QueryRequest
 from src.utils.logger import Logger
 
 # Import deep analysis components directly

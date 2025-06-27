@@ -15,6 +15,7 @@ from src.db.init_db import get_session
 import dspy
 import textwrap
 import os
+from src.schemas.code_schema import CodeExecuteRequest, CodeEditRequest, CodeFixRequest, CodeCleanRequest, GetLatestCodeRequest
 
 def clean_print_statements(code_block):
     """
@@ -111,27 +112,6 @@ refine_fixer = dspy.Refine(
 )
 
 
-
-# Request body model
-class CodeExecuteRequest(BaseModel):
-    code: str
-    session_id: Optional[str] = None
-    message_id: Optional[int] = None
-    
-class CodeEditRequest(BaseModel):
-    original_code: str
-    user_prompt: str
-    
-class CodeFixRequest(BaseModel):
-    code: str
-    error: str
-    
-class CodeCleanRequest(BaseModel):
-    code: str
-    
-class GetLatestCodeRequest(BaseModel):
-    message_id: int
-    
 def format_code(code: str) -> str:
     """
     Clean the code by organizing imports and ensuring code blocks are properly formatted.

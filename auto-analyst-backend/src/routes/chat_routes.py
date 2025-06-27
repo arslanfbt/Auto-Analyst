@@ -8,7 +8,7 @@ from src.db.schemas.models import ModelUsage
 from src.managers.ai_manager import AI_Manager
 from src.managers.chat_manager import ChatManager
 from src.managers.user_manager import get_current_user, User
-from src.schemas.chat_schemas import *
+from src.schemas.chat_schema import *
 from src.utils.logger import Logger
 import os
 from dotenv import load_dotenv
@@ -132,49 +132,3 @@ async def cleanup_empty_chats(request: ChatCreate):
     except Exception as e:
         logger.log_message(f"Error cleaning up empty chats: {str(e)}", level=logging.ERROR)
         raise HTTPException(status_code=500, detail=f"Failed to clean up empty chats: {str(e)}")
-
-@router.post("/debug/test-model-usage")
-async def test_model_usage(
-    model_name: str = "gpt-3.5-turbo", 
-    user_id: Optional[int] = None
-):
-    """Debug endpoint to manually test model usage tracking"""
-    try:
-        # Generate a test prompt
-        test_prompt = "This is a test message to verify model usage tracking."
-        
-        # Call the AI manager directly
-        response = await ai_manager.generate_response(
-            prompt=test_prompt,
-            model_name=model_name,
-            user_id=user_id,
-            chat_id=999  # Test chat ID
-        )
-        
-        # Get the latest model usage entry
-        session = session_factory()
-        try:
-            latest_usage = session.query(ModelUsage).order_by(ModelUsage.usage_id.desc()).first()
-            
-            return {
-                "success": True,
-                "message": "Model usage tracking test completed",
-                "response": response,
-                "usage_recorded": {
-                    "usage_id": latest_usage.usage_id if latest_usage else None,
-                    "model_name": latest_usage.model_name if latest_usage else None,
-                    "tokens": latest_usage.total_tokens if latest_usage else None,
-                    "cost": latest_usage.cost if latest_usage else None,
-                    "timestamp": latest_usage.timestamp.isoformat() if latest_usage else None
-                }
-            }
-        finally:
-            session.close()
-            
-    except Exception as e:
-        logger.log_message(f"Error in test-model-usage: {str(e)}", level=logging.ERROR)
-        return {
-            "success": False,
-            "error": str(e)
-        } 
-    
