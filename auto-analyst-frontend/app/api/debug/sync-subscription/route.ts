@@ -8,7 +8,7 @@ export const dynamic = 'force-dynamic'
 // Initialize Stripe
 const stripe = process.env.STRIPE_SECRET_KEY 
   ? new Stripe(process.env.STRIPE_SECRET_KEY, {
-      apiVersion: '2025-02-24.acacia',
+      apiVersion: '2025-05-28.basil',
     })
   : null
 
@@ -58,8 +58,8 @@ export async function POST(request: NextRequest) {
     // Handle cancel_at_period_end flag
     if (subscription.cancel_at_period_end) {
       updateData.cancel_at_period_end = 'true'
-      updateData.willCancelAt = subscription.current_period_end 
-        ? new Date(subscription.current_period_end * 1000).toISOString()
+      updateData.willCancelAt = subscription.items?.data[0]?.current_period_end 
+        ? new Date(subscription.items.data[0].current_period_end * 1000).toISOString()
         : new Date().toISOString()
       
       // Override status display for UI purposes  
