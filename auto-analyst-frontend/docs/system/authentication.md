@@ -59,3 +59,4 @@ Create a `.env.local` file in your project root and add:
 ```env
 GOOGLE_CLIENT_ID=your-client-id-here
 GOOGLE_CLIENT_SECRET=your-client-secret-here
+```
