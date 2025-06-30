@@ -43,7 +43,7 @@ from src.routes.feedback_routes import router as feedback_router
 from src.routes.session_routes import router as session_router, get_session_id_dependency
 from src.routes.deep_analysis_routes import router as deep_analysis_router
 from src.routes.templates_routes import router as templates_router
-from src.schemas.query_schemas import QueryRequest
+from src.schemas.query_schema import QueryRequest
 from src.utils.logger import Logger
 
 # Import deep analysis components directly
@@ -1582,67 +1582,6 @@ async def download_html_report(
         logger.log_message(f"Failed to generate HTML report: {str(e)}", level=logging.ERROR)
         raise HTTPException(status_code=500, detail=f"Failed to generate report: {str(e)}")
 
-@app.get("/debug/deep_analysis_agents")
-async def debug_deep_analysis_agents(session_id: str = Depends(get_session_id_dependency)):
-    """Debug endpoint to show which agents are loaded for deep analysis"""
-    session_state = app.state.get_session_state(session_id)
-    user_id = session_state.get("user_id")
-    
-    try:
-        # Get the deep analyzer for this session
-        deep_analyzer = app.state.get_deep_analyzer(session_id)
-        
-        # Get the agents from the deep analyzer
-        available_agents = list(deep_analyzer.agents.keys()) if hasattr(deep_analyzer, 'agents') else []
-        
-        # Also get the raw enabled agents from database
-        from src.db.init_db import session_factory
-        from src.agents.agents import load_user_enabled_templates_for_planner_from_db
-        
-        db_session = session_factory()
-        try:
-            if user_id:
-                enabled_agents_dict = load_user_enabled_templates_for_planner_from_db(user_id, db_session)
-                db_enabled_agents = list(enabled_agents_dict.keys())
-            else:
-                db_enabled_agents = ["No user_id - using defaults"]
-        finally:
-            db_session.close()
-        
-        return {
-            "session_id": session_id,
-            "user_id": user_id,
-            "deep_analyzer_agents": available_agents,
-            "db_enabled_agents": db_enabled_agents,
-            "agents_match": set(available_agents) == set(db_enabled_agents) if user_id else "N/A"
-        }
-        
-    except Exception as e:
-        logger.log_message(f"Error in debug endpoint: {str(e)}", level=logging.ERROR)
-        return {
-            "error": str(e),
-            "session_id": session_id,
-            "user_id": user_id
-        }
-
-@app.post("/debug/clear_deep_analyzer")
-async def clear_deep_analyzer_cache(session_id: str = Depends(get_session_id_dependency)):
-    """Debug endpoint to clear the deep analyzer cache and force reload"""
-    session_state = app.state.get_session_state(session_id)
-    
-    # Clear the cached deep analyzer
-    if 'deep_analyzer' in session_state:
-        del session_state['deep_analyzer']
-    if 'deep_analyzer_user_id' in session_state:
-        del session_state['deep_analyzer_user_id']
-    
-    logger.log_message(f"Cleared deep analyzer cache for session {session_id}", level=logging.INFO)
-    
-    return {
-        "message": "Deep analyzer cache cleared",
-        "session_id": session_id,
-        "user_id": session_state.get("user_id")
-    }
 
 # In the section where routers are included, add the session_router
 app.include_router(chat_router)

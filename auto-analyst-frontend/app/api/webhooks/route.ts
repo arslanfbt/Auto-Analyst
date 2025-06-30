@@ -13,7 +13,7 @@ export const dynamic = 'force-dynamic'
 // Initialize Stripe only if the secret key exists
 const stripe = process.env.STRIPE_SECRET_KEY 
   ? new Stripe(process.env.STRIPE_SECRET_KEY, {
-      apiVersion: '2025-02-24.acacia',
+      apiVersion: '2025-05-28.basil',
     })
   : null
 
@@ -225,8 +225,8 @@ export async function POST(request: NextRequest) {
         const invoice = event.data.object as Stripe.Invoice
         
         // Check if this is for a subscription payment
-        if (invoice.subscription) {
-          const subscription = await stripe.subscriptions.retrieve(invoice.subscription as string)
+        if ((invoice as any).subscription_id) {
+          const subscription = await stripe.subscriptions.retrieve((invoice as any).subscription_id as string)
           
           // Get customer and user info
           const customerId = subscription.customer as string
@@ -284,8 +284,8 @@ export async function POST(request: NextRequest) {
         const invoice = event.data.object as Stripe.Invoice
         
         // Handle failed payment after trial
-        if (invoice.subscription && invoice.billing_reason === 'subscription_cycle') {
-          const subscription = await stripe.subscriptions.retrieve(invoice.subscription as string)
+        if ((invoice as any).subscription_id && invoice.billing_reason === 'subscription_cycle') {
+          const subscription = await stripe.subscriptions.retrieve((invoice as any).subscription_id as string)
           
           // Get customer and user info
           const customerId = subscription.customer as string

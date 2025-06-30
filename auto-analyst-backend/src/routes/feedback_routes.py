@@ -3,7 +3,7 @@ from typing import List, Optional
 import logging
 from src.db.init_db import session_factory
 from src.db.schemas.models import Message, MessageFeedback
-from src.schemas.chat_schemas import MessageFeedbackCreate, MessageFeedbackResponse
+from src.schemas.chat_schema import MessageFeedbackCreate, MessageFeedbackResponse
 from src.managers.chat_manager import ChatManager
 from src.utils.logger import Logger
 import os

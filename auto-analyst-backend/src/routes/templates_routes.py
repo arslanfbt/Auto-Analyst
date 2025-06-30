@@ -10,7 +10,8 @@ from sqlalchemy.exc import IntegrityError
 from src.db.init_db import session_factory
 from src.db.schemas.models import AgentTemplate, User, UserTemplatePreference
 from src.utils.logger import Logger
-from src.agents.agents import get_all_available_templates, toggle_user_template_preference
+from src.agents.agents import toggle_user_template_preference
+from src.schemas.template_schema import TemplateResponse, UserTemplatePreferenceResponse, TogglePreferenceRequest
 
 # Initialize logger with console logging disabled
 logger = Logger("templates_routes", see_time=True, console_log=False)
@@ -18,38 +19,6 @@ logger = Logger("templates_routes", see_time=True, console_log=False)
 # Initialize router
 router = APIRouter(prefix="/templates", tags=["templates"])
 
-# Pydantic models for request/response
-class TemplateResponse(BaseModel):
-    template_id: int
-    template_name: str
-    display_name: Optional[str]
-    description: str
-    prompt_template: str
-    template_category: Optional[str]
-    icon_url: Optional[str]
-    is_premium_only: bool
-    is_active: bool
-    usage_count: int
-    created_at: datetime
-    updated_at: datetime
-
-class UserTemplatePreferenceResponse(BaseModel):
-    template_id: int
-    template_name: str
-    display_name: Optional[str]
-    description: str
-    template_category: Optional[str]
-    icon_url: Optional[str]
-    is_premium_only: bool
-    is_active: bool
-    is_enabled: bool
-    usage_count: int
-    last_used_at: Optional[datetime]
-    created_at: Optional[datetime]
-    updated_at: Optional[datetime]
-
-class TogglePreferenceRequest(BaseModel):
-    is_enabled: bool
 
 def get_global_usage_counts(session, template_ids: List[int] = None) -> Dict[int, int]:
     """

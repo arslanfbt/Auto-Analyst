@@ -179,28 +179,3 @@ These routes handle chat interactions, message processing, user management, and 
   "created_at": "2023-05-01T12:00:00Z"
 }
 ```
-
----
-
-### **Debugging**
-
-#### **1. Test Model Usage Tracking**
-**Endpoint:** `POST /chats/debug/test-model-usage`  
-**Query Parameters:**  
-- `model_name`: Model to test (default: "gpt-3.5-turbo")  
-- `user_id`: Optional user ID  
-**Response:**  
-```json
-{
-  "success": true,
-  "message": "Model usage tracking test completed",
-  "response": "This is a test response",
-  "usage_recorded": {
-    "usage_id": 123,
-    "model_name": "gpt-3.5-turbo",
-    "tokens": 50,
-    "cost": 0.0005,
-    "timestamp": "2023-05-01T12:00:00Z"
-  }
-}
-```

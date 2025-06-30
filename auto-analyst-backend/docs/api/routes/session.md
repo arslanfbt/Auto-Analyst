@@ -253,17 +253,9 @@ Health check endpoint.
 
 ---
 
-### **7. Debug Endpoints**
-
-#### **GET /debug/deep_analysis_agents**  
-Debug information about deep analysis agents for a session.
-
-#### **POST /debug/clear_deep_analyzer**  
-Clears the deep analyzer cache for a session.
-
 ---
 
-### **8. Authentication & Session Management**
+### **7. Authentication & Session Management**
 - **Session ID Sources:**  
   - Query parameter: `session_id`  
   - Header: `X-Session-ID`  

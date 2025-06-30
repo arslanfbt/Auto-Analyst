@@ -43,7 +43,7 @@ Auto-Analyst Platform Architecture
 
 ### **🔧 Backend Specific** (`/auto-analyst-backend/docs/`)
 - **[Getting Started Guide](../auto-analyst-backend/docs/getting_started.md)** - Backend setup and deployment
-- **[API Endpoints Reference](../auto-analyst-backend/docs/api/endpoints.md)** - Complete API documentation
+- **[API Endpoints Reference](../auto-analyst-backend/docs/api/README.md)** - Complete API documentation
 - **[Architecture Overview](../auto-analyst-backend/docs/architecture/architecture.md)** - Backend system design
 - **[Development Workflow](../auto-analyst-backend/docs/development/development_workflow.md)** - Backend development guide
 - **[Database Schema](../auto-analyst-backend/docs/system/database-schema.md)** - Data models and relationships
