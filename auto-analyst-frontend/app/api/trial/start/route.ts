@@ -98,8 +98,14 @@ export async function POST(request: NextRequest) {
       trial_end: trialEndTimestamp,
       expand: ['latest_invoice.payment_intent'],
       payment_behavior: 'default_incomplete',
+      default_payment_method: setupIntent.payment_method as string,
       payment_settings: {
         save_default_payment_method: 'on_subscription',
+      },
+      trial_settings: {
+        end_behavior: {
+          missing_payment_method: 'cancel'
+        }
       },
       metadata: {
         userId: userId || 'anonymous',

@@ -49,9 +49,9 @@ export interface TrialConfig {
  * Trial period configuration - Change here to update across the entire app
  */
 export const TRIAL_CONFIG: TrialConfig = {
-  duration: 2,
+  duration: 15,
   unit: 'minutes',
-  displayText: '2-Minute Free Trial',
+  displayText: '15-Minute Free Trial',
   credits: 500
 }
 
