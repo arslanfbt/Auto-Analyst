@@ -50,8 +50,8 @@ export interface TrialConfig {
  */
 export const TRIAL_CONFIG: TrialConfig = {
   duration: 2,
-  unit: 'days',
-  displayText: '2-Day Free Trial',
+  unit: 'minutes',
+  displayText: '2-Minute Free Trial',
   credits: 500
 }
 
