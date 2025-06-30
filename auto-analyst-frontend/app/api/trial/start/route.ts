@@ -9,7 +9,7 @@ export const dynamic = 'force-dynamic'
 // Initialize Stripe
 const stripe = process.env.STRIPE_SECRET_KEY 
   ? new Stripe(process.env.STRIPE_SECRET_KEY, {
-      apiVersion: '2025-02-24.acacia',
+      apiVersion: '2025-05-28.basil',
     })
   : null
 
@@ -98,8 +98,14 @@ export async function POST(request: NextRequest) {
       trial_end: trialEndTimestamp,
       expand: ['latest_invoice.payment_intent'],
       payment_behavior: 'default_incomplete',
+      default_payment_method: setupIntent.payment_method as string,
       payment_settings: {
         save_default_payment_method: 'on_subscription',
+      },
+      trial_settings: {
+        end_behavior: {
+          missing_payment_method: 'cancel'
+        }
       },
       metadata: {
         userId: userId || 'anonymous',
@@ -114,7 +120,7 @@ export async function POST(request: NextRequest) {
 
     // Apply discount if coupon is valid
     if (couponId) {
-      subscriptionParams.coupon = couponId
+      subscriptionParams.discounts = [{ coupon: couponId }]
     }
 
     // Create subscription with trial

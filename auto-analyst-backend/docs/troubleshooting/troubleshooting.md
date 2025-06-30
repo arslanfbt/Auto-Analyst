@@ -14,9 +14,7 @@
    ```bash
    python -c "
    from src.db.init_db import init_db
-   from src.db.init_default_agents import initialize_default_agents
    init_db()
-   initialize_default_agents()
    print('✅ Database initialized')
    "
    ```
@@ -69,9 +67,7 @@
 **Solutions:**
 1. **Initialize Default Agents**:
    ```python
-   python -c "
-   from src.db.init_default_agents import initialize_default_agents
-   initialize_default_agents()
+   python -m scripts.populate_agent_templates
    print('✅ Default agents initialized')
    "
    ```

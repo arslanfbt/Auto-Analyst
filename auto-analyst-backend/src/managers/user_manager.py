@@ -8,7 +8,7 @@ from fastapi.security import APIKeyHeader
 
 from src.db.init_db import get_session
 from src.db.schemas.models import User as DBUser, AgentTemplate, UserTemplatePreference
-from src.schemas.user_schemas import User
+from src.schemas.user_schema import User
 from src.utils.logger import Logger
 
 logger = Logger("user_manager", see_time=True, console_log=False)
