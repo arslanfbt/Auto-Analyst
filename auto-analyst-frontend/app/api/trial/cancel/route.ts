@@ -8,7 +8,7 @@ export const dynamic = 'force-dynamic'
 // Initialize Stripe
 const stripe = process.env.STRIPE_SECRET_KEY 
   ? new Stripe(process.env.STRIPE_SECRET_KEY, {
-      apiVersion: '2025-02-24.acacia',
+      apiVersion: '2025-05-28.basil',
     })
   : null
 
@@ -126,8 +126,8 @@ export async function POST(request: NextRequest) {
         canceledAt: now.toISOString(),
         lastUpdated: now.toISOString(),
         subscriptionCanceled: 'true',
-        willCancelAt: stripeSubscription?.current_period_end 
-          ? new Date(stripeSubscription.current_period_end * 1000).toISOString()
+        willCancelAt: stripeSubscription?.items?.data[0]?.current_period_end 
+          ? new Date(stripeSubscription.items.data[0].current_period_end * 1000).toISOString()
           : now.toISOString()
       })
       
@@ -151,8 +151,8 @@ export async function POST(request: NextRequest) {
         remaining: Math.max(0, parseInt(subscriptionData.total as string || '0') - parseInt(subscriptionData.used as string || '0'))
       },
       stripeStatus: stripeSubscription?.status || (isLegacyUser ? 'legacy' : 'unknown'),
-      willCancelAt: !(isTrial || isLegacyActive) && stripeSubscription?.current_period_end 
-        ? new Date(stripeSubscription.current_period_end * 1000).toISOString()
+      willCancelAt: !(isTrial || isLegacyActive) && stripeSubscription?.items?.data[0]?.current_period_end 
+        ? new Date(stripeSubscription.items.data[0].current_period_end * 1000).toISOString()
         : undefined
     })
     
