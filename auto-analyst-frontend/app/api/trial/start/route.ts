@@ -178,7 +178,7 @@ export async function POST(request: NextRequest) {
         used: 0,
         remaining: TrialUtils.getTrialCredits()
       },
-      trialEndDate: trialEndDate,
+      // trialEndDate: trialEndDate,
       message: 'Trial started successfully! You have immediate access to 500 credits.'
     })
     
