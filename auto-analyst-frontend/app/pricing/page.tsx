@@ -35,7 +35,7 @@ const pricingTiers = [
       `${TrialUtils.getTrialDisplayText()}`,
     ],
     highlight: true,
-    trial: false,
+    trial: true,
   },
   {
     name: 'Enterprise',
