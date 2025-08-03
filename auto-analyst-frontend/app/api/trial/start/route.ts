@@ -87,7 +87,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Store customer mapping for webhooks
-    await redis.set(stripe,customer:${customerId}, String(userId))
+    await redis.set(`stripe:customer:${customerId}`, String(userId))
 
     // NOW create the subscription (after payment method is confirmed)
     const trialEndTimestamp = TrialUtils.getTrialEndTimestamp()
