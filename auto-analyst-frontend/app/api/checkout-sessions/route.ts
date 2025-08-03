@@ -109,7 +109,7 @@ export async function POST(request: NextRequest) {
       clientSecret: setupIntent.client_secret,
       customerId: customerId,
       discountApplied: !!couponId,
-      isTrialSetup: false,
+      isTrialSetup: true,
       planName,
       interval,
       priceId,
