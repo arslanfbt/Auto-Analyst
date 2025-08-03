@@ -51,7 +51,7 @@ export interface TrialConfig {
 export const TRIAL_CONFIG: TrialConfig = {
   duration: 0,
   unit: 'days',
-  displayText: 'Start Analyzing!',
+  displayText: 'Analyzing!',
   credits: 500
 }
 
