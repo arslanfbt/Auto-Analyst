@@ -95,7 +95,7 @@ export async function POST(request: NextRequest) {
     const subscriptionParams: Stripe.SubscriptionCreateParams = {
       customer: customerId,
       items: [{ price: priceId }],
-      // trial_end: trialEndTimestamp,
+      trial_end: trialEndTimestamp,
       expand: ['latest_invoice.payment_intent'],
       payment_behavior: 'default_incomplete',
       default_payment_method: setupIntent.payment_method as string,
@@ -112,8 +112,8 @@ export async function POST(request: NextRequest) {
         planName: metadata.planName || planName || 'Standard',
         interval: metadata.interval || interval || 'month',
         priceId,
-        // isTrial: 'true',
-        // trialEndDate: TrialUtils.getTrialEndDate(),
+        isTrial: 'true',
+        trialEndDate: TrialUtils.getTrialEndDate(),
         createdFromSetupIntent: setupIntentId,
       },
     }
@@ -144,7 +144,7 @@ export async function POST(request: NextRequest) {
     const subscriptionData = {
       plan: 'Standard Plan',
       planType: 'STANDARD', // Immediate Standard access as requested
-      status: 'active', // Use Stripe's standard trialing status
+      status: 'trialing', // Use Stripe's standard trialing status
       amount: amount?.toString() || '15',
       interval: interval || 'month',
       purchaseDate: now.toISOString(),
