@@ -14,18 +14,12 @@ PROVIDERS = {
 # Cost per 1K tokens for different models
 MODEL_COSTS = {
     "openai": {
-        "gpt-4.1": {"input": 0.002, "output": 0.008},
-        "gpt-4.1-mini": {"input": 0.0004, "output": 0.0016},
-        "gpt-4.1-nano": {"input": 0.00010, "output": 0.0004},
-        "gpt-4.5-preview": {"input": 0.075, "output": 0.15},
-        "gpt-4o": {"input": 0.0025, "output": 0.01},
-        "gpt-4o-mini": {"input": 0.00015, "output": 0.0006},  
+
         "o1": {"input": 0.015, "output": 0.06},  
         "o1-pro": {"input": 0.015, "output": 0.6},
         "o1-mini": {"input": 0.00011, "output": 0.00044}, 
         "o3": {"input": 0.002, "output": 0.008},
         "o3-mini": {"input": 0.00011, "output": 0.00044},
-        "gpt-3.5-turbo": {"input": 0.0005, "output": 0.0015},  
     },
     "anthropic": {
         "claude-3-5-haiku-latest": {"input": 0.00025, "output": 0.000125},
@@ -37,16 +31,9 @@ MODEL_COSTS = {
     },
     "groq": {
         "deepseek-r1-distill-llama-70b": {"input": 0.00075, "output": 0.00099},
-        "llama-3.3-70b-versatile": {"input": 0.00059, "output": 0.00079},
-        "llama3-8b-8192": {"input": 0.00005, "output": 0.00008},
-        "llama3-70b-8192": {"input": 0.00059, "output": 0.00079},
-        "mistral-saba-24b": {"input": 0.00079, "output": 0.00079},
-        "gemma2-9b-it": {"input": 0.0002, "output": 0.0002},
-        "qwen-qwq-32b": {"input": 0.00029, "output": 0.00039},
-        "meta-llama/llama-4-maverick-17b-128e-instruct": {"input": 0.0002, "output": 0.0006},
-        "meta-llama/llama-4-scout-17b-16e-instruct": {"input": 0.00011, "output": 0.00034},
-        "deepseek-r1-distill-qwen-32b": {"input": 0.00075, "output": 0.00099},
-        "llama-3.1-70b-versatile": {"input": 0.00059, "output": 0.00079},
+        "gpt-oss-120B":{"input": 0.00075, "output": 0.00099},
+        "gpt-oss-20B":{"input": 0.00075, "output": 0.00099}
+
     },
     "gemini": {
         "gemini-2.5-pro-preview-03-25": {"input": 0.00015, "output": 0.001}
@@ -114,13 +101,6 @@ MODEL_TIERS = {
 # Model metadata (display name, context window, etc.)
 MODEL_METADATA = {
     # OpenAI
-    "gpt-4.1": {"display_name": "GPT-4.1", "context_window": 128000},
-    "gpt-4.1-mini": {"display_name": "GPT-4.1 Mini", "context_window": 128000},
-    "gpt-4.1-nano": {"display_name": "GPT-4.1 Nano", "context_window": 128000},
-    "gpt-4o": {"display_name": "GPT-4o", "context_window": 128000},
-    "gpt-4.5-preview": {"display_name": "GPT-4.5 Preview", "context_window": 128000},
-    "gpt-4o-mini": {"display_name": "GPT-4o Mini", "context_window": 128000},
-    "gpt-3.5-turbo": {"display_name": "GPT-3.5 Turbo", "context_window": 16385},
     "o1": {"display_name": "o1", "context_window": 128000},
     "o1-pro": {"display_name": "o1 Pro", "context_window": 128000},
     "o1-mini": {"display_name": "o1 Mini", "context_window": 128000},
@@ -134,15 +114,9 @@ MODEL_METADATA = {
     
     # GROQ
     "deepseek-r1-distill-llama-70b": {"display_name": "DeepSeek R1 Distill Llama 70b", "context_window": 32768},
-    "llama-3.3-70b-versatile": {"display_name": "Llama 3.3 70b", "context_window": 8192},
-    "llama3-8b-8192": {"display_name": "Llama 3 8b", "context_window": 8192},
-    "llama3-70b-8192": {"display_name": "Llama 3 70b", "context_window": 8192},
-    "mistral-saba-24b": {"display_name": "Mistral Saba 24b", "context_window": 32768},
-    "gemma2-9b-it": {"display_name": "Gemma 2 9b", "context_window": 8192},
-    "qwen-qwq-32b": {"display_name": "Qwen QWQ 32b | Alibaba", "context_window": 32768},
-    "meta-llama/llama-4-maverick-17b-128e-instruct": {"display_name": "Llama 4 Maverick 17b", "context_window": 128000},
-    "meta-llama/llama-4-scout-17b-16e-instruct": {"display_name": "Llama 4 Scout 17b", "context_window": 16000},
-    "llama-3.1-70b-versatile": {"display_name": "Llama 3.1 70b Versatile", "context_window": 8192},
+    "gpt-oss-120B":{"display_name": "OpenAI gpt oss 120B, "context_window": 128000},
+    "gpt-oss-20B"::{"display_name": "OpenAI gpt oss 20B, "context_window": 128000},
+
     
     # Gemini
     "gemini-2.5-pro-preview-03-25": {"display_name": "Gemini 2.5 Pro", "context_window": 1000000},
