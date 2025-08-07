@@ -105,8 +105,8 @@ MODEL_METADATA = {
     
     # GROQ
     "deepseek-r1-distill-llama-70b": {"display_name": "DeepSeek R1 Distill Llama 70b", "context_window": 32768},
-    "gpt-oss-120B":{"display_name": "OpenAI gpt oss 120B, "context_window": 128000},
-    "gpt-oss-20B"::{"display_name": "OpenAI gpt oss 20B, "context_window": 128000},
+    "gpt-oss-120B":{"display_name": "OpenAI gpt oss 120B", "context_window": 128000},
+    "gpt-oss-20B":{"display_name": "OpenAI gpt oss 20B", "context_window": 128000},
 
     
     # Gemini
