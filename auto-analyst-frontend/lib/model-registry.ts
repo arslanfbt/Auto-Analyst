@@ -111,7 +111,7 @@ export const MODEL_METADATA: Record<string, { displayName: string; contextWindow
   // GROQ
   "deepseek-r1-distill-llama-70b": { displayName: "DeepSeek R1 Distill Llama 70b", contextWindow: 32768 },
       "gpt-oss-120B":{displayName: "OpenAI gpt oss 120B", contextWindow: 128000},
-    "gpt-oss-20B"::{displayName: "OpenAI gpt oss 20B", contextWindow: 128000},
+    "gpt-oss-20B":{displayName: "OpenAI gpt oss 20B", contextWindow: 128000},
 
 
 
