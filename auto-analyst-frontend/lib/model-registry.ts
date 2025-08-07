@@ -14,18 +14,11 @@ export const PROVIDERS = {
 // Cost per 1K tokens for different models
 export const MODEL_COSTS = {
   openai: {
-    "gpt-4.1": { input: 0.002, output: 0.008 },
-    "gpt-4.1-mini": { input: 0.0004, output: 0.0016 },
-    "gpt-4.1-nano": { input: 0.00010, output: 0.0004 },
-    "gpt-4.5-preview": { input: 0.075, output: 0.15 },
-    "gpt-4o": { input: 0.0025, output: 0.01 },
-    "gpt-4o-mini": { input: 0.00015, output: 0.0006 },  
     "o1": { input: 0.015, output: 0.06 },  
     "o1-pro": { input: 0.015, output: 0.6 },
     "o1-mini": { input: 0.00011, output: 0.00044 }, 
     "o3": { input: 0.002, output: 0.008 },
-    "o3-mini": { input: 0.00011, output: 0.00044 },
-    "gpt-3.5-turbo": { input: 0.0005, output: 0.0015 }
+    "o3-mini": { input: 0.00011, output: 0.00044 }
   },
   anthropic: {
     "claude-3-opus-latest": { input: 0.015, output: 0.075 },  
@@ -37,16 +30,9 @@ export const MODEL_COSTS = {
   },
   groq: {
     "deepseek-r1-distill-llama-70b": {"input": 0.00075, "output": 0.00099},
-    "llama-3.3-70b-versatile": {"input": 0.00059, "output": 0.00079},
-    "llama3-8b-8192": {"input": 0.00005, "output": 0.00008},
-    "llama3-70b-8192": {"input": 0.00059, "output": 0.00079},
-    "mistral-saba-24b": {"input": 0.00079, "output": 0.00079},
-    "gemma2-9b-it": {"input": 0.0002, "output": 0.0002},
-    "qwen-qwq-32b": {"input": 0.00029, "output": 0.00039},
-    "meta-llama/llama-4-maverick-17b-128e-instruct": {"input": 0.0002, "output": 0.0006},
-    "meta-llama/llama-4-scout-17b-16e-instruct": {"input": 0.00011, "output": 0.00034},
-    "deepseek-r1-distill-qwen-32b": {"input": 0.00075, "output": 0.00099},
-    "llama-3.1-70b-versatile": {"input": 0.00059, "output": 0.00079},
+    "gpt-oss-120B":{"input": 0.00075, "output": 0.00099},
+    "gpt-oss-20B":{"input": 0.00075, "output": 0.00099}
+
   },
   gemini: {
     "gemini-2.5-pro-preview-03-25": { input: 0.00015, output: 0.001 }
@@ -60,41 +46,29 @@ export const MODEL_TIERS = {
       "credits": 1,
       "models": [
           "claude-3-5-haiku-latest",
-          "llama3-8b-8192",
-          "gemma2-9b-it",
-          "meta-llama/llama-4-scout-17b-16e-instruct"
+         "gpt-oss-20B"
       ]
   },
   "tier2": {
       "name": "Standard",
       "credits": 3,
       "models": [
-          "gpt-4.1-nano",
-          "gpt-4o-mini",
+
           "o1-mini",
           "o3-mini",
-          "qwen-qwq-32b",
-          "meta-llama/llama-4-maverick-17b-128e-instruct"
       ]
   },
   "tier3": {
       "name": "Premium",
       "credits": 5,
       "models": [
-          "gpt-4.1",
-          "gpt-4.1-mini",
-          "gpt-4o",
           "o3",
-          "gpt-3.5-turbo",
           "claude-3-7-sonnet-latest",
           "claude-3-5-sonnet-latest",
           "claude-sonnet-4-20250514",
           "deepseek-r1-distill-llama-70b",
-          "llama-3.3-70b-versatile",
-          "llama3-70b-8192",
-          "mistral-saba-24b",
-          "deepseek-r1-distill-qwen-32b",
-          "llama-3.1-70b-versatile",
+           "gpt-oss-120B",
+        
           "gemini-2.5-pro-preview-03-25"
       ]
   },
@@ -121,13 +95,6 @@ export const TIER_COLORS = {
 // Model metadata (display name, context window, etc.)
 export const MODEL_METADATA: Record<string, { displayName: string; contextWindow: number }> = {
   // OpenAI
-  "gpt-4.1": { displayName: "GPT-4.1", contextWindow: 128000 },
-  "gpt-4.1-mini": { displayName: "GPT-4.1 Mini", contextWindow: 128000 },
-  "gpt-4.1-nano": { displayName: "GPT-4.1 Nano", contextWindow: 128000 },
-  "gpt-4o": { displayName: "GPT-4o", contextWindow: 128000 },
-  "gpt-4.5-preview": { displayName: "GPT-4.5 Preview", contextWindow: 128000 },
-  "gpt-4o-mini": { displayName: "GPT-4o Mini", contextWindow: 128000 },
-  "gpt-3.5-turbo": { displayName: "GPT-3.5 Turbo", contextWindow: 16385 },
   "o1": { displayName: "o1", contextWindow: 128000 },
   "o1-pro": { displayName: "o1 Pro", contextWindow: 128000 },
   "o1-mini": { displayName: "o1-mini", contextWindow: 128000 },
@@ -143,15 +110,10 @@ export const MODEL_METADATA: Record<string, { displayName: string; contextWindow
   "claude-opus-4-20250514": { displayName: "Claude Opus 4", contextWindow: 200000 },
   // GROQ
   "deepseek-r1-distill-llama-70b": { displayName: "DeepSeek R1 Distill Llama 70b", contextWindow: 32768 },
-  "deepseek-r1-distill-qwen-32b": { displayName: "DeepSeek R1 Distill Qwen 32b", contextWindow: 32768 },
-  "llama-3.3-70b-versatile": { displayName: "Llama 3.3 70b", contextWindow: 8192 },
-  "llama3-8b-8192": { displayName: "Llama 3 8b", contextWindow: 8192 },
-  "llama3-70b-8192": { displayName: "Llama 3 70b", contextWindow: 8192 },
-  "mistral-saba-24b": { displayName: "Mistral Saba 24b", contextWindow: 32768 },
-  "gemma2-9b-it": { displayName: "Gemma 2 9b", contextWindow: 8192 },
-  "qwen-qwq-32b": { displayName: "Qwen QWQ 32b | Alibaba", contextWindow: 32768 },
-  "meta-llama/llama-4-maverick-17b-128e-instruct": { displayName: "Llama 4 Maverick 17b", contextWindow: 128000 },
-  "meta-llama/llama-4-scout-17b-16e-instruct": { displayName: "Llama 4 Scout 17b", contextWindow: 16000 },
+      "gpt-oss-120B":{displayName: "OpenAI gpt oss 120B, contextWindow: 128000},
+    "gpt-oss-20B"::{displayName: "OpenAI gpt oss 20B, contextWindow: 128000},
+
+
 
     
   // Gemini
