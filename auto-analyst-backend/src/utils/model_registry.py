@@ -47,41 +47,32 @@ MODEL_TIERS = {
         "credits": 1,
         "models": [
             "claude-3-5-haiku-latest",
-            "llama3-8b-8192",
-            "gemma2-9b-it",
-            "meta-llama/llama-4-scout-17b-16e-instruct"
+             "gpt-oss-20B"
+            
+
         ]
     },
     "tier2": {
         "name": "Standard",
         "credits": 3,
         "models": [
-            "gpt-4.1-nano",
-            "gpt-4o-mini",
+
             "o1-mini",
             "o3-mini",
-            "qwen-qwq-32b",
-            "meta-llama/llama-4-maverick-17b-128e-instruct"
         ]
     },
     "tier3": {
         "name": "Premium",
         "credits": 5,
         "models": [
-            "gpt-4.1",
-            "gpt-4.1-mini",
-            "gpt-4o",
             "o3",
-            "gpt-3.5-turbo",
+
             "claude-3-7-sonnet-latest",
             "claude-3-5-sonnet-latest",
             "claude-sonnet-4-20250514",
             "deepseek-r1-distill-llama-70b",
-            "llama-3.3-70b-versatile",
-            "llama3-70b-8192",
-            "mistral-saba-24b",
-            "deepseek-r1-distill-qwen-32b",
-            "llama-3.1-70b-versatile",
+            "gpt-oss-120B",
+    
             "gemini-2.5-pro-preview-03-25"
         ]
     },
