@@ -246,7 +246,7 @@ def get_session_lm(session_state):
                         api_key=model_config.get("api_key", DEFAULT_MODEL_CONFIG["api_key"]),
                         temperature=model_config.get("temperature", DEFAULT_MODEL_CONFIG["temperature"]),
                         max_tokens=None,
-                        max_completion_tokens=20000
+                        max_completion_tokens=500
                     )
                 else:
                     # For other models, keep using max_tokens as parameter name
