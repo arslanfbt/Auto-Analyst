@@ -220,7 +220,7 @@ async def update_model_settings(
                 "api_key": settings.api_key,
                 "temperature": settings.temperature,
                 "max_tokens":None,
-                "max_completion_tokens": 20000
+                "max_completion_tokens": 10000
             }
             
         
@@ -278,7 +278,7 @@ async def update_model_settings(
                     api_key=settings.api_key,
                     temperature=settings.temperature,
                     max_tokens = None,
-                    max_completion_tokens= 20000
+                    max_completion_tokens= 10000
                 )
             else:
                 lm = dspy.LM(
