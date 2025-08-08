@@ -708,7 +708,7 @@ class planner_module(dspy.Module):
             return {
                 "complexity": "error",
                 "plan": "basic_qa_agent",
-                "plan_instructions": {"error": f"Planning error: {str(e)}"}
+                "plan_instructions": {"error": f"Planning error in agents: {str(e)} + {dspy.settings.lm}"}
             }
         
         return output
