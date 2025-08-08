@@ -3,7 +3,7 @@ beautifulsoup4==4.13.4
 dspy==2.6.27
 litellm==1.75.2
 email_validator==2.2.0
-fastapi==0.111.1
+fastapi==0.115.5
 fastapi-cli==0.0.7
 FastAPI-SQLAlchemy==0.2.1
 fastapi-sso==0.10.0
