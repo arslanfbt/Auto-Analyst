@@ -223,7 +223,6 @@ def get_session_lm(session_state):
                     max_tokens=model_config.get("max_tokens", DEFAULT_MODEL_CONFIG["max_tokens"])
                 )
             else:  # OpenAI is the default
-                else:  # OpenAI is the default provider
                 model_name = model_config.get("model", DEFAULT_MODEL_CONFIG["model"])
                 max_token_value = model_config.get("max_tokens", DEFAULT_MODEL_CONFIG["max_tokens"])
             
