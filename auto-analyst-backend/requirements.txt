@@ -50,7 +50,7 @@ tiktoken==0.8.0
 tokenizers==0.21.0
 tqdm==4.67.1
 urllib3==2.4.0
-uvicorn==0.22.0
+uvicorn==0.29.0
 websockets==14.2
 wheel==0.45.1
 xgboost-cpu==3.0.2
