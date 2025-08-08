@@ -164,6 +164,7 @@ if DEFAULT_MODEL_CONFIG["provider"].lower() == "groq":
         temperature=DEFAULT_MODEL_CONFIG["temperature"],
         max_tokens=DEFAULT_MODEL_CONFIG["max_tokens"]
     )
+    
 elif DEFAULT_MODEL_CONFIG["provider"].lower() == "gemini":
     default_lm = dspy.LM(
         model=f"gemini/{DEFAULT_MODEL_CONFIG['model']}",
@@ -179,12 +180,20 @@ elif DEFAULT_MODEL_CONFIG["provider"].lower() == "anthropic":
         max_tokens=DEFAULT_MODEL_CONFIG["max_tokens"]
     )
 else:
-    default_lm = dspy.LM(
-        model=f"openai/{DEFAULT_MODEL_CONFIG["model"]}",
+    if DEFAULT_MODEL_CONFIG['model'] in ['gpt-5','gpt-5-mini','gpt-5-nano']:
+        default_lm = dspy.LM(
+        model=f"gemini/{DEFAULT_MODEL_CONFIG['model']}",
         api_key=DEFAULT_MODEL_CONFIG["api_key"],
         temperature=DEFAULT_MODEL_CONFIG["temperature"],
-        max_tokens=DEFAULT_MODEL_CONFIG["max_tokens"]
-    )
+        max_completion_tokens=DEFAULT_MODEL_CONFIG["max_tokens"]
+        )
+    else:
+        default_lm = dspy.LM(
+            model=f"openai/{DEFAULT_MODEL_CONFIG["model"]}",
+            api_key=DEFAULT_MODEL_CONFIG["api_key"],
+            temperature=DEFAULT_MODEL_CONFIG["temperature"],
+            max_tokens=DEFAULT_MODEL_CONFIG["max_tokens"]
+        )
     
 # lm = dspy.LM('openai/gpt-4o-mini', api_key=os.getenv("OPENAI_API_KEY"))
 # dspy.configure(lm=lm)
