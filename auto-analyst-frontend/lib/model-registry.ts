@@ -18,7 +18,10 @@ export const MODEL_COSTS = {
     "o1-pro": { input: 0.015, output: 0.6 },
     "o1-mini": { input: 0.00011, output: 0.00044 }, 
     "o3": { input: 0.002, output: 0.008 },
-    "o3-mini": { input: 0.00011, output: 0.00044 }
+    "o3-mini": { input: 0.00011, output: 0.00044 },
+    "gpt-5": { input: 0.00125, output: 0.01 },         // real cost
+    "gpt-5-mini": { input: 0.00025, output: 0.002 },   // real cost
+    "gpt-5-nano": { input: 0.00005, output: 0.0004 }   // real cost
   },
   anthropic: {
     "claude-3-opus-latest": { input: 0.015, output: 0.075 },  
@@ -26,13 +29,13 @@ export const MODEL_COSTS = {
     "claude-3-5-sonnet-latest": { input: 0.003, output: 0.015 }, 
     "claude-3-5-haiku-latest": { input: 0.0008, output: 0.0004 },
     "claude-sonnet-4-20250514": { input: 0.003, output: 0.015 },
-    "claude-opus-4-20250514": { input: 0.015, output: 0.075 }
+    "claude-opus-4-20250514": { input: 0.015, output: 0.075 },
+    "claude-opus-4-1": { input: 0.015, output: 0.075 }  // approximate real cost
   },
   groq: {
-    "deepseek-r1-distill-llama-70b": {"input": 0.00075, "output": 0.00099},
-    "gpt-oss-120B":{"input": 0.00075, "output": 0.00099},
-    "gpt-oss-20B":{"input": 0.00075, "output": 0.00099}
-
+    "deepseek-r1-distill-llama-70b": { input: 0.00075, output: 0.00099 },
+    "gpt-oss-120B": { input: 0.00075, output: 0.00099 },
+    "gpt-oss-20B": { input: 0.00075, output: 0.00099 }
   },
   gemini: {
     "gemini-2.5-pro-preview-03-25": { input: 0.00015, output: 0.001 }
@@ -41,55 +44,58 @@ export const MODEL_COSTS = {
 
 // Models by tier
 export const MODEL_TIERS = {
-  "tier1": {
-      "name": "Basic",
-      "credits": 1,
-      "models": [
-          "claude-3-5-haiku-latest",
-         "gpt-oss-20B"
-      ]
+  tier1: {
+    name: "Basic",
+    credits: 1,
+    models: [
+      "claude-3-5-haiku-latest",
+      "gpt-oss-20B"
+    ]
   },
-  "tier2": {
-      "name": "Standard",
-      "credits": 3,
-      "models": [
-
-          "o1-mini",
-          "o3-mini",
-      ]
+  tier2: {
+    name: "Standard",
+    credits: 3,
+    models: [
+      "o1-mini",
+      "o3-mini",
+      "gpt-5-nano"  // added
+    ]
   },
-  "tier3": {
-      "name": "Premium",
-      "credits": 5,
-      "models": [
-          "o3",
-          "claude-3-7-sonnet-latest",
-          "claude-3-5-sonnet-latest",
-          "claude-sonnet-4-20250514",
-          "deepseek-r1-distill-llama-70b",
-           "gpt-oss-120B",
-        
-          "gemini-2.5-pro-preview-03-25"
-      ]
+  tier3: {
+    name: "Premium",
+    credits: 5,
+    models: [
+      "o3",
+      "claude-3-7-sonnet-latest",
+      "claude-3-5-sonnet-latest",
+      "claude-sonnet-4-20250514",
+      "deepseek-r1-distill-llama-70b",
+      "gpt-oss-120B",
+      "gemini-2.5-pro-preview-03-25",
+      "gpt-5-mini"  // added
+    ]
   },
-  "tier4": {
-      "name": "Premium Plus",
-      "credits": 20,
-      "models": [
-          "gpt-4.5-preview",
-          "o1",
-          "o1-pro",
-          "claude-3-opus-latest",
-          "claude-opus-4-20250514"
-      ]
+  tier4: {
+    name: "Premium Plus",
+    credits: 20,
+    models: [
+      "gpt-4.5-preview",
+      "o1",
+      "o1-pro",
+      "claude-3-opus-latest",
+      "claude-opus-4-20250514",
+      "gpt-5",           // moved here
+      "claude-opus-4-1"  // moved here
+    ]
   }
 };
-        // Tier colors for UI components
+
+// Tier colors for UI components
 export const TIER_COLORS = {
   tier1: "#10B981", // Green for Basic tier
   tier2: "#3B82F6", // Blue for Standard tier
   tier3: "#8B5CF6", // Purple for Premium tier
-  tier4: "#F59E0B" // Orange for Premium Plus tier
+  tier4: "#F59E0B"  // Orange for Premium Plus tier
 };
 
 // Model metadata (display name, context window, etc.)
@@ -97,10 +103,13 @@ export const MODEL_METADATA: Record<string, { displayName: string; contextWindow
   // OpenAI
   "o1": { displayName: "o1", contextWindow: 128000 },
   "o1-pro": { displayName: "o1 Pro", contextWindow: 128000 },
-  "o1-mini": { displayName: "o1-mini", contextWindow: 128000 },
+  "o1-mini": { displayName: "o1 Mini", contextWindow: 128000 },
   "o3": { displayName: "o3", contextWindow: 128000 },
-  "o3-mini": { displayName: "o3-mini", contextWindow: 128000 },
-  
+  "o3-mini": { displayName: "o3 Mini", contextWindow: 128000 },
+  "gpt-5": { displayName: "GPT-5", contextWindow: 400000 },
+  "gpt-5-mini": { displayName: "GPT-5 Mini", contextWindow: 150000 },
+  "gpt-5-nano": { displayName: "GPT-5 Nano", contextWindow: 64000 },
+
   // Anthropic
   "claude-3-opus-latest": { displayName: "Claude 3 Opus", contextWindow: 200000 },
   "claude-3-7-sonnet-latest": { displayName: "Claude 3.7 Sonnet", contextWindow: 200000 },
@@ -108,14 +117,13 @@ export const MODEL_METADATA: Record<string, { displayName: string; contextWindow
   "claude-3-5-haiku-latest": { displayName: "Claude 3.5 Haiku", contextWindow: 200000 },
   "claude-sonnet-4-20250514": { displayName: "Claude Sonnet 4", contextWindow: 200000 },
   "claude-opus-4-20250514": { displayName: "Claude Opus 4", contextWindow: 200000 },
+  "claude-opus-4-1": { displayName: "Claude Opus 4.1", contextWindow: 200000 },
+
   // GROQ
   "deepseek-r1-distill-llama-70b": { displayName: "DeepSeek R1 Distill Llama 70b", contextWindow: 32768 },
-      "gpt-oss-120B":{displayName: "OpenAI gpt oss 120B", contextWindow: 128000},
-    "gpt-oss-20B":{displayName: "OpenAI gpt oss 20B", contextWindow: 128000},
+  "gpt-oss-120B": { displayName: "OpenAI gpt oss 120B", contextWindow: 128000 },
+  "gpt-oss-20B": { displayName: "OpenAI gpt oss 20B", contextWindow: 128000 },
 
-
-
-    
   // Gemini
   "gemini-2.5-pro-preview-03-25": { displayName: "Gemini 2.5 Pro", contextWindow: 1000000 }
 };
@@ -228,7 +236,7 @@ export function calculateCost(modelName: string, inputTokens: number, outputToke
     return 0;
   }
   
-  // TypeScript needs this explicit type assertion to understand the structure
+  // Type assertion for TypeScript
   const costs = providerCosts as Record<string, { input: number; output: number }>;
   
   return (
@@ -275,4 +283,4 @@ export function getAllModelsForProvider(provider: string): string[] {
  */
 export function getModelsByTier(tierId: string): string[] {
   return MODEL_TIERS[tierId as TierId]?.models || [];
-} 
+}
