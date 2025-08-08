@@ -219,6 +219,7 @@ async def update_model_settings(
                 "model": settings.model,
                 "api_key": settings.api_key,
                 "temperature": settings.temperature,
+                "max_tokens":None,
                 "max_completion_tokens": settings.max_tokens
             }
             
@@ -276,6 +277,7 @@ async def update_model_settings(
                     model=f"openai/{settings.model}",
                     api_key=settings.api_key,
                     temperature=settings.temperature,
+                    max_tokens = None,
                     max_completion_tokens=settings.max_tokens
                 )
             else:
