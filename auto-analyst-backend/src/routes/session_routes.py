@@ -213,14 +213,25 @@ async def update_model_settings(
         session_state = app_state.get_session_state(session_id)
         
         # Create the model config
-        model_config = {
-            "provider": settings.provider,
-            "model": settings.model,
-            "api_key": settings.api_key,
-            "temperature": settings.temperature,
-            "max_tokens": settings.max_tokens
-        }
+        if settings.model in ['gpt-5', 'gpt-5-mini','gpt-5-nano']:
+            model_config = {
+                "provider": settings.provider,
+                "model": settings.model,
+                "api_key": settings.api_key,
+                "temperature": settings.temperature,
+                "max_completion_tokens": settings.max_tokens
+            }
+            
         
+        else:
+            model_config = {
+                "provider": settings.provider,
+                "model": settings.model,
+                "api_key": settings.api_key,
+                "temperature": settings.temperature,
+                "max_tokens": settings.max_tokens
+            }
+            
         # Update only the session's model config
         session_state["model_config"] = model_config
         
