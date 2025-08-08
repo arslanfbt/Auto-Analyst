@@ -150,7 +150,7 @@ styling_instructions = [
 # Add near the top of the file, after imports
 DEFAULT_MODEL_CONFIG = {
     "provider": os.getenv("MODEL_PROVIDER", "openai"),
-    "model": os.getenv("MODEL_NAME", "gpt-4o-mini"),
+    "model": os.getenv("MODEL_NAME", "01"),
     "api_key": os.getenv("OPENAI_API_KEY"),
     "temperature": float(os.getenv("TEMPERATURE", 1.0)),
     "max_tokens": int(os.getenv("MAX_TOKENS", 6000))
@@ -223,13 +223,31 @@ def get_session_lm(session_state):
                     max_tokens=model_config.get("max_tokens", DEFAULT_MODEL_CONFIG["max_tokens"])
                 )
             else:  # OpenAI is the default
-                logger.log_message(f"Using default model: {model_config.get('model', DEFAULT_MODEL_CONFIG['model'])}", level=logging.INFO)
-                return dspy.LM(
-                    model=f"openai/{model_config.get("model", DEFAULT_MODEL_CONFIG["model"])}",
-                    api_key=model_config.get("api_key", DEFAULT_MODEL_CONFIG["api_key"]),
-                    temperature=model_config.get("temperature", DEFAULT_MODEL_CONFIG["temperature"]),
-                    max_tokens=model_config.get("max_tokens", DEFAULT_MODEL_CONFIG["max_tokens"])
-                )
+                else:  # OpenAI is the default provider
+                model_name = model_config.get("model", DEFAULT_MODEL_CONFIG["model"])
+                max_token_value = model_config.get("max_tokens", DEFAULT_MODEL_CONFIG["max_tokens"])
+            
+                logger.log_message(f"Using default model: {model_name} with max tokens value: {max_token_value}", level=logging.INFO)
+            
+                if model_name in ["gpt-5", "gpt-5-mini", "gpt-5-nano"]:
+                    # For gpt-5 model, use max_completion_token (singular) argument name,
+                    # but its value is what max_tokens used to be
+                    return dspy.LM(
+                        model=f"openai/{model_name}",
+                        api_key=model_config.get("api_key", DEFAULT_MODEL_CONFIG["api_key"]),
+                        temperature=model_config.get("temperature", DEFAULT_MODEL_CONFIG["temperature"]),
+                        max_completion_token=max_token_value  # note the renamed param here
+                    )
+                else:
+                    # For other models, keep using max_tokens as parameter name
+                    return dspy.LM(
+                        model=f"openai/{model_name}",
+                        api_key=model_config.get("api_key", DEFAULT_MODEL_CONFIG["api_key"]),
+                        temperature=model_config.get("temperature", DEFAULT_MODEL_CONFIG["temperature"]),
+                        max_tokens=max_token_value
+                    )
+
+
     
     # If no valid session config, use default
     return default_lm
