@@ -185,6 +185,7 @@ else:
         model=f"gemini/{DEFAULT_MODEL_CONFIG['model']}",
         api_key=DEFAULT_MODEL_CONFIG["api_key"],
         temperature=DEFAULT_MODEL_CONFIG["temperature"],
+        max_tokens=None,
         max_completion_tokens=DEFAULT_MODEL_CONFIG["max_tokens"]
         )
     else:
@@ -244,7 +245,8 @@ def get_session_lm(session_state):
                         model=f"openai/{model_name}",
                         api_key=model_config.get("api_key", DEFAULT_MODEL_CONFIG["api_key"]),
                         temperature=model_config.get("temperature", DEFAULT_MODEL_CONFIG["temperature"]),
-                        max_completion_tokens=max_token_value  # note the renamed param here
+                        max_tokens=None,
+                        max_completion_tokens=DEFAULT_MODEL_CONFIG["max_tokens"]
                     )
                 else:
                     # For other models, keep using max_tokens as parameter name
