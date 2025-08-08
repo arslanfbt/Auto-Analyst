@@ -213,7 +213,7 @@ async def update_model_settings(
         session_state = app_state.get_session_state(session_id)
         
         # Create the model config
-        if settings.model in ['gpt-5', 'gpt-5-mini','gpt-5-nano']:
+        if settings.model in ['openai/gpt-5', 'openai/gpt-5-mini','openai/gpt-5-nano']:
             model_config = {
                 "provider": settings.provider,
                 "model": settings.model,
