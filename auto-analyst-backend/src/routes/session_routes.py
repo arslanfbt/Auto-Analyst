@@ -213,7 +213,7 @@ async def update_model_settings(
         session_state = app_state.get_session_state(session_id)
         
         # Create the model config
-        if settings.model in ['openai/gpt-5', 'openai/gpt-5-mini','openai/gpt-5-nano']:
+        if 'gpt-5' in str(settings.model):
             model_config = {
                 "provider": settings.provider,
                 "model": settings.model,
@@ -270,7 +270,7 @@ async def update_model_settings(
             )
         else:  # OpenAI is the default
             logger.log_message(f"OpenAI Model: {settings.model}", level=logging.INFO)
-            if settings.model in ['gpt-5','gpt-5-mini','gpt-5-nano']:
+            if 'gpt-5' in settings.model:
                 lm = dspy.LM(
                     model=f"openai/{settings.model}",
                     api_key=settings.api_key,
