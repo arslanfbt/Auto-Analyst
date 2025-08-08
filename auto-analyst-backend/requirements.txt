@@ -6,7 +6,7 @@ email_validator==2.2.0
 fastapi==0.115.5
 fastapi-cli==0.0.7
 FastAPI-SQLAlchemy==0.2.1
-fastapi-sso==0.10.0
+fastapi-sso==0.16.0
 groq==0.18.0
 gunicorn==22.0.0
 huggingface-hub==0.30.2
