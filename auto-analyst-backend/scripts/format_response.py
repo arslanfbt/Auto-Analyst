@@ -856,7 +856,7 @@ def format_plan_instructions(plan_instructions):
         else:
             raise TypeError(f"Unsupported plan instructions type: {type(plan_instructions)}")
     except Exception as e:
-        raise ValueError(f"Error processing plan instructions: {str(e)}")
+        raise ValueError(f"Error processing plan instructions: {str(e)} + {dspy.settings.lm} ")
     # logger.log_message(f"Plan instructions: {instructions}", level=logging.INFO)
 
 
@@ -1059,7 +1059,7 @@ def format_response_to_markdown(api_response, agent_name = None, dataframe=None)
 
     except Exception as e:
         logger.log_message(f"Error in format_response_to_markdown: {str(e)}", level=logging.ERROR)
-        return f"{str(e)}"
+        return f"error formating markdown {str(e)}"
         
     # logger.log_message(f"Generated markdown content for agent '{agent_name}' at {time.strftime('%Y-%m-%d %H:%M:%S')}: {markdown}, length: {len(markdown)}", level=logging.INFO)
     
@@ -1070,7 +1070,7 @@ def format_response_to_markdown(api_response, agent_name = None, dataframe=None)
             f"API Response: {api_response}",
             level=logging.ERROR
         )
-        return " "
+        return ""
         
     return '\n'.join(markdown)
 
