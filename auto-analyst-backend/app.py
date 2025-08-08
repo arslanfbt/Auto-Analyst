@@ -180,7 +180,7 @@ elif DEFAULT_MODEL_CONFIG["provider"].lower() == "anthropic":
         max_tokens=DEFAULT_MODEL_CONFIG["max_tokens"]
     )
 else:
-    if DEFAULT_MODEL_CONFIG['model'] in ['openai/gpt-5', 'openai/gpt-5-mini','openai/gpt-5-nano']:
+    if DEFAULT_MODEL_CONFIG['model'].lower() in ['openai/gpt-5', 'openai/gpt-5-mini','openai/gpt-5-nano']:
         default_lm = dspy.LM(
         model=f"gemini/{DEFAULT_MODEL_CONFIG['model']}",
         api_key=DEFAULT_MODEL_CONFIG["api_key"],
@@ -237,7 +237,7 @@ def get_session_lm(session_state):
             
                 logger.log_message(f"Using default model: {model_name} with max tokens value: {max_token_value}", level=logging.INFO)
             
-                if model_name in ['openai/gpt-5', 'openai/gpt-5-mini','openai/gpt-5-nano']:
+                if 'gpt-5' in model_name:
                     # For gpt-5 model, use max_completion_token (singular) argument name,
                     # but its value is what max_tokens used to be
                     return dspy.LM(
