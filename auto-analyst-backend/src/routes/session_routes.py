@@ -268,9 +268,10 @@ async def update_model_settings(
                 temperature=settings.temperature,
                 max_tokens=settings.max_tokens
             )
-        else:  # OpenAI is the default
+        elif settings.provider.lower() == "openai":  # OpenAI is the default
             logger.log_message(f"OpenAI Model: {settings.model}", level=logging.INFO)
-            if 'gpt-5' in settings.model:
+            print(settings.model.lower())
+            if 'gpt-5' in settings.model.lower():
                 lm = dspy.LM(
                     model=f"openai/{settings.model}",
                     api_key=settings.api_key,
