@@ -270,12 +270,20 @@ async def update_model_settings(
             )
         else:  # OpenAI is the default
             logger.log_message(f"OpenAI Model: {settings.model}", level=logging.INFO)
-            lm = dspy.LM(
-                model=f"openai/{settings.model}",
-                api_key=settings.api_key,
-                temperature=settings.temperature,
-                max_tokens=settings.max_tokens
-            )
+            if settings.model in ['gpt-5','gpt-5-mini','gpt-5-nano']:
+                lm = dspy.LM(
+                    model=f"openai/{settings.model}",
+                    api_key=settings.api_key,
+                    temperature=settings.temperature,
+                    max_completion_tokens=settings.max_tokens
+                )
+            else:
+                lm = dspy.LM(
+                    model=f"openai/{settings.model}",
+                    api_key=settings.api_key,
+                    temperature=settings.temperature,
+                    max_tokens=settings.max_tokens
+                )
         
 
         # Test the model configuration without setting it globally
