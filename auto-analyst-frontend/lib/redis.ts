@@ -43,7 +43,7 @@ export const creditUtils = {
       const creditsHash = await redis.hgetall(KEYS.USER_CREDITS(userId))
       if (!creditsHash || !creditsHash.total || !creditsHash.used) {
         // No more free credits - users must have 0 credits if no subscription
-        return 0
+        return 20
       }
       
       const total = parseInt(creditsHash.total as string)
