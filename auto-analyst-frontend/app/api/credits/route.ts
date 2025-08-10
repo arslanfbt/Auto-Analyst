@@ -40,7 +40,7 @@ export async function POST(request: Request) {
     
     if (action === 'reset') {
       // Reset credits to the monthly allowance using centralized config
-      const defaultCredits = 0 // No free credits anymore
+      const defaultCredits = 20 // No free credits anymore
       await creditUtils.initializeTrialCredits(userIdentifier, 'manual-init', new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString())
       return NextResponse.json({ success: true, credits: defaultCredits })
     } else if (action === 'deduct') {
