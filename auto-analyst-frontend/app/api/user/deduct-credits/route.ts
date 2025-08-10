@@ -19,7 +19,7 @@ export async function POST(request: NextRequest) {
     const creditsHash = await redis.hgetall(KEYS.USER_CREDITS(userId))
     
     if (!creditsHash || !creditsHash.total) {
-      const defaultCredits = CreditConfig.getDefaultInitialCredits()
+      const defaultCredits = 20
       await redis.hset(KEYS.USER_CREDITS(userId), {
         total: '20',
         used: '0',
@@ -28,7 +28,7 @@ export async function POST(request: NextRequest) {
       })
        return NextResponse.json({
         success: true,
-        remaining: defaultCredits,
+        remaining: 20,
         deducted: 0
       })
       
