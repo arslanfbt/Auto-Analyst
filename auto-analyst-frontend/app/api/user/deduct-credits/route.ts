@@ -31,7 +31,7 @@ export async function POST(request: NextRequest) {
         remaining: 20,
         deducted: 0
       })
-      
+     }
       // No credits for users without subscription - require upgrade
     //   return NextResponse.json({
     //     success: false,
@@ -40,8 +40,9 @@ export async function POST(request: NextRequest) {
     //     remaining: 0,
     //     needsUpgrade: true
     //   }, { status: 402 }) // Payment Required status code
-    // }
-    
+    // 
+   }
+}
     // Calculate new used amount
     const total = parseInt(creditsHash.total as string)
     const currentUsed = creditsHash.used ? parseInt(creditsHash.used as string) : 0
