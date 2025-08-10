@@ -41,8 +41,8 @@ export async function POST(request: NextRequest) {
     //     needsUpgrade: true
     //   }, { status: 402 }) // Payment Required status code
     // 
-   }
-}
+   
+
     // Calculate new used amount
     const total = parseInt(creditsHash.total as string)
     const currentUsed = creditsHash.used ? parseInt(creditsHash.used as string) : 0
