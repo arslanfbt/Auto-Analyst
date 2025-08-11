@@ -35,6 +35,22 @@ export const KEYS = {
   USER_CREDITS: (userId: string) => `user:${userId}:credits`,
 };
 
+async initializeCredits(userId: string, credits: number = parseInt(process.env.NEXT_PUBLIC_CREDITS_INITIAL_AMOUNT || '20')): Promise<void> {
+    try {
+      // Only use hash-based approach
+      await redis.hset(KEYS.USER_CREDITS(userId), {
+        total: credits.toString(),
+        used: '0',
+        lastUpdate: new Date().toISOString(),
+        resetDate: this.getNextMonthFirstDay()
+      });
+      
+      logger.log(`Credits initialized successfully for ${userId}: ${credits}`);
+    } catch (error) {
+      console.error('Error initializing credits:', error);
+    }
+  },
+
 // Credits management utilities with consolidated hash-based storage
 export const creditUtils = {
   // Get remaining credits for a user
