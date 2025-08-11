@@ -35,21 +35,7 @@ export const KEYS = {
   USER_CREDITS: (userId: string) => `user:${userId}:credits`,
 };
 
-async initializeCredits(userId: string, credits: number = parseInt(process.env.NEXT_PUBLIC_CREDITS_INITIAL_AMOUNT || '20')): Promise<void> {
-    try {
-      // Only use hash-based approach
-      await redis.hset(KEYS.USER_CREDITS(userId), {
-        total: credits.toString(),
-        used: '0',
-        lastUpdate: new Date().toISOString(),
-        resetDate: this.getNextMonthFirstDay()
-      });
-      
-      logger.log(`Credits initialized successfully for ${userId}: ${credits}`);
-    } catch (error) {
-      console.error('Error initializing credits:', error);
-    }
-  },
+
 
 // Credits management utilities with consolidated hash-based storage
 export const creditUtils = {
@@ -74,6 +60,21 @@ export const creditUtils = {
     } catch (error) {
       console.error('Error getting remaining credits:', error)
       return 0
+    }
+  },
+  async initializeCredits(userId: string, credits: number = parseInt(process.env.NEXT_PUBLIC_CREDITS_INITIAL_AMOUNT || '20')): Promise<void> {
+    try {
+      // Only use hash-based approach
+      await redis.hset(KEYS.USER_CREDITS(userId), {
+        total: credits.toString(),
+        used: '0',
+        lastUpdate: new Date().toISOString(),
+        resetDate: this.getNextMonthFirstDay()
+      });
+      
+      logger.log(`Credits initialized successfully for ${userId}: ${credits}`);
+    } catch (error) {
+      console.error('Error initializing credits:', error);
     }
   },
 
@@ -146,6 +147,8 @@ export const creditUtils = {
       return true; // Failsafe
     }
   },
+
+
 
   // Check if a user has enough credits
   async hasEnoughCredits(userId: string, amount: number): Promise<boolean> {
