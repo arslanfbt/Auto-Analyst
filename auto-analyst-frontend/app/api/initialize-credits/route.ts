@@ -22,7 +22,6 @@ export async function GET(request: NextRequest) {
     // Initialize credits for the user
     await creditUtils.initializeCredits(userId, amount);
     
-    const userId = token.sub;
     
     // This endpoint is for debugging/testing only
     // Don't automatically initialize credits anymore since we removed free plan
