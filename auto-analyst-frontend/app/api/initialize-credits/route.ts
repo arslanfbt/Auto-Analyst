@@ -10,6 +10,18 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
     
+    
+    const userId = token.sub;
+    
+    // Allow custom amount via query param for testing
+    const searchParams = request.nextUrl.searchParams;
+    const amount = searchParams.get('amount')
+      ? parseInt(searchParams.get('amount') as string) 
+      : parseInt(process.env.NEXT_PUBLIC_CREDITS_INITIAL_AMOUNT || '20');
+    
+    // Initialize credits for the user
+    await creditUtils.initializeCredits(userId, amount);
+    
     const userId = token.sub;
     
     // This endpoint is for debugging/testing only
