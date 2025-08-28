@@ -43,6 +43,31 @@ export async function POST(request: Request) {
       const defaultCredits = 20 // No free credits anymore
       await creditUtils.initializeTrialCredits(userIdentifier, 'manual-init', new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString())
       return NextResponse.json({ success: true, credits: defaultCredits })
+    } else if (action === 'add') {
+      // Add credits to user's total
+      if (!amount || amount <= 0) {
+        return NextResponse.json(
+          { error: 'Amount must be greater than 0' },
+          { status: 400 }
+        )
+      }
+      
+      // Get current credits
+      const currentCredits = await creditUtils.getRemainingCredits(userIdentifier)
+      
+      // Add the specified amount to current total
+      const newTotal = currentCredits + amount
+      
+      // Initialize with new total
+      await creditUtils.initializeCredits(userIdentifier, newTotal)
+      
+      const updatedCredits = await creditUtils.getRemainingCredits(userIdentifier)
+      return NextResponse.json({ 
+        success: true, 
+        creditsAdded: amount,
+        newTotal: updatedCredits,
+        message: `Successfully added ${amount} credits`
+      })
     } else if (action === 'deduct') {
       // Deduct credits
       const success = await creditUtils.deductCredits(userIdentifier, amount)
@@ -58,7 +83,7 @@ export async function POST(request: Request) {
     }
     
     return NextResponse.json(
-      { error: 'Invalid action' },
+      { error: 'Invalid action. Use: reset, add, or deduct' },
       { status: 400 }
     )
   } catch (error) {
