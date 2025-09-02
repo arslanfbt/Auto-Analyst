@@ -65,25 +65,20 @@ async def get_all_templates(variant_type: str = Query(default="all", description
         session = session_factory()
         
         try:
-            # Get templates filtered by variant type
-            query = session.query(AgentTemplate).filter(AgentTemplate.is_active == True)
+            # Single query to get all active templates
+            templates = session.query(AgentTemplate).filter(AgentTemplate.is_active == True).all()
             
-            # Filter by variant type if specified
+            # Filter in Python instead of database
             if variant_type and variant_type != "all":
                 if variant_type == "individual":
-                    query = query.filter(AgentTemplate.variant_type.in_(['individual', 'both']))
+                    templates = [t for t in templates if t.variant_type in ['individual', 'both']]
                 elif variant_type == "planner":
-                    query = query.filter(AgentTemplate.variant_type.in_(['planner', 'both']))
-                else:
-                    # Invalid variant_type, default to all
-                    pass
+                    templates = [t for t in templates if t.variant_type in ['planner', 'both']]
             
-            templates = query.all()
-            
-            # Get template IDs for usage calculation
+            # Get template IDs for usage calculation (only for filtered templates)
             template_ids = [template.template_id for template in templates]
             
-            # Calculate global usage counts
+            # Calculate global usage counts (only for the templates we're returning)
             global_usage = get_global_usage_counts(session, template_ids)
             
             return [TemplateResponse(
@@ -96,7 +91,7 @@ async def get_all_templates(variant_type: str = Query(default="all", description
                 icon_url=template.icon_url,
                 is_premium_only=template.is_premium_only,
                 is_active=template.is_active,
-                usage_count=global_usage.get(template.template_id, 0),  # Global usage count
+                usage_count=global_usage.get(template.template_id, 0),
                 created_at=template.created_at,
                 updated_at=template.updated_at
             ) for template in templates]

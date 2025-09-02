@@ -836,9 +836,10 @@ async def get_latest_code(
                 CodeExecution.message_id == message_id
             ).first()
             
-            logger.log_message(f"Execution record: {execution_record.is_successful} for {message_id}", level=logging.INFO)
             
             if execution_record:
+                logger.log_message(f"Execution record: {execution_record.is_successful} for {message_id}", level=logging.INFO)
+
                 # Return the latest code and execution status
                 return {
                     "found": True,
