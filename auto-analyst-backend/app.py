@@ -482,7 +482,7 @@ app.add_middleware(
 RESPONSE_ERROR_INVALID_QUERY = "Please provide a valid query..."
 RESPONSE_ERROR_NO_DATASET = "No dataset is currently loaded. Please link a dataset before proceeding with your analysis."
 DEFAULT_TOKEN_RATIO = 1.5
-REQUEST_TIMEOUT_SECONDS = 120  # Timeout for LLM requests
+REQUEST_TIMEOUT_SECONDS = 30  # Timeout for LLM requests
 MAX_RECENT_MESSAGES = 3
 DB_BATCH_SIZE = 10  # For future batch DB operations
 
