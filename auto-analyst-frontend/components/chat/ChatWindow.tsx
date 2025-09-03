@@ -237,6 +237,8 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
           // Add agent name header for all blocks, including the first one
           combinedCode += `# ${agents[i]} code start\n\n`;
           combinedCode += blocks[i];
+          // Add a print statement in the code to indicate the agent has finished
+          combinedCode += `\nprint("${agents[i]} has done, check code canvas")\n`;
           combinedCode += `\n\n# ${agents[i]} code end\n\n`;
           
           // Add separator between blocks if not the last block
