@@ -8,7 +8,7 @@
 
 Auto-Analyst is a fully open-sourced, modular AI system designed to automate data science workflows — from data cleaning and statistical analysis to machine learning and visualization.
 
-You can try it live at: [https://www.autoanalyst.ai/chat](https://www.autoanalyst.ai/chat)
+You can try it live at: [https://www.autoanalyst.ai/chat](https://www.autoanalyst.ai)
 
 ---
 
