@@ -59,5 +59,4 @@ pymc==5.23.0
 lightgbm==4.6.0
 arviz==0.21.0
 optuna==4.3.0
-shap==0.45.1
 litellm[proxy]

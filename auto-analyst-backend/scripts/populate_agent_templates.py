@@ -116,10 +116,10 @@ def sync_agents_from_config():
     session = session_factory()
     db_type = get_database_type()
     
-    if db_type != "sqlite":
-        print(f"⚠️  This script is designed for SQLite, but detected {db_type}")
-        print("Consider using manage_templates.py for PostgreSQL")
-        return
+    # if db_type != "sqlite":
+    #     print(f"⚠️  This script is designed for SQLite, but detected {db_type}")
+    #     print("Consider using manage_templates.py for PostgreSQL")
+    #     return
     
     try:
         # Load configuration

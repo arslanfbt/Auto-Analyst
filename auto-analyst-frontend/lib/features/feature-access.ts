@@ -48,9 +48,12 @@ function isSubscriptionActive(subscription: UserSubscription | null): boolean {
   const tier = planToTier(subscription);
   if (tier === 'free') return true;
   
-  // Accept both 'active' and 'trialing' as active statuses
-  // This allows trial users to access paid features immediately
-  return subscription.status === 'active' || subscription.status === 'trialing';
+  // Accept 'active', 'trialing', 'cancelling', and 'cancel_at_period_end' as active statuses
+  // This allows users who are cancelling to keep access until their billing period ends
+  return subscription.status === 'active' || 
+         subscription.status === 'trialing' || 
+         subscription.status === 'cancelling' || 
+         subscription.status === 'cancel_at_period_end';
 }
 
 export function hasFeatureAccess(
