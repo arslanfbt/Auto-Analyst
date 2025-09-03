@@ -4,6 +4,8 @@ import asyncio
 from dotenv import load_dotenv
 import logging
 from src.utils.logger import Logger
+import json
+
 load_dotenv()
 
 logger = Logger("agents", see_time=True, console_log=False)
@@ -626,9 +628,9 @@ class planner_module(dspy.Module):
         
 
         self.planners = {
-                         "advanced":dspy.asyncify(dspy.ChainOfThought(advanced_query_planner)),
-                         "intermediate":dspy.asyncify(dspy.ChainOfThought(intermediate_query_planner)),
-                         "basic":dspy.asyncify(dspy.ChainOfThought(basic_query_planner)),
+                         "advanced":dspy.asyncify(dspy.Predict(advanced_query_planner)),
+                         "intermediate":dspy.asyncify(dspy.Predict(intermediate_query_planner)),
+                         "basic":dspy.asyncify(dspy.Predict(basic_query_planner)),
                         #  "unrelated":dspy.Predict(self.basic_qa_agent)
                          }
         self.planner_desc = {
@@ -642,76 +644,89 @@ class planner_module(dspy.Module):
         self.allocator = dspy.Predict("goal,planner_desc,dataset->exact_word_complexity,reasoning")
 
     async def forward(self, goal, dataset, Agent_desc):
-        # Check if we have any agents available
-        if not Agent_desc or Agent_desc == "[]" or len(str(Agent_desc).strip()) < 10:
+
+        if not Agent_desc or Agent_desc == "[]":
             logger.log_message("No agents available for planning", level=logging.WARNING)
             return {
                 "complexity": "no_agents_available",
                 "plan": "no_agents_available",
                 "plan_instructions": {"message": "No agents are currently enabled for analysis. Please enable at least one agent (preprocessing, statistical analysis, machine learning, or visualization) in your template preferences to proceed with data analysis."}
             }
-        
-        try:
-            complexity = self.allocator(goal=goal, planner_desc=str(self.planner_desc), dataset=str(dataset))
-            # If complexity is unrelated, return basic_qa_agent
-            if complexity.exact_word_complexity.strip() == "unrelated":
-                return {
-                    "complexity": complexity.exact_word_complexity.strip(),
-                    "plan": "basic_qa_agent", 
-                    "plan_instructions": "{'basic_qa_agent':'Not a data related query, please ask a data related-query'}"
-                }
+        lm = dspy.LM('openai/gpt-4o-mini',max_tokens=400)
+        with dspy.context(lm= lm):
             
-            # Try to get plan with determined complexity
-            try:
-                logger.log_message(f"Attempting to plan with complexity: {complexity.exact_word_complexity.strip()}", level=logging.DEBUG)
-                plan = await self.planners[complexity.exact_word_complexity.strip()](goal=goal, dataset=dataset, Agent_desc=Agent_desc)
-                logger.log_message(f"Plan generated successfully: {plan}", level=logging.DEBUG)
-                
-                # Check if the planner returned no_agents_available
-                if hasattr(plan, 'plan') and 'no_agents_available' in str(plan.plan):
-                    logger.log_message("Planner returned no_agents_available", level=logging.WARNING)
-                    output = {
-                        "complexity": "no_agents_available",
-                        "plan": "no_agents_available",
-                        "plan_instructions": {"message": "No agents are currently enabled for analysis. Please enable at least one agent (preprocessing, statistical analysis, machine learning, or visualization) in your template preferences to proceed with data analysis."}
-                    }
-                else:
-                    output = {
-                        "complexity": complexity.exact_word_complexity.strip(),
-                        "plan": dict(plan)
-                    }
+            # Check if we have any agents available
 
+            
+            try:
+            
+                complexity = self.allocator(goal=goal, planner_desc=str(self.planner_desc), dataset=str(dataset))
+                # If complexity is unrelated, return basic_qa_agent
+                if complexity.exact_word_complexity.strip() == "unrelated":
+                    return {
+                        "complexity": complexity.exact_word_complexity.strip(),
+                        "plan": "basic_qa_agent", 
+                        "plan_instructions": "{'basic_qa_agent':'Not a data related query, please ask a data related-query'}"
+                    }
+                
+                
             except Exception as e:
-                logger.log_message(f"Error with {complexity.exact_word_complexity.strip()} planner, falling back to intermediate: {str(e)}", level=logging.WARNING)
+                logger.log_message(f"Error in planner forward: {str(e)}", level=logging.ERROR)
+                # Return error response
+                return {
+                    "complexity": "error",
+                    "plan": "basic_qa_agent",
+                    "plan_instructions": {"error": f"Planning error in agents: {str(e)} + {dspy.settings.lm.model}"}
+                }
                 
-                # Fallback to intermediate planner
-                plan = await self.planners["intermediate"](goal=goal, dataset=dataset, Agent_desc=Agent_desc)
-                logger.log_message(f"Fallback plan generated: {plan}", level=logging.DEBUG)
-                
-                # Check if the fallback planner also returned no_agents_available
-                if hasattr(plan, 'plan') and 'no_agents_available' in str(plan.plan):
-                    logger.log_message("Fallback planner also returned no_agents_available", level=logging.WARNING)
-                    output = {
-                        "complexity": "no_agents_available",
-                        "plan": "no_agents_available", 
-                        "plan_instructions": {"message": "No agents are currently enabled for analysis. Please enable at least one agent (preprocessing, statistical analysis, machine learning, or visualization) in your template preferences to proceed with data analysis."}
-                    }
-                else:
-                    output = {
-                        "complexity": "intermediate",
-                        "plan": dict(plan)
-                    }
-                    
-        except Exception as e:
-            logger.log_message(f"Error in planner forward: {str(e)}", level=logging.ERROR)
-            # Return error response
-            return {
-                "complexity": "error",
-                "plan": "basic_qa_agent",
-                "plan_instructions": {"error": f"Planning error in agents: {str(e)} + {dspy.settings.lm.model}"}
-            }
+                # Try to get plan with determined complexity
+        # try:
+        logger.log_message(f"Attempting to plan with complexity: {complexity.exact_word_complexity.strip()}", level=logging.DEBUG)
+        with dspy.context(lm = dspy.LM('openai/gpt-4o-mini',max_tokens=3000)):
+            plan = await self.planners[complexity.exact_word_complexity.strip()](goal=goal, dataset=dataset, Agent_desc=Agent_desc)
+        logger.log_message(f"Plan generated successfully: {plan}", level=logging.DEBUG)
         
-        return output
+        # Check if the planner returned no_agents_available
+        if hasattr(plan, 'plan') and 'no_agents_available' in str(plan.plan):
+            logger.log_message("Planner returned no_agents_available", level=logging.WARNING)
+            output = {
+                "complexity": "no_agents_available",
+                "plan": "no_agents_available",
+                "plan_instructions": {"message": "No agents are currently enabled for analysis. Please enable at least one agent (preprocessing, statistical analysis, machine learning, or visualization) in your template preferences to proceed with data analysis."}
+            }
+        else:
+            output = {
+                "complexity": complexity.exact_word_complexity.strip(),
+                "plan": plan.plan,
+                "plan_instructions": plan.plan_instructions
+            }
+
+        # except Exception as e:
+        #     logger.log_message(f"Error with {complexity.exact_word_complexity.strip()} planner, falling back to basic: {str(e)}", level=logging.WARNING)
+            
+        #     # Fallback to basic planner
+        #     with dspy.context(lm = dspy.LM('openai/gpt-4o-mini',max_tokens=3000)):
+        #         plan = await self.planners["basic"](goal=goal, dataset=dataset, Agent_desc=Agent_desc)
+        #     logger.log_message(f"Fallback plan generated: {plan}", level=logging.DEBUG)
+            
+        #     # Check if the fallback planner also returned no_agents_available
+        #     if hasattr(plan, 'plan') and 'no_agents_available' in str(plan.plan):
+        #         logger.log_message("Fallback planner also returned no_agents_available", level=logging.WARNING)
+        #         output = {
+        #             "complexity": "no_agents_available",
+        #             "plan": "no_agents_available", 
+        #             "plan_instructions": {"message": "No agents are currently enabled for analysis. Please enable at least one agent (preprocessing, statistical analysis, machine learning, or visualization) in your template preferences to proceed with data analysis."}
+        #         }
+        #     else:
+        #         output = {
+        #             "complexity": "basic",
+        #             "plan": plan.plan,
+        #             "plan_instructions":plan.plan_instructions
+        #         }
+                        
+
+            
+            return output
 
 
 
@@ -1399,7 +1414,7 @@ class auto_analyst_ind(dspy.Module):
             
         except Exception as e:
             # logger.log_message(f"[EXECUTE] Error executing agent {specified_agent}: {str(e)}", level=logging.ERROR)
-            import traceback
+
             # logger.log_message(f"[EXECUTE] Full traceback: {traceback.format_exc()}", level=logging.ERROR)
             return specified_agent.strip(), {"error": str(e)}
 
@@ -1580,7 +1595,7 @@ class auto_analyst(dspy.Module):
                         continue
                         
                     # Add template agent to agents dict
-                    self.agents[template_name] = dspy.asyncify(dspy.ChainOfThought(signature))
+                    self.agents[template_name] = dspy.asyncify(dspy.Predict(signature))
                     
                     # Determine if this is a visualization agent based on database category
                     is_viz_agent = False
@@ -1861,20 +1876,7 @@ class auto_analyst(dspy.Module):
         except Exception as e:
             logger.log_message(f"Error in _track_agent_usage for {agent_name}: {str(e)}", level=logging.ERROR)
 
-    async def execute_agent(self, agent_name, inputs):
-        """Execute a single agent with given inputs"""
-        
-        try:
-            result = await self.agents[agent_name.strip()](**inputs)
-            
-            # Track usage for custom agents and templates
-            await self._track_agent_usage(agent_name.strip())
-            
-            logger.log_message(f"Agent {agent_name} execution completed", level=logging.DEBUG)
-            return agent_name.strip(), dict(result)
-        except Exception as e:
-            logger.log_message(f"Error in execute_agent for {agent_name}: {str(e)}", level=logging.ERROR)
-            return agent_name.strip(), {"error": str(e)}
+
 
     async def get_plan(self, query):
         """Get the analysis plan"""
@@ -1885,51 +1887,51 @@ class auto_analyst(dspy.Module):
         dict_['Agent_desc'] = str(self.agent_desc)
         
         
-        try:
-            module_return = await self.planner(
-                goal=dict_['goal'], 
-                dataset=dict_['dataset'], 
-                Agent_desc=dict_['Agent_desc']
-            )
-            logger.log_message(f"Module return: {module_return}", level=logging.INFO)
-            
-            # Handle different plan formats
-            plan = module_return['plan']
-            logger.log_message(f"Plan from module_return: {plan}, type: {type(plan)}", level=logging.INFO)
-            
-            # If plan is a string (agent name), convert to proper format
-            if isinstance(plan, str):
-                if 'complexity' in module_return:
-                    complexity = module_return['complexity']
-                else:
-                    complexity = 'basic'
-                    
-                plan_dict = {
-                    'plan': plan,
-                    'complexity': complexity
-                }
-                
-                # Add plan_instructions if available
-                if 'plan_instructions' in module_return:
-                    plan_dict['plan_instructions'] = module_return['plan_instructions']
-                else:
-                    plan_dict['plan_instructions'] = {}
+        # try:
+        module_return = await self.planner(
+            goal=dict_['goal'], 
+            dataset=dict_['dataset'], 
+            Agent_desc=dict_['Agent_desc']
+        )
+        logger.log_message(f"Module return: {module_return}", level=logging.INFO)
+        
+        # Handle different plan formats
+        plan = module_return['plan']
+        logger.log_message(f"Plan from module_return: {plan}, type: {type(plan)}", level=logging.INFO)
+        
+        # If plan is a string (agent name), convert to proper format
+        if isinstance(plan, str):
+            if 'complexity' in module_return:
+                complexity = module_return['complexity']
             else:
-                # If plan is already a dict, use it directly
-                plan_dict = dict(plan) if not isinstance(plan, dict) else plan
-                if 'complexity' in module_return:
-                    complexity = module_return['complexity']
-                else:
-                    complexity = 'basic'
-                plan_dict['complexity'] = complexity
+                complexity = 'basic'
                 
-            logger.log_message(f"Final plan dict: {plan_dict}", level=logging.INFO)
-
-            return plan_dict
+            plan_dict = {
+                'plan': plan,
+                'complexity': complexity
+            }
             
-        except Exception as e:
-            logger.log_message(f"Error in get_plan: {str(e)}", level=logging.ERROR)
-            raise
+            # Add plan_instructions if available
+            if 'plan_instructions' in module_return:
+                plan_dict['plan_instructions'] = module_return['plan_instructions']
+            else:
+                plan_dict['plan_instructions'] = {}
+        else:
+            # If plan is already a dict, use it directly
+            plan_dict = dict(plan) if not isinstance(plan, dict) else plan
+            if 'complexity' in module_return:
+                complexity = module_return['complexity']
+            else:
+                complexity = 'basic'
+            plan_dict['complexity'] = complexity
+            
+        logger.log_message(f"Final plan dict: {plan_dict}", level=logging.INFO)
+
+        return plan_dict
+            
+        # except Exception as e:
+        #     logger.log_message(f"Error in get_plan: {str(e)}", level=logging.ERROR)
+        #     raise
 
     async def execute_plan(self, query, plan):
         """Execute the plan and yield results as they complete"""
@@ -1940,7 +1942,6 @@ class auto_analyst(dspy.Module):
         dict_['hint'] = []
         dict_['goal'] = query
         
-        import json
 
         # Clean and split the plan string into agent names
         plan_text = plan.get("plan", "").lower().replace("plan:", "").strip()
@@ -1953,6 +1954,7 @@ class auto_analyst(dspy.Module):
             return 
 
         plan_list = [agent.strip() for agent in plan_text.split("->") if agent.strip()]
+
         logger.log_message(f"Plan list: {plan_list}", level=logging.INFO)
         # Parse the attached plan_instructions into a dict
         raw_instr = plan.get("plan_instructions", {})
@@ -1969,15 +1971,14 @@ class auto_analyst(dspy.Module):
 
 
         # Check if we have no valid agents to execute
-        if not plan_list or all(agent not in self.agents for agent in plan_list):
-            yield "plan_not_found", None, {"error": "No valid agents found in plan"}
+        if not plan_list:
+            if len(plan_text) != 0: 
+                yield "plan_not_formatted_correctly", str(plan_text), {'error': "There was a error in the formatting"}
+
             return
-        
+
         # Execute agents in sequence
         for agent_name in plan_list:
-            if agent_name not in self.agents:
-                yield agent_name, {}, {"error": f"Agent '{agent_name}' not available"}
-                continue
                         
             try:
                 # Prepare inputs for the agent
@@ -1985,18 +1986,23 @@ class auto_analyst(dspy.Module):
                 
                 # Add plan instructions if available for this agent
                 if agent_name in plan_instructions:
-                    inputs['plan_instructions'] = json.dumps(plan_instructions[agent_name])
+                    inputs['plan_instructions'] = plan_instructions[agent_name]
                 else:
-                    inputs['plan_instructions'] = ""
+                    inputs['plan_instructions'] = str(plan_instructions).split(agent_name)[1].split('agent')[0]
                 
                 # logger.log_message(f"Agent inputs for {agent_name}: {inputs}", level=logging.INFO)
+            
+
+                result = await self.agents[agent_name.strip()](**inputs)
                 
+                # Track usage for custom agents and templates
+                await self._track_agent_usage(agent_name.strip())
                 # Execute the agent
-                agent_result_name, response = await self.execute_agent(agent_name, inputs)
+            
                 
-                yield agent_result_name, inputs, response
+                yield agent_name, inputs, result
                     
             except Exception as e:
-                    logger.log_message(f"Error executing agent {agent_name}: {str(e)}", level=logging.ERROR)
-                    yield agent_name, {}, {"error": f"Error executing {agent_name}: {str(e)}"}
+                logger.log_message(f"Error executing agent {agent_name}: {str(e)}", level=logging.ERROR)
+                yield agent_name, {}, {"error": f"Error executing {agent_name}: {str(e)}"}
 

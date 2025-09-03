@@ -153,7 +153,7 @@ DEFAULT_MODEL_CONFIG = {
     "model": os.getenv("MODEL_NAME", "01"),
     "api_key": os.getenv("OPENAI_API_KEY"),
     "temperature": float(os.getenv("TEMPERATURE", 1.0)),
-    "max_tokens": int(os.getenv("MAX_TOKENS", 6000))
+    "max_tokens": int(os.getenv("MAX_TOKENS", 6000)), "cache": False
 }
 
 # Create default LM config but don't set it globally
@@ -162,7 +162,7 @@ if DEFAULT_MODEL_CONFIG["provider"].lower() == "groq":
         model=f"groq/{DEFAULT_MODEL_CONFIG["model"]}",
         api_key=DEFAULT_MODEL_CONFIG["api_key"],
         temperature=DEFAULT_MODEL_CONFIG["temperature"],
-        max_tokens=DEFAULT_MODEL_CONFIG["max_tokens"]
+        max_tokens=DEFAULT_MODEL_CONFIG["max_tokens"], cache=False
     )
     
 elif DEFAULT_MODEL_CONFIG["provider"].lower() == "gemini":
@@ -170,14 +170,14 @@ elif DEFAULT_MODEL_CONFIG["provider"].lower() == "gemini":
         model=f"gemini/{DEFAULT_MODEL_CONFIG['model']}",
         api_key=DEFAULT_MODEL_CONFIG["api_key"],
         temperature=DEFAULT_MODEL_CONFIG["temperature"],
-        max_tokens=DEFAULT_MODEL_CONFIG["max_tokens"]
+        max_tokens=DEFAULT_MODEL_CONFIG["max_tokens"], cache=False
     )
 elif DEFAULT_MODEL_CONFIG["provider"].lower() == "anthropic":
     default_lm = dspy.LM(
         model=f"anthropic/{DEFAULT_MODEL_CONFIG["model"]}",
         api_key=DEFAULT_MODEL_CONFIG["api_key"],
         temperature=DEFAULT_MODEL_CONFIG["temperature"],
-        max_tokens=DEFAULT_MODEL_CONFIG["max_tokens"]
+        max_tokens=DEFAULT_MODEL_CONFIG["max_tokens"], cache=False
     )
 else:
     if DEFAULT_MODEL_CONFIG['model'].lower() in ['openai/gpt-5', 'openai/gpt-5-mini','openai/gpt-5-nano']:
@@ -186,14 +186,14 @@ else:
         api_key=DEFAULT_MODEL_CONFIG["api_key"],
         temperature=DEFAULT_MODEL_CONFIG["temperature"],
         max_tokens=None,
-        max_completion_tokens=10000
+        max_completion_tokens= DEFAULT_MODEL_CONFIG["max_tokens"], cache=False
         )
     else:
         default_lm = dspy.LM(
             model=f"openai/{DEFAULT_MODEL_CONFIG["model"]}",
             api_key=DEFAULT_MODEL_CONFIG["api_key"],
             temperature=DEFAULT_MODEL_CONFIG["temperature"],
-            max_tokens=DEFAULT_MODEL_CONFIG["max_tokens"]
+            max_tokens=DEFAULT_MODEL_CONFIG["max_tokens"], cache=False
         )
     
 # lm = dspy.LM('openai/gpt-4o-mini', api_key=os.getenv("OPENAI_API_KEY"))
@@ -214,7 +214,7 @@ def get_session_lm(session_state):
                     model=f"groq/{model_config.get("model", DEFAULT_MODEL_CONFIG["model"])}",
                     api_key=model_config.get("api_key", DEFAULT_MODEL_CONFIG["api_key"]),
                     temperature=model_config.get("temperature", DEFAULT_MODEL_CONFIG["temperature"]),
-                    max_tokens=model_config.get("max_tokens", DEFAULT_MODEL_CONFIG["max_tokens"])
+                    max_tokens=model_config.get("max_tokens", DEFAULT_MODEL_CONFIG["max_tokens"]), cache=False
                 )
             elif provider == "anthropic":
                 logger.log_message(f"Using anthropic model: {model_config.get('model', DEFAULT_MODEL_CONFIG['model'])}", level=logging.INFO)
@@ -222,7 +222,7 @@ def get_session_lm(session_state):
                     model=f"anthropic/{model_config.get("model", DEFAULT_MODEL_CONFIG["model"])}",
                     api_key=model_config.get("api_key", DEFAULT_MODEL_CONFIG["api_key"]),
                     temperature=model_config.get("temperature", DEFAULT_MODEL_CONFIG["temperature"]),
-                    max_tokens=model_config.get("max_tokens", DEFAULT_MODEL_CONFIG["max_tokens"])
+                    max_tokens=model_config.get("max_tokens", DEFAULT_MODEL_CONFIG["max_tokens"]), cache=False
                 )
             elif provider == "gemini":
                 logger.log_message(f"Using gemini model: {model_config.get('model', DEFAULT_MODEL_CONFIG['model'])}", level=logging.INFO)
@@ -230,7 +230,7 @@ def get_session_lm(session_state):
                     model=f"gemini/{model_config.get('model', DEFAULT_MODEL_CONFIG['model'])}",
                     api_key=model_config.get("api_key", DEFAULT_MODEL_CONFIG["api_key"]),
                     temperature=model_config.get("temperature", DEFAULT_MODEL_CONFIG["temperature"]),
-                    max_tokens=model_config.get("max_tokens", DEFAULT_MODEL_CONFIG["max_tokens"])
+                    max_tokens=model_config.get("max_tokens", DEFAULT_MODEL_CONFIG["max_tokens"]), cache=False
                 )
             else:  # OpenAI is the default
                 model_name = model_config.get("model", DEFAULT_MODEL_CONFIG["model"])
@@ -246,7 +246,7 @@ def get_session_lm(session_state):
                         api_key=model_config.get("api_key", DEFAULT_MODEL_CONFIG["api_key"]),
                         temperature=model_config.get("temperature", DEFAULT_MODEL_CONFIG["temperature"]),
                         max_tokens=None,
-                        max_completion_tokens=10000
+                        max_completion_tokens=model_config.get("max_tokens", 3000), cache=False
                     )
                 else:
                     # For other models, keep using max_tokens as parameter name
@@ -254,7 +254,7 @@ def get_session_lm(session_state):
                         model=f"openai/{model_name}",
                         api_key=model_config.get("api_key", DEFAULT_MODEL_CONFIG["api_key"]),
                         temperature=model_config.get("temperature", DEFAULT_MODEL_CONFIG["temperature"]),
-                        max_tokens=max_token_value
+                        max_tokens=max_token_value, cache=False
                     )
 
 
@@ -482,7 +482,7 @@ app.add_middleware(
 RESPONSE_ERROR_INVALID_QUERY = "Please provide a valid query..."
 RESPONSE_ERROR_NO_DATASET = "No dataset is currently loaded. Please link a dataset before proceeding with your analysis."
 DEFAULT_TOKEN_RATIO = 1.5
-REQUEST_TIMEOUT_SECONDS = 120  # Timeout for LLM requests
+REQUEST_TIMEOUT_SECONDS = 30  # Timeout for LLM requests
 MAX_RECENT_MESSAGES = 3
 DB_BATCH_SIZE = 10  # For future batch DB operations
 
@@ -923,115 +923,159 @@ async def _generate_streaming_responses(session_state: dict, query: str, session
     # Add chat context from previous messages
     enhanced_query = _prepare_query_with_context(query, session_state)
     
-    # Use the session model for this specific request
-    with dspy.context(lm=session_lm):
-        try:
-            # Get the plan - planner is now async, so we need to await it
-            plan_response = await session_state["ai_system"].get_plan(enhanced_query)
-            
-            plan_description = format_response_to_markdown(
-                {"analytical_planner": plan_response}, 
-                dataframe=session_state["current_df"]
-            )
-            
-            # Check if plan is valid
-            if plan_description == RESPONSE_ERROR_INVALID_QUERY:
-                yield json.dumps({
-                    "agent": "Analytical Planner",
-                    "content": plan_description,
-                    "status": "error"
-                }) + "\n"
-                return
-            
+    try:
+        # Get the plan - planner is now async, so we need to await it
+        plan_response = await session_state["ai_system"].get_plan(enhanced_query)
+        
+        plan_description = format_response_to_markdown(
+            {"analytical_planner": plan_response}, 
+            dataframe=session_state["current_df"]
+        )
+        
+        # Check if plan is valid
+        if plan_description == RESPONSE_ERROR_INVALID_QUERY:
             yield json.dumps({
                 "agent": "Analytical Planner",
                 "content": plan_description,
-                "status": "success" if plan_description else "error"
-            }) + "\n"
-            
-            # Track planner usage
-            if session_state.get("user_id"):
-                planner_tokens = _estimate_tokens(ai_manager=app.state.ai_manager, 
-                                                input_text=enhanced_query, 
-                                                output_text=plan_description)
-                
-                usage_records.append(_create_usage_record(
-                    session_state=session_state,
-                    model_name=session_state.get("model_config", DEFAULT_MODEL_CONFIG)["model"],
-                    prompt_tokens=planner_tokens["prompt"],
-                    completion_tokens=planner_tokens["completion"],
-                    query_size=len(enhanced_query),
-                    response_size=len(plan_description),
-                    processing_time_ms=int((time.time() - overall_start_time) * 1000),
-                    is_streaming=False
-                ))
-            
-            # Execute the plan with well-managed concurrency
-            async for agent_name, inputs, response in _execute_plan_with_timeout(
-                session_state["ai_system"], enhanced_query, plan_response):
-                
-                if agent_name == "plan_not_found":
-                    yield json.dumps({
-                        "agent": "Analytical Planner",
-                        "content": "**No plan found**\n\nPlease try again with a different query or try using a different model.",
-                        "status": "error"
-                    }) + "\n"
-                    return
-                
-                formatted_response = format_response_to_markdown(
-                    {agent_name: response}, 
-                    dataframe=session_state["current_df"]
-                ) or "No response generated"
-
-                if formatted_response == RESPONSE_ERROR_INVALID_QUERY:
-                    yield json.dumps({
-                        "agent": agent_name,
-                        "content": formatted_response,
-                        "status": "error"
-                    }) + "\n"
-                    return
-
-                # Send response chunk
-                yield json.dumps({
-                    "agent": agent_name.split("__")[0] if "__" in agent_name else agent_name,
-                    "content": formatted_response,
-                    "status": "success" if response else "error"
-                }) + "\n"
-                
-                # Track agent usage for future batch DB write
-                if session_state.get("user_id"):
-                    agent_tokens = _estimate_tokens(
-                        ai_manager=app.state.ai_manager,
-                        input_text=str(inputs),
-                        output_text=str(response)
-                    )
-                    
-                    # Get appropriate model name for code combiner
-                    if "code_combiner_agent" in agent_name and "__" in agent_name:
-                        provider = agent_name.split("__")[1]
-                        model_name = _get_model_name_for_provider(provider)
-                    else:
-                        model_name = session_state.get("model_config", DEFAULT_MODEL_CONFIG)["model"]
-
-                    usage_records.append(_create_usage_record(
-                        session_state=session_state,
-                        model_name=model_name,
-                        prompt_tokens=agent_tokens["prompt"],
-                        completion_tokens=agent_tokens["completion"],
-                        query_size=len(str(inputs)),
-                        response_size=len(str(response)),
-                        processing_time_ms=int((time.time() - overall_start_time) * 1000),
-                        is_streaming=True
-                    ))
-                        
-        except asyncio.TimeoutError:
-            yield json.dumps({
-                "agent": "planner",
-                "content": "The request timed out. Please try a simpler query.",
                 "status": "error"
             }) + "\n"
             return
-        except Exception as e:
+        
+        yield json.dumps({
+            "agent": "Analytical Planner",
+            "content": plan_description,
+            "status": "success" if plan_description else "error"
+        }) + "\n"
+        
+        # Track planner usage
+        if session_state.get("user_id"):
+            planner_tokens = _estimate_tokens(ai_manager=app.state.ai_manager, 
+                                            input_text=enhanced_query, 
+                                            output_text=plan_description)
+            
+            usage_records.append(_create_usage_record(
+                session_state=session_state,
+                model_name=session_state.get("model_config", DEFAULT_MODEL_CONFIG)["model"],
+                prompt_tokens=planner_tokens["prompt"],
+                completion_tokens=planner_tokens["completion"],
+                query_size=len(enhanced_query),
+                response_size=len(plan_description),
+                processing_time_ms=int((time.time() - overall_start_time) * 1000),
+                is_streaming=False
+            ))
+        
+        logger.log_message(f"Plan response: {plan_response}", level=logging.INFO)
+        logger.log_message(f"Plan response type: {type(plan_response)}", level=logging.INFO)
+
+        # Check if plan_response is valid
+        # if not plan_response or not isinstance(plan_response, dict):
+        #     yield json.dumps({
+        #         "agent": "Analytical Planner",
+        #         "content": "**Error: Invalid plan response**\n\nResponse: " + str(plan_response),
+        #         "status": "error"
+        #     }) + "\n"
+        #     return
+        
+        # Execute the plan with well-managed concurrency
+        with dspy.context(lm = session_lm):
+            try:
+                
+                async for agent_name, inputs, response in session_state["ai_system"].execute_plan(enhanced_query, plan_response):
+                    
+                    if agent_name == "plan_not_found":
+                        yield json.dumps({
+                            "agent": "Analytical Planner",
+                            "content": "**No plan found**\n\nPlease try again with a different query or try using a different model.",
+                            "status": "error"
+                        }) + "\n"
+                        return
+                        
+                    if agent_name == "plan_not_formated_correctly":
+                        yield json.dumps({
+                            "agent": "Analytical Planner",
+                            "content": "**Something went wrong with formatting, retry the query!**",
+                            "status": "error"
+                        }) + "\n"
+                        return
+                    
+
+                    formatted_response = format_response_to_markdown(
+                        {agent_name: response}, 
+                        dataframe=session_state["current_df"]
+                    ) 
+
+                    yield json.dumps({
+                        "agent": agent_name.split("__")[0] if "__" in agent_name else agent_name,
+                        "content": formatted_response,
+                        "status": "success" if response else "error"
+                    }) + "\n"
+
+                    # Handle agent errors
+                    if isinstance(response, dict) and "error" in response:
+                        yield json.dumps({
+                            "agent": agent_name,
+                            "content": f"**Error in {agent_name}**: {response['error']}",
+                            "status": "error"
+                        }) + "\n"
+                        continue  # Continue with next agent instead of returning
+
+
+
+                    if formatted_response == RESPONSE_ERROR_INVALID_QUERY:
+                        yield json.dumps({
+                            "agent": agent_name,
+                            "content": formatted_response,
+                            "status": "error"
+                        }) + "\n"
+                        continue  # Continue with next agent instead of returning
+
+                    # Send response chunk
+
+                    
+                    # Track agent usage for future batch DB write
+                    if session_state.get("user_id"):
+                        agent_tokens = _estimate_tokens(
+                            ai_manager=app.state.ai_manager,
+                            input_text=str(inputs),
+                            output_text=str(response)
+                        )
+                        
+                        # Get appropriate model name for code combiner
+                        if "code_combiner_agent" in agent_name and "__" in agent_name:
+                            provider = agent_name.split("__")[1]
+                            model_name = _get_model_name_for_provider(provider)
+                        else:
+                            model_name = session_state.get("model_config", DEFAULT_MODEL_CONFIG)["model"]
+
+                        usage_records.append(_create_usage_record(
+                            session_state=session_state,
+                            model_name=model_name,
+                            prompt_tokens=agent_tokens["prompt"],
+                            completion_tokens=agent_tokens["completion"],
+                            query_size=len(str(inputs)),
+                            response_size=len(str(response)),
+                            processing_time_ms=int((time.time() - overall_start_time) * 1000),
+                            is_streaming=True
+                        ))
+                        
+            except asyncio.TimeoutError:
+                yield json.dumps({
+                    "agent": "planner",
+                    "content": "The request timed out. Please try a simpler query.",
+                    "status": "error"
+                }) + "\n"
+                return
+                
+            except Exception as e:
+                logger.log_message(f"Error executing plan: {str(e)}", level=logging.ERROR)
+                yield json.dumps({
+                    "agent": "planner",
+                    "content": f"An error occurred while executing the plan: {str(e)}",
+                    "status": "error"
+                }) + "\n"
+                return
+                
+    except Exception as e:
             logger.log_message(f"Error in streaming response: {str(e)}", level=logging.ERROR)
             yield json.dumps({
                 "agent": "planner",
@@ -1093,18 +1137,6 @@ def _get_model_name_for_provider(provider: str) -> str:
     }
     return provider_model_map.get(provider, "o3-mini")
 
-
-async def _execute_plan_with_timeout(ai_system, enhanced_query, plan_response):
-    """Execute the plan with timeout handling for each step"""
-    try:
-        logger.log_message(f"Plan response: {plan_response}", level=logging.INFO)
-        # Use the async generator from execute_plan directly
-        async for agent_name, inputs, response in ai_system.execute_plan(enhanced_query, plan_response):
-            # Yield results as they come
-            yield agent_name, inputs, response
-    except Exception as e:
-        logger.log_message(f"Error executing plan: {str(e)}", level=logging.ERROR)
-        yield "error", None, {"error": "An error occurred during plan execution"}
 
 
 # Add an endpoint to list available agents
