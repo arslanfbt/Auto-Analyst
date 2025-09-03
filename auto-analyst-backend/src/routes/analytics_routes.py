@@ -1181,75 +1181,115 @@ async def get_detailed_code_executions(
     with filtering options.
     """
     logger.log_message(f"Detailed code executions requested for period: {period}", logging.INFO)
-    start_date, end_date = get_date_range(period)
     
-    # Build the query with filters
-    query = db.query(CodeExecution).filter(
-        CodeExecution.created_at.between(start_date, end_date)
-    )
-    
-    # Apply optional filters
-    if success_filter is not None:
-        query = query.filter(CodeExecution.is_successful == success_filter)
-    
-    if user_id:
-        query = query.filter(CodeExecution.user_id == user_id)
-    
-    if model_name:
-        query = query.filter(CodeExecution.model_name == model_name)
-    
-    # Order by most recent first and limit results
-    query = query.order_by(desc(CodeExecution.created_at)).limit(limit)
-    
-    # Execute query
-    executions = query.all()
-    
-    # Process results
-    detailed_executions = []
-    for execution in executions:
-        # Parse failed agents and error messages if available
-        failed_agents_list = []
-        error_messages_dict = {}
+    try:
+        start_date, end_date = get_date_range(period)
         
+        # Add this at the beginning of the function, right after the logger.log_message line:
+        logger.log_message(f"Database session type: {type(db)}", logging.INFO)
+        logger.log_message(f"Database URL: {db.bind.url if hasattr(db, 'bind') and db.bind else 'No bind'}", logging.INFO)
+
+        # Test if we can access the CodeExecution model
         try:
-            if execution.failed_agents:
-                failed_agents_list = json.loads(execution.failed_agents)
-            
-            if execution.error_messages:
-                error_messages_dict = json.loads(execution.error_messages)
-        except (json.JSONDecodeError, TypeError):
-            logger.log_message(f"Error parsing JSON data for execution {execution.execution_id}", logging.ERROR)
+            test_count = db.query(CodeExecution).count()
+            logger.log_message(f"Total CodeExecution records in database: {test_count}", logging.INFO)
+        except Exception as test_error:
+            logger.log_message(f"Database connection test failed: {str(test_error)}", logging.ERROR)
+            raise HTTPException(
+                status_code=500,
+                detail=f"Database connection test failed: {str(test_error)}"
+            )
         
-        # Format the execution data
-        detailed_executions.append({
-            "execution_id": execution.execution_id,
-            "message_id": execution.message_id,
-            "chat_id": execution.chat_id,
-            "user_id": execution.user_id,
-            "created_at": execution.created_at.isoformat(),
-            "updated_at": execution.updated_at.isoformat() if execution.updated_at else None,
-            "is_successful": execution.is_successful,
-            "model_info": {
-                "provider": execution.model_provider,
-                "name": execution.model_name,
-                "temperature": execution.model_temperature,
-                "max_tokens": execution.model_max_tokens
-            },
-            "failed_agents": failed_agents_list,
-            "error_messages": error_messages_dict,
-            # Include trimmed code snippets
-            "initial_code_preview": execution.initial_code[:500] + "..." if execution.initial_code and len(execution.initial_code) > 500 else execution.initial_code,
-            "latest_code_preview": execution.latest_code[:500] + "..." if execution.latest_code and len(execution.latest_code) > 500 else execution.latest_code,
-        })
-    
-    logger.log_message(f"Retrieved {len(detailed_executions)} detailed code executions", logging.INFO)
-    return {
-        "period": period,
-        "start_date": start_date.strftime('%Y-%m-%d'),
-        "end_date": end_date.strftime('%Y-%m-%d'),
-        "count": len(detailed_executions),
-        "executions": detailed_executions
-    }
+        # Build the query with filters
+        query = db.query(CodeExecution).filter(
+            CodeExecution.created_at.between(start_date, end_date)
+        )
+        
+        # Apply optional filters
+        if success_filter is not None:
+            query = query.filter(CodeExecution.is_successful == success_filter)
+        
+        if user_id:
+            query = query.filter(CodeExecution.user_id == user_id)
+        
+        if model_name:
+            query = query.filter(CodeExecution.model_name == model_name)
+        
+        # Order by most recent first and limit results
+        query = query.order_by(desc(CodeExecution.created_at)).limit(limit)
+        
+        # Execute query with error handling
+        try:
+            executions = query.all()
+        except Exception as db_error:
+            logger.log_message(f"Database query error: {str(db_error)}", logging.ERROR)
+            raise HTTPException(
+                status_code=500,
+                detail=f"Database query failed: {str(db_error)}"
+            )
+        
+        # Process results with defensive programming
+        detailed_executions = []
+        for execution in executions:
+            # Skip None or invalid execution objects
+            if not execution or not hasattr(execution, 'execution_id'):
+                logger.log_message(f"Skipping invalid execution object: {execution}", logging.WARNING)
+                continue
+                
+            # Parse failed agents and error messages if available
+            failed_agents_list = []
+            error_messages_dict = {}
+            
+            try:
+                if execution.failed_agents:
+                    failed_agents_list = json.loads(execution.failed_agents)
+                
+                if execution.error_messages:
+                    error_messages_dict = json.loads(execution.error_messages)
+            except (json.JSONDecodeError, TypeError):
+                logger.log_message(f"Error parsing JSON data for execution {execution.execution_id}", logging.ERROR)
+            
+            # Format the execution data with null checks
+            try:
+                detailed_executions.append({
+                    "execution_id": execution.execution_id,
+                    "message_id": execution.message_id,
+                    "chat_id": execution.chat_id,
+                    "user_id": execution.user_id,
+                    "created_at": execution.created_at.isoformat() if execution.created_at else None,
+                    "updated_at": execution.updated_at.isoformat() if execution.updated_at else None,
+                    "is_successful": getattr(execution, 'is_successful', False),  # Safe attribute access
+                    "model_info": {
+                        "provider": getattr(execution, 'model_provider', None),
+                        "name": getattr(execution, 'model_name', None),
+                        "temperature": getattr(execution, 'model_temperature', None),
+                        "max_tokens": getattr(execution, 'model_max_tokens', None)
+                    },
+                    "failed_agents": failed_agents_list,
+                    "error_messages": error_messages_dict,
+                    # Include trimmed code snippets with null checks
+                    "initial_code_preview": execution.initial_code[:500] + "..." if execution.initial_code and len(execution.initial_code) > 500 else execution.initial_code,
+                    "latest_code_preview": execution.latest_code[:500] + "..." if execution.latest_code and len(execution.latest_code) > 500 else execution.latest_code,
+                })
+            except Exception as e:
+                logger.log_message(f"Error processing execution {execution.execution_id}: {str(e)}", logging.ERROR)
+                continue
+        
+        logger.log_message(f"Retrieved {len(detailed_executions)} detailed code executions", logging.INFO)
+        return {
+            "period": period,
+            "start_date": start_date.strftime('%Y-%m-%d'),
+            "end_date": end_date.strftime('%Y-%m-%d'),
+            "count": len(detailed_executions),
+            "executions": detailed_executions
+        }
+        
+    except Exception as e:
+        logger.log_message(f"Database error in get_detailed_code_executions: {str(e)}", logging.ERROR)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Database error: {str(e)}"
+        )
 
 @router.get("/code-executions/users")
 async def get_user_code_execution_stats(
