@@ -1991,7 +1991,7 @@ class auto_analyst(dspy.Module):
                 if agent_name in plan_instructions:
                     inputs['plan_instructions'] = plan_instructions[agent_name]
                 else:
-                    inputs['plan_instructions'] = str(plan_instructions).split(agent_name)[1].split('agent')[0]
+                    inputs['plan_instructions'] = ""
                 
                 # logger.log_message(f"Agent inputs for {agent_name}: {inputs}", level=logging.INFO)
             
