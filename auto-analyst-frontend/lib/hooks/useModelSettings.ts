@@ -3,6 +3,7 @@ import axios from 'axios'
 import API_URL from '@/config/api'
 import { useSessionStore } from '@/lib/store/sessionStore'
 import logger from '@/lib/utils/logger'
+import { getUserStorageKey } from '@/lib/utils/userStorage'
 
 
 export interface ModelSettings {
@@ -24,19 +25,8 @@ const saveSettingsToLocalStorage = (settings: ModelSettings) => {
       hasCustomKey: settings.hasCustomKey, // Keep flag but not the actual key
     }
     
-    // Check if localStorage is available
-    if (typeof window !== 'undefined' && window.localStorage) {
-      try {
-        window.localStorage.setItem('userModelSettings', JSON.stringify(safeSettings))
-      } catch (storageError) {
-        // Handle storage errors (e.g., quota exceeded)
-        console.warn('Failed to save settings to localStorage:', storageError)
-        // Fallback to sessionStorage if localStorage fails
-        if (window.sessionStorage) {
-          window.sessionStorage.setItem('userModelSettings', JSON.stringify(safeSettings))
-        }
-      }
-    }
+    const userKey = getUserStorageKey('userModelSettings');
+    localStorage.setItem(userKey, JSON.stringify(safeSettings));
   } catch (error) {
     console.error('Failed to save settings:', error)
   }
@@ -44,29 +34,9 @@ const saveSettingsToLocalStorage = (settings: ModelSettings) => {
 
 const getSettingsFromLocalStorage = (): Partial<ModelSettings> | null => {
   try {
-    if (typeof window === 'undefined') return null
-    
-    let settings = null
-    
-    // Try localStorage first
-    if (window.localStorage) {
-      try {
-        settings = window.localStorage.getItem('userModelSettings')
-      } catch (storageError) {
-        console.warn('Failed to read from localStorage:', storageError)
-      }
-    }
-    
-    // If localStorage fails or is empty, try sessionStorage
-    if (!settings && window.sessionStorage) {
-      try {
-        settings = window.sessionStorage.getItem('userModelSettings')
-      } catch (storageError) {
-        console.warn('Failed to read from sessionStorage:', storageError)
-      }
-    }
-    
-    return settings ? JSON.parse(settings) : null
+    const userKey = getUserStorageKey('userModelSettings');
+    const settings = localStorage.getItem(userKey);
+    return settings ? JSON.parse(settings) : null;
   } catch (error) {
     console.error('Failed to get settings:', error)
     return null
