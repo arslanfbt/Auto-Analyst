@@ -1,3 +1,6 @@
+import dspy
+import os
+
 # Model providers
 PROVIDERS = {
     "openai": "OpenAI",
@@ -5,37 +8,203 @@ PROVIDERS = {
     "groq": "GROQ",
     "gemini": "Google Gemini"
 }
+max_tokens = int(os.getenv("MAX_TOKENS", 6000))
 
-# Cost per 1K tokens for different models
-MODEL_COSTS = {
-    "openai": {
-        "o1": {"input": 0.015, "output": 0.06},  
-        "o1-pro": {"input": 0.015, "output": 0.6},
-        "o1-mini": {"input": 0.00011, "output": 0.00044}, 
-        "o3": {"input": 0.002, "output": 0.008},
-        "o3-mini": {"input": 0.00011, "output": 0.00044},
-        "gpt-5": {"input": 0.00125, "output": 0.01},         # updated real cost
-        "gpt-5-mini": {"input": 0.00025, "output": 0.002},   # updated real cost
-        "gpt-5-nano": {"input": 0.00005, "output": 0.0004},  # updated real cost
-    },
-    "anthropic": {
-        "claude-3-5-haiku-latest": {"input": 0.00025, "output": 0.000125},
-        "claude-3-7-sonnet-latest": {"input": 0.003, "output": 0.015},   
-        "claude-3-5-sonnet-latest": {"input": 0.003, "output": 0.015}, 
-        "claude-sonnet-4-20250514": {"input": 0.003, "output": 0.015},
-        "claude-3-opus-latest": {"input": 0.015, "output": 0.075},  
-        "claude-opus-4-20250514": {"input": 0.015, "output": 0.075},
-        "claude-opus-4-1": {"input": 0.015, "output": 0.075},  # approximate placeholder
-    },
-    "groq": {
-        "deepseek-r1-distill-llama-70b": {"input": 0.00075, "output": 0.00099},
-        "gpt-oss-120B": {"input": 0.00075, "output": 0.00099},
-        "gpt-oss-20B": {"input": 0.00075, "output": 0.00099}
-    },
-    "gemini": {
-        "gemini-2.5-pro-preview-03-25": {"input": 0.00015, "output": 0.001}
-    }
+# Create model API objects
+# OpenAI models
+gpt_5_mini = dspy.LM(
+    model="openai/gpt-5-mini",
+    api_key=os.getenv("OPENAI_API_KEY"),
+    temperature=float(os.getenv("TEMPERATURE", 1.0)),
+    max_completion_tokens=max_tokens,
+    cache=False
+)
+
+gpt_5 = dspy.LM(
+    model="openai/gpt-5",
+    api_key=os.getenv("OPENAI_API_KEY"),
+    temperature=float(os.getenv("TEMPERATURE", 1.0)),
+    max_completion_tokens=max_tokens,  # Use max_completion_tokens for gpt-5
+    cache=False
+)
+
+gpt_5_nano = dspy.LM(
+    model="openai/gpt-5-nano",
+    api_key=os.getenv("OPENAI_API_KEY"),
+    temperature=float(os.getenv("TEMPERATURE", 1.0)),
+    max_completion_tokens=max_tokens,
+    cache=False
+)
+
+o1 = dspy.LM(
+    model="openai/o1-preview",
+    api_key=os.getenv("OPENAI_API_KEY"),
+    temperature=1,
+    max_tokens=20_000,  # Use max_completion_tokens for o1
+    cache=False
+)
+
+o1_pro = dspy.LM(
+    model="openai/o1-pro",
+    api_key=os.getenv("OPENAI_API_KEY"),
+    temperature=1,
+    max_tokens=20_000,  # Use max_completion_tokens for o1-pro
+    cache=False
+)
+
+o1_mini = dspy.LM(
+    model="openai/o1-mini",
+    api_key=os.getenv("OPENAI_API_KEY"),
+    temperature=1,
+    max_tokens=20_000,
+    cache=False
+)
+
+o3 = dspy.LM(
+    model="openai/o3-2025-04-16",
+    api_key=os.getenv("OPENAI_API_KEY"),
+    temperature=float(os.getenv("TEMPERATURE", 1.0)),
+    max_tokens=20_000,
+    cache=False
+)
+
+o3_mini = dspy.LM(
+    model="openai/o3-mini",
+    api_key=os.getenv("OPENAI_API_KEY"),
+    temperature=float(os.getenv("TEMPERATURE", 1.0)),
+    max_tokens=20_000,
+    cache=False
+)
+
+# Anthropic models
+claude_3_5_haiku_latest = dspy.LM(
+    model="anthropic/claude-3-5-haiku-latest",
+    api_key=os.getenv("ANTHROPIC_API_KEY"),
+    temperature=float(os.getenv("TEMPERATURE", 1.0)),
+    max_tokens=max_tokens,
+    cache=False
+)
+
+claude_3_7_sonnet_latest = dspy.LM(
+    model="anthropic/claude-3-7-sonnet-latest",
+    api_key=os.getenv("ANTHROPIC_API_KEY"),
+    temperature=float(os.getenv("TEMPERATURE", 1.0)),
+    max_tokens=max_tokens,
+    cache=False
+)
+
+claude_3_5_sonnet_latest = dspy.LM(
+    model="anthropic/claude-3-5-sonnet-latest",
+    api_key=os.getenv("ANTHROPIC_API_KEY"),
+    temperature=float(os.getenv("TEMPERATURE", 1.0)),
+    max_tokens=max_tokens,
+    cache=False
+)
+
+claude_sonnet_4_20250514 = dspy.LM(
+    model="anthropic/claude-sonnet-4-20250514",
+    api_key=os.getenv("ANTHROPIC_API_KEY"),
+    temperature=float(os.getenv("TEMPERATURE", 1.0)),
+    max_tokens=max_tokens,
+    cache=False
+)
+
+claude_3_opus_latest = dspy.LM(
+    model="anthropic/claude-3-opus-latest",
+    api_key=os.getenv("ANTHROPIC_API_KEY"),
+    temperature=float(os.getenv("TEMPERATURE", 1.0)),
+    max_tokens=max_tokens,
+    cache=False
+)
+
+claude_opus_4_20250514 = dspy.LM(
+    model="anthropic/claude-opus-4-20250514",
+    api_key=os.getenv("ANTHROPIC_API_KEY"),
+    temperature=float(os.getenv("TEMPERATURE", 1.0)),
+    max_tokens=max_tokens,
+    cache=False
+)
+
+claude_opus_4_1 = dspy.LM(
+    model="anthropic/claude-opus-4-1",
+    api_key=os.getenv("ANTHROPIC_API_KEY"),
+    temperature=float(os.getenv("TEMPERATURE", 1.0)),
+    max_tokens=max_tokens,
+    cache=False
+)
+
+# Groq models
+deepseek_r1_distill_llama_70b = dspy.LM(
+    model="groq/deepseek-r1-distill-llama-70b",
+    api_key=os.getenv("GROQ_API_KEY"),
+    temperature=float(os.getenv("TEMPERATURE", 1.0)),
+    max_tokens=max_tokens,
+    cache=False
+)
+
+gpt_oss_120B = dspy.LM(
+    model="groq/gpt-oss-120B",
+    api_key=os.getenv("GROQ_API_KEY"),
+    temperature=float(os.getenv("TEMPERATURE", 1.0)),
+    max_tokens=max_tokens,
+    cache=False
+)
+
+gpt_oss_20B = dspy.LM(
+    model="groq/gpt-oss-20B",
+    api_key=os.getenv("GROQ_API_KEY"),
+    temperature=float(os.getenv("TEMPERATURE", 1.0)),
+    max_tokens=max_tokens,
+    cache=False
+)
+
+gemini_2_5_pro_preview_03_25 = dspy.LM(
+    model="gemini/gemini-2.5-pro-preview-03-25",
+    api_key=os.getenv("GEMINI_API_KEY"),
+    temperature=float(os.getenv("TEMPERATURE", 1.0)),
+    max_tokens=max_tokens,
+    cache=False
+)
+
+MODEL_OBJECTS = {
+    # OpenAI models
+    "gpt-5-mini": gpt_5_mini,
+    "gpt-5": gpt_5,
+    "gpt-5-nano": gpt_5_nano,
+    "o1": o1,
+    "o1-pro": o1_pro,
+    "o1-mini": o1_mini,
+    "o3": o3,
+    "o3-mini": o3_mini,
+    
+    # Anthropic models
+    "claude-3-5-haiku-latest": claude_3_5_haiku_latest,
+    "claude-3-7-sonnet-latest": claude_3_7_sonnet_latest,
+    "claude-3-5-sonnet-latest": claude_3_5_sonnet_latest,
+    "claude-sonnet-4-20250514": claude_sonnet_4_20250514,
+    "claude-3-opus-latest": claude_3_opus_latest,
+    "claude-opus-4-20250514": claude_opus_4_20250514,
+    "claude-opus-4-1": claude_opus_4_1,
+    
+    # Groq models
+    "deepseek-r1-distill-llama-70b": deepseek_r1_distill_llama_70b,
+    "gpt-oss-120B": gpt_oss_120B,
+    "gpt-oss-20B": gpt_oss_20B,
+    
+    # Gemini models
+    "gemini-2.5-pro-preview-03-25": gemini_2_5_pro_preview_03_25
 }
+
+
+# Model registry dictionary for easy access
+
+def get_model_object(model_name: str):
+    """Get model object by name"""
+    return MODEL_OBJECTS.get(model_name, gpt_5_mini)  # Default to gpt-5-mini
+
+
+# Get max tokens from environment
+max_tokens = int(os.getenv("MAX_TOKENS", 6000))
 
 # Tiers based on cost per 1K tokens
 MODEL_TIERS = {
@@ -117,6 +286,36 @@ MODEL_METADATA = {
 
     # Gemini
     "gemini-2.5-pro-preview-03-25": {"display_name": "Gemini 2.5 Pro", "context_window": 1000000},
+}
+
+MODEL_COSTS = {
+    "openai": {
+        "o1": {"input": 0.015, "output": 0.06},  
+        "o1-pro": {"input": 0.015, "output": 0.6},
+        "o1-mini": {"input": 0.00011, "output": 0.00044}, 
+        "o3": {"input": 0.002, "output": 0.008},
+        "o3-mini": {"input": 0.00011, "output": 0.00044},
+        "gpt-5": {"input": 0.00125, "output": 0.01},         # updated real cost
+        "gpt-5-mini": {"input": 0.00025, "output": 0.002},   # updated real cost
+        "gpt-5-nano": {"input": 0.00005, "output": 0.0004},  # updated real cost
+    },
+    "anthropic": {
+        "claude-3-5-haiku-latest": {"input": 0.00025, "output": 0.000125},
+        "claude-3-7-sonnet-latest": {"input": 0.003, "output": 0.015},   
+        "claude-3-5-sonnet-latest": {"input": 0.003, "output": 0.015}, 
+        "claude-sonnet-4-20250514": {"input": 0.003, "output": 0.015},
+        "claude-3-opus-latest": {"input": 0.015, "output": 0.075},  
+        "claude-opus-4-20250514": {"input": 0.015, "output": 0.075},
+        "claude-opus-4-1": {"input": 0.015, "output": 0.075},  # approximate placeholder
+    },
+    "groq": {
+        "deepseek-r1-distill-llama-70b": {"input": 0.00075, "output": 0.00099},
+        "gpt-oss-120B": {"input": 0.00075, "output": 0.00099},
+        "gpt-oss-20B": {"input": 0.00075, "output": 0.00099}
+    },
+    "gemini": {
+        "gemini-2.5-pro-preview-03-25": {"input": 0.00015, "output": 0.001}
+    }
 }
 
 # Helper functions

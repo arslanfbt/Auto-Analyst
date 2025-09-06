@@ -33,3 +33,10 @@ schema*.md
 
 
 notebooks/
+
+
+
+testing.ipynb
+redis_index.json
+email_to_userid_mapping.json
+redis_backup_20250906_143859.json

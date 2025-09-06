@@ -14,6 +14,7 @@ from src.managers.session_manager import get_session_id
 from src.schemas.model_settings_schema import ModelSettings
 from src.utils.logger import Logger
 from src.agents.agents import dataset_description_agent
+from src.utils.model_registry import MODEL_OBJECTS
 import dspy
 
 
@@ -220,7 +221,15 @@ async def update_model_settings(
                 "api_key": settings.api_key,
                 "temperature": settings.temperature,
                 "max_tokens":None,
-                "max_completion_tokens": 10000
+                "max_completion_tokens": 2500
+            }
+        elif 'o1-' in str(settings.model):
+            model_config = {
+                "provider": settings.provider,
+                "model": settings.model,
+                "api_key": settings.api_key,
+                "temperature": 1,
+                "max_tokens":5001
             }
             
         
@@ -243,50 +252,9 @@ async def update_model_settings(
         app_state._session_manager._app_model_config = model_config
 
         # Create the LM instance to test the configuration, but don't set it globally
-        import dspy
+        lm = MODEL_OBJECTS[str(settings.model)]
         
-        if settings.provider.lower() == "groq":
-            logger.log_message(f"Groq Model: {settings.model}", level=logging.INFO)
-            lm = dspy.LM(
-                model=f"groq/{settings.model}",
-                api_key=settings.api_key,
-                temperature=settings.temperature,
-                max_tokens=settings.max_tokens
-            )
-        elif settings.provider.lower() == "anthropic":
-            logger.log_message(f"Anthropic Model: {settings.model}", level=logging.INFO)
-            lm = dspy.LM(
-                model=f"anthropic/{settings.model}",
-                api_key=settings.api_key,
-                temperature=settings.temperature,
-                max_tokens=settings.max_tokens
-            )
-        elif settings.provider.lower() == "gemini":
-            logger.log_message(f"Gemini Model: {settings.model}, API Key: {settings.api_key}, Temperature: {settings.temperature}, Max Tokens: {settings.max_tokens}", level=logging.INFO)
-            lm = dspy.LM(
-                model=f"gemini/{settings.model}",
-                api_key=settings.api_key,
-                temperature=settings.temperature,
-                max_tokens=settings.max_tokens
-            )
-        elif settings.provider.lower() == "openai":  # OpenAI is the default
-            logger.log_message(f"OpenAI Model: {settings.model}", level=logging.INFO)
-            print(settings.model.lower())
-            if 'gpt-5' in settings.model.lower():
-                lm = dspy.LM(
-                    model=f"openai/{settings.model}",
-                    api_key=settings.api_key,
-                    temperature=settings.temperature,
-                    max_tokens = None,
-                    max_completion_tokens= 10000
-                )
-            else:
-                lm = dspy.LM(
-                    model=f"openai/{settings.model}",
-                    api_key=settings.api_key,
-                    temperature=settings.temperature,
-                    max_tokens=settings.max_tokens
-                )
+
         
 
         # Test the model configuration without setting it globally

@@ -16,6 +16,7 @@ import dspy
 import textwrap
 import os
 from src.schemas.code_schema import CodeExecuteRequest, CodeEditRequest, CodeFixRequest, CodeCleanRequest, GetLatestCodeRequest
+from src.utils.model_registry import MODEL_OBJECTS
 
 def clean_print_statements(code_block):
     """
@@ -312,7 +313,8 @@ async def fix_code_with_dspy(code: str, error: str, dataset_context: str = ""):
         # If no specific errors found, fix the entire code using refine
         try:
             # Create the LM instance that will be used
-            thread_lm = dspy.LM("anthropic/claude-3-5-sonnet-latest", api_key=anthropic_key, max_tokens=5000)
+            # thread_lm = dspy.LM("anthropic/claude-3-5-sonnet-latest", api_key=anthropic_key, max_tokens=2500)
+            thread_lm = MODEL_OBJECTS['claude-3-5-sonnet-latest']
             
             # Define the blocking function to run in thread
             def run_refine_fixer():
@@ -336,7 +338,7 @@ async def fix_code_with_dspy(code: str, error: str, dataset_context: str = ""):
     
     # Fix each faulty block separately using async refine
     try:
-        thread_lm = dspy.LM("anthropic/claude-3-5-sonnet-latest", api_key=anthropic_key, max_tokens=5000)
+        thread_lm = MODEL_OBJECTS['claude-3-5-sonnet-latest']
         
         for agent_name, block_code, specific_error in faulty_blocks:
             try:
@@ -454,9 +456,9 @@ def get_dataset_context(df):
 
 def edit_code_with_dspy(original_code: str, user_prompt: str, dataset_context: str = ""):
     # gemini = dspy.LM("claude-3-5-sonnet-latest", api_key = os.environ['ANTHROPIC_API_KEY'], max_tokens=3000)
-    claude = dspy.LM("anthropic/claude-3-5-sonnet-latest", api_key = os.environ['ANTHROPIC_API_KEY'], max_tokens=3000)
-    with dspy.context(lm=claude):
-        code_editor = dspy.ChainOfThought(code_edit)
+    thread_lm = MODEL_OBJECTS['claude-3-5-sonnet-latest']
+    with dspy.context(lm=thread_lm):
+        code_editor = dspy.Predict(code_edit)
         
         result = code_editor(
             dataset_context=dataset_context,
