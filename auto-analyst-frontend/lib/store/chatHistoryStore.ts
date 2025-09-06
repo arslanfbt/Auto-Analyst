@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
+import { getUserStorageKey } from '../utils/userStorage'
 
 export interface ChatMessage {
   text: string | {
@@ -44,6 +45,30 @@ export const useChatHistoryStore = create<ChatHistoryStore>()(
     }),
     {
       name: 'chat-history',
+      storage: {
+        getItem: (name) => {
+          // Check if we're on the client side
+          if (typeof window === 'undefined') return null;
+          
+          const userKey = getUserStorageKey(name);
+          const item = localStorage.getItem(userKey);
+          return item ? JSON.parse(item) : null;
+        },
+        setItem: (name, value) => {
+          // Check if we're on the client side
+          if (typeof window === 'undefined') return;
+          
+          const userKey = getUserStorageKey(name);
+          localStorage.setItem(userKey, JSON.stringify(value));
+        },
+        removeItem: (name) => {
+          // Check if we're on the client side
+          if (typeof window === 'undefined') return;
+          
+          const userKey = getUserStorageKey(name);
+          localStorage.removeItem(userKey);
+        },
+      },
     }
   )
 ) 

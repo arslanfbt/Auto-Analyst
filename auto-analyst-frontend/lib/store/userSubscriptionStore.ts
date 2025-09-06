@@ -6,6 +6,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { UserSubscription } from '../features/feature-access';
+import { getUserStorageKey } from '../utils/userStorage';
 
 interface UserSubscriptionState {
   subscription: UserSubscription | null;
@@ -86,7 +87,21 @@ export const useUserSubscriptionStore = create<UserSubscriptionStore>()(
     }),
     {
       name: 'user-subscription-storage',
-      storage: createJSONStorage(() => localStorage),
+      storage: createJSONStorage(() => ({
+        getItem: (name) => {
+          const userKey = getUserStorageKey(name);
+          const item = localStorage.getItem(userKey);
+          return item ? JSON.parse(item) : null;
+        },
+        setItem: (name, value) => {
+          const userKey = getUserStorageKey(name);
+          localStorage.setItem(userKey, JSON.stringify(value));
+        },
+        removeItem: (name) => {
+          const userKey = getUserStorageKey(name);
+          localStorage.removeItem(userKey);
+        },
+      })),
       partialize: (state: UserSubscriptionStore) => ({
         subscription: state.subscription,
         lastFetched: state.lastFetched,
