@@ -82,11 +82,11 @@ export function useModelSettings() {
     const localSettings = getSettingsFromLocalStorage()
     return {
       provider: localSettings?.provider || process.env.DEFAULT_MODEL_PROVIDER || 'openai',
-      model: localSettings?.model || process.env.DEFAULT_PUBLIC_MODEL || 'gpt-4o-mini',
+      model: localSettings?.model || process.env.DEFAULT_PUBLIC_MODEL || 'gpt-5-mini',
       hasCustomKey: localSettings?.hasCustomKey || false,
       apiKey: process.env.NEXT_PUBLIC_OPENAI_API_KEY || '', // Never load API key from localStorage
-      temperature: localSettings?.temperature || process.env.DEFAULT_TEMPERATURE || 0.7,
-      maxTokens: localSettings?.maxTokens || process.env.PUBLIC_DEFAULT_MAX_TOKENS || 6000
+      temperature: localSettings?.temperature || process.env.DEFAULT_TEMPERATURE || 1,
+      maxTokens: localSettings?.maxTokens || process.env.PUBLIC_DEFAULT_MAX_TOKENS || 2500
     }
   })
   
