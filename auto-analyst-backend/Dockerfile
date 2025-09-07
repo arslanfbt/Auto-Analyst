@@ -26,7 +26,7 @@ RUN if [ -f "/app/agents_config.json" ]; then \
 USER root
 RUN chmod +x /app/entrypoint_local.sh
 # Make populate script executable
-RUN chmod +x /app/scripts/populate_agent_templates.py validate
+RUN chmod +x /app/scripts/populate_agent_templates.py
 
 USER user
 
