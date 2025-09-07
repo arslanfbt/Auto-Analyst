@@ -56,3 +56,4 @@ export const switchUser = (newUserId: string): void => {
     clearUserData(currentUserId);
   }
 };
+
