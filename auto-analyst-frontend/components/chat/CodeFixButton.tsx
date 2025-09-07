@@ -45,17 +45,17 @@ const CodeFixButton: React.FC<CodeFixButtonProps> = ({
   const { hasEnoughCredits, checkCredits } = useCredits()
   const [hovered, setHovered] = useState(false)
   const { subscription } = useUserSubscriptionStore()
-  const featureAccess = useFeatureAccess('AI_CODE_FIX', subscription)
+  const featureAccess = useFeatureAccess('ai_code_fix', subscription)
   
   // Get the number of fixes for this code entry
   const fixCount = codeFixes[codeId] || 0
   const isFreeFix = fixCount < 3
 
   const handleFixCode = async () => {
-    // Check if user has access to the feature
+    // Auto-fix is now available to all users - no premium check
     if (!featureAccess.hasAccess) {
       toast({
-        title: "Premium Feature",
+        title: "Premium Feature", 
         description: `AI Code Fix requires a ${featureAccess.requiredTier} subscription.`,
         variant: "destructive",
         duration: 5000,
