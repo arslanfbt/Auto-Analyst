@@ -149,7 +149,7 @@ export default function StatsTicker() {
           <div className="text-3xl font-bold text-gray-900 mb-1">
             <AnimatedCounter value={tickerData.total_tokens} />
           </div>
-          <p className="text-gray-600 font-medium">Smart Insights Delivered</p>
+          <p className="text-gray-600 font-medium">Tokens analyzed</p>
         </motion.div>
 
         {/* Total Requests */}
