@@ -6,6 +6,8 @@ ENV PATH="/home/user/.local/bin:$PATH"
 
 WORKDIR /app
 
+
+
 COPY --chown=user ./requirements.txt requirements.txt
 RUN pip install --no-cache-dir --upgrade -r requirements.txt
 
@@ -24,7 +26,7 @@ RUN if [ -f "/app/agents_config.json" ]; then \
 USER root
 RUN chmod +x /app/entrypoint_local.sh
 # Make populate script executable
-RUN chmod +x /app/scripts/populate_agent_templates.py
+RUN chmod +x /app/scripts/populate_agent_templates.py validate
 
 USER user
 
