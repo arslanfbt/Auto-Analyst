@@ -12,7 +12,7 @@ export const metadata: Metadata = {
     siteName: "Auto-Analyst",
     images: [
       {
-        url: "https://4q2e4qu710mvgubg.public.blob.vercel-storage.com/auto-analyst-logo-R9wBx0kWOUA96KxwKBtl1onOHp6o02.png",
+        url: "https://xu73i5cewj3dp7jn.public.blob.vercel-storage.com/FireBirdTech%20%281%29.png",
         width: 1200,
         height: 630,
         alt: "Auto-Analyst - AI-powered analytics platform",
@@ -25,7 +25,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "Auto-Analyst",
     description: "AI-powered analytics platform",
-    images: ["https://4q2e4qu710mvgubg.public.blob.vercel-storage.com/auto-analyst-logo-R9wBx0kWOUA96KxwKBtl1onOHp6o02.png"],
+    images: ["https://xu73i5cewj3dp7jn.public.blob.vercel-storage.com/FireBirdTech%20%281%29.png"],
   },
 }
 
