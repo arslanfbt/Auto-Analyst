@@ -15,6 +15,12 @@ interface AgentSuggestion {
   isPremium?: boolean
 }
 
+
+
+
+
+
+
 interface AgentSuggestionsProps {
   message: string
   cursorPosition: number
