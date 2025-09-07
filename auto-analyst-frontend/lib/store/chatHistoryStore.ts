@@ -46,7 +46,7 @@ export const useChatHistoryStore = create<ChatHistoryStore>()(
     {
       name: 'chat-history',
       storage: {
-        getItem: (name) => {
+        getItem: (name: string) => {
           // Check if we're on the client side
           if (typeof window === 'undefined') return null;
           
@@ -54,14 +54,14 @@ export const useChatHistoryStore = create<ChatHistoryStore>()(
           const item = localStorage.getItem(userKey);
           return item ? JSON.parse(item) : null;
         },
-        setItem: (name, value) => {
+        setItem: (name: string, value: any) => {
           // Check if we're on the client side
           if (typeof window === 'undefined') return;
           
           const userKey = getUserStorageKey(name);
           localStorage.setItem(userKey, JSON.stringify(value));
         },
-        removeItem: (name) => {
+        removeItem: (name: string) => {
           // Check if we're on the client side
           if (typeof window === 'undefined') return;
           
