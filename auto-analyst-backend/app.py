@@ -53,7 +53,7 @@ from src.utils.generate_report import generate_html_report
 
 from src.utils.model_registry import MODEL_OBJECTS
 
-logger = Logger("app", see_time=True, console_log=False)
+logger = Logger("app", see_time=True, console_log=True)
 load_dotenv()
 
 # Request models
@@ -166,7 +166,7 @@ default_lm = MODEL_OBJECTS[DEFAULT_MODEL_CONFIG['model']]
 
     
 # lm = dspy.LM('openai/gpt-4o-mini', api_key=os.getenv("OPENAI_API_KEY"))
-dspy.configure(lm=default_lm)
+dspy.configure(lm=default_lm, async_max_workers=100)
 
 # Function to get model config from session or use default
 def get_session_lm(session_state):
@@ -744,6 +744,8 @@ async def _execute_custom_agents(ai_system, agent_names: list, query: str):
     """Execute custom agents using the session's AI system"""
     try:
         # For custom agents, we need to use the AI system's execute_agent method
+
+        agent_results = [ai_system]
         if len(agent_names) == 1:
             # Single custom agent
             agent_name = agent_names[0]
@@ -759,7 +761,7 @@ async def _execute_custom_agents(ai_system, agent_names: list, query: str):
                 inputs = {x: dict_[x] for x in ai_system.agent_inputs[agent_name] if x in dict_}
                 
                 # Execute the custom agent
-                agent_name_result, result_dict = await ai_system.execute_agent(agent_name, inputs)
+                agent_name_result, result_dict = await ai_system.agents[agent_name](**inputs)
                 return {agent_name_result: result_dict}
             else:
                 logger.log_message(f"Agent '{agent_name}' not found in ai_system.agent_inputs", level=logging.ERROR)
@@ -908,102 +910,102 @@ async def _generate_streaming_responses(session_state: dict, query: str, session
     
     # Execute the plan with well-managed concurrency
     with dspy.context(lm = session_lm):
-        try:
+        # try:
             
-            async for agent_name, inputs, response in session_state["ai_system"].execute_plan(enhanced_query, plan_response):
-                
-                if agent_name == "plan_not_found":
-                    yield json.dumps({
-                        "agent": "Analytical Planner",
-                        "content": "**No plan found**\n\nPlease try again with a different query or try using a different model.",
-                        "status": "error"
-                    }) + "\n"
-                    return
-                    
-                if agent_name == "plan_not_formated_correctly":
-                    yield json.dumps({
-                        "agent": "Analytical Planner",
-                        "content": "**Something went wrong with formatting, retry the query!**",
-                        "status": "error"
-                    }) + "\n"
-                    return
-                
-
-                formatted_response = format_response_to_markdown(
-                    {agent_name: response}, 
-                    dataframe=session_state["current_df"]
-                ) 
-
+        async for agent_name, inputs, response in session_state["ai_system"].execute_plan(enhanced_query, plan_response):
+            
+            if agent_name == "plan_not_found":
                 yield json.dumps({
-                    "agent": agent_name.split("__")[0] if "__" in agent_name else agent_name,
-                    "content": formatted_response,
-                    "status": "success" if response else "error"
+                    "agent": "Analytical Planner",
+                    "content": "**No plan found**\n\nPlease try again with a different query or try using a different model.",
+                    "status": "error"
                 }) + "\n"
-
-                # Handle agent errors
-                if isinstance(response, dict) and "error" in response:
-                    yield json.dumps({
-                        "agent": agent_name,
-                        "content": f"**Error in {agent_name}**: {response['error']}",
-                        "status": "error"
-                    }) + "\n"
-                    continue  # Continue with next agent instead of returning
-
-
-
-                if formatted_response == RESPONSE_ERROR_INVALID_QUERY:
-                    yield json.dumps({
-                        "agent": agent_name,
-                        "content": formatted_response,
-                        "status": "error"
-                    }) + "\n"
-                    continue  # Continue with next agent instead of returning
-
-                # Send response chunk
-
+                return
                 
-                # Track agent usage for future batch DB write
-                if session_state.get("user_id"):
-                    agent_tokens = _estimate_tokens(
-                        ai_manager=app.state.ai_manager,
-                        input_text=str(inputs),
-                        output_text=str(response)
-                    )
-                    
-                    # Get appropriate model name for code combiner
-                    if "code_combiner_agent" in agent_name and "__" in agent_name:
-                        provider = agent_name.split("__")[1]
-                        model_name = _get_model_name_for_provider(provider)
-                    else:
-                        model_name = session_state.get("model_config", DEFAULT_MODEL_CONFIG)["model"]
-
-                    usage_records.append(_create_usage_record(
-                        session_state=session_state,
-                        model_name=model_name,
-                        prompt_tokens=agent_tokens["prompt"],
-                        completion_tokens=agent_tokens["completion"],
-                        query_size=len(str(inputs)),
-                        response_size=len(str(response)),
-                        processing_time_ms=int((time.time() - overall_start_time) * 1000),
-                        is_streaming=True
-                    ))
-                    
-        except asyncio.TimeoutError:
-            yield json.dumps({
-                "agent": "planner",
-                "content": "The request timed out. Please try a simpler query.",
-                "status": "error"
-            }) + "\n"
-            return
+            if agent_name == "plan_not_formated_correctly":
+                yield json.dumps({
+                    "agent": "Analytical Planner",
+                    "content": "**Something went wrong with formatting, retry the query!**",
+                    "status": "error"
+                }) + "\n"
+                return
             
-        except Exception as e:
-            logger.log_message(f"Error executing plan: {str(e)}", level=logging.ERROR)
+
+            formatted_response = format_response_to_markdown(
+                {agent_name: response}, 
+                dataframe=session_state["current_df"]
+            ) 
+
             yield json.dumps({
-                "agent": "planner",
-                "content": f"An error occurred while executing the plan: {str(e)}",
-                "status": "error"
+                "agent": agent_name.split("__")[0] if "__" in agent_name else agent_name,
+                "content": formatted_response,
+                "status": "success" if response else "error"
             }) + "\n"
-            return
+
+            # Handle agent errors
+            if isinstance(response, dict) and "error" in response:
+                yield json.dumps({
+                    "agent": agent_name,
+                    "content": f"**Error in {agent_name}**: {response['error']}",
+                    "status": "error"
+                }) + "\n"
+                continue  # Continue with next agent instead of returning
+
+
+
+            if formatted_response == RESPONSE_ERROR_INVALID_QUERY:
+                yield json.dumps({
+                    "agent": agent_name,
+                    "content": formatted_response,
+                    "status": "error"
+                }) + "\n"
+                continue  # Continue with next agent instead of returning
+
+            # Send response chunk
+
+            
+            # Track agent usage for future batch DB write
+            if session_state.get("user_id"):
+                agent_tokens = _estimate_tokens(
+                    ai_manager=app.state.ai_manager,
+                    input_text=str(inputs),
+                    output_text=str(response)
+                )
+                
+                # Get appropriate model name for code combiner
+                if "code_combiner_agent" in agent_name and "__" in agent_name:
+                    provider = agent_name.split("__")[1]
+                    model_name = _get_model_name_for_provider(provider)
+                else:
+                    model_name = session_state.get("model_config", DEFAULT_MODEL_CONFIG)["model"]
+
+                usage_records.append(_create_usage_record(
+                    session_state=session_state,
+                    model_name=model_name,
+                    prompt_tokens=agent_tokens["prompt"],
+                    completion_tokens=agent_tokens["completion"],
+                    query_size=len(str(inputs)),
+                    response_size=len(str(response)),
+                    processing_time_ms=int((time.time() - overall_start_time) * 1000),
+                    is_streaming=True
+                ))
+                    
+        # except asyncio.TimeoutError:
+        #     yield json.dumps({
+        #         "agent": "planner",
+        #         "content": "The request timed out. Please try a simpler query.",
+        #         "status": "error"
+        #     }) + "\n"
+        #     return
+            
+        # except Exception as e:
+        #     logger.log_message(f"Error executing plan: {str(e)}", level=logging.ERROR)
+        #     yield json.dumps({
+        #         "agent": "planner",
+        #         "content": f"An error occurred while executing the plan: {str(e)}",
+        #         "status": "error"
+        #     }) + "\n"
+        #     return
                 
     # except Exception as e:
     #         logger.log_message(f"Error in streaming response: {str(e)}", level=logging.ERROR)

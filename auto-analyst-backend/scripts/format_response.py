@@ -276,6 +276,14 @@ def format_code_block(code_str):
     return f'\n{code_clean}\n'
 
 def format_code_backticked_block(code_str):
+    # Add None check at the beginning
+    if code_str is None:
+        return 
+    
+    # Add type check to ensure it's a string
+    if not isinstance(code_str, str):
+        return f"```python\n# Invalid code type: {type(code_str)}\n```"
+    
     code_clean = re.sub(r'^```python\n?', '', code_str, flags=re.MULTILINE)
     code_clean = re.sub(r'\n```$', '', code_clean)
     # Only match assignments at top level (not indented)
@@ -284,6 +292,7 @@ def format_code_backticked_block(code_str):
   
     # Remove reading the csv file if it's already in the context
     modified_code = re.sub(r"df\s*=\s*pd\.read_csv\([\"\'].*?[\"\']\).*?(\n|$)", '', code_clean)
+    modified_code = re.sub(r'^(\s*)(df\s*=.*)$', r'\1# \2', code_clean, flags=re.MULTILINE)
     
     # Only match assignments at top level (not indented)
     # 1. Remove 'df = pd.DataFrame()' if it's at the top level
@@ -985,7 +994,7 @@ def format_response_to_markdown(api_response, agent_name = None, dataframe=None)
                 if "rationale" in content:
                     markdown.append(f"### Reasoning\n{content['rationale']}\n")
 
-            if 'code' in content:
+            if 'code' in content and content['code'] is not None:
                 markdown.append(f"### Code Implementation\n{format_code_backticked_block(content['code'])}\n")
             if 'answer' in content:
                 markdown.append(f"### Answer\n{content['answer']}\n Please ask a query about the data")

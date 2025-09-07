@@ -10,12 +10,18 @@ PROVIDERS = {
 }
 max_tokens = int(os.getenv("MAX_TOKENS", 6000))
 
+small_lm = dspy.LM('openai/gpt-4o-mini',max_tokens=300,api_key=os.getenv("OPENAI_API_KEY"), cache=False)
+
+gpt_4o_mini = dspy.LM('openai/gpt-4o-mini',max_tokens=4000,api_key=os.getenv("OPENAI_API_KEY"), cache=False)
+
+
 # Create model API objects
 # OpenAI models
 gpt_5_mini = dspy.LM(
     model="openai/gpt-5-mini",
     api_key=os.getenv("OPENAI_API_KEY"),
     temperature=float(os.getenv("TEMPERATURE", 1.0)),
+    max_tokens= None,
     max_completion_tokens=max_tokens,
     cache=False
 )
@@ -24,6 +30,7 @@ gpt_5 = dspy.LM(
     model="openai/gpt-5",
     api_key=os.getenv("OPENAI_API_KEY"),
     temperature=float(os.getenv("TEMPERATURE", 1.0)),
+        max_tokens= None,
     max_completion_tokens=max_tokens,  # Use max_completion_tokens for gpt-5
     cache=False
 )
@@ -32,6 +39,7 @@ gpt_5_nano = dspy.LM(
     model="openai/gpt-5-nano",
     api_key=os.getenv("OPENAI_API_KEY"),
     temperature=float(os.getenv("TEMPERATURE", 1.0)),
+        max_tokens= None,
     max_completion_tokens=max_tokens,
     cache=False
 )
@@ -168,6 +176,7 @@ gemini_2_5_pro_preview_03_25 = dspy.LM(
 
 MODEL_OBJECTS = {
     # OpenAI models
+    "gpt-4o-mini":gpt_4o_mini,
     "gpt-5-mini": gpt_5_mini,
     "gpt-5": gpt_5,
     "gpt-5-nano": gpt_5_nano,
