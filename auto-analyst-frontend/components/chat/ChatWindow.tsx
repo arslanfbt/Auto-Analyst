@@ -1678,10 +1678,17 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
                     onClick={() => {
                       const currentCode = codeEntries.find(entry => entry.id === output.codeId)?.code || '';
                       console.log('Pin click - Code found:', !!currentCode, 'CodeId:', output.codeId, 'Available entries:', codeEntries.map(e => e.id));
+                      
                       if (currentCode) {
                         togglePinVisualization(output.content, currentCode, 'plotly');
                       } else {
                         console.warn('No code found for codeId:', output.codeId);
+                        toast({
+                          title: "Cannot Pin Visualization",
+                          description: "Code data is missing. Please refresh and try again.",
+                          variant: "destructive",
+                          duration: 5000
+                        });
                       }
                     }}
                     className={`flex items-center gap-1 h-7 px-2 text-xs ${
@@ -1728,15 +1735,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
                   <Button
                     variant={isPinned ? "default" : "outline"}
                     size="sm"
-                    onClick={() => {
-                      const currentCode = codeEntries.find(entry => entry.id === output.codeId)?.code || '';
-                      console.log('Pin click - Code found:', !!currentCode, 'CodeId:', output.codeId, 'Available entries:', codeEntries.map(e => e.id));
-                      if (currentCode) {
-                        togglePinVisualization(output.content, currentCode, 'matplotlib');
-                      } else {
-                        console.warn('No code found for codeId:', output.codeId);
-                      }
-                    }}
+                    onClick={() => togglePinVisualization(output.content, currentCode, 'matplotlib')}
                     className={`flex items-center gap-1 h-7 px-2 text-xs ${
                       isPinned 
                         ? 'bg-[#FF7F7F] hover:bg-[#FF6666] text-white' 
@@ -1839,17 +1838,13 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
             </div>
             
             {/* Full chart area */}
-            <div className="flex-1 p-4 overflow-auto">
+            <div className="flex-1 p-4 overflow-hidden">
               {fullscreenViz.type === 'plotly' ? (
-                <div className="w-full h-full min-h-[500px] overflow-auto">
-                  <PlotlyChart 
-                    data={fullscreenViz.content.data} 
-                    layout={fullscreenViz.content.layout} 
-                    isFullscreen={true}
-                  />
+                <div className="w-full h-full">
+                  <PlotlyChart data={fullscreenViz.content.data} layout={fullscreenViz.content.layout} />
                 </div>
               ) : (
-                <div className="w-full h-full flex items-center justify-center overflow-auto">
+                <div className="w-full h-full flex items-center justify-center">
                   <MatplotlibChart imageData={fullscreenViz.content} />
                 </div>
               )}
