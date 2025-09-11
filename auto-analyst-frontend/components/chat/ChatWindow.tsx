@@ -144,9 +144,11 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
   }, []);
 
   // Helper function to check if a visualization is pinned
-  const isVisualizationPinned = useCallback((content: any, code: string): boolean => {
+  const isVisualizationPinned = useCallback((content: any, code: string, vizIndex?: number): boolean => {
     try {
-      const codeHash = code ? hashCode(code) : '';
+      // Use the same hash logic as togglePinVisualization
+      const hashInput = code + (vizIndex !== undefined ? `_viz_${vizIndex}` : '');
+      const codeHash = hashInput ? hashCode(hashInput) : '';
       return visualizations.some(viz => viz.codeHash === codeHash);
     } catch (error) {
       console.warn('Error checking pin status:', error);
@@ -1659,7 +1661,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
         {plotlyOutputs.map((output, idx) => {
           const codeEntry = codeEntries.find(entry => entry.id === output.codeId);
           const currentCode = codeEntry?.code || '';
-          const isPinned = isVisualizationPinned(output.content, currentCode);
+          const isPinned = isVisualizationPinned(output.content, currentCode, idx);
           
           return (
             <div key={`plotly-${messageIndex}-${idx}`} className="bg-white border border-gray-200 rounded-md p-3 overflow-auto relative">
@@ -1739,7 +1741,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
         {matplotlibOutputs.map((output, idx) => {
           const codeEntry = codeEntries.find(entry => entry.id === output.codeId);
           const currentCode = codeEntry?.code || '';
-          const isPinned = isVisualizationPinned(output.content, currentCode);
+          const isPinned = isVisualizationPinned(output.content, currentCode, idx);
           
           return (
             <div key={`matplotlib-${messageIndex}-${idx}`} className="bg-white border border-gray-200 rounded-md p-3 overflow-auto relative">
@@ -1758,7 +1760,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
                   <Button
                     variant={isPinned ? "default" : "outline"}
                     size="sm"
-                    onClick={() => togglePinVisualization(output.content, currentCode, 'matplotlib')}
+                    onClick={() => togglePinVisualization(output.content, currentCode, 'matplotlib', idx)}
                     className={`flex items-center gap-1 h-7 px-2 text-xs ${
                       isPinned 
                         ? 'bg-[#FF7F7F] hover:bg-[#FF6666] text-white' 
