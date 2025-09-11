@@ -54,6 +54,7 @@ const pricingTiers = [
     features: [
       '500 credits or 100+ analysis/month',
       'Deep Analysis',
+      'AI Code Edit',
       '3 free code fix per query',
       'Latest models',
       'Priority support',
