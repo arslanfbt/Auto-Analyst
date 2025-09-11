@@ -2004,8 +2004,13 @@ class auto_analyst(dspy.Module):
             response = await self.agents['basic_qa_agent'](**inputs)
             yield 'basic_qa_agent', inputs, response 
             return 
+            
 
-        plan_list = [agent.strip() for agent in plan_text.split("->") if agent.strip()]
+        plan_list = []
+        for agent in [a.strip() for a in plan_text.split("->") if a.strip()]:
+            if not agent.startswith("planner_"):
+                agent = "planner_" + agent
+            plan_list.append(agent)
 
         
 
