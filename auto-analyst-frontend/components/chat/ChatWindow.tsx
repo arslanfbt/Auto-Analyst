@@ -141,7 +141,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
       hash = ((hash << 5) - hash) + char;
       hash = hash & hash;
     }
-    return hash.toString();
+    return Math.abs(hash).toString(); // Add Math.abs() to match store
   }, []);
 
   // Helper function to check if a visualization is pinned
