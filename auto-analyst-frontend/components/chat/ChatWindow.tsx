@@ -12,7 +12,7 @@ import CodeCanvas from "./CodeCanvas"
 import CodeIndicator from "./CodeIndicator"
 import CodeFixButton from "./CodeFixButton"
 import { v4 as uuidv4 } from 'uuid'
-import { Code, AlertTriangle, Lock } from "lucide-react"
+import { Code, AlertTriangle, Lock, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import axios from "axios"
 import { useSessionStore } from '@/lib/store/sessionStore'
@@ -22,6 +22,8 @@ import API_URL from '@/config/api'
 import { useUserSubscription, useUserSubscriptionStore } from '@/lib/store/userSubscriptionStore'
 import { useFeatureAccess } from '@/lib/hooks/useFeatureAccess'
 import { PremiumFeatureButton } from '@/components/features/FeatureGate'
+import { useVisualizationsStore } from '@/lib/store/visualizationsStore'
+import { Pin, PinOff, Maximize2, X } from 'lucide-react'
 
 interface PlotlyMessage {
   type: "plotly"
@@ -68,6 +70,43 @@ interface CodeFixState {
   codeBeingFixed: string | null
 }
 
+// Simple text cycling loader like ChatGPT - just text, no background
+const SimpleThinkingLoader = () => {
+  const [currentIndex, setCurrentIndex] = useState(0)
+  
+  const thinkingTexts = [
+    "Analyzing your data...",
+    "Processing patterns...",
+    "Generating insights...",
+    "Running calculations...",
+    "Preparing visualization...",
+  ]
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setCurrentIndex((prev) => (prev + 1) % thinkingTexts.length)
+    }, 1500) // Change text every 1.5 seconds
+
+    return () => clearInterval(interval)
+  }, [])
+
+  return (
+    <motion.span
+      key={currentIndex}
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{
+        duration: 0.3,
+        ease: "easeInOut",
+      }}
+      className="text-gray-600 font-medium"
+    >
+      {thinkingTexts[currentIndex]}
+    </motion.span>
+  )
+}
+
 const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMessage, showWelcome, chatNameGenerated = false, sessionId, setSidebarOpen }) => {
   const chatWindowRef = useRef<HTMLDivElement>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -87,7 +126,59 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
   const { subscription } = useUserSubscriptionStore()
   const codeEditAccess = useFeatureAccess('AI_CODE_EDIT', subscription)
   const codeFixAccess = useFeatureAccess('AI_CODE_FIX', subscription)
+  const { addOrUpdatePlotly, addOrUpdateMatplotlib, unpinVisualization, visualizations } = useVisualizationsStore()
   
+  // Add state for fullscreen visualization
+  const [fullscreenViz, setFullscreenViz] = useState<{ type: 'plotly' | 'matplotlib', content: any } | null>(null)
+  
+  // Simple hash function for code content
+  const hashCode = useCallback((str: string): string => {
+    let hash = 0;
+    if (str.length === 0) return hash.toString();
+    for (let i = 0; i < str.length; i++) {
+      const char = str.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash;
+    }
+    return hash.toString();
+  }, []);
+
+  // Helper function to check if a visualization is pinned
+  const isVisualizationPinned = useCallback((content: any, code: string): boolean => {
+    try {
+      const codeHash = code ? hashCode(code) : '';
+      return visualizations.some(viz => viz.codeHash === codeHash);
+    } catch (error) {
+      console.warn('Error checking pin status:', error);
+      return false;
+    }
+  }, [visualizations, hashCode]);
+
+  // Helper function to toggle pin status
+  const togglePinVisualization = useCallback((content: any, code: string, type: 'plotly' | 'matplotlib') => {
+    try {
+      const codeHash = code ? hashCode(code) : '';
+      const existingViz = visualizations.find(viz => viz.codeHash === codeHash);
+      
+      console.log('Pin toggle:', { codeHash, exists: !!existingViz, type });
+      
+      if (existingViz) {
+        unpinVisualization(codeHash);
+        console.log('Unpinned visualization');
+      } else {
+        if (type === 'plotly') {
+          addOrUpdatePlotly(content.data || [], content.layout || {}, 'Chart from Chat', code);
+          console.log('Pinned plotly visualization');
+        } else if (type === 'matplotlib') {
+          addOrUpdateMatplotlib(content, 'Chart from Chat', code);
+          console.log('Pinned matplotlib visualization');
+        }
+      }
+    } catch (error) {
+      console.error('Pin toggle error:', error);
+    }
+  }, [visualizations, hashCode, unpinVisualization, addOrUpdatePlotly, addOrUpdateMatplotlib]);
+
   // Set chatCompleted when chat name is generated
   useEffect(() => {
     if (chatNameGenerated && messages.length > 0) {
@@ -1475,7 +1566,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
     return <div>{parts}</div>;
   }, []);
 
-  // Replace the entire renderCodeOutputs function with a fixed implementation
+  // Update the renderCodeOutputs function to include fullscreen buttons
   const renderCodeOutputs = (messageIndex: number) => {
     // Detect if we have an actual message ID or just an array index
     const message = messages[messageIndex];
@@ -1483,7 +1574,6 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
     
     // Get outputs for this specific message
     const relevantOutputs = codeOutputs[actualMessageId] || [];
-    
     
     if (relevantOutputs.length === 0) return null;
     
@@ -1504,27 +1594,18 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
             </div>
             
             {errorOutputs[0].codeId && (
-              codeFixAccess.hasAccess ? (
-                <CodeFixButton
-                  codeId={errorOutputs[0].codeId}
-                  errorOutput={errorOutputs[0].content as string}
-                  code={codeEntries.find(entry => entry.id === errorOutputs[0].codeId)?.code || ''}
-                  isFixing={codeFixState.isFixing && codeFixState.codeBeingFixed === errorOutputs[0].codeId}
-                  codeFixes={codeFixes}
-                  sessionId={sessionId || storeSessionId || ''}
-                  onFixStart={handleFixStart}
-                  onFixComplete={handleFixComplete}
-                  onCreditCheck={handleCreditCheck}
-                  variant="inline"
-                />
-              ) : (
-                <div className="absolute top-3 right-3">
-                  <PremiumFeatureButton
-                    featureId="AI_CODE_FIX"
-                    variant="icon"
-                  />
-                </div>
-              )
+              <CodeFixButton
+                codeId={errorOutputs[0].codeId}
+                errorOutput={errorOutputs[0].content as string}
+                code={codeEntries.find(entry => entry.id === errorOutputs[0].codeId)?.code || ''}
+                isFixing={codeFixState.isFixing && codeFixState.codeBeingFixed === errorOutputs[0].codeId}
+                codeFixes={codeFixes}
+                sessionId={sessionId || storeSessionId || ''}
+                onFixStart={handleFixStart}
+                onFixComplete={handleFixComplete}
+                onCreditCheck={handleCreditCheck}
+                variant="inline"
+              />
             )}
             
             {(() => {
@@ -1548,27 +1629,18 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
              (textOutputs[0].content.toString().toLowerCase().includes("error") || 
               textOutputs[0].content.toString().toLowerCase().includes("traceback") || 
               textOutputs[0].content.toString().toLowerCase().includes("exception")) && (
-              codeFixAccess.hasAccess ? (
-                <CodeFixButton
-                  codeId={textOutputs[0].codeId}
-                  errorOutput={textOutputs[0].content as string}
-                  code={codeEntries.find(entry => entry.id === textOutputs[0].codeId)?.code || ''}
-                  isFixing={codeFixState.isFixing && codeFixState.codeBeingFixed === textOutputs[0].codeId}
-                  codeFixes={codeFixes}
-                  sessionId={sessionId || storeSessionId || ''}
-                  onFixStart={handleFixStart}
-                  onFixComplete={handleFixComplete}
-                  onCreditCheck={handleCreditCheck}
-                  variant="inline"
-                />
-              ) : (
-                <div className="absolute top-3 right-3">
-                  <PremiumFeatureButton
-                    featureId="AI_CODE_FIX"
-                    variant="icon"
-                  />
-                </div>
-              )
+              <CodeFixButton
+                codeId={textOutputs[0].codeId}
+                errorOutput={textOutputs[0].content as string}
+                code={codeEntries.find(entry => entry.id === textOutputs[0].codeId)?.code || ''}
+                isFixing={codeFixState.isFixing && codeFixState.codeBeingFixed === textOutputs[0].codeId}
+                codeFixes={codeFixes}
+                sessionId={sessionId || storeSessionId || ''}
+                onFixStart={handleFixStart}
+                onFixComplete={handleFixComplete}
+                onCreditCheck={handleCreditCheck}
+                variant="inline"
+              />
             )}
             
             {(() => {
@@ -1580,31 +1652,111 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
           </div>
         )}
         
-        {/* Show plotly visualizations */}
-        {plotlyOutputs.map((output, idx) => (
-          <div key={`plotly-${messageIndex}-${idx}`} className="bg-white border border-gray-200 rounded-md p-3 overflow-auto relative">
-            <div className="flex items-center text-gray-700 font-medium mb-2">
-              📊 Interactive Visualization
+        {/* Show plotly visualizations with pin and fullscreen buttons */}
+        {plotlyOutputs.map((output, idx) => {
+          const codeEntry = codeEntries.find(entry => entry.id === output.codeId);
+          const currentCode = codeEntry?.code || '';
+          const isPinned = isVisualizationPinned(output.content, currentCode);
+          
+          return (
+            <div key={`plotly-${messageIndex}-${idx}`} className="bg-white border border-gray-200 rounded-md p-3 overflow-auto relative">
+              <div className="flex items-center justify-between text-gray-700 font-medium mb-2">
+                <span>📊 Interactive Visualization</span>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setFullscreenViz({ type: 'plotly', content: output.content })}
+                    className="flex items-center gap-1 h-7 px-2 text-xs text-gray-600 border-gray-300 hover:bg-gray-100"
+                  >
+                    <Maximize2 className="h-3 w-3" />
+                    <span className="hidden sm:inline">Fullscreen</span>
+                  </Button>
+                  <Button
+                    variant={isPinned ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => {
+                      const currentCode = codeEntries.find(entry => entry.id === output.codeId)?.code || '';
+                      console.log('Pin click - Code found:', !!currentCode, 'CodeId:', output.codeId, 'Available entries:', codeEntries.map(e => e.id));
+                      if (currentCode) {
+                        togglePinVisualization(output.content, currentCode, 'plotly');
+                      } else {
+                        console.warn('No code found for codeId:', output.codeId);
+                      }
+                    }}
+                    className={`flex items-center gap-1 h-7 px-2 text-xs ${
+                      isPinned 
+                        ? 'bg-[#FF7F7F] hover:bg-[#FF6666] text-white' 
+                        : 'text-[#FF7F7F] border-[#FF7F7F] hover:bg-[#FF7F7F] hover:text-white'
+                    }`}
+                  >
+                    {isPinned ? <PinOff className="h-3 w-3" /> : <Pin className="h-3 w-3" />}
+                    <span className="hidden sm:inline">
+                      {isPinned ? 'Unpin' : 'Pin'}
+                    </span>
+                  </Button>
+                </div>
+              </div>
+              
+              <div className="w-full">
+                <PlotlyChart data={output.content.data} layout={output.content.layout} />
+              </div>
             </div>
-            
-            <div className="w-full">
-              <PlotlyChart data={output.content.data} layout={output.content.layout} />
-            </div>
-          </div>
-        ))}
+          );
+        })}
         
-        {/* Render matplotlib charts */}
-        {matplotlibOutputs.map((output, idx) => (
-          <div key={`matplotlib-${messageIndex}-${idx}`} className="bg-white border border-gray-200 rounded-md p-3 overflow-auto relative">
-            <div className="flex items-center text-gray-700 font-medium mb-2">
-              📈 Chart Visualization
+        {/* Render matplotlib charts with pin and fullscreen buttons */}
+        {matplotlibOutputs.map((output, idx) => {
+          const codeEntry = codeEntries.find(entry => entry.id === output.codeId);
+          const currentCode = codeEntry?.code || '';
+          const isPinned = isVisualizationPinned(output.content, currentCode);
+          
+          return (
+            <div key={`matplotlib-${messageIndex}-${idx}`} className="bg-white border border-gray-200 rounded-md p-3 overflow-auto relative">
+              <div className="flex items-center justify-between text-gray-700 font-medium mb-2">
+                <span>📈 Chart Visualization</span>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setFullscreenViz({ type: 'matplotlib', content: output.content })}
+                    className="flex items-center gap-1 h-7 px-2 text-xs text-gray-600 border-gray-300 hover:bg-gray-100"
+                  >
+                    <Maximize2 className="h-3 w-3" />
+                    <span className="hidden sm:inline">Fullscreen</span>
+                  </Button>
+                  <Button
+                    variant={isPinned ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => {
+                      const currentCode = codeEntries.find(entry => entry.id === output.codeId)?.code || '';
+                      console.log('Pin click - Code found:', !!currentCode, 'CodeId:', output.codeId, 'Available entries:', codeEntries.map(e => e.id));
+                      if (currentCode) {
+                        togglePinVisualization(output.content, currentCode, 'matplotlib');
+                      } else {
+                        console.warn('No code found for codeId:', output.codeId);
+                      }
+                    }}
+                    className={`flex items-center gap-1 h-7 px-2 text-xs ${
+                      isPinned 
+                        ? 'bg-[#FF7F7F] hover:bg-[#FF6666] text-white' 
+                        : 'text-[#FF7F7F] border-[#FF7F7F] hover:bg-[#FF7F7F] hover:text-white'
+                    }`}
+                  >
+                    {isPinned ? <PinOff className="h-3 w-3" /> : <Pin className="h-3 w-3" />}
+                    <span className="hidden sm:inline">
+                      {isPinned ? 'Unpin' : 'Pin'}
+                    </span>
+                  </Button>
+                </div>
+              </div>
+              
+              <div className="w-full">
+                <MatplotlibChart imageData={output.content} />
+              </div>
             </div>
-            
-            <div className="w-full">
-              <MatplotlibChart imageData={output.content} />
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     );
   };
@@ -1657,13 +1809,54 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
             transition={{ duration: 0.3 }}
             className="flex justify-start mb-8 max-w-4xl mx-auto px-4"
           >
-            <div className="relative max-w-[85%] rounded-2xl p-6 transition-shadow duration-200 hover:shadow-lg bg-white text-gray-900 shadow-md shadow-gray-200/50">
-              <LoadingIndicator />
+            {/* Simple loading with just spinner and text - no background */}
+            <div className="flex items-center space-x-3">
+              <Loader2 className="w-5 h-5 text-[#FF7F7F] animate-spin" />
+              <SimpleThinkingLoader />
             </div>
           </motion.div>
         )}
         <div ref={messagesEndRef} />
       </div>
+      
+      {/* Fullscreen Modal for visualizations */}
+      {fullscreenViz && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg w-full h-full max-w-[95vw] max-h-[95vh] flex flex-col">
+            {/* Header with close button */}
+            <div className="flex justify-between items-center p-4 border-b bg-white rounded-t-lg">
+              <h2 className="text-xl font-semibold">
+                {fullscreenViz.type === 'plotly' ? '📊 Interactive Visualization' : '📈 Chart Visualization'}
+              </h2>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setFullscreenViz(null)}
+                className="h-8 w-8 p-0"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+            
+            {/* Full chart area */}
+            <div className="flex-1 p-4 overflow-auto">
+              {fullscreenViz.type === 'plotly' ? (
+                <div className="w-full h-full min-h-[500px] overflow-auto">
+                  <PlotlyChart 
+                    data={fullscreenViz.content.data} 
+                    layout={fullscreenViz.content.layout} 
+                    isFullscreen={true}
+                  />
+                </div>
+              ) : (
+                <div className="w-full h-full flex items-center justify-center overflow-auto">
+                  <MatplotlibChart imageData={fullscreenViz.content} />
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
       
       {/* Code Canvas - always render it if we have code, but control visibility */}
       {currentMessageIndex !== null && codeEntries.length > 0 && (

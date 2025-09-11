@@ -9,48 +9,93 @@ const Plot = dynamic(() => import("react-plotly.js"), { ssr: false })
 interface PlotlyChartProps {
   data: any[]
   layout?: any
+  isFullscreen?: boolean
 }
 
-const PlotlyChart: React.FC<PlotlyChartProps> = ({ data, layout = {} }) => {
+const PlotlyChart: React.FC<PlotlyChartProps> = ({ data, layout = {}, isFullscreen = false }) => {
   const containerRef = useRef<HTMLDivElement>(null)
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 })
 
   const updateDimensions = useCallback(() => {
     if (containerRef.current) {
-      const parentWidth = containerRef.current.parentElement?.getBoundingClientRect().width || 0
-      const width = Math.max(parentWidth - 40, 800) // Minimum width of 600px
-      const height = Math.max(width * 0.6, 600) // Minimum height of 400px
-      setDimensions((prevDimensions) => {
-        if (prevDimensions.width !== width || prevDimensions.height !== height) {
-          return { width, height }
-        }
-        return prevDimensions
-      })
+      const container = containerRef.current
+      
+      if (isFullscreen) {
+        // For fullscreen: use viewport dimensions instead of container rect
+        const viewportWidth = window.innerWidth
+        const viewportHeight = window.innerHeight
+        
+        // Account for modal padding and header (roughly 120px for header + padding)
+        const availableWidth = viewportWidth * 0.95 - 80  // 95vw minus padding
+        const availableHeight = viewportHeight * 0.95 - 120 // 95vh minus header and padding
+        
+        // Set reasonable max sizes but allow it to be responsive
+        const width = Math.min(Math.max(availableWidth, 500), 1200)
+        const height = Math.min(Math.max(availableHeight, 350), 700)
+        
+        console.log('Fullscreen dimensions:', { width, height, availableWidth, availableHeight })
+        
+        setDimensions((prev) => {
+          if (prev.width !== width || prev.height !== height) {
+            return { width, height }
+          }
+          return prev
+        })
+      } else {
+        // For regular view: use container-based calculation
+        const parentWidth = container.parentElement?.getBoundingClientRect().width || 0
+        const width = Math.max(parentWidth - 40, 600)
+        const height = Math.max(width * 0.6, 400)
+        setDimensions((prev) => {
+          if (prev.width !== width || prev.height !== height) {
+            return { width, height }
+          }
+          return prev
+        })
+      }
     }
-  }, [])
+  }, [isFullscreen])
 
   useEffect(() => {
-    updateDimensions()
+    // Add a small delay to ensure the modal is fully rendered
+    const timer = setTimeout(() => {
+      updateDimensions()
+    }, isFullscreen ? 100 : 0)
+    
     const resizeObserver = new ResizeObserver(updateDimensions)
     if (containerRef.current) {
       resizeObserver.observe(containerRef.current)
     }
+    
+    // For fullscreen, also listen to window resize
+    if (isFullscreen) {
+      window.addEventListener('resize', updateDimensions)
+    }
+    
     return () => {
+      clearTimeout(timer)
       if (containerRef.current) {
         resizeObserver.unobserve(containerRef.current)
       }
       resizeObserver.disconnect()
+      if (isFullscreen) {
+        window.removeEventListener('resize', updateDimensions)
+      }
     }
-  }, [updateDimensions])
+  }, [updateDimensions, isFullscreen])
 
   const memoizedLayout = useMemo(() => ({
     ...layout,
     width: dimensions.width,
     height: dimensions.height,
-    margin: { t: 50, b: 50, l: 50, r: 50 },
+    margin: isFullscreen ? { t: 60, b: 60, l: 60, r: 60 } : { t: 50, b: 50, l: 50, r: 50 },
     autosize: false,
-    paper_bgcolor: "transparent",
-    plot_bgcolor: "transparent",
+    paper_bgcolor: isFullscreen ? "white" : "transparent",
+    plot_bgcolor: isFullscreen ? "white" : "transparent",
+    font: {
+      ...layout.font,
+      size: isFullscreen ? 14 : (layout.font?.size || 12),
+    },
     xaxis: {
       ...layout.xaxis,
       automargin: true,
@@ -59,7 +104,7 @@ const PlotlyChart: React.FC<PlotlyChartProps> = ({ data, layout = {} }) => {
       ...layout.yaxis,
       automargin: true,
     },
-  }), [layout, dimensions.width, dimensions.height])
+  }), [layout, dimensions.width, dimensions.height, isFullscreen])
 
   const memoizedConfig = useMemo(() => ({
     responsive: false,
@@ -73,7 +118,7 @@ const PlotlyChart: React.FC<PlotlyChartProps> = ({ data, layout = {} }) => {
   }), [dimensions.width, dimensions.height])
 
   return (
-    <div ref={containerRef} className="overflow-hidden px-2">
+    <div ref={containerRef} className={`overflow-hidden ${isFullscreen ? 'w-full h-full flex items-center justify-center' : 'px-2'}`}>
       <Plot
         data={data}
         layout={memoizedLayout}
