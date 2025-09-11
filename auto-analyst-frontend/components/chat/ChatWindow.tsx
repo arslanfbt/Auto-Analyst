@@ -155,22 +155,24 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
   }, [visualizations, hashCode]);
 
   // Helper function to toggle pin status
-  const togglePinVisualization = useCallback((content: any, code: string, type: 'plotly' | 'matplotlib') => {
+  const togglePinVisualization = useCallback((content: any, code: string, type: 'plotly' | 'matplotlib', vizIndex?: number) => {
     try {
-      const codeHash = code ? hashCode(code) : '';
+      // Include visualization index in hash to make multiple viz from same code unique
+      const hashInput = code + (vizIndex !== undefined ? `_viz_${vizIndex}` : '');
+      const codeHash = hashInput ? hashCode(hashInput) : '';
       const existingViz = visualizations.find(viz => viz.codeHash === codeHash);
       
-      console.log('Pin toggle:', { codeHash, exists: !!existingViz, type });
+      console.log('Pin toggle:', { codeHash, exists: !!existingViz, type, vizIndex });
       
       if (existingViz) {
         unpinVisualization(codeHash);
         console.log('Unpinned visualization');
       } else {
         if (type === 'plotly') {
-          addOrUpdatePlotly(content.data || [], content.layout || {}, 'Chart from Chat', code);
+          addOrUpdatePlotly(content.data || [], content.layout || {}, `Chart ${vizIndex ? `#${vizIndex + 1}` : ''} from Chat`, hashInput);
           console.log('Pinned plotly visualization');
         } else if (type === 'matplotlib') {
-          addOrUpdateMatplotlib(content, 'Chart from Chat', code);
+          addOrUpdateMatplotlib(content, `Chart ${vizIndex ? `#${vizIndex + 1}` : ''} from Chat`, hashInput);
           console.log('Pinned matplotlib visualization');
         }
       }
@@ -731,7 +733,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
       // Process all plotly outputs
       const plotlyOutputItems: CodeOutput[] = [];
       
-      result.plotly_outputs.forEach((plotlyOutput: string) => {
+      result.plotly_outputs.forEach((plotlyOutput: string, vizIndex: number) => {
         try {
           const plotlyContent = plotlyOutput.replace(/```plotly\n|\n```/g, "");
           
@@ -740,7 +742,8 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
             type: 'plotly',
             content: plotlyData,
             messageIndex: messageId,
-            codeId: entryId
+            codeId: entryId,
+            vizIndex: vizIndex // Add visualization index
           });
         } catch (e) {
           console.error("Error parsing Plotly data:", e);
@@ -1680,7 +1683,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
                       console.log('Pin click - Code found:', !!currentCode, 'CodeId:', output.codeId, 'Available entries:', codeEntries.map(e => e.id));
                       
                       if (currentCode) {
-                        togglePinVisualization(output.content, currentCode, 'plotly');
+                        togglePinVisualization(output.content, currentCode, 'plotly', idx);
                       } else {
                         // FALLBACK: Try to extract code from the output content itself
                         console.warn('No code found for codeId:', output.codeId);
@@ -1697,7 +1700,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
                           const codeMatch = messageWithCode.text.match(/```python\n([\s\S]*?)\n```/);
                           if (codeMatch && codeMatch[1]) {
                             console.log('Using fallback code extraction');
-                            togglePinVisualization(output.content, codeMatch[1], 'plotly');
+                            togglePinVisualization(output.content, codeMatch[1], 'plotly', idx);
                             return;
                           }
                         }
