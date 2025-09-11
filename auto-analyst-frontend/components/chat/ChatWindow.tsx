@@ -1682,7 +1682,27 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
                       if (currentCode) {
                         togglePinVisualization(output.content, currentCode, 'plotly');
                       } else {
+                        // FALLBACK: Try to extract code from the output content itself
                         console.warn('No code found for codeId:', output.codeId);
+                        
+                        // Check if we can get the code from the message content
+                        const messageWithCode = localMessages.find(msg => 
+                          msg.text && typeof msg.text === 'string' && 
+                          msg.text.includes('```') && 
+                          msg.text.includes('python')
+                        );
+                        
+                        if (messageWithCode && typeof messageWithCode.text === 'string') {
+                          // Extract code from markdown
+                          const codeMatch = messageWithCode.text.match(/```python\n([\s\S]*?)\n```/);
+                          if (codeMatch && codeMatch[1]) {
+                            console.log('Using fallback code extraction');
+                            togglePinVisualization(output.content, codeMatch[1], 'plotly');
+                            return;
+                          }
+                        }
+                        
+                        // If still no code found, show error
                         toast({
                           title: "Cannot Pin Visualization",
                           description: "Code data is missing. Please refresh and try again.",

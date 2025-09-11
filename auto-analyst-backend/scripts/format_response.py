@@ -278,7 +278,7 @@ def format_code_block(code_str):
 def format_code_backticked_block(code_str):
     # Add None check at the beginning
     if code_str is None:
-        return 
+        return "```python\n# No code available\n```"  # Return empty code block instead of None
     
     # Add type check to ensure it's a string
     if not isinstance(code_str, str):
@@ -995,7 +995,9 @@ def format_response_to_markdown(api_response, agent_name = None, dataframe=None)
                     markdown.append(f"### Reasoning\n{content['rationale']}\n")
 
             if 'code' in content and content['code'] is not None:
-                markdown.append(f"### Code Implementation\n{format_code_backticked_block(content['code'])}\n")
+                formatted_code = format_code_backticked_block(content['code'])
+                if formatted_code:  # Check if formatted_code is not None
+                    markdown.append(f"### Code Implementation\n{formatted_code}\n")
             if 'answer' in content:
                 markdown.append(f"### Answer\n{content['answer']}\n Please ask a query about the data")
             if 'summary' in content:
