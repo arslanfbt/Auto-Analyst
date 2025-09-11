@@ -3,7 +3,7 @@
 
 import React, { useState, useEffect, useRef, forwardRef, useImperativeHandle } from "react"
 import { motion, AnimatePresence } from "framer-motion"
-import { Send, Paperclip, X, Square, Loader2, CheckCircle2, XCircle, Eye, CreditCard, Edit, FileText, MessageSquare, AlertTriangle, ChevronDown } from 'lucide-react'
+import { Send, Paperclip, X, Square, Loader2, CheckCircle2, XCircle, Eye, CreditCard, Edit, FileText, MessageSquare, AlertTriangle, ChevronDown, BarChart3 } from 'lucide-react'
 import { Button } from "../ui/button"
 import { Textarea } from "../ui/textarea"
 import { useCookieConsentStore } from "@/lib/store/cookieConsentStore"
@@ -42,6 +42,7 @@ import { useUserSubscriptionStore } from '@/lib/store/userSubscriptionStore'
 import { useFeatureAccess } from '@/lib/hooks/useFeatureAccess'
 import { UserSubscription } from '@/lib/features/feature-access'
 import { useDeepAnalysis } from '@/lib/contexts/deep-analysis-context'
+import { useRouter } from 'next/router'
 
 // const PREVIEW_API_URL = 'http://localhost:8000';
 const PREVIEW_API_URL = API_URL;

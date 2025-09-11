@@ -10,8 +10,7 @@ import API_URL from '@/config/api'
 import { useSession } from "next-auth/react"
 import { useCredits } from '@/lib/contexts/credit-context'
 import { motion } from "framer-motion"
-import { useFeatureAccess } from '@/lib/hooks/useFeatureAccess'
-import { useUserSubscriptionStore } from '@/lib/store/userSubscriptionStore'
+import { useUserSubscriptionStore, useUserTier } from '@/lib/store/userSubscriptionStore'
 
 interface CodeFixButtonProps {
   codeId: string
@@ -24,7 +23,7 @@ interface CodeFixButtonProps {
   onFixComplete: (codeId: string, fixedCode: string) => void
   onCreditCheck: (codeId: string, hasEnough: boolean) => void
   className?: string
-  variant?: 'inline' | 'button' // 'inline' for output blocks, 'button' for code canvas
+  variant?: 'inline' | 'button' | 'icon-only' // Add new variant
 }
 
 const CodeFixButton: React.FC<CodeFixButtonProps> = ({ 
@@ -45,24 +44,16 @@ const CodeFixButton: React.FC<CodeFixButtonProps> = ({
   const { hasEnoughCredits, checkCredits } = useCredits()
   const [hovered, setHovered] = useState(false)
   const { subscription } = useUserSubscriptionStore()
-  const featureAccess = useFeatureAccess('ai_code_fix', subscription)
+  const userTier = useUserTier()
   
   // Get the number of fixes for this code entry
   const fixCount = codeFixes[codeId] || 0
-  const isFreeFix = fixCount < 3
+  
+  // Determine free fix limit based on user tier
+  const freeFixLimit = userTier === 'free' ? 1 : 3 // Free users: 1 fix, Paid users: 3 fixes
+  const isFreeFix = fixCount < freeFixLimit
 
   const handleFixCode = async () => {
-    // Auto-fix is now available to all users - no premium check
-    if (!featureAccess.hasAccess) {
-      toast({
-        title: "Premium Feature", 
-        description: `AI Code Fix requires a ${featureAccess.requiredTier} subscription.`,
-        variant: "destructive",
-        duration: 5000,
-      })
-      return
-    }
-    
     // Check if the error output exists
     if (!errorOutput) return
     
@@ -71,13 +62,17 @@ const CodeFixButton: React.FC<CodeFixButtonProps> = ({
     
     // Track number of fixes and check credits if needed
     const newFixCount = fixCount + 1
-    const needsCredits = newFixCount > 3
+    const needsCredits = newFixCount > freeFixLimit
     
-    // Show notification after 3rd fix
-    if (newFixCount === 4) {
+    // Show notification after free limit is reached
+    if (newFixCount === freeFixLimit + 1) {
+      const tierMessage = userTier === 'free' 
+        ? "You've used your 1 free code fix. Additional fixes will use 1 credit each."
+        : "You've used your 3 free code fixes. Additional fixes will use 1 credit each."
+      
       toast({
         title: "Free fix limit reached",
-        description: "You've used your 3 free code fixes. Additional fixes will use 1 credit each.",
+        description: tierMessage,
         duration: 5000,
       })
     }
@@ -209,90 +204,10 @@ const CodeFixButton: React.FC<CodeFixButtonProps> = ({
     }
   }
 
-  // If user doesn't have access to the feature, show lock icon instead of wrench
-  if (!featureAccess.hasAccess) {
-    // Default 'button' variant with lock icon
-    if (variant === 'button') {
-      return (
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <div className={`flex items-center ${className}`}>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => {
-                    toast({
-                      title: "Premium Feature",
-                      description: `AI Code Fix requires a ${featureAccess.requiredTier} subscription.`,
-                      duration: 5000,
-                    });
-                  }}
-                  className="text-gray-500 hover:bg-gray-100 relative"
-                >
-                  <Lock className="h-4 w-4" />
-                </Button>
-              </div>
-            </TooltipTrigger>
-            <TooltipContent side="bottom" className="px-3 py-1.5">
-              <div className="space-y-1">
-                <p className="text-sm font-medium">AI Code Fix</p>
-                <p className="text-xs text-gray-500">
-                  Requires {featureAccess.requiredTier} subscription
-                </p>
-              </div>
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
-      );
-    }
-    
-    // Inline variant with lock icon for error outputs
-    return (
-      <div className={`inline-flex items-center absolute top-3 right-3 ${className}`}
-           onMouseEnter={() => setHovered(true)}
-           onMouseLeave={() => setHovered(false)}>
-        <motion.div
-          initial={{ width: "auto" }}
-          animate={{ 
-            width: hovered ? "auto" : "auto",
-            backgroundColor: hovered ? "rgba(243, 244, 246, 0.5)" : "transparent"
-          }}
-          transition={{ duration: 0.2 }}
-          className="rounded-md overflow-hidden flex items-center justify-end px-1 cursor-pointer"
-          onClick={() => {
-            toast({
-              title: "Premium Feature",
-              description: `AI Code Fix requires a ${featureAccess.requiredTier} subscription.`,
-              duration: 5000,
-            });
-          }}
-        >
-          <motion.span 
-            initial={{ opacity: 0, width: 0 }}
-            animate={{ 
-              opacity: hovered ? 1 : 0,
-              width: hovered ? "auto" : 0,
-              marginRight: hovered ? "4px" : 0
-            }}
-            transition={{ duration: 0.2 }}
-            className="text-xs font-medium whitespace-nowrap text-gray-600 overflow-hidden"
-          >
-            Premium Feature
-          </motion.span>
-          
-          <div className="flex items-center">
-            <div className="h-6 w-6 p-0 flex items-center justify-center rounded-full bg-gray-100 border border-gray-200">
-              <Lock className="h-3 w-3 text-gray-500" />
-            </div>
-          </div>
-        </motion.div>
-      </div>
-    );
-  }
-
   // Render different button styles based on variant
   if (variant === 'inline') {
+    const remainingFixes = Math.max(0, freeFixLimit - fixCount)
+    
     return (
       <div className={`inline-flex items-center absolute top-3 right-3 ${className}`}
            onMouseEnter={() => setHovered(true)}
@@ -307,18 +222,6 @@ const CodeFixButton: React.FC<CodeFixButtonProps> = ({
           className="rounded-md overflow-hidden flex items-center justify-end px-1 cursor-pointer"
           onClick={handleFixCode}
         >
-          <motion.span 
-            initial={{ opacity: 0, width: 0 }}
-            animate={{ 
-              opacity: hovered ? 1 : 0,
-              width: hovered ? "auto" : 0,
-              marginRight: hovered ? "4px" : 0
-            }}
-            transition={{ duration: 0.2 }}
-            className="text-xs font-medium whitespace-nowrap text-red-500 overflow-hidden"
-          >
-            {isFreeFix ? `Fix & auto-run (${3 - fixCount} free left)` : "Fix & auto-run (1 credit)"}
-          </motion.span>
           
           <div className="flex items-center">
             <div className="h-6 w-6 p-0 flex items-center justify-center rounded-full bg-red-50 border border-red-200">
@@ -337,7 +240,42 @@ const CodeFixButton: React.FC<CodeFixButtonProps> = ({
     )
   }
 
+  if (variant === 'icon-only') {
+    const remainingFixes = Math.max(0, freeFixLimit - fixCount)
+    
+    return (
+      <div className={`inline-flex items-center absolute top-3 right-3 ${className}`}
+           onMouseEnter={() => setHovered(true)}
+           onMouseLeave={() => setHovered(false)}>
+        <motion.div
+          initial={{ width: "auto" }}
+          animate={{ 
+            backgroundColor: hovered ? "rgba(254, 226, 226, 0.5)" : "transparent"
+          }}
+          transition={{ duration: 0.2 }}
+          className="rounded-md overflow-hidden flex items-center justify-end px-1 cursor-pointer"
+          onClick={handleFixCode}
+        >
+          <div className="flex items-center">
+            <div className="h-6 w-6 p-0 flex items-center justify-center rounded-full bg-red-50 border border-red-200">
+              {isFixing ? (
+                <svg className="animate-spin h-3 w-3 text-red-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+              ) : (
+                <WrenchIcon className="h-3 w-3 text-red-500" />
+              )}
+            </div>
+          </div>
+        </motion.div>
+      </div>
+    )
+  }
+
   // Default 'button' variant
+  const remainingFixes = Math.max(0, freeFixLimit - fixCount)
+  
   return (
     <TooltipProvider>
       <Tooltip>
@@ -360,7 +298,7 @@ const CodeFixButton: React.FC<CodeFixButtonProps> = ({
                   {isFreeFix && (
                     <div className="absolute -top-1 -right-1 flex items-center justify-center">
                       <div className="bg-gradient-to-r from-blue-500 to-cyan-400 text-white text-[9px] px-1.5 py-0.5 rounded-full font-semibold shadow-sm">
-                        {3 - fixCount}
+                        {remainingFixes}
                       </div>
                     </div>
                   )}
@@ -381,7 +319,12 @@ const CodeFixButton: React.FC<CodeFixButtonProps> = ({
             <div className="space-y-1">
               <p className="text-sm font-medium">Fix & auto-run code</p>
               <p className="text-xs text-gray-500">
-                {3 - fixCount} free {3 - fixCount === 1 ? 'fix' : 'fixes'} remaining
+                {remainingFixes} free {remainingFixes === 1 ? 'fix' : 'fixes'} remaining
+                {userTier === 'free' && (
+                  <span className="block text-blue-500 mt-1">
+                    Upgrade for 3 free fixes per code
+                  </span>
+                )}
               </p>
             </div>
           ) : (
