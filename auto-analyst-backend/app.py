@@ -37,6 +37,7 @@ from src.agents.retrievers.retrievers import *
 from src.managers.ai_manager import AI_Manager
 from src.managers.session_manager import SessionManager
 from src.routes.analytics_routes import router as analytics_router
+from src.routes.blog_routes import router as blog_router
 from src.routes.chat_routes import router as chat_router
 from src.routes.code_routes import router as code_router
 from src.routes.feedback_routes import router as feedback_router
@@ -1583,6 +1584,7 @@ app.include_router(session_router)
 app.include_router(feedback_router)
 app.include_router(deep_analysis_router)
 app.include_router(templates_router)
+app.include_router(blog_router)
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8000))

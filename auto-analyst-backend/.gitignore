@@ -40,3 +40,9 @@ testing.ipynb
 redis_index.json
 email_to_userid_mapping.json
 redis_backup_20250906_143859.json
+"*.db" 
+"*.sqlite" 
+"*.sqlite3" 
+"venv/" 
+"__pycache__/" 
+"*.pyc" 
