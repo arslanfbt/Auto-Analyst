@@ -53,6 +53,7 @@ interface CodeOutput {
   content: string | any;
   messageIndex: number;
   codeId: string;
+  vizIndex?: number; // Add visualization index for multiple viz from same code
 }
 
 interface ChatWindowProps {
