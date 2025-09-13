@@ -16,7 +16,7 @@ logs/
 updated_code.py
 sample_code.py
 
-
+*.duckdb
 *.dump
 
 migrations/
@@ -34,6 +34,10 @@ schema*.md
 
 notebooks/
 
+*.xlsx
+*.xls
+*.xlsm
+*.xlsb
 
 
 testing.ipynb

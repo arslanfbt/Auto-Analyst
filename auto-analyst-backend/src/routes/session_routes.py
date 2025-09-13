@@ -13,8 +13,9 @@ from pydantic import BaseModel
 from src.managers.session_manager import get_session_id
 from src.schemas.model_settings_schema import ModelSettings
 from src.utils.logger import Logger
-from src.agents.agents import dataset_description_agent
-from src.utils.model_registry import MODEL_OBJECTS
+# data context is for excelsheets with multiple sheets and dataset_descrp is for single sheet or csv
+from src.agents.agents import data_context_gen, dataset_description_agent
+from src.utils.model_registry import MODEL_OBJECTS, mid_lm
 import dspy
 
 
@@ -77,12 +78,15 @@ async def get_excel_sheets(
         logger.log_message(f"Error getting Excel sheets: {str(e)}", level=logging.ERROR)
         raise HTTPException(status_code=400, detail=f"Error reading Excel file: {str(e)}")
 
+
+
+
 @router.post("/upload_excel")
 async def upload_excel(
     file: UploadFile = File(...),
     name: str = Form(...),
     description: str = Form(...),
-    sheet_name: str = Form(...),
+    selected_sheets: Optional[str] = Form(None),  # JSON array of strings
     app_state = Depends(get_app_state),
     session_id: str = Depends(get_session_id_dependency),
     request: Request = None
@@ -104,43 +108,85 @@ async def upload_excel(
         contents = await file.read()
         
         try:
-            # Read the specific sheet with basic preprocessing
-            excel_df = pd.read_excel(io.BytesIO(contents), sheet_name=sheet_name)
+            # Load Excel file to get all sheet names
+            excel_file = pd.ExcelFile(io.BytesIO(contents))
+            sheet_names = excel_file.sheet_names
             
-            # Preprocessing steps
-            # 1. Drop empty rows and columns
-            excel_df.dropna(how='all', inplace=True)  # Remove empty rows
-            excel_df.dropna(how='all', axis=1, inplace=True)  # Remove empty columns
+            # Parse selected sheets if provided; else use all sheets
+            target_sheets = sheet_names
+            if selected_sheets:
+                try:
+                    sel = json.loads(selected_sheets)
+                    if isinstance(sel, list):
+                        target_sheets = [s for s in sheet_names if s in sel]
+                except Exception:
+                    pass
+
+            # Get session state and DuckDB connection
+            session_state = app_state.get_session_state(session_id)
+            duckdb_conn = session_state.get("duckdb_conn")
             
-            # 2. Clean column names
-            excel_df.columns = excel_df.columns.str.strip()  # Remove extra spaces
+            if not duckdb_conn:
+                raise HTTPException(status_code=500, detail="DuckDB connection not found for session")
             
-            # 3. Convert Excel data to CSV with UTF-8-sig encoding
-            csv_buffer = io.StringIO()
-            excel_df.to_csv(csv_buffer, index=False, encoding='utf-8-sig')
-            csv_buffer.seek(0)
+            # Process all sheets and register them in DuckDB
+            processed_sheets = []
             
-            # Read the processed CSV back into a dataframe
-            new_df = pd.read_csv(csv_buffer)
+            for sheet_name in target_sheets:
+                try:
+                    # Read each sheet
+                    sheet_df = pd.read_excel(io.BytesIO(contents), sheet_name=sheet_name)
+                    
+                    # Preprocessing steps
+                    # 1. Drop empty rows and columns
+                    sheet_df.dropna(how='all', inplace=True)
+                    sheet_df.dropna(how='all', axis=1, inplace=True)
+                    
+                    # 2. Clean column names
+                    sheet_df.columns = sheet_df.columns.str.strip()
+                    
+                    # 3. Skip empty sheets
+                    if sheet_df.empty:
+                        continue
+                    
+                    # Register each sheet in DuckDB with a clean table name
+                    clean_sheet_name = sheet_name.replace(' ', '_').replace('-', '_').lower()
+                    # First drop the table if it exists
+                    try:
+                        duckdb_conn.execute(f"DROP TABLE IF EXISTS {clean_sheet_name}")
+                    except:
+                        pass
+
+                    # Then register the new table
+                    duckdb_conn.register(clean_sheet_name, sheet_df)
+                    
+                    processed_sheets.append(sheet_name)
+                        
+                except Exception as e:
+                    logger.log_message(f"Error processing sheet '{sheet_name}': {str(e)}", level=logging.WARNING)
+                    continue
             
-            # Log some info about the processed data
-            # logger.log_message(f"Processed Excel sheet '{sheet_name}' into dataframe with {len(new_df)} rows and {len(new_df.columns)} columns", level=logging.INFO)
+            if not processed_sheets:
+                raise HTTPException(status_code=400, detail="No valid sheets found in Excel file")
+            
+            # Update the session description (no primary dataset needed)
+            desc = f"{name} Dataset (Excel with {len(processed_sheets)} sheets): {description}"
+            session_state["description"] = desc
+            session_state["name"] = name
+            
+            logger.log_message(f"Processed Excel file with {len(processed_sheets)} sheets: {', '.join(processed_sheets)}", level=logging.INFO)
+            
+            return {
+                "message": "Excel file processed successfully", 
+                "session_id": session_id, 
+                "sheets_processed": processed_sheets,
+                "total_sheets": len(processed_sheets)
+            }
             
         except Exception as e:
             logger.log_message(f"Error processing Excel file: {str(e)}", level=logging.ERROR)
             raise HTTPException(status_code=400, detail=f"Error processing Excel file: {str(e)}")
-        
-        # Update the dataset description to include sheet name
-        desc = f"{name} Dataset (from Excel sheet '{sheet_name}'): {description}"
-        
-        # logger.log_message(f"Updating session dataset with Excel data and description: '{desc}'", level=logging.INFO)
-        app_state.update_session_dataset(session_id, new_df, name, desc)
-        
-        # Log the final state
-        session_state = app_state.get_session_state(session_id)
-        # logger.log_message(f"Session dataset updated with Excel data and description: '{session_state.get('description')}'", level=logging.INFO)
-        
-        return {"message": "Excel file processed successfully", "session_id": session_id, "sheet": sheet_name}
+            
     except Exception as e:
         logger.log_message(f"Error in upload_excel: {str(e)}", level=logging.ERROR)
         raise HTTPException(status_code=400, detail=str(e))
@@ -168,23 +214,44 @@ async def upload_dataframe(
         
         # Now process the new file
         contents = await file.read()
-        try:
-            new_df = pd.read_csv(io.BytesIO(contents), encoding='utf-8')
-        except Exception as e:
+        # Note: There is no reliable way to determine the encoding of a file just from its bytes.
+        # We have to try common encodings or rely on user input/metadata.
+        # Try a list of common encodings to read the CSV
+        encodings_to_try = ['utf-8', 'utf-8-sig', 'unicode_escape', 'ISO-8859-1', 'latin1', 'cp1252']
+        
+        new_df = None
+        last_exception = None
+        for enc in encodings_to_try:
             try:
-                new_df = pd.read_csv(io.BytesIO(contents), encoding='unicode_escape')
+                new_df = pd.read_csv(io.BytesIO(contents), encoding=enc)
+                break
             except Exception as e:
-                try:
-                    new_df = pd.read_csv(io.BytesIO(contents), encoding='ISO-8859-1')
-                except Exception as e:
-                    raise HTTPException(status_code=400, detail=f"Error reading file: {str(e)}")
-        desc = f"{name} Dataset: {description}"
+                last_exception = e
+                continue
+        if new_df is None:
+            raise HTTPException(status_code=400, detail=f"Error reading file with tried encodings: {encodings_to_try}. Last error: {str(last_exception)}")
+        session_state = app_state.get_session_state(session_id)
+        duckdb_conn = session_state.get("duckdb_conn")
+        
+    
+        desc = f" exact_python_name: `{name}` Dataset: {description}"
         
         # logger.log_message(f"Updating session dataset with description: '{desc}'", level=logging.INFO)
         app_state.update_session_dataset(session_id, new_df, name, desc)
         
         # Log the final state
         session_state = app_state.get_session_state(session_id)
+
+        conn = session_state.get('duckdb_conn')
+        if conn is None:
+            raise HTTPException(status_code=500, detail="DuckDB connection not available for session")
+
+        try:
+            conn.execute("DROP TABLE IF EXISTS df")
+        except:
+            pass
+
+        
         # logger.log_message(f"Session dataset updated with description: '{session_state.get('description')}'", level=logging.INFO)
         
         return {"message": "Dataframe uploaded successfully", "session_id": session_id}
@@ -490,37 +557,53 @@ async def create_dataset_description(
     try:
         # Get the session state to access the dataset
         session_state = app_state.get_session_state(session_id)
-        df = session_state["current_df"]
+        conn = session_state['duckdb_conn']
+        # df = session_state["current_df"]
+
+        tables = conn.execute("SHOW TABLES").fetchall()
+
+        dataset_view = ""
+        count = 0
+        for table in tables:
+            head_data = conn.execute(f"SELECT * FROM {table[0]} LIMIT 3").df().to_markdown()
+
+            dataset_view+="exact_table_name="+table[0]+'\n:'+head_data+'\n'
+            count+=1
+
         
         # Get any existing description provided by the user
-        existing_description = request.get("existingDescription", "")
+        user_description = request.get("existingDescription", "")
         
         
         # Convert dataframe to a string representation for the agent
-        dataset_info = {
-            "columns": df.columns.tolist(),
-            "sample": df.head(2).to_dict(),
-            "stats": df.describe().to_dict()
-        }
+        # dataset_info = {
+        #     "columns": df.columns.tolist(),
+        #     "sample": df.head(2).to_dict(),
+        #     "stats": df.describe().to_dict()
+        # }
         
         # Get session-specific model
-        lm = dspy.LM(
-            model="gpt-4o-mini",
-            api_key=os.getenv("OPENAI_API_KEY"),
-            temperature=0.7,
-            max_tokens=3000
-        )
+        lm = mid_lm
         
         # Generate description using session model
         with dspy.context(lm=lm):
             # If there's an existing description, have the agent improve it
-            description = dspy.Predict(dataset_description_agent)(
-                dataset=str(dataset_info),
-                existing_description=existing_description
-            )
+            if count==1:
+                data_context = dspy.Predict(dataset_description_agent)(
+                    existing_description=user_description,
+                    dataset=dataset_view
+
+                )
+
+            else:
+                data_context = dspy.Predict(dataset_context_gen)(
+                    user_description=user_description,
+                    dataset_view=dataset_view
+
+                )
             
         
-        return {"description": description.description}
+        return {"description": data_context.data_context}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to generate description: {str(e)}")
 

@@ -197,8 +197,8 @@ def get_session_lm(session_state):
 def initialize_retrievers(styling_instructions: List[str], doc: List[str]):
     try:
         style_index = VectorStoreIndex.from_documents([Document(text=x) for x in styling_instructions])
-        data_index = VectorStoreIndex.from_documents([Document(text=x) for x in doc])
-        return {"style_index": style_index, "dataframe_index": data_index}
+        
+        return {"style_index": style_index, "dataframe_index": doc}
     except Exception as e:
         logger.log_message(f"Error initializing retrievers: {str(e)}", level=logging.ERROR)
         raise e
