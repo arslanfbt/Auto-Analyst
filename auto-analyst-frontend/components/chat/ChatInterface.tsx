@@ -1160,21 +1160,26 @@ const ChatInterface: React.FC = () => {
   }, [addMessage, clearMessages, incrementQueries, session, isAdmin, activeChatId, userId, sessionId, modelSettings, hasEnoughCredits, processRegularMessage, processAgentMessage, fetchChatHistories, checkCredits, recentlyUploadedDataset, chatHistories, syncSettingsToBackend, queriesUsed]);
 
   const handleFileUpload = async (file: File) => {
-    // Feature check for file upload (enterprise feature)
-    if (subscription && !hasFeatureAccess('CUSTOM_INTEGRATIONS', subscription).hasAccess) {
-      toast({
-        title: "Enterprise feature",
-        description: "Custom file uploads require an enterprise subscription.",
-        variant: "destructive",
-        duration: 5000,
-      });
-      return;
-    }
-
     // File validation
     const isCSVByExtension = file.name.toLowerCase().endsWith('.csv');
     const isCSVByType = file.type === 'text/csv' || file.type === 'application/csv';
+    const isExcelByExtension = file.name.toLowerCase().endsWith('.xlsx') || file.name.toLowerCase().endsWith('.xls');
+    const isExcelByType = file.type === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' || 
+                          file.type === 'application/vnd.ms-excel';
     
+    // Only check enterprise restriction for Excel files, not CSV files
+    if (isExcelByExtension || isExcelByType) {
+      if (subscription && !hasFeatureAccess('CUSTOM_INTEGRATIONS', subscription).hasAccess) {
+        toast({
+          title: "Enterprise feature",
+          description: "Excel file uploads require an enterprise subscription. CSV uploads are available for all users.",
+          variant: "destructive",
+          duration: 5000,
+        });
+        return;
+      }
+    }
+
     if (!isCSVByExtension || !isCSVByType) {
       addMessage({
         text: "Error: Please upload a valid CSV file. Other file formats are not supported.",

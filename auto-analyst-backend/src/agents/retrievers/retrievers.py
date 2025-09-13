@@ -52,9 +52,8 @@ def correct_num(df,c):
 # does most of the pre-processing
 def make_data(df, desc):
     dict_ = {}
-    dict_['df_name'] = "The data is loaded as df"
+    dict_['dataset_python_name'] = "The data is loaded as df"       
     dict_['Description'] = desc
-    dict_['dataframe_head_view'] = df.head(2).to_markdown()
     # dict_['all_column_names'] = str(list(df.columns[:20]))
 
     # for c in df.columns:
