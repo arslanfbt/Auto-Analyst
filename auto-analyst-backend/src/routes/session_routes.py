@@ -200,6 +200,7 @@ async def upload_dataframe(
     session_id: str = Depends(get_session_id_dependency),
     request: Request = None
 ):
+    
     try:
         # Log the incoming request details
         # logger.log_message(f"Upload request for session {session_id}: name='{name}', description='{description}'", level=logging.INFO)
@@ -233,7 +234,7 @@ async def upload_dataframe(
         session_state = app_state.get_session_state(session_id)
         duckdb_conn = session_state.get("duckdb_conn")
         
-    
+        name = name.replace(' ','_').lower()
         desc = f" exact_python_name: `{name}` Dataset: {description}"
         
         # logger.log_message(f"Updating session dataset with description: '{desc}'", level=logging.INFO)

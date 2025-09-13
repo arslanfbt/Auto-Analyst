@@ -1,24 +1,61 @@
 "use client"
 
-import React, { forwardRef, useImperativeHandle } from "react"
+import React, { forwardRef, useImperativeHandle, useState, useEffect, useRef } from "react"
 import { motion, AnimatePresence } from "framer-motion"
-import { Eye, Zap, Paperclip, Send, Square } from 'lucide-react'
+import { Eye, Zap, Paperclip, Send, Square, FileText, Database } from 'lucide-react'
 import { Button } from "../ui/button"
 import { Textarea } from "../ui/textarea"
 import { useChatInput } from '@/lib/hooks/useChatInput'
-import { FileUploadSection } from './FileUploadSection'
 import { ChatInputProps, ChatInputRef } from '@/types/chatInput.types'
 import ExcelUploadDialog from './ExcelUploadDialog'
+import CSVUploadDialog from './CSVUploadDialogue'
 import DeepAnalysisSidebar from '../deep-analysis/DeepAnalysisSidebar'
+import UploadSummaryDialog from './UploadSummaryDialog'
+import axios from 'axios'
+import API_URL from '@/config/api'
+
+interface AgentInfo {
+  name: string
+  description: string
+}
 
 const ChatInput = forwardRef<ChatInputRef, ChatInputProps>((props, ref) => {
   const chatInput = useChatInput(props)
+  
+  // Agent mention functionality
+  const [availableAgents, setAvailableAgents] = useState<AgentInfo[]>([])
+  const [showAgentMentions, setShowAgentMentions] = useState(false)
+  const [mentionQuery, setMentionQuery] = useState('')
+  const [mentionPosition, setMentionPosition] = useState({ top: 0, left: 0 })
+  const [filteredAgents, setFilteredAgents] = useState<AgentInfo[]>([])
+  const [selectedMentionIndex, setSelectedMentionIndex] = useState(0)
+  const mentionRef = useRef<HTMLDivElement>(null)
   
   // Expose methods to parent component
   useImperativeHandle(ref, () => ({
     handlePreviewDefaultDataset: chatInput.handlePreviewDefaultDataset,
     handleSilentDefaultDataset: chatInput.handleSilentDefaultDataset
   }))
+
+  // Fetch available agents on component mount
+  useEffect(() => {
+    const fetchAgents = async () => {
+      try {
+        const response = await axios.get(`${API_URL}/agents`)
+        if (response.data && response.data.available_agents) {
+          const agentList: AgentInfo[] = response.data.available_agents.map((name: string) => ({
+            name,
+            description: `Specialized ${name.replace(/_/g, " ")} agent`,
+          }))
+          setAvailableAgents(agentList)
+        }
+      } catch (error) {
+        console.error("Error fetching agents:", error)
+      }
+    }
+
+    fetchAgents()
+  }, [])
 
   // Handle file selection from input
   const handleFileSelect = (file: File) => {
@@ -29,53 +66,169 @@ const ChatInput = forwardRef<ChatInputRef, ChatInputProps>((props, ref) => {
     }
   }
 
-  // Handle textarea auto-resize and input
+  // Handle agent mention input
   const handleInput = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    chatInput.setMessage(e.target.value)
+    const value = e.target.value
+    const cursorPosition = e.target.selectionStart
     
-    // Auto-resize textarea
+    chatInput.setMessage(value)
+    
+    // Check for @ mention
+    const textBeforeCursor = value.substring(0, cursorPosition)
+    const mentionMatch = textBeforeCursor.match(/@(\w*)$/)
+    
+    if (mentionMatch) {
+      const query = mentionMatch[1].toLowerCase()
+      setMentionQuery(query)
+      
+      // Filter agents based on query
+      const filtered = availableAgents.filter(agent => 
+        agent.name.toLowerCase().includes(query)
+      )
+      setFilteredAgents(filtered)
+      
+      if (filtered.length > 0) {
+        // Calculate position for mention dropdown
+        const textarea = e.target
+        const rect = textarea.getBoundingClientRect()
+        const lineHeight = 24 // Approximate line height
+        const lines = textBeforeCursor.split('\n').length
+        const linePosition = (lines - 1) * lineHeight
+        
+        setMentionPosition({
+          top: rect.top + linePosition - 10,
+          left: rect.left + 20
+        })
+        setShowAgentMentions(true)
+        setSelectedMentionIndex(0)
+      } else {
+        setShowAgentMentions(false)
+      }
+    } else {
+      setShowAgentMentions(false)
+    }
+    
+    // Auto-resize textarea with reduced max height
     const textarea = e.target
     textarea.style.height = 'auto'
-    textarea.style.height = Math.min(textarea.scrollHeight, 200) + 'px'
+    textarea.style.height = Math.min(textarea.scrollHeight, 150) + 'px' // Reduced from 200 to 150
   }
 
-  // Handle keyboard shortcuts
+  // Handle agent mention selection
+  const handleMentionSelect = (agent: AgentInfo) => {
+    const value = chatInput.message
+    const cursorPosition = chatInput.inputRef.current?.selectionStart || 0
+    const textBeforeCursor = value.substring(0, cursorPosition)
+    const textAfterCursor = value.substring(cursorPosition)
+    
+    // Replace the @query with @agent_name
+    const newValue = textBeforeCursor.replace(/@\w*$/, `@${agent.name} `) + textAfterCursor
+    
+    chatInput.setMessage(newValue)
+    setShowAgentMentions(false)
+    
+    // Focus back on textarea
+    setTimeout(() => {
+      chatInput.inputRef.current?.focus()
+    }, 0)
+  }
+
+  // Handle keyboard navigation in mentions
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault()
-      if (!chatInput.disabled && !chatInput.isLoading && chatInput.message.trim()) {
-        chatInput.handleSendMessage()
+    if (showAgentMentions && filteredAgents.length > 0) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault()
+        setSelectedMentionIndex(prev => 
+          prev < filteredAgents.length - 1 ? prev + 1 : 0
+        )
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault()
+        setSelectedMentionIndex(prev => 
+          prev > 0 ? prev - 1 : filteredAgents.length - 1
+        )
+      } else if (e.key === 'Enter') {
+        e.preventDefault()
+        handleMentionSelect(filteredAgents[selectedMentionIndex])
+      } else if (e.key === 'Escape') {
+        e.preventDefault()
+        setShowAgentMentions(false)
+      }
+    } else {
+      // Normal Enter key behavior
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault()
+        if (!chatInput.disabled && !chatInput.isLoading && chatInput.message.trim()) {
+          chatInput.handleSendMessage()
+        }
       }
     }
   }
 
+  // Close mentions when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (mentionRef.current && !mentionRef.current.contains(event.target as Node)) {
+        setShowAgentMentions(false)
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [])
+
   return (
     <div className="relative w-full max-w-5xl mx-auto px-4">
       {/* Action buttons row - ChatGPT style above input */}
-      <div className="flex items-center justify-center gap-2 mb-3">
-        {/* Preview Default Dataset Button */}
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={chatInput.handlePreviewDefaultDataset}
-          className="bg-white/90 border-gray-200 text-blue-600 hover:text-blue-700 hover:bg-blue-50 hover:border-blue-300 transition-all duration-200 flex items-center gap-2 px-4 py-2 rounded-full shadow-sm"
-          disabled={chatInput.disabled || chatInput.isLoading}
-        >
-          <Eye className="h-4 w-4" />
-          <span className="text-sm font-medium">Preview Default Dataset</span>
-        </Button>
+      <div className="flex items-center justify-center gap-2 mb-2"> {/* Reduced margin from mb-3 to mb-2 */}
+        {/* Preview Default Dataset Button - only show if no file uploaded */}
+        {!chatInput.fileUpload && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={chatInput.handlePreviewDefaultDataset}
+            className="bg-white/90 border-gray-200 text-[#FF7F7F] hover:text-[#FF6666] hover:bg-[#FF7F7F]/10 hover:border-[#FF7F7F]/30 transition-all duration-200 flex items-center gap-2 px-4 py-2 rounded-full shadow-sm"
+            disabled={chatInput.disabled || chatInput.isLoading}
+          >
+            <Eye className="h-4 w-4" />
+            <span className="text-sm font-medium">Preview Default Dataset</span>
+          </Button>
+        )}
+        
+        {/* Dataset Info - show after upload - clickable to show details */}
+        {chatInput.fileUpload && chatInput.fileUpload.status === 'success' && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => chatInput.setShowUploadSummary(true)}
+            className="bg-[#FF7F7F]/10 border-[#FF7F7F]/30 text-[#FF7F7F] hover:bg-[#FF7F7F]/20 hover:border-[#FF7F7F]/50 transition-all duration-200 flex items-center gap-2 px-4 py-2 rounded-full shadow-sm"
+          >
+            <Database className="h-4 w-4" />
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium">
+                Dataset: {chatInput.datasetDescription.name || chatInput.fileUpload.file.name}
+              </span>
+              {chatInput.fileUpload.selectedSheet && (
+                <span className="text-xs bg-[#FF7F7F]/20 text-[#FF7F7F] px-2 py-0.5 rounded-full">
+                  {chatInput.fileUpload.selectedSheet}
+                </span>
+              )}
+            </div>
+          </Button>
+        )}
         
         {/* Deep Analysis Button */}
         <Button
           variant="outline"
           size="sm"
           onClick={() => chatInput.setShowDeepAnalysisSidebar(true)}
-          className="bg-white/90 border-gray-200 text-gray-600 hover:text-pink-600 hover:bg-pink-50 hover:border-pink-300 transition-all duration-200 flex items-center gap-2 px-4 py-2 rounded-full shadow-sm relative"
+          className="bg-white/90 border-gray-200 text-gray-600 hover:text-[#FF7F7F] hover:bg-[#FF7F7F]/10 hover:border-[#FF7F7F]/30 transition-all duration-200 flex items-center gap-2 px-4 py-2 rounded-full shadow-sm relative"
           disabled={chatInput.disabled || chatInput.isLoading}
         >
           <Zap className="h-4 w-4" />
           <span className="text-sm font-medium">Deep Analysis</span>
-          <span className="absolute -top-1 -right-1 bg-pink-500 text-white text-xs px-1.5 py-0.5 rounded-full">
+          <span className="absolute -top-1 -right-1 bg-[#FF7F7F] text-white text-xs px-1.5 py-0.5 rounded-full">
             Premium
           </span>
         </Button>
@@ -84,28 +237,8 @@ const ChatInput = forwardRef<ChatInputRef, ChatInputProps>((props, ref) => {
       {/* Main input container - ChatGPT style but wider */}
       <div className="bg-white border border-gray-300 rounded-3xl shadow-lg hover:shadow-xl transition-shadow duration-200 overflow-hidden w-full">
         
-        {/* File Upload Section */}
-        <AnimatePresence>
-          {chatInput.fileUpload && (
-            <motion.div
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: "auto" }}
-              exit={{ opacity: 0, height: 0 }}
-              className="border-b border-gray-200 bg-gray-50"
-            >
-              <FileUploadSection
-                fileUpload={chatInput.fileUpload}
-                fileInputRef={chatInput.fileInputRef}
-                onFileSelect={handleFileSelect}
-                onRemoveFile={chatInput.handleRemoveFile}
-                disabled={chatInput.disabled}
-              />
-            </motion.div>
-          )}
-        </AnimatePresence>
-
         {/* Main Input Section - ChatGPT style but wider */}
-        <div className="flex items-center gap-4 p-5">
+        <div className="flex items-center gap-4 p-4"> {/* Reduced padding from p-5 to p-4 */}
           {/* File attachment button - better centered */}
           <Button
             type="button"
@@ -113,7 +246,7 @@ const ChatInput = forwardRef<ChatInputRef, ChatInputProps>((props, ref) => {
             size="sm"
             onClick={() => chatInput.fileInputRef.current?.click()}
             disabled={chatInput.disabled || chatInput.isLoading}
-            className="text-gray-500 hover:text-pink-600 hover:bg-pink-50 transition-colors duration-200 p-2.5 rounded-xl flex-shrink-0 self-center"
+            className="text-gray-500 hover:text-[#FF7F7F] hover:bg-[#FF7F7F]/10 transition-colors duration-200 p-2.5 rounded-xl flex-shrink-0 self-center"
           >
             <Paperclip className="h-5 w-5" />
           </Button>
@@ -127,7 +260,7 @@ const ChatInput = forwardRef<ChatInputRef, ChatInputProps>((props, ref) => {
               onKeyDown={handleKeyDown}
               placeholder="Ask anything"
               disabled={chatInput.disabled}
-              className="min-h-[52px] max-h-[200px] resize-none border-0 shadow-none focus:ring-0 focus-visible:ring-0 bg-transparent text-gray-900 placeholder-gray-500 text-base leading-6 pr-16 py-3 w-full"
+              className="min-h-[44px] max-h-[150px] resize-none border-0 shadow-none focus:ring-0 focus-visible:ring-0 bg-transparent text-gray-900 placeholder-gray-500 text-base leading-6 pr-16 py-2.5 w-full" // Reduced min-height from 52px to 44px, max-height from 200px to 150px, padding from py-3 to py-2.5
               style={{ 
                 fontSize: '16px',
                 lineHeight: '24px',
@@ -152,7 +285,7 @@ const ChatInput = forwardRef<ChatInputRef, ChatInputProps>((props, ref) => {
                   size="sm"
                   onClick={chatInput.handleSendMessage}
                   disabled={chatInput.disabled || !chatInput.message.trim()}
-                  className="h-9 w-9 p-0 bg-pink-500 hover:bg-pink-600 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors duration-200 rounded-lg shadow-sm"
+                  className="h-9 w-9 p-0 bg-[#FF7F7F] hover:bg-[#FF6666] disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors duration-200 rounded-lg shadow-sm"
                 >
                   <Send className="h-4 w-4 text-white" />
                 </Button>
@@ -160,14 +293,6 @@ const ChatInput = forwardRef<ChatInputRef, ChatInputProps>((props, ref) => {
             </div>
           </div>
         </div>
-
-        {/* Status indicator */}
-        {chatInput.uploadSuccess && (
-          <div className="flex items-center justify-center gap-2 text-green-600 pb-3 px-4">
-            <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-            <span className="text-sm">Dataset Ready</span>
-          </div>
-        )}
 
         {/* Hidden file input */}
         <input
@@ -181,6 +306,39 @@ const ChatInput = forwardRef<ChatInputRef, ChatInputProps>((props, ref) => {
           className="hidden"
         />
       </div>
+
+      {/* Agent Mention Dropdown */}
+      <AnimatePresence>
+        {showAgentMentions && filteredAgents.length > 0 && (
+          <motion.div
+            ref={mentionRef}
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            className="absolute z-50 bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto"
+            style={{
+              top: `${mentionPosition.top + 40}px`,
+              left: `${mentionPosition.left}px`,
+              minWidth: '200px'
+            }}
+          >
+            {filteredAgents.map((agent, index) => (
+              <div
+                key={agent.name}
+                className={`px-3 py-2 cursor-pointer border-b border-gray-100 last:border-b-0 ${
+                  index === selectedMentionIndex 
+                    ? 'bg-[#FF7F7F]/10 text-[#FF7F7F]' 
+                    : 'hover:bg-gray-50'
+                }`}
+                onClick={() => handleMentionSelect(agent)}
+              >
+                <div className="font-medium text-sm">@{agent.name}</div>
+                <div className="text-xs text-gray-500">{agent.description}</div>
+              </div>
+            ))}
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Deep Analysis Sidebar */}
       <DeepAnalysisSidebar
@@ -200,73 +358,43 @@ const ChatInput = forwardRef<ChatInputRef, ChatInputProps>((props, ref) => {
         isSubmitting={chatInput.isExcelSubmitting}
       />
 
-      {/* File Preview Modal */}
-      <AnimatePresence>
-        {chatInput.showPreview && chatInput.filePreview && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
-            onClick={() => chatInput.setShowPreview(false)}
-          >
-            <motion.div
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.9, opacity: 0 }}
-              className="bg-white rounded-lg max-w-6xl max-h-[80vh] overflow-hidden shadow-xl"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="p-6">
-                <div className="flex justify-between items-center mb-4">
-                  <h3 className="text-lg font-semibold text-gray-900">
-                    Dataset Preview: {chatInput.filePreview.name}
-                  </h3>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => chatInput.setShowPreview(false)}
-                    className="text-gray-500 hover:text-gray-700"
-                  >
-                    ✕
-                  </Button>
-                </div>
-                
-                <div className="mb-4">
-                  <p className="text-sm text-gray-600">
-                    {chatInput.filePreview.description}
-                  </p>
-                </div>
+      {/* CSV Upload Dialog */}
+      <CSVUploadDialog
+        isOpen={chatInput.showCSVDialog}
+        onClose={() => chatInput.setShowCSVDialog(false)}
+        fileName={chatInput.csvFileName}
+        filePreview={chatInput.csvPreview}
+        onConfirm={chatInput.handleCSVConfirmUpload}
+        isSubmitting={chatInput.isCSVSubmitting}
+      />
 
-                <div className="overflow-auto max-h-96 border rounded-lg">
-                  <table className="min-w-full text-sm">
-                    <thead className="bg-gray-50">
-                      <tr>
-                        {chatInput.filePreview.headers.map((header, index) => (
-                          <th key={index} className="px-4 py-2 text-left font-medium text-gray-900 border-b">
-                            {header}
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {chatInput.filePreview.rows.map((row, rowIndex) => (
-                        <tr key={rowIndex} className={rowIndex % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                          {row.map((cell, cellIndex) => (
-                            <td key={cellIndex} className="px-4 py-2 border-b border-gray-200">
-                              {cell}
-                            </td>
-                          ))}
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {/* Upload Summary Dialog - shows after successful upload */}
+      <UploadSummaryDialog
+        isOpen={chatInput.showUploadSummary}
+        onClose={() => chatInput.setShowUploadSummary(false)}
+        uploadData={{
+          fileName: chatInput.fileUpload?.file.name || '',
+          datasetName: chatInput.datasetDescription.name,
+          description: chatInput.datasetDescription.description,
+          selectedSheets: chatInput.fileUpload?.selectedSheets || [],
+          isExcel: chatInput.fileUpload?.isExcel || false
+        }}
+      />
+
+      {/* Default Dataset Upload Dialog - show dialog instead of preview */}
+      <CSVUploadDialog
+        isOpen={chatInput.showPreview && !chatInput.fileUpload}
+        onClose={() => chatInput.setShowPreview(false)}
+        fileName="Default Dataset"
+        filePreview={chatInput.filePreview}
+        onConfirm={(name, description) => {
+          chatInput.setDatasetDescription({ name, description })
+          chatInput.setShowPreview(false)
+          chatInput.setUploadSuccess(true)
+          setTimeout(() => chatInput.setUploadSuccess(false), 3000)
+        }}
+        isSubmitting={false}
+      />
     </div>
   )
 })
