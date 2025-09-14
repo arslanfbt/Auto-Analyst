@@ -709,7 +709,7 @@ class planner_module(dspy.Module):
         if complexity.exact_word_complexity.strip() == "unrelated":
             if complexity.analysis_query==True:
                 plan = await self.planners['basic'](goal=goal, dataset=dataset, Agent_desc=Agent_desc)
-                return output = {
+                return {
                 "complexity": 'basic',
                 "plan": plan.plan,
                 "plan_instructions": plan.plan_instructions}

@@ -55,14 +55,11 @@ export function useAgentMentions() {
       setFilteredAgents(filtered)
       
       if (filtered.length > 0) {
-        // Calculate position for mention dropdown
+        // Calculate position for mention dropdown - position above the chat input
         const rect = textareaElement.getBoundingClientRect()
-        const lineHeight = 24 // Approximate line height
-        const lines = textBeforeCursor.split('\n').length
-        const linePosition = (lines - 1) * lineHeight
         
         setMentionPosition({
-          top: rect.top + linePosition - 10,
+          top: rect.top - 200, // Position above the input (200px above)
           left: rect.left + 20
         })
         setShowAgentMentions(true)
