@@ -291,12 +291,12 @@ const ChatInput = forwardRef<ChatInputRef, ChatInputProps>((props, ref) => {
             size="sm"
             onClick={() => {
               // Set the correct preview data before opening dialog
-              if (chatInput.fileUpload.preview) {
+              if (chatInput.fileUpload?.preview) {
                 chatInput.setCSVPreview(chatInput.fileUpload.preview)
               }
               
               // Show the appropriate dialog based on file type
-              if (chatInput.fileUpload.isExcel) {
+              if (chatInput.fileUpload?.isExcel) {
                 chatInput.setShowExcelDialog(true)
               } else {
                 chatInput.setShowCSVDialog(true)
