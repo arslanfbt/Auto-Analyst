@@ -26,12 +26,13 @@ export type Viz = PlotlyViz | MplViz
 // Simple hash function for code content
 const hashCode = (str: string): string => {
   let hash = 0;
-  if (str.length === 0) return hash.toString();
+  if (str.length === 0) return '0';
   for (let i = 0; i < str.length; i++) {
     const char = str.charCodeAt(i);
     hash = ((hash << 5) - hash) + char;
     hash = hash & hash; // Convert to 32bit integer
   }
+  // Ensure consistent positive hash
   return Math.abs(hash).toString();
 }
 
