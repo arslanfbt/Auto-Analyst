@@ -1867,7 +1867,11 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
             <div className="flex-1 p-4 overflow-hidden">
               {fullscreenViz.type === 'plotly' ? (
                 <div className="w-full h-full">
-                  <PlotlyChart data={fullscreenViz.content.data} layout={fullscreenViz.content.layout} />
+                  <PlotlyChart 
+                    data={fullscreenViz.content.data} 
+                    layout={fullscreenViz.content.layout} 
+                    isFullscreen={true}
+                  />
                 </div>
               ) : (
                 <div className="w-full h-full flex items-center justify-center">

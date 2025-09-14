@@ -289,8 +289,20 @@ const ChatInput = forwardRef<ChatInputRef, ChatInputProps>((props, ref) => {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => chatInput.setShowUploadSummary(true)}
-            className="bg-[#FF7F7F]/10 border-[#FF7F7F]/30 text-[#FF7F7F] hover:bg-[#FF7F7F]/20 hover:border-[#FF7F7F]/50 transition-all duration-200 flex items-center gap-2 px-4 py-2 rounded-full shadow-sm"
+            onClick={() => {
+              // Set the correct preview data before opening dialog
+              if (chatInput.fileUpload.preview) {
+                chatInput.setCSVPreview(chatInput.fileUpload.preview)
+              }
+              
+              // Show the appropriate dialog based on file type
+              if (chatInput.fileUpload.isExcel) {
+                chatInput.setShowExcelDialog(true)
+              } else {
+                chatInput.setShowCSVDialog(true)
+              }
+            }}
+            className="bg-[#FF7F7F]/10 border-[#FF7F7F]/30 text-[#FF7F7F] hover:bg-[#FF7F7F]/20 hover:border-[#FF7F7F]/50 transition-all duration-200 flex items-center gap-2 px-4 py-2 rounded-full shadow-sm cursor-pointer"
           >
             <Database className="h-4 w-4" />
             <div className="flex items-center gap-2">
@@ -463,6 +475,7 @@ const ChatInput = forwardRef<ChatInputRef, ChatInputProps>((props, ref) => {
         fileName={chatInput.excelFileName}
         onConfirm={chatInput.handleExcelConfirmUpload}
         isSubmitting={chatInput.isExcelSubmitting}
+        sessionId={chatInput.sessionId} // Pass sessionId
       />
 
       {/* CSV Upload Dialog */}
@@ -470,9 +483,10 @@ const ChatInput = forwardRef<ChatInputRef, ChatInputProps>((props, ref) => {
         isOpen={chatInput.showCSVDialog}
         onClose={() => chatInput.setShowCSVDialog(false)}
         fileName={chatInput.csvFileName}
-        filePreview={chatInput.csvPreview}
+        filePreview={chatInput.csvPreview} // This now shows the correct preview
         onConfirm={chatInput.handleCSVConfirmUpload}
         isSubmitting={chatInput.isCSVSubmitting}
+        sessionId={chatInput.sessionId} // Add sessionId
       />
 
       {/* Upload Summary Dialog - shows after successful upload */}
@@ -501,6 +515,7 @@ const ChatInput = forwardRef<ChatInputRef, ChatInputProps>((props, ref) => {
           setTimeout(() => chatInput.setUploadSuccess(false), 3000)
         }}
         isSubmitting={false}
+        sessionId={chatInput.sessionId} // Add sessionId
       />
     </div>
   )

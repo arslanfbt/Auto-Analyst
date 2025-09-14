@@ -1,12 +1,13 @@
 // Move all interfaces and types here
 export interface FileUpload {
   file: File
-  status: 'loading' | 'success' | 'error'
-  errorMessage?: string
-  isExcel?: boolean
+  status: 'uploading' | 'success' | 'error'
+  isExcel: boolean
+  selectedSheets: string[]
   sheets?: string[]
   selectedSheet?: string
-  dataset_upload_id?: number
+  errorMessage?: string
+  preview?: FilePreview // Add preview data to FileUpload
 }
 
 export interface AgentSuggestion {

@@ -397,29 +397,33 @@ export const useChatInput = (props: ChatInputProps) => {
   // CSV confirm upload handler
   const handleCSVConfirmUpload = async (name: string, description: string) => {
     try {
-      // Update the session description with the final name and description
-      const formData = new FormData()
-      formData.append('name', name)
-      formData.append('description', description)
+      setIsCSVSubmitting(true)
       
-      // Call an endpoint to update the session description (if such an endpoint exists)
-      // Or we could call upload_dataframe again with the same file but new description
-      // For now, let's just update the local state
-      setDatasetDescription({ name, description })
-      setUploadSuccess(true)
-      setShowCSVDialog(false)
+      // Call the reset-session endpoint to update the dataset description
+      const response = await axios.post(`${PREVIEW_API_URL}/reset-session`, {
+        name: name,
+        description: description
+      }, {
+        headers: getHeaders(),
+      })
       
-      // Show upload summary after successful upload
-      setTimeout(() => {
-        setShowUploadSummary(true)
-        setUploadSuccess(false)
-      }, 500)
+      if (response.data) {
+        // Update local state
+        setDatasetDescription({ name, description })
+        setUploadSuccess(true)
+        setShowCSVDialog(false)
+        
+        // Show upload summary after successful upload
+        setTimeout(() => {
+          setShowUploadSummary(true)
+          setUploadSuccess(false)
+        }, 500)
+      }
     } catch (error) {
       console.error('Error updating CSV description:', error)
-      setErrorNotification({
-        message: 'Failed to update description',
-        details: getErrorMessage(error)
-      })
+      setUploadSuccess(false)
+    } finally {
+      setIsCSVSubmitting(false)
     }
   }
 

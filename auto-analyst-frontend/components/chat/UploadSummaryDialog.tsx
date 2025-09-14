@@ -1,7 +1,7 @@
-import React from "react"
+import React, { useState } from "react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
-import { FileText, BarChart3, CheckCircle2, FileSpreadsheet } from "lucide-react"
+import { FileText, BarChart3, CheckCircle2, FileSpreadsheet, ChevronDown, ChevronUp } from "lucide-react"
 
 interface UploadSummaryDialogProps {
   isOpen: boolean
@@ -21,6 +21,12 @@ export default function UploadSummaryDialog({
   uploadData
 }: UploadSummaryDialogProps) {
   const { fileName, datasetName, description, selectedSheets, isExcel } = uploadData
+  const [showFullDescription, setShowFullDescription] = useState(false)
+  
+  // Truncate description to first 150 characters
+  const truncatedDescription = description.length > 150 
+    ? description.substring(0, 150) + "..." 
+    : description
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -86,9 +92,33 @@ export default function UploadSummaryDialog({
               <FileText className="w-5 h-5 text-gray-600 mt-0.5" />
               <div className="flex-1">
                 <h3 className="font-medium text-gray-900 mb-1">Description</h3>
-                <p className="text-sm text-gray-600 whitespace-pre-wrap">
-                  {description}
-                </p>
+                <div 
+                  className={`text-sm text-gray-600 whitespace-pre-wrap ${
+                    showFullDescription 
+                      ? 'max-h-[200px] overflow-y-auto pr-2' 
+                      : ''
+                  }`}
+                >
+                  {showFullDescription ? description : truncatedDescription}
+                </div>
+                {description.length > 150 && (
+                  <button
+                    onClick={() => setShowFullDescription(!showFullDescription)}
+                    className="flex items-center gap-1 text-xs text-[#FF7F7F] hover:text-[#FF6666] mt-2 transition-colors"
+                  >
+                    {showFullDescription ? (
+                      <>
+                        <ChevronUp className="w-3 h-3" />
+                        Show Less
+                      </>
+                    ) : (
+                      <>
+                        <ChevronDown className="w-3 h-3" />
+                        Show More
+                      </>
+                    )}
+                  </button>
+                )}
               </div>
             </div>
           </div>

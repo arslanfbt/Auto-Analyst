@@ -21,19 +21,25 @@ const PlotlyChart: React.FC<PlotlyChartProps> = ({ data, layout = {}, isFullscre
       const container = containerRef.current
       
       if (isFullscreen) {
-        // For fullscreen: use viewport dimensions instead of container rect
-        const viewportWidth = window.innerWidth
-        const viewportHeight = window.innerHeight
+        // For fullscreen: get the actual available space from the container
+        const containerRect = container.getBoundingClientRect()
         
-        // Account for modal padding and header (roughly 120px for header + padding)
-        const availableWidth = viewportWidth * 0.95 - 80  // 95vw minus padding
-        const availableHeight = viewportHeight * 0.95 - 120 // 95vh minus header and padding
+        // Use the actual container dimensions, accounting for padding and margins
+        const availableWidth = containerRect.width - 120 // Account for plot margins (60px each side)
+        const availableHeight = containerRect.height - 120 // Account for plot margins (60px each side)
         
-        // Set reasonable max sizes but allow it to be responsive
-        const width = Math.min(Math.max(availableWidth, 500), 1200)
-        const height = Math.min(Math.max(availableHeight, 350), 700)
+        // Ensure minimum sizes and reasonable maximums
+        const width = Math.min(Math.max(availableWidth, 400), 1400)
+        const height = Math.min(Math.max(availableHeight, 300), 800)
         
-        console.log('Fullscreen dimensions:', { width, height, availableWidth, availableHeight })
+        console.log('Fullscreen dimensions:', { 
+          width, 
+          height, 
+          containerWidth: containerRect.width, 
+          containerHeight: containerRect.height,
+          availableWidth, 
+          availableHeight 
+        })
         
         setDimensions((prev) => {
           if (prev.width !== width || prev.height !== height) {
