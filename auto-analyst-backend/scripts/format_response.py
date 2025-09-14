@@ -316,7 +316,7 @@ def format_code_backticked_block(code_str):
     return f'```python\n{code_clean}\n```'
 
     
-def execute_code_from_markdown(code_str, dataframe=None):
+def execute_code_from_markdown(code_str, datasets=None):
     import pandas as pd
     import plotly.express as px
     import plotly
@@ -562,8 +562,11 @@ def execute_code_from_markdown(code_str, dataframe=None):
     pd.DataFrame.__repr__ = custom_df_repr
 
     # If a dataframe is provided, add it to the context
-    if dataframe is not None:
-        context['df'] = dataframe
+    for dataset_name, dataset_df in datasets.items():
+        if dataset_df is not None:
+            context[dataset_name] = dataset_df
+            logger.log_message(f"Added dataset '{dataset_name}' to execution context", level=logging.DEBUG)
+
 
     # remove pd.read_csv() if it's already in the context
     modified_code = re.sub(r"pd\.read_csv\(\s*[\"\'].*?[\"\']\s*\)", '', modified_code)
@@ -952,7 +955,7 @@ def format_complexity(instructions):
         return "\n".join(markdown_lines).strip()    
 
 
-def format_response_to_markdown(api_response, agent_name = None, dataframe=None):
+def format_response_to_markdown(api_response, agent_name = None, datasets=None):
     try:
         markdown = []
         # logger.log_message(f"API response for {agent_name} at {time.strftime('%Y-%m-%d %H:%M:%S')}: {api_response}", level=logging.INFO)
@@ -1035,11 +1038,11 @@ def format_response_to_markdown(api_response, agent_name = None, dataframe=None)
                     if content['refined_complete_code'] is not None and content['refined_complete_code'] != "":
                         clean_code = format_code_block(content['refined_complete_code']) 
                         markdown_code = format_code_backticked_block(content['refined_complete_code'])
-                        output, json_outputs, matplotlib_outputs = execute_code_from_markdown(clean_code, dataframe)
+                        output, json_outputs, matplotlib_outputs = execute_code_from_markdown(clean_code, datasets)
                     elif "```python" in content['summary']:
                         clean_code = format_code_block(content['summary'])
                         markdown_code = format_code_backticked_block(content['summary'])
-                        output, json_outputs, matplotlib_outputs = execute_code_from_markdown(clean_code, dataframe)
+                        output, json_outputs, matplotlib_outputs = execute_code_from_markdown(clean_code, datasets)
                 except Exception as e:
                     logger.log_message(f"Error in execute_code_from_markdown: {str(e)}", level=logging.ERROR)
                     markdown_code = f"**Error**: {str(e)}"
@@ -1086,29 +1089,3 @@ def format_response_to_markdown(api_response, agent_name = None, dataframe=None)
     return '\n'.join(markdown)
 
 
-# Example usage with dummy data
-if __name__ == "__main__":
-    sample_response = {
-        "code_combiner_agent": {
-            "reasoning": "Sample reasoning for multiple charts.",
-            "refined_complete_code": """
-```python
-import plotly.express as px
-import pandas as pd
-
-# Sample Data
-df = pd.DataFrame({'Category': ['A', 'B', 'C'], 'Values': [10, 20, 30]})
-
-# First Chart
-fig = px.bar(df, x='Category', y='Values', title='Bar Chart')
-fig.show()
-
-# Second Chart
-fig2 = px.pie(df, values='Values', names='Category', title='Pie Chart')
-fig2.show()
-```
-"""
-        }
-    }
-
-    formatted_md = format_response_to_markdown(sample_response)

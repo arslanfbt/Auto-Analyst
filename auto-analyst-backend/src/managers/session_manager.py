@@ -42,9 +42,9 @@ class SessionManager:
         self._make_data = None
 
         # Initialize chat manager
-        self._dataset_description = "Housing Dataset"
+
         self._default_name = "Housing.csv"
-        self.conn = None  # Keep for backward compatibility if needed
+
         
         self._dataset_description = """This dataset contains residential property information with details about pricing, physical characteristics, and amenities. The data can be used for real estate market analysis, property valuation, and understanding the relationship between house features and prices.
 
@@ -85,7 +85,6 @@ Data Handling Recommendations:
 
 This dataset appears clean with consistent formatting and no missing values, making it suitable for immediate analysis with appropriate categorical encoding.
         """
-        self.styling_instructions = styling_instructions
         self.available_agents = available_agents
         self.chat_manager = ChatManager(db_url=os.getenv("DATABASE_URL"))
         
@@ -140,13 +139,14 @@ This dataset appears clean with consistent formatting and no missing values, mak
             logger.log_message(f"Creating new session state for session_id: {session_id}", level=logging.INFO)
             
             # Initialize DuckDB connection for this session
-            duckdb_conn = duckdb.connect(f'{session_id}.duckdb')
+            duckdb_conn = duckdb.connect(':memory:')
             if self._default_df is not None:
-                duckdb_conn.register("current_data", self._default_df)
+                duckdb_conn.register("df", self._default_df)
             
             # Initialize with default state
             self._sessions[session_id] = {
-                "current_df": self._default_df.copy() if self._default_df is not None else None,
+                "datasets": {"df":self._default_df.copy() if self._default_df is not None else None},
+                "dataset_names": ["df"],
                 "retrievers": self._default_retrievers,
                 "ai_system": self._default_ai_system,
                 "make_data": self._make_data,
@@ -164,9 +164,9 @@ This dataset appears clean with consistent formatting and no missing values, mak
             session["model_config"] = default_model_config
             
             # If dataset is somehow missing, restore it
-            if "current_df" not in session or session["current_df"] is None:
+            if "datasets" not in session or session["datasets"] is None:
                 logger.log_message(f"Restoring missing dataset for session {session_id}", level=logging.WARNING)
-                session["current_df"] = self._default_df.copy() if self._default_df is not None else None
+                session["datasets"] = {"df":self._default_df.copy() if self._default_df is not None else None}
                 session["retrievers"] = self._default_retrievers
                 session["ai_system"] = self._default_ai_system
                 session["description"] = self._dataset_description
@@ -204,15 +204,9 @@ This dataset appears clean with consistent formatting and no missing values, mak
             logger.log_message(f"Cleared session state for session {session_id}", level=logging.INFO)
 
 
-    def update_session_dataset(self, session_id: str, df, name: str, desc: str):
+    def update_session_dataset(self, session_id: str, datasets, names, desc: str):
         """
-        Update dataset for a specific session
 
-        Args:
-            session_id: The session identifier
-            df: Pandas DataFrame containing the dataset
-            name: Name of the dataset
-            desc: Description of the dataset
         """
         try:
             self._make_data = {'description':desc}
@@ -240,24 +234,25 @@ This dataset appears clean with consistent formatting and no missing values, mak
                 duckdb_conn = self._sessions[session_id]["duckdb_conn"]
             else:
                 # Create new DuckDB connection if it doesn't exist
-                duckdb_conn = duckdb.connect(f'{session_id}.duckdb')
+                duckdb_conn = duckdb.connect(':memory:')
             
             # Register the new dataset in DuckDB
             try:
                 duckdb_conn.execute("DROP TABLE IF EXISTS current_data")
             except:
                 pass
-            duckdb_conn.register("current_data", df)
+            
             
             # Create a completely fresh session state for the new dataset
             # This ensures no remnants of the previous dataset remain
             session_state = {
-                "current_df": df,
+                "datasets": datasets,
+                "dataset_names":names,
                 "retrievers": retrievers,
                 "ai_system": ai_system,
                 "make_data": self._make_data,
                 "description": desc,
-                "name": name,
+                "name": names[0],
                 "duckdb_conn":duckdb_conn,
                 "model_config": default_model_config,  # Initialize with default
             }
@@ -276,10 +271,6 @@ This dataset appears clean with consistent formatting and no missing values, mak
             self._sessions[session_id] = session_state
             
             # Update DuckDB with new dataset
-            if session_id in self._sessions:
-                duckdb_conn = self._sessions[session_id].get("duckdb_conn")
-                if duckdb_conn:
-                    duckdb_conn.register("current_data", df)
             
             logger.log_message(f"Updated session {session_id} with completely fresh dataset state: {name}", level=logging.INFO)
         except Exception as e:
@@ -309,7 +300,7 @@ This dataset appears clean with consistent formatting and no missing values, mak
                 logger.log_message(f"Cleared existing state for session {session_id} before reset.", level=logging.INFO)
 
             # Create new DuckDB connection for default session
-            duckdb_conn = duckdb.connect(f'{session_id}.duckdb')
+            duckdb_conn = duckdb.connect(':memory:')
 
             # Register default DataFrame in DuckDB
             if self._default_df is not None:
@@ -317,7 +308,8 @@ This dataset appears clean with consistent formatting and no missing values, mak
 
             # Initialize with default state
             self._sessions[session_id] = {
-                "current_df": self._default_df.copy(), # Use a copy
+                "datasets": {'df':self._default_df.copy()},
+                "dataset_names": ["df"], # Use a copy
                 "retrievers": self._default_retrievers,
                 "ai_system": self._default_ai_system,
                 "description": self._dataset_description,

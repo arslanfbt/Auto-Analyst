@@ -42,6 +42,7 @@ import { useUserSubscriptionStore } from '@/lib/store/userSubscriptionStore'
 import { hasFeatureAccess } from '@/lib/features/feature-access'
 import { toast } from "@/components/ui/use-toast"
 import FeedbackPopup from './FeedbackPopup'
+import { SessionRecovery } from '@/lib/utils/sessionRecovery';
 
 interface PlotlyMessage {
   type: "plotly"
@@ -87,7 +88,7 @@ const ChatInterface: React.FC = () => {
   const [agents, setAgents] = useState<AgentInfo[]>([])
   const [showWelcome, setShowWelcome] = useState(true)
   const [abortController, setAbortController] = useState<AbortController | null>(null)
-  const { sessionId } = useSessionStore()
+  const { sessionId, setSessionId, clearSessionId } = useSessionStore()
   const chatInputRef = useRef<{ 
     handlePreviewDefaultDataset: () => void;
     handleSilentDefaultDataset: () => void;
@@ -1490,6 +1491,26 @@ const ChatInterface: React.FC = () => {
     router.push('/account');
     setIsUserProfileOpen(false);
   }, [router, setIsUserProfileOpen]);
+
+  // Add session recovery on component mount
+  useEffect(() => {
+    const recoverSession = () => {
+      const storedSessionId = SessionRecovery.getStoredSessionId();
+      if (storedSessionId && storedSessionId !== sessionId) {
+        console.log(`Recovering session on mount: ${storedSessionId}`);
+        setSessionId(storedSessionId);
+      }
+    };
+    
+    recoverSession();
+  }, []); // Run once on mount
+  
+  // Add session persistence when sessionId changes
+  useEffect(() => {
+    if (sessionId) {
+      SessionRecovery.storeSessionId(sessionId);
+    }
+  }, [sessionId]);
 
   // Don't render anything until mounted to prevent hydration mismatch
   if (!mounted) {

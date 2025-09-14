@@ -518,7 +518,7 @@ async def execute_code(
     session_state = app_state.get_session_state(session_id)
     # logger.log_message(f"Session State: {session_state}", level=logging.INFO)
     
-    if session_state["current_df"] is None:
+    if session_state["datasets"] is None:
         raise HTTPException(
             status_code=400,
             detail="No dataset is currently loaded. Please link a dataset before executing code."
@@ -574,7 +574,7 @@ async def execute_code(
         error_messages = None
         
         try:
-            full_output, json_outputs, matplotlib_outputs = execute_code_from_markdown(code, session_state["current_df"])
+            full_output, json_outputs, matplotlib_outputs = execute_code_from_markdown(code, session_state["datasets"])
             
             # Even with "successful" execution, check for agent failures in the output
             failed_blocks = identify_error_blocks(code, full_output)
@@ -692,7 +692,7 @@ async def edit_code(
         session_state = app_state.get_session_state(session_id)
         
         # Get dataset context
-        dataset_context = get_dataset_context(session_state["current_df"])
+        dataset_context = get_dataset_context(session_state["datasets"])
         try:
             # Use the configured language model with dataset context
             edited_code = edit_code_with_dspy(
@@ -745,7 +745,7 @@ async def fix_code(
         session_state = app_state.get_session_state(session_id)
         
         # Get dataset context
-        dataset_context = get_dataset_context(session_state["current_df"])
+        dataset_context = get_dataset_context(session_state["datasets"])
         
         try:
             # Use the code_fix agent to fix the code, with dataset context

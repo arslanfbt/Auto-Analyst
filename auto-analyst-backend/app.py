@@ -194,14 +194,6 @@ def get_session_lm(session_state):
     return MODEL_OBJECTS[model_name]
 
 # Initialize retrievers with empty data first
-def initialize_retrievers(styling_instructions: List[str], doc: List[str]):
-    try:
-        style_index = VectorStoreIndex.from_documents([Document(text=x) for x in styling_instructions])
-        
-        return {"style_index": style_index, "dataframe_index": doc}
-    except Exception as e:
-        logger.log_message(f"Error initializing retrievers: {str(e)}", level=logging.ERROR)
-        raise e
 
 # clear console
 def clear_console():
@@ -239,9 +231,9 @@ class AppState:
         """Clear session-specific state using the SessionManager"""
         self._session_manager.clear_session_state(session_id)
 
-    def update_session_dataset(self, session_id: str, df, name, desc):
+    def update_session_dataset(self, session_id: str, datasets, names, desc):
         """Update dataset for a specific session using the SessionManager"""
-        self._session_manager.update_session_dataset(session_id, df, name, desc)
+        self._session_manager.update_session_dataset(session_id, datasets, names, desc)
 
     def reset_session_to_default(self, session_id: str):
         """Reset a session to use the default dataset using the SessionManager"""
@@ -434,7 +426,7 @@ async def chat_with_agent(
         logger.log_message(f"[DEBUG] Session state after query params: user_id={session_state.get('user_id')}, chat_id={session_state.get('chat_id')}", level=logging.DEBUG)
         
         # Validate dataset and agent name
-        if session_state["current_df"] is None:
+        if session_state["datasets"] is None:
             logger.log_message(f"[DEBUG] No dataset loaded", level=logging.DEBUG)
             raise HTTPException(status_code=400, detail=RESPONSE_ERROR_NO_DATASET)
 
@@ -534,7 +526,7 @@ async def chat_with_agent(
                     logger.log_message(f"[DEBUG] Custom single agent response type: {type(response)}, content: {str(response)[:200]}...", level=logging.DEBUG)
         
         logger.log_message(f"[DEBUG] About to format response to markdown. Response type: {type(response)}", level=logging.DEBUG)
-        formatted_response = format_response_to_markdown(response, agent_name, session_state["current_df"])
+        formatted_response = format_response_to_markdown(response, agent_name, session_state["datasets"])
         logger.log_message(f"[DEBUG] Formatted response type: {type(formatted_response)}, length: {len(str(formatted_response))}", level=logging.DEBUG)
         
         if formatted_response == RESPONSE_ERROR_INVALID_QUERY:
@@ -591,7 +583,7 @@ async def chat_with_all(
         _update_session_from_query_params(request_obj, session_state)
         
         # Validate dataset
-        if session_state["current_df"] is None:
+        if session_state["datasets"] is None:
             raise HTTPException(status_code=400, detail=RESPONSE_ERROR_NO_DATASET)
         
         if session_state["ai_system"] is None:
@@ -862,7 +854,7 @@ async def _generate_streaming_responses(session_state: dict, query: str, session
     
     plan_description = format_response_to_markdown(
         {"analytical_planner": plan_response}, 
-        dataframe=session_state["current_df"]
+        datasets=session_state["datasets"]
     )
     
     # Check if plan is valid
@@ -934,7 +926,7 @@ async def _generate_streaming_responses(session_state: dict, query: str, session
 
             formatted_response = format_response_to_markdown(
                 {agent_name: response}, 
-                dataframe=session_state["current_df"]
+                datasets=session_state["datasets"]
             ) 
 
             yield json.dumps({
@@ -1175,7 +1167,7 @@ async def deep_analysis_streaming(
         _update_session_from_query_params(request_obj, session_state)
         
         # Validate dataset
-        if session_state["current_df"] is None:
+        if session_state["datasets"] is None:
             raise HTTPException(status_code=400, detail=RESPONSE_ERROR_NO_DATASET)
         
         # Get user_id from session state (if available)
@@ -1250,7 +1242,7 @@ async def _generate_deep_analysis_stream(session_state: dict, goal: str, session
     
     try:
         # Get dataset info
-        df = session_state["current_df"]
+        datasets = session_state["datasets"]
         dtypes_info = pd.DataFrame({
             'Column': df.columns,
             'Data Type': df.dtypes.astype(str)

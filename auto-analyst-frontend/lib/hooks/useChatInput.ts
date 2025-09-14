@@ -6,6 +6,7 @@ import { ChatInputProps, FileUpload, FilePreview, DatasetDescription, ErrorNotif
 import axios from 'axios'
 import API_URL from '@/config/api'
 import logger from '@/lib/utils/logger'
+import { SessionRecovery } from '@/lib/utils/sessionRecovery';
 
 const PREVIEW_API_URL = API_URL;
 
@@ -58,22 +59,55 @@ export const useChatInput = (props: ChatInputProps) => {
   // Add a ref to prevent multiple initializations
   const sessionInitialized = useRef(false)
 
-  // Ensure we always have a session ID
+  // Ensure we always have a session ID with proper persistence
   useEffect(() => {
     if (!sessionId && !sessionInitialized.current) {
       sessionInitialized.current = true
-      // Generate a new session ID if we don't have one
-      const newSessionId = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
-      setSessionId(newSessionId)
+      
+      // Try to recover existing session ID
+      const existingSessionId = SessionRecovery.getStoredSessionId();
+      
+      if (existingSessionId) {
+        console.log(`Recovering existing session ID: ${existingSessionId}`);
+        setSessionId(existingSessionId);
+      } else {
+        // Generate new session ID only if none exists
+        const newSessionId = SessionRecovery.generateSessionId();
+        console.log(`Generating new session ID: ${newSessionId}`);
+        setSessionId(newSessionId);
+        SessionRecovery.storeSessionId(newSessionId);
+      }
     }
-  }, [sessionId, setSessionId])
+  }, [sessionId, setSessionId]);
 
-  // Helper function to safely update session ID
+  // Add cleanup effect to store session ID when it changes
+  useEffect(() => {
+    if (sessionId && sessionId.length > 0) {
+      // Store in localStorage for persistence across browser sessions
+      localStorage.setItem('auto-analyst-session-id', sessionId)
+      // Store in sessionStorage for current browser session
+      sessionStorage.setItem('auto-analyst-session-id', sessionId)
+    }
+  }, [sessionId])
+
+  // Helper function to safely update session ID (with persistence)
   const updateSessionIdSafely = (newSessionId: string) => {
     if (newSessionId && newSessionId !== sessionId) {
       console.log(`Session ID update: ${sessionId} -> ${newSessionId}`)
       setSessionId(newSessionId)
+      
+      // Immediately persist the new session ID
+      localStorage.setItem('auto-analyst-session-id', newSessionId)
+      sessionStorage.setItem('auto-analyst-session-id', newSessionId)
     }
+  }
+
+  // Helper function to clear session ID (with cleanup)
+  const clearSessionId = () => {
+    console.log('Clearing session ID')
+    setSessionId(null)
+    localStorage.removeItem('auto-analyst-session-id')
+    sessionStorage.removeItem('auto-analyst-session-id')
   }
 
   // Helper function to get headers with session ID
@@ -494,6 +528,7 @@ export const useChatInput = (props: ChatInputProps) => {
     handleExcelConfirmUpload,
     handleCSVConfirmUpload,
     handleFilePreview,
+    clearSessionId, // Add this new function
     
     // Props
     ...props

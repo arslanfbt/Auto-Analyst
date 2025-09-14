@@ -1,10 +1,11 @@
 import io
 import logging
 import json
+import re
 import os
 from io import StringIO
 from typing import Optional, List
-
+import random
 import pandas as pd
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.security import APIKeyHeader
@@ -125,6 +126,7 @@ async def upload_excel(
             # Get session state and DuckDB connection
             session_state = app_state.get_session_state(session_id)
             duckdb_conn = session_state.get("duckdb_conn")
+            datasets = {}
             
             if not duckdb_conn:
                 raise HTTPException(status_code=500, detail="DuckDB connection not found for session")
@@ -151,6 +153,10 @@ async def upload_excel(
                     
                     # Register each sheet in DuckDB with a clean table name
                     clean_sheet_name = sheet_name.replace(' ', '_').replace('-', '_').lower()
+                    # Check if the clean_sheet_name is a safe Python variable name; if not, append a random int
+                    if not is_safe_variable_name(clean_sheet_name):
+                        
+                        clean_sheet_name = f"{clean_sheet_name}_{random.randint(1000, 9999)}"
                     # First drop the table if it exists
                     try:
                         duckdb_conn.execute(f"DROP TABLE IF EXISTS {clean_sheet_name}")
@@ -158,9 +164,11 @@ async def upload_excel(
                         pass
 
                     # Then register the new table
+                    datasets[clean_sheet_name] = clean_sheet_name
                     duckdb_conn.register(clean_sheet_name, sheet_df)
+                    # exec(f"{clean_sheet_name} = duckdb_conn.execute('SELECT * FROM {clean_sheet_name}').fetchdf()")
                     
-                    processed_sheets.append(sheet_name)
+                    processed_sheets.append(clean_sheet_name)
                         
                 except Exception as e:
                     logger.log_message(f"Error processing sheet '{sheet_name}': {str(e)}", level=logging.WARNING)
@@ -171,8 +179,9 @@ async def upload_excel(
             
             # Update the session description (no primary dataset needed)
             desc = f"{name} Dataset (Excel with {len(processed_sheets)} sheets): {description}"
-            session_state["description"] = desc
-            session_state["name"] = name
+            app_state.update_session_dataset(session_id,datasets,processed_sheets,desc)
+
+
             
             logger.log_message(f"Processed Excel file with {len(processed_sheets)} sheets: {', '.join(processed_sheets)}", level=logging.INFO)
             
@@ -191,6 +200,12 @@ async def upload_excel(
         logger.log_message(f"Error in upload_excel: {str(e)}", level=logging.ERROR)
         raise HTTPException(status_code=400, detail=str(e))
 
+
+
+def is_safe_variable_name(name: str) -> bool:
+    """Check if name is a safe Python identifier"""
+    return bool(re.match(r'^[a-zA-Z_][a-zA-Z0-9_]*$', name)) and len(name) <= 30
+
 @router.post("/upload_dataframe")
 async def upload_dataframe(
     file: UploadFile = File(...),
@@ -206,6 +221,14 @@ async def upload_dataframe(
         # logger.log_message(f"Upload request for session {session_id}: name='{name}', description='{description}'", level=logging.INFO)
         
         # Check if we need to force a complete session reset before upload
+
+
+
+        # If name is longer than 30 characters, shorten it
+        safe_name = name.replace(' ', '_').lower()
+
+
+
         force_refresh = request.headers.get("X-Force-Refresh") == "true" if request else False
         
         if force_refresh:
@@ -221,6 +244,7 @@ async def upload_dataframe(
         encodings_to_try = ['utf-8', 'utf-8-sig', 'unicode_escape', 'ISO-8859-1', 'latin1', 'cp1252']
         
         new_df = None
+        
         last_exception = None
         for enc in encodings_to_try:
             try:
@@ -229,28 +253,31 @@ async def upload_dataframe(
             except Exception as e:
                 last_exception = e
                 continue
+
         if new_df is None:
             raise HTTPException(status_code=400, detail=f"Error reading file with tried encodings: {encodings_to_try}. Last error: {str(last_exception)}")
         session_state = app_state.get_session_state(session_id)
         duckdb_conn = session_state.get("duckdb_conn")
         
-        name = name.replace(' ','_').lower()
+        
         desc = f" exact_python_name: `{name}` Dataset: {description}"
         
         # logger.log_message(f"Updating session dataset with description: '{desc}'", level=logging.INFO)
-        app_state.update_session_dataset(session_id, new_df, name, desc)
+        datasets = {name:new_df}
+        # app_state.update_session_dataset(session_id, datasets , [name], desc)
         
         # Log the final state
         session_state = app_state.get_session_state(session_id)
 
-        conn = session_state.get('duckdb_conn')
-        if conn is None:
-            raise HTTPException(status_code=500, detail="DuckDB connection not available for session")
+        # conn = session_state.get('duckdb_conn')
+        # if conn is None:
+        #     raise HTTPException(status_code=500, detail="DuckDB connection not available for session")
 
-        try:
-            conn.execute("DROP TABLE IF EXISTS df")
-        except:
-            pass
+        # try:
+        #     conn.execute("DROP TABLE IF EXISTS df")
+        #     conn.execute(f"DROP TABLE IF EXISTS {name}")
+        # except:
+        #     pass
 
         
         # logger.log_message(f"Session dataset updated with description: '{session_state.get('description')}'", level=logging.INFO)
@@ -381,7 +408,9 @@ async def preview_csv(app_state = Depends(get_app_state), session_id: str = Depe
     try:
         # Get the session state to ensure we're using the current dataset
         session_state = app_state.get_session_state(session_id)
-        df = session_state.get("current_df")
+        datasets = session_state.get("datasets")
+        keys = list(datasets.keys())
+        df = datasets[keys[0]]
         
         # Handle case where dataset might be missing
         if df is None:
@@ -390,7 +419,9 @@ async def preview_csv(app_state = Depends(get_app_state), session_id: str = Depe
             app_state.reset_session_to_default(session_id)
             # Get the session state again
             session_state = app_state.get_session_state(session_id)
-            df = session_state.get("current_df")
+            datasets = session_state.get("datasets")
+            keys = list(datasets.keys())
+            df = datasets[keys[0]]
 
         # Replace NaN values with None (which becomes null in JSON)
         df = df.where(pd.notna(df), None)
@@ -403,7 +434,7 @@ async def preview_csv(app_state = Depends(get_app_state), session_id: str = Depe
                     df[column] = df[column].astype(bool)
 
         # Extract name and description if available
-        name = session_state.get("name", "Dataset")
+        name = session_state.get("name")
         description = session_state.get("description", "No description available")
         
         
@@ -465,7 +496,10 @@ async def get_default_dataset(
     
     # Get the session state to ensure we're using the default dataset
     session_state = app_state.get_session_state(session_id)
-    df = session_state["current_df"]
+    datasets = session_state["datasets"]
+    keys = list(datasets.keys())
+    if "df" in keys:
+        df = datasets['df']
     desc = session_state["description"]
     
     # Replace NaN values with None (which becomes null in JSON)
@@ -526,11 +560,11 @@ async def reset_session(
         # If name and description are provided, update the dataset description
         if name and description:
             session_state = app_state.get_session_state(session_id)
-            df = session_state["current_df"]
+            datasets = session_state["datasets"]
             desc = f"{description}"
             
             # Update the session dataset with the new description
-            app_state.update_session_dataset(session_id, df, name, desc)
+            app_state.update_session_dataset(session_id, datasets, name, desc)
         
         return {
             "message": "Session reset to default dataset",
@@ -559,7 +593,7 @@ async def create_dataset_description(
         # Get the session state to access the dataset
         session_state = app_state.get_session_state(session_id)
         conn = session_state['duckdb_conn']
-        # df = session_state["current_df"]
+        
 
         tables = conn.execute("SHOW TABLES").fetchall()
 
@@ -634,14 +668,12 @@ async def get_session_info(
             is_custom = True
                     
         # Also check by checking if we have a dataframe that's different from default
-        if "current_df" in session_state and session_state["current_df"] is not None:
+        if "datasets" in session_state and session_state["datasets"] is not None:
             try:
                 # This is just a basic check - we could make it more sophisticated if needed
-                custom_col_count = len(session_state["current_df"].columns)
-                if hasattr(session_manager, "_default_df") and session_manager._default_df is not None:
-                    default_col_count = len(session_manager._default_df.columns)
-                    if custom_col_count != default_col_count:
-                        is_custom = True
+                key_count = len(session_state["datasets"].keys)
+                if key_count > 1:
+                    is_custom = True
             except Exception as e:
                 logger.log_message(f"Error comparing datasets: {str(e)}", level=logging.ERROR)
         

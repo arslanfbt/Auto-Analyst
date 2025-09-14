@@ -22,12 +22,19 @@ export const useSessionStore = create<SessionStore>()(
         if (currentState.validateSessionId(id)) {
           console.log(`Updating session ID from ${currentState.sessionId} to ${id}`);
           set({ sessionId: id });
+          
+          // Also update localStorage for redundancy
+          localStorage.setItem('auto-analyst-session-id', id);
         } else {
           console.warn(`Rejected session ID update: ${id}`);
         }
       },
       
-      clearSessionId: () => set({ sessionId: null }),
+      clearSessionId: () => {
+        console.log('Clearing session ID from store');
+        set({ sessionId: null });
+        localStorage.removeItem('auto-analyst-session-id');
+      },
       
       isUserBased: () => {
         const state = get();
@@ -38,9 +45,16 @@ export const useSessionStore = create<SessionStore>()(
         const currentState = get();
         const currentId = currentState.sessionId;
         
+        // If no current session ID, accept any new one
         if (!currentId) {
-          // No current session ID, accept any new one
+          console.log(`Accepting new session ID (no current): ${newId}`);
           return true;
+        }
+        
+        // If it's the same ID, reject (no change needed)
+        if (currentId === newId) {
+          console.log(`Rejecting same session ID: ${newId}`);
+          return false;
         }
         
         const isNewUserBased = newId.startsWith('user_');
@@ -58,30 +72,35 @@ export const useSessionStore = create<SessionStore>()(
           return true;
         }
         
-        // Same type, allow if different
-        return newId !== currentId;
+        // For same type, only allow if significantly different (avoid minor changes)
+        const isSignificantlyDifferent = Math.abs(newId.length - currentId.length) > 5;
+        if (isSignificantlyDifferent) {
+          console.log(`Accepting significantly different session ID: ${newId}`);
+          return true;
+        }
+        
+        console.log(`Rejecting similar session ID: ${newId}`);
+        return false;
       }
     }),
     {
       name: 'session-storage',
+      // Add partialize to only persist sessionId
+      partialize: (state) => ({ sessionId: state.sessionId }),
+      // Add storage configuration for better persistence
       storage: {
-        getItem: (name: string) => {
-          if (typeof window === 'undefined') return null;
-          const userKey = getUserStorageKey(name);
-          const item = localStorage.getItem(userKey);
-          return item ? JSON.parse(item) : null;
+        getItem: (name) => {
+          const str = localStorage.getItem(name);
+          if (!str) return null;
+          return JSON.parse(str);
         },
-        setItem: (name: string, value: any) => {
-          if (typeof window === 'undefined') return;
-          const userKey = getUserStorageKey(name);
-          localStorage.setItem(userKey, JSON.stringify(value));
+        setItem: (name, value) => {
+          localStorage.setItem(name, JSON.stringify(value));
         },
-        removeItem: (name: string) => {
-          if (typeof window === 'undefined') return;
-          const userKey = getUserStorageKey(name);
-          localStorage.removeItem(userKey);
+        removeItem: (name) => {
+          localStorage.removeItem(name);
         },
       },
     }
   )
-) 
+); 

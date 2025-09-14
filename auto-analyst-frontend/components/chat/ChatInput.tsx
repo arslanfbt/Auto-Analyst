@@ -2,7 +2,7 @@
 
 import React, { forwardRef, useImperativeHandle, useState, useEffect, useRef } from "react"
 import { motion, AnimatePresence } from "framer-motion"
-import { Eye, Zap, Paperclip, Send, Square, FileText, Database } from 'lucide-react'
+import { Eye, Zap, Paperclip, Send, Square, FileText, Database, Loader2 } from 'lucide-react'
 import { Button } from "../ui/button"
 import { Textarea } from "../ui/textarea"
 import { useChatInput } from '@/lib/hooks/useChatInput'
@@ -31,6 +31,11 @@ const ChatInput = forwardRef<ChatInputRef, ChatInputProps>((props, ref) => {
   const [selectedMentionIndex, setSelectedMentionIndex] = useState(0)
   const mentionRef = useRef<HTMLDivElement>(null)
   
+  // File upload status display
+  const [showUploadStatus, setShowUploadStatus] = useState(false)
+  const [uploadStatusMessage, setUploadStatusMessage] = useState('')
+  const [uploadStatusType, setUploadStatusType] = useState<'loading' | 'success' | 'error'>('loading')
+  
   // Expose methods to parent component
   useImperativeHandle(ref, () => ({
     handlePreviewDefaultDataset: chatInput.handlePreviewDefaultDataset,
@@ -56,6 +61,39 @@ const ChatInput = forwardRef<ChatInputRef, ChatInputProps>((props, ref) => {
 
     fetchAgents()
   }, [])
+
+  // Monitor file upload status and show loading indicator
+  useEffect(() => {
+    if (chatInput.fileUpload) {
+      const { status, file, errorMessage } = chatInput.fileUpload
+      
+      if (status === 'loading') {
+        setShowUploadStatus(true)
+        setUploadStatusType('loading')
+        setUploadStatusMessage(`Uploading ${file.name}...`)
+      } else if (status === 'success') {
+        setShowUploadStatus(true)
+        setUploadStatusType('success')
+        setUploadStatusMessage(`${file.name} uploaded successfully`)
+        
+        // Hide success message after 3 seconds
+        setTimeout(() => {
+          setShowUploadStatus(false)
+        }, 3000)
+      } else if (status === 'error') {
+        setShowUploadStatus(true)
+        setUploadStatusType('error')
+        setUploadStatusMessage(errorMessage || `Failed to upload ${file.name}`)
+        
+        // Hide error message after 5 seconds
+        setTimeout(() => {
+          setShowUploadStatus(false)
+        }, 5000)
+      }
+    } else {
+      setShowUploadStatus(false)
+    }
+  }, [chatInput.fileUpload])
 
   // Handle file selection from input
   const handleFileSelect = (file: File) => {
@@ -178,22 +216,72 @@ const ChatInput = forwardRef<ChatInputRef, ChatInputProps>((props, ref) => {
     }
   }, [])
 
+  // Get status icon based on upload status type
+  const getStatusIcon = () => {
+    switch (uploadStatusType) {
+      case 'loading':
+        return <Loader2 className="h-4 w-4 animate-spin text-blue-500" />
+      case 'success':
+        return <Database className="h-4 w-4 text-green-500" />
+      case 'error':
+        return <Square className="h-4 w-4 text-red-500" />
+      default:
+        return <Eye className="h-4 w-4 text-gray-500" />
+    }
+  }
+
+  // Get status text color based on upload status type
+  const getStatusTextColor = () => {
+    switch (uploadStatusType) {
+      case 'loading':
+        return 'text-blue-600'
+      case 'success':
+        return 'text-green-600'
+      case 'error':
+        return 'text-red-600'
+      default:
+        return 'text-gray-600'
+    }
+  }
+
+  // Check if we should show loading indicator near Preview Default Dataset button
+  const showLoadingNearPreview = chatInput.fileUpload && chatInput.fileUpload.status === 'loading'
+
   return (
     <div className="relative w-full max-w-5xl mx-auto px-4">
       {/* Action buttons row - ChatGPT style above input */}
       <div className="flex items-center justify-center gap-2 mb-2"> {/* Reduced margin from mb-3 to mb-2 */}
         {/* Preview Default Dataset Button - only show if no file uploaded */}
         {!chatInput.fileUpload && (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={chatInput.handlePreviewDefaultDataset}
-            className="bg-white/90 border-gray-200 text-[#FF7F7F] hover:text-[#FF6666] hover:bg-[#FF7F7F]/10 hover:border-[#FF7F7F]/30 transition-all duration-200 flex items-center gap-2 px-4 py-2 rounded-full shadow-sm"
-            disabled={chatInput.disabled || chatInput.isLoading}
-          >
-            <Eye className="h-4 w-4" />
-            <span className="text-sm font-medium">Preview Default Dataset</span>
-          </Button>
+          <div className="relative flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={chatInput.handlePreviewDefaultDataset}
+              className="bg-white/90 border-gray-200 text-[#FF7F7F] hover:text-[#FF6666] hover:bg-[#FF7F7F]/10 hover:border-[#FF7F7F]/30 transition-all duration-200 flex items-center gap-2 px-4 py-2 rounded-full shadow-sm"
+              disabled={chatInput.disabled || chatInput.isLoading}
+            >
+              <Eye className="h-4 w-4" />
+              <span className="text-sm font-medium">Preview Default Dataset</span>
+            </Button>
+            
+            {/* Loading indicator next to Preview Default Dataset button */}
+            <AnimatePresence>
+              {showLoadingNearPreview && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.8 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.8 }}
+                  className="flex items-center gap-1 bg-blue-50 border border-blue-200 rounded-full px-3 py-1.5 shadow-sm"
+                >
+                  <Loader2 className="h-3 w-3 animate-spin text-blue-500" />
+                  <span className="text-xs text-blue-600 font-medium">
+                    Uploading...
+                  </span>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
         )}
         
         {/* Dataset Info - show after upload - clickable to show details */}
@@ -233,6 +321,25 @@ const ChatInput = forwardRef<ChatInputRef, ChatInputProps>((props, ref) => {
           </span>
         </Button>
       </div>
+
+      {/* File Upload Status Indicator */}
+      <AnimatePresence>
+        {showUploadStatus && (
+          <motion.div
+            initial={{ opacity: 0, y: -10, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -10, scale: 0.95 }}
+            className="flex items-center justify-center mb-3"
+          >
+            <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-full px-4 py-2 shadow-sm">
+              {getStatusIcon()}
+              <span className={`text-sm font-medium ${getStatusTextColor()}`}>
+                {uploadStatusMessage}
+              </span>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Main input container - ChatGPT style but wider */}
       <div className="bg-white border border-gray-300 rounded-3xl shadow-lg hover:shadow-xl transition-shadow duration-200 overflow-hidden w-full">
