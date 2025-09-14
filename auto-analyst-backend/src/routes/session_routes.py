@@ -4,7 +4,7 @@ import json
 import re
 import os
 from io import StringIO
-from typing import Optional, List
+from typing import Optional, List, Dict
 import random
 import pandas as pd
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
@@ -17,6 +17,7 @@ from src.utils.logger import Logger
 # data context is for excelsheets with multiple sheets and dataset_descrp is for single sheet or csv
 from src.agents.agents import data_context_gen, dataset_description_agent
 from src.utils.model_registry import MODEL_OBJECTS, mid_lm
+from src.utils.dataset_description_generator import generate_dataset_description
 import dspy
 
 
@@ -164,7 +165,7 @@ async def upload_excel(
                         pass
 
                     # Then register the new table
-                    datasets[clean_sheet_name] = clean_sheet_name
+                    datasets[clean_sheet_name] = sheet_df  # Store the DataFrame, not the name
                     duckdb_conn.register(clean_sheet_name, sheet_df)
                     # exec(f"{clean_sheet_name} = duckdb_conn.execute('SELECT * FROM {clean_sheet_name}').fetchdf()")
                     
@@ -178,7 +179,7 @@ async def upload_excel(
                 raise HTTPException(status_code=400, detail="No valid sheets found in Excel file")
             
             # Update the session description (no primary dataset needed)
-            desc = f"{name} Dataset (Excel with {len(processed_sheets)} sheets): {description}"
+            desc = description
             app_state.update_session_dataset(session_id,datasets,processed_sheets,desc)
 
 
@@ -225,7 +226,7 @@ async def upload_dataframe(
 
 
         # If name is longer than 30 characters, shorten it
-        safe_name = name.replace(' ', '_').lower()
+        name = name.replace(' ', '_').lower().strip()
 
 
 
@@ -264,7 +265,7 @@ async def upload_dataframe(
         
         # logger.log_message(f"Updating session dataset with description: '{desc}'", level=logging.INFO)
         datasets = {name:new_df}
-        # app_state.update_session_dataset(session_id, datasets , [name], desc)
+        app_state.update_session_dataset(session_id, datasets , [name], desc)
         
         # Log the final state
         session_state = app_state.get_session_state(session_id)
@@ -592,53 +593,18 @@ async def create_dataset_description(
     try:
         # Get the session state to access the dataset
         session_state = app_state.get_session_state(session_id)
-        conn = session_state['duckdb_conn']
         
-
-        tables = conn.execute("SHOW TABLES").fetchall()
-
-        dataset_view = ""
-        count = 0
-        for table in tables:
-            head_data = conn.execute(f"SELECT * FROM {table[0]} LIMIT 3").df().to_markdown()
-
-            dataset_view+="exact_table_name="+table[0]+'\n:'+head_data+'\n'
-            count+=1
-
+        tables = session_state['datasets']
+        dataset_names = session_state.get('dataset_names', list(tables.keys()))
         
         # Get any existing description provided by the user
         user_description = request.get("existingDescription", "")
         
+        # Use the utility function to generate description with proper formatting
+        generated_description = generate_dataset_description(tables, user_description, dataset_names)
         
-        # Convert dataframe to a string representation for the agent
-        # dataset_info = {
-        #     "columns": df.columns.tolist(),
-        #     "sample": df.head(2).to_dict(),
-        #     "stats": df.describe().to_dict()
-        # }
+        return {"description": generated_description}
         
-        # Get session-specific model
-        lm = mid_lm
-        
-        # Generate description using session model
-        with dspy.context(lm=lm):
-            # If there's an existing description, have the agent improve it
-            if count==1:
-                data_context = dspy.Predict(dataset_description_agent)(
-                    existing_description=user_description,
-                    dataset=dataset_view
-
-                )
-
-            else:
-                data_context = dspy.Predict(dataset_context_gen)(
-                    user_description=user_description,
-                    dataset_view=dataset_view
-
-                )
-            
-        
-        return {"description": data_context.data_context}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to generate description: {str(e)}")
 

@@ -9,11 +9,14 @@ from typing import Dict, Any, List
 from llama_index.core import Document, VectorStoreIndex
 from src.utils.logger import Logger
 from src.managers.user_manager import get_current_user
-from src.agents.agents import auto_analyst
+from src.agents.agents import auto_analyst, dataset_description_agent, data_context_gen
 from src.agents.retrievers.retrievers import make_data
 from src.managers.chat_manager import ChatManager
+from src.utils.model_registry import mid_lm
 from dotenv import load_dotenv
 import duckdb
+import dspy
+from src.utils.dataset_description_generator import generate_dataset_description
 
 load_dotenv()
 
@@ -206,19 +209,9 @@ This dataset appears clean with consistent formatting and no missing values, mak
 
     def update_session_dataset(self, session_id: str, datasets, names, desc: str):
         """
-
+        Update session with new dataset and optionally auto-generate description
         """
         try:
-            self._make_data = {'description':desc}
-            retrievers = self.initialize_retrievers(self.styling_instructions, [str(self._make_data)])
-            
-            # Check if session has a user_id to create user-specific AI system
-            current_user_id = None
-            if session_id in self._sessions and "user_id" in self._sessions[session_id]:
-                current_user_id = self._sessions[session_id]["user_id"]
-            
-            ai_system = self.create_ai_system_for_user(retrievers, current_user_id)
-            
             # Get default model config for new sessions
             default_model_config = {
                 "provider": os.getenv("MODEL_PROVIDER", "openai"),
@@ -242,19 +235,40 @@ This dataset appears clean with consistent formatting and no missing values, mak
             except:
                 pass
             
+            # Auto-generate description if we have datasets
+            if datasets:
+                try:
+                    generated_desc = generate_dataset_description(datasets, desc, names)
+                    desc = generated_desc  # No need to format again since it's already formatted
+                    logger.log_message(f"Auto-generated description for session {session_id}", level=logging.INFO)
+                except Exception as e:
+                    logger.log_message(f"Failed to auto-generate description: {str(e)}", level=logging.WARNING)
+                    # Keep the original description if generation fails
+                    pass
+            
+            # Initialize retrievers and AI system BEFORE creating session_state
+            # Update make_data with the description
+            self._make_data = {'description': desc}
+            retrievers = self.initialize_retrievers(self.styling_instructions, [str(self._make_data)])
+            
+            # Check if session has a user_id to create user-specific AI system
+            current_user_id = None
+            if session_id in self._sessions and "user_id" in self._sessions[session_id]:
+                current_user_id = self._sessions[session_id]["user_id"]
+            
+            ai_system = self.create_ai_system_for_user(retrievers, current_user_id)
             
             # Create a completely fresh session state for the new dataset
-            # This ensures no remnants of the previous dataset remain
             session_state = {
                 "datasets": datasets,
-                "dataset_names":names,
-                "retrievers": retrievers,
-                "ai_system": ai_system,
+                "dataset_names": names,
+                "retrievers": retrievers,  # Now retrievers is defined
+                "ai_system": ai_system,    # Now ai_system is defined
                 "make_data": self._make_data,
                 "description": desc,
                 "name": names[0],
-                "duckdb_conn":duckdb_conn,
-                "model_config": default_model_config,  # Initialize with default
+                "duckdb_conn": duckdb_conn,
+                "model_config": default_model_config,
             }
             
             # Preserve user_id, chat_id, and model_config if they exist in the current session
@@ -264,15 +278,12 @@ This dataset appears clean with consistent formatting and no missing values, mak
                 if "chat_id" in self._sessions[session_id]:
                     session_state["chat_id"] = self._sessions[session_id]["chat_id"]
                 if "model_config" in self._sessions[session_id]:
-                    # Preserve the user's model configuration
                     session_state["model_config"] = self._sessions[session_id]["model_config"]
             
             # Replace the entire session with the new state
             self._sessions[session_id] = session_state
             
-            # Update DuckDB with new dataset
-            
-            logger.log_message(f"Updated session {session_id} with completely fresh dataset state: {name}", level=logging.INFO)
+            logger.log_message(f"Updated session {session_id} with completely fresh dataset state: {names}", level=logging.INFO)
         except Exception as e:
             logger.log_message(f"Error updating dataset for session {session_id}: {str(e)}", level=logging.ERROR)
             raise e

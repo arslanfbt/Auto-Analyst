@@ -5,6 +5,9 @@ import { Textarea } from "@/components/ui/textarea"
 import { Input } from "@/components/ui/input"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { FileText, Eye, Loader2, Sparkles } from "lucide-react"
+import axios from 'axios'
+import API_URL from '@/config/api'
+// Remove the useSession import since we're getting sessionId as a prop
 
 interface CSVUploadDialogProps {
   isOpen: boolean
@@ -18,6 +21,8 @@ interface CSVUploadDialogProps {
   }
   onConfirm: (name: string, description: string) => void
   isSubmitting: boolean
+  existingData?: any
+  sessionId: string // Add sessionId prop
 }
 
 export default function CSVUploadDialog({
@@ -26,106 +31,71 @@ export default function CSVUploadDialog({
   fileName,
   filePreview,
   onConfirm,
-  isSubmitting
+  isSubmitting,
+  existingData,
+  sessionId // Use the prop instead of useSession
 }: CSVUploadDialogProps) {
   const [datasetName, setDatasetName] = useState<string>("")
   const [description, setDescription] = useState<string>("")
   const [activeTab, setActiveTab] = useState<"edit" | "preview">("edit")
   const [isGeneratingDescription, setIsGeneratingDescription] = useState(false)
 
-  // Initialize with filename and blank description
+  // Initialize with existing data if provided, otherwise use props
   useEffect(() => {
-    if (fileName && !datasetName) {
+    if (existingData) {
+      // If we have existing data (from uploaded dataset), use it
+      setDatasetName(existingData.name || fileName)
+      setDescription(existingData.description || '')
+    } else if (fileName && !datasetName) {
+      // If it's a new upload, use filename
       const baseFileName = fileName.replace(/\.csv$/i, '').replace('Default Dataset', 'Housing Dataset')
       setDatasetName(baseFileName)
     }
-    // Don't pre-fill description - start blank
-  }, [fileName, datasetName])
+  }, [fileName, datasetName, existingData])
+
+  const handleClose = () => {
+    if (!isSubmitting) {
+      setDatasetName('')
+      setDescription('')
+      setActiveTab("edit")
+      onClose()
+    }
+  }
 
   const handleSubmit = () => {
     if (!datasetName.trim() || !description.trim()) return
     onConfirm(datasetName.trim(), description.trim())
   }
 
-  const handleClose = () => {
-    if (!isSubmitting) {
-      onClose()
-    }
-  }
-
   const handleAutoGenerate = async () => {
-    if (!filePreview) return
+    if (!sessionId) {
+      console.error('No session ID available for description generation')
+      return
+    }
     
     setIsGeneratingDescription(true)
     
     try {
-      // Create a detailed description based on the data
-      const headers = filePreview.headers
-      const sampleRows = filePreview.rows.slice(0, 3)
-      
-      // Analyze the data to create a comprehensive description
-      let generatedDescription = `This dataset contains ${headers.length} columns and appears to be a comprehensive data collection. `
-      
-      // Analyze column types and patterns
-      const numericColumns = []
-      const textColumns = []
-      const dateColumns = []
-      
-      headers.forEach((header, index) => {
-        const sampleValues = sampleRows.map(row => row[index]).filter(val => val !== null && val !== undefined)
-        
-        if (sampleValues.length > 0) {
-          const firstValue = sampleValues[0]
-          if (typeof firstValue === 'number' || !isNaN(Number(firstValue))) {
-            numericColumns.push(header)
-          } else if (typeof firstValue === 'string') {
-            if (firstValue.includes('/') || firstValue.includes('-') || firstValue.includes('202')) {
-              dateColumns.push(header)
-            } else {
-              textColumns.push(header)
-            }
-          }
+      // Always use the create-dataset-description endpoint (same as Excel)
+      const response = await axios.post(`${API_URL}/create-dataset-description`, {
+        sessionId: sessionId,
+        existingDescription: description
+      }, {
+        headers: {
+          'Content-Type': 'application/json',
+          ...(sessionId && { 'X-Session-ID': sessionId }),
         }
       })
       
-      // Build detailed description
-      if (numericColumns.length > 0) {
-        generatedDescription += `The dataset includes ${numericColumns.length} numeric columns (${numericColumns.slice(0, 3).join(', ')}${numericColumns.length > 3 ? ' and more' : ''}) which suggest quantitative measurements or metrics. `
+      if (response.data && response.data.description) {
+        setDescription(response.data.description)
+      } else {
+        console.error('No description received from backend')
       }
-      
-      if (textColumns.length > 0) {
-        generatedDescription += `There are ${textColumns.length} text-based columns (${textColumns.slice(0, 3).join(', ')}${textColumns.length > 3 ? ' and more' : ''}) that likely contain categorical data, identifiers, or descriptive information. `
-      }
-      
-      if (dateColumns.length > 0) {
-        generatedDescription += `The dataset also includes ${dateColumns.length} date/time columns (${dateColumns.slice(0, 2).join(', ')}${dateColumns.length > 2 ? ' and more' : ''}) which enable temporal analysis. `
-      }
-      
-      // Add analysis suggestions
-      generatedDescription += `This data structure is well-suited for various analytical approaches including statistical analysis, trend identification, correlation studies, and predictive modeling. `
-      
-      // Add specific insights based on column names
-      const columnNames = headers.map(h => h.toLowerCase())
-      if (columnNames.some(name => name.includes('price') || name.includes('cost') || name.includes('revenue'))) {
-        generatedDescription += `Given the presence of financial metrics, this dataset would be particularly valuable for economic analysis, pricing strategies, and financial forecasting. `
-      }
-      
-      if (columnNames.some(name => name.includes('customer') || name.includes('user') || name.includes('client'))) {
-        generatedDescription += `The customer-related fields suggest this data could be used for customer segmentation, behavior analysis, and customer relationship management insights. `
-      }
-      
-      if (columnNames.some(name => name.includes('location') || name.includes('address') || name.includes('city'))) {
-        generatedDescription += `Geographic information present in the dataset enables location-based analysis, regional comparisons, and spatial data visualization. `
-      }
-      
-      generatedDescription += `The comprehensive nature of this dataset makes it suitable for machine learning applications, business intelligence reporting, and strategic decision-making processes.`
-      
-      setDescription(generatedDescription)
     } catch (error) {
       console.error('Error generating description:', error)
-      // Fallback to simple description
-      const features = filePreview.headers.slice(0, 5).join(', ')
-      setDescription(`This dataset contains ${filePreview.headers.length} columns including ${features}${filePreview.headers.length > 5 ? ' and more' : ''}. The data can be used for analysis and insights.`)
+      // Show user-friendly error message instead of fallback
+      setDescription('Failed to generate description. Please try again or enter manually.')
     } finally {
       setIsGeneratingDescription(false)
     }

@@ -12,6 +12,7 @@ interface ExcelUploadDialogProps {
   fileName: string
   onConfirm: (selectedSheets: string[], name: string, description: string) => void
   isSubmitting: boolean
+  sessionId: string // Add sessionId prop
 }
 
 export default function ExcelUploadDialog({
@@ -20,16 +21,17 @@ export default function ExcelUploadDialog({
   sheets,
   fileName,
   onConfirm,
-  isSubmitting
+  isSubmitting,
+  sessionId // Add sessionId parameter
 }: ExcelUploadDialogProps) {
   const [selectedSheets, setSelectedSheets] = useState<string[]>([])
   const [datasetName, setDatasetName] = useState<string>("")
   const [description, setDescription] = useState<string>("")
 
-  // Initialize with first sheet selected and set default name
+  // Initialize dataset name from filename
   useEffect(() => {
     if (sheets.length > 0 && selectedSheets.length === 0) {
-      setSelectedSheets([sheets[0]])
+      setSelectedSheets([sheets[0]]) // Auto-select first sheet
     }
     if (fileName && !datasetName) {
       const baseFileName = fileName.replace(/\.(xlsx|xls)$/i, '')
@@ -37,12 +39,8 @@ export default function ExcelUploadDialog({
     }
   }, [sheets, fileName, selectedSheets.length, datasetName])
 
-  // Reset description when dialog opens
-  useEffect(() => {
-    if (isOpen && !description) {
-      setDescription(`Excel data from ${fileName}`)
-    }
-  }, [isOpen, fileName, description])
+  // Remove auto-generation when dialog opens - let user control when to generate
+  // (No auto-generation effect for Excel uploads)
 
   const handleSheetToggle = (sheetName: string) => {
     setSelectedSheets(prev => 

@@ -12,7 +12,7 @@ max_tokens = int(os.getenv("MAX_TOKENS", 6000))
 
 small_lm = dspy.LM('openai/gpt-4o-mini',max_tokens=300,api_key=os.getenv("OPENAI_API_KEY"), cache=False)
 
-mid_lm = dspy.LM('openai/gpt-4o-mini',max_tokens=1000,api_key=os.getenv("OPENAI_API_KEY"), cache=False)
+mid_lm = dspy.LM('openai/gpt-4o-mini',max_tokens=1300,api_key=os.getenv("OPENAI_API_KEY"), cache=False)
 
 gpt_4o_mini = dspy.LM('openai/gpt-4o-mini',max_tokens=4000,api_key=os.getenv("OPENAI_API_KEY"), cache=False)
 

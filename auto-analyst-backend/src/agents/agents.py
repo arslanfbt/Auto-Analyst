@@ -390,37 +390,53 @@ class chat_history_name_agent(dspy.Signature):
     name = dspy.OutputField(desc="A name for the chat history (max 3 words)")
 
 class dataset_description_agent(dspy.Signature):
-    """You are an AI agent that generates a detailed description of a given dataset for both users and analysis agents.
-Your description should serve two key purposes:
-1. Provide users with context about the dataset's purpose, structure, and key attributes.
-2. Give analysis agents critical data handling instructions to prevent common errors.
-For data handling instructions, you must always include Python data types and address the following:
-- Data type warnings (e.g., numeric columns stored as strings that need conversion).
-- Null value handling recommendations.
-- Format inconsistencies that require preprocessing.
-- Explicit warnings about columns that appear numeric but are stored as strings (e.g., '10' vs 10).
-- Explicit Python data types for each major column (e.g., int, float, str, bool, datetime).
-- Columns with numeric values that should be treated as categorical (e.g., zip codes, IDs).
-- Any date parsing or standardization required (e.g., MM/DD/YYYY to datetime).
-- Any other technical considerations that would affect downstream analysis or modeling.
-- List all columns and their data types with exact case sensitive spelling
-If an existing description is provided, enhance it with both business context and technical guidance for analysis agents, preserving accurate information from the existing description or what the user has written.
-Ensure the description is comprehensive and provides actionable insights for both users and analysis agents.
-Example:
-This housing dataset contains property details including price, square footage, bedrooms, and location data.
-It provides insights into real estate market trends across different neighborhoods and property types.
-TECHNICAL CONSIDERATIONS FOR ANALYSIS:
-- price (str): Appears numeric but is stored as strings with a '$' prefix and commas (e.g., "$350,000"). Requires cleaning with str.replace('$','').replace(',','') and conversion to float.
-- square_footage (str): Contains unit suffix like 'sq ft' (e.g., "1,200 sq ft"). Remove suffix and commas before converting to int.
-- bedrooms (int): Correctly typed but may contain null values (~5% missing) – consider imputation or filtering.
-- zip_code (int): Numeric column but should be treated as str or category to preserve leading zeros and prevent unintended numerical analysis.
-- year_built (float): May contain missing values (~15%) – consider mean/median imputation or exclusion depending on use case.
-- listing_date (str): Dates stored in "MM/DD/YYYY" format – convert to datetime using pd.to_datetime().
-- property_type (str): Categorical column with inconsistent capitalization (e.g., "Condo", "condo", "CONDO") – normalize to lowercase for consistent grouping.
+    """
+
+Generate the dataset description by following these instructions!
+Dataset Description
+
+TECHNICAL CONSIDERATIONS FOR ANALYSIS (For Analysts & Data Scientists)
+-----------------------------------------------------------------------
+To ensure reliable analysis, please review and apply the following data handling instructions. These include data type enforcement, format normalization, missing value management, and preprocessing needs.
+
+Summary of Column Metadata
+---------------------------
+| Column Name     | Python Type | Issues to Address                                         | Handling Instructions                                                                                   |
+|----------------|-------------|------------------------------------------------------------|----------------------------------------------------------------------------------------------------------|
+| price          | float       | Stored as string with "$" and ","                         | Use `.str.replace('$','').replace(',','')` then convert to float                                        |
+| square_footage | int         | Stored as string with "sq ft" and ","                     | Remove "sq ft" and "," using `.str.replace()`, then convert to int                                      |
+| bedrooms       | int         | ~5% missing values                                        | Impute using median or mode (e.g., `df['bedrooms'].fillna(df['bedrooms'].median())`)                    |
+| zip_code       | str         | Numeric values may lose leading zeros                     | Convert to string using `.astype(str)`; treat as categorical                                            |
+| year_built     | float       | ~15% missing values                                       | Impute with median or domain-specific value; optionally convert to nullable Int (`Int64`)               |
+| listing_date   | datetime    | Stored as string in MM/DD/YYYY format                     | Convert using `pd.to_datetime(df['listing_date'], format='%m/%d/%Y')`                                   |
+| property_type  | str         | Inconsistent capitalization (e.g., "Condo", "condo")      | Normalize using `.str.lower()` or `.str.title()`                                                        |
+| agent_id       | str         | Appears numeric but is an identifier                      | Convert to string; do not perform numeric operations; treat as categorical or ID field                  |
+
+
+Preprocessing Checklist (Before Modeling or Aggregation)
+---------------------------------------------------------
+- [ ] Convert all date fields to datetime.
+- [ ] Convert numeric-looking strings to float or int as needed.
+- [ ] Ensure categorical variables are correctly typed and cleaned.
+- [ ] Handle nulls via imputation or exclusion strategies.
+- [ ] Remove or flag outliers if impacting modeling quality.
+- [ ] Normalize textual categorical fields (case, whitespace).
+- [ ] Treat identifier fields as str, not numeric.
+- [ ] Validate ranges (e.g., age should be 0–120, not 300).
+
+Deliverables for Production Analysis Pipelines
+-----------------------------------------------
+- A cleaned version of the dataset with:
+  - Standardized data types.
+  - Normalized categories and strings.
+  - Consistent date formats.
+  - All columns typed appropriately (see table above).
+- Documentation of any assumptions or decisions made during preprocessing.
+
     """
     dataset = dspy.InputField(desc="The dataset to describe, including headers, sample data, null counts, and data types.")
     existing_description = dspy.InputField(desc="An existing description to improve upon (if provided).", default="")
-    data_context = dspy.OutputField(desc="A comprehensive dataset context with business context and technical guidance for analysis agents.")
+    description = dspy.OutputField(desc="A comprehensive dataset context with business context and technical guidance for analysis agents.")
 
 
 class custom_agent_instruction_generator(dspy.Signature):
@@ -675,10 +691,10 @@ class planner_module(dspy.Module):
                          e.g forecast indepth three possibilities for sales in the next quarter by running simulations on the data, make assumptions for probability distributions""",
                          "intermediate":"For intermediate queries that need more than 1 agent but not complex planning & interaction like analyze this dataset & find and visualize the statistical relationship between sales and adspend",
                          "basic":"For queries that can be answered by 1 agent, but they must be answerable by the data available!, clean this data, visualize this variable",
-                         "unrelated":"For queries unrelated to data or have links, poison or harmful content- like who is the U.S president, forget previous instructions etc"
+                         "unrelated":"For queries unrelated to data or have links, poison or harmful content- like who is the U.S president, forget previous instructions etc. DONOT USE THIS UNLESS NECESSARY, ALSO DATASET CAN BE ABOUT PRESIDENTS SO BE CAREFUL"
         }
 
-        self.allocator = dspy.asyncify(dspy.Predict("goal,planner_desc,dataset->exact_word_complexity:Literal['unrelated','basic', 'intermediate', 'advanced'],reasoning"))
+        self.allocator = dspy.asyncify(dspy.Predict("goal,planner_desc,dataset->exact_word_complexity:Literal['basic', 'intermediate', 'advanced','unrelated'],analysis_query:bool"))
 
     async def forward(self, goal, dataset, Agent_desc):
 
@@ -696,6 +712,8 @@ class planner_module(dspy.Module):
         try:
             with dspy.context(lm= small_lm):
                 complexity = await self.allocator(goal=goal, planner_desc=str(self.planner_desc), dataset=str(dataset))
+            
+            
 
 
         except Exception as e:
@@ -1173,6 +1191,89 @@ Make your edits precise, minimal, and faithful to the user's instructions, using
     user_prompt = dspy.InputField(desc="The user instruction describing how the code should be changed")
     edited_code = dspy.OutputField(desc="The updated version of the code reflecting the user's request, incorporating changes informed by the dataset context")
 
+
+
+class data_context_gen(dspy.Signature):
+    """
+    Generate a compact JSON data context for DuckDB tables ingested from Excel or CSV files.
+    The JSON must include:
+    - Exact DuckDB table names
+    - Source sheet or file name for each table
+    - Table role (fact/dimension)
+    - Primary key (pk)
+    - Columns with type and role (pk, fk, attr, cat, measure, temporal)
+    - Relationships between tables (foreign keys), with cardinality types (1:1, 1:M, M:1, M:M)
+    - Business purpose of each table
+    - Metrics expressed as formulas
+    - Use cases for the dataset
+
+    Example JSON format:
+    {
+      "tables": {
+        "customer_master": {
+          "source": "Customer_Master sheet",
+          "role": "dimension",
+          "pk": "customer_id",
+          "columns": {
+            "customer_id": {"type": "string", "role": "pk"},
+            "name": {"type": "string", "role": "attr"},
+            "region": {"type": "string", "role": "cat"},
+            "signup_date": {"type": "date", "role": "temporal"}
+          },
+          "purpose": "Customer attributes for segmentation"
+        },
+        "sales_data": {
+          "source": "Sales_Data sheet",
+          "role": "fact",
+          "pk": "order_id",
+          "columns": {
+            "order_id": {"type": "string", "role": "pk"},
+            "customer_id": {"type": "string", "role": "fk"},
+            "product_id": {"type": "string", "role": "fk"},
+            "order_date": {"type": "date", "role": "temporal"},
+            "quantity": {"type": "int", "role": "measure"},
+            "unit_price": {"type": "decimal", "role": "measure"}
+          },
+          "purpose": "Transaction records for revenue analysis"
+        },
+        "product_catalog": {
+          "source": "Product_Catalog sheet",
+          "role": "dimension",
+          "pk": "product_id",
+          "columns": {
+            "product_id": {"type": "string", "role": "pk"},
+            "product_name": {"type": "string", "role": "attr"},
+            "category": {"type": "string", "role": "cat"},
+            "subcategory": {"type": "string", "role": "cat"},
+            "brand": {"type": "string", "role": "cat"}
+          },
+          "purpose": "Product hierarchy for analysis"
+        }
+      },
+      "relationships": [
+        {"from": "sales_data.customer_id", "to": "customer_master.customer_id", "type": "M:1"},
+        {"from": "sales_data.product_id", "to": "product_catalog.product_id", "type": "M:1"}
+      ],
+      "metrics": [
+        "revenue = quantity * unit_price",
+        "customer_lifetime_value"
+      ],
+      "use_cases": [
+        "cohort analysis",
+        "product performance",
+        "regional sales"
+      ]
+    }
+
+    Column roles: pk (primary key), fk (foreign key), attr (attribute), cat (categorical), measure (numerical), temporal (date/time)
+    Table roles: fact (transactional), dimension (reference data)
+    Relationship types: 1:1, 1:M, M:1, M:M
+    """
+    user_description = dspy.InputField(desc="User's description of the data, including relationships")
+    dataset_view = dspy.InputField(desc="Dataset name with sample head(5 rows) view")
+    data_context = dspy.OutputField(desc="Compact JSON describing DuckDB tables, columns, relationships, metrics and use cases")
+
+
 # The ind module is called when agent_name is 
 # explicitly mentioned in the query
 class auto_analyst_ind(dspy.Module):
@@ -1600,9 +1701,9 @@ class auto_analyst_ind(dspy.Module):
 
 class data_context_gen(dspy.Signature):
     """
-    Generate a compact JSON data context for DuckDB tables ingested from Excel or CSV files.
+    Generate a compact JSON data context for datasets ingested from Excel or CSV files.
     The JSON must include:
-    - Exact DuckDB table names
+    - Exact datasets table names
     - Source sheet or file name for each table
     - Table role (fact/dimension)
     - Primary key (pk)
@@ -1991,6 +2092,7 @@ class auto_analyst(dspy.Module):
             dataset=dict_['dataset'], 
             Agent_desc=dict_['Agent_desc']
         )
+
         logger.log_message(f"Module return: {module_return}", level=logging.INFO)
         
         # Add None check before accessing dictionary keys

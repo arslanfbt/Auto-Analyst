@@ -599,12 +599,7 @@ def execute_code_from_markdown(code_str, datasets=None):
         modified_code = re.sub(pattern, add_show, modified_code)
     
     # Only add df = pd.read_csv() if no dataframe was provided and the code contains pd.read_csv
-    if dataframe is None and 'pd.read_csv' not in modified_code:
-        modified_code = re.sub(
-            r'import pandas as pd',
-            r'import pandas as pd\n\n# Read Housing.csv\ndf = pd.read_csv("Housing.csv")',
-            modified_code
-        )
+
 
     # Identify code blocks by comments
     code_blocks = []
