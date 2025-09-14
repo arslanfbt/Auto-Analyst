@@ -27,7 +27,7 @@ export const useChatInput = (props: ChatInputProps) => {
     description: '',
   });
   const [uploadSuccess, setUploadSuccess] = useState(false);
-  const { sessionId, setSessionId } = useSessionStore()
+  const { sessionId, setSessionId, clearSessionId } = useSessionStore()
   const { remainingCredits, isChatBlocked, creditResetDate, checkCredits } = useCredits()
   const [showCreditInfo, setShowCreditInfo] = useState(false)
   const [showDatasetResetPopup, setShowDatasetResetPopup] = useState(false)
@@ -102,14 +102,6 @@ export const useChatInput = (props: ChatInputProps) => {
     }
   }
 
-  // Helper function to clear session ID (with cleanup)
-  const clearSessionId = () => {
-    console.log('Clearing session ID')
-    setSessionId(null)
-    localStorage.removeItem('auto-analyst-session-id')
-    sessionStorage.removeItem('auto-analyst-session-id')
-  }
-
   // Helper function to get headers with session ID
   const getHeaders = (additionalHeaders: Record<string, string> = {}) => {
     return {
@@ -144,7 +136,12 @@ export const useChatInput = (props: ChatInputProps) => {
         setCSVFileName(file.name)
         // Add debugging to track status changes
         console.log('Setting status to uploading for:', file.name)
-        setFileUpload({ file, status: 'uploading', isExcel: false })
+        setFileUpload({ 
+          file, 
+          status: 'uploading', 
+          isExcel: false,
+          selectedSheets: []
+        })
 
         // Upload the CSV file temporarily with basic info
         const uploadFormData = new FormData()
@@ -205,6 +202,8 @@ export const useChatInput = (props: ChatInputProps) => {
       setFileUpload({
         file,
         status: 'error',
+        isExcel: false,
+        selectedSheets: [],
         errorMessage: 'Please upload a CSV or Excel file only'
       })
       setErrorNotification({
@@ -225,7 +224,12 @@ export const useChatInput = (props: ChatInputProps) => {
   const handleExcelFileSelected = async (file: File) => {
     try {
       setExcelFileName(file.name)
-      setFileUpload({ file, status: 'loading', isExcel: true })
+      setFileUpload({ 
+        file, 
+        status: 'uploading', // Changed from 'loading' to match type
+        isExcel: true,
+        selectedSheets: []
+      })
 
       const formData = new FormData()
       formData.append('file', file)

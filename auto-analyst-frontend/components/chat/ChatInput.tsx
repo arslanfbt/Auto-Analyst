@@ -398,7 +398,7 @@ const ChatInput = forwardRef<ChatInputRef, ChatInputProps>((props, ref) => {
           ref={chatInput.fileInputRef}
           type="file"
           accept=".csv,.xlsx,.xls"
-          onChange={(e) => {
+          onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
             const file = e.target.files?.[0]
             if (file) handleFileSelect(file)
           }}
@@ -463,10 +463,10 @@ const ChatInput = forwardRef<ChatInputRef, ChatInputProps>((props, ref) => {
         isOpen={chatInput.showCSVDialog}
         onClose={() => chatInput.setShowCSVDialog(false)}
         fileName={chatInput.csvFileName}
-        filePreview={chatInput.csvPreview} // This now shows the correct preview
+        filePreview={chatInput.csvPreview || undefined}
         onConfirm={chatInput.handleCSVConfirmUpload}
         isSubmitting={chatInput.isCSVSubmitting}
-        sessionId={chatInput.sessionId} // Add sessionId
+        sessionId={chatInput.sessionId || ''}
       />
 
       {/* Upload Summary Dialog - shows after successful upload */}
@@ -488,7 +488,7 @@ const ChatInput = forwardRef<ChatInputRef, ChatInputProps>((props, ref) => {
         isOpen={chatInput.showPreview && !chatInput.fileUpload}
         onClose={() => chatInput.setShowPreview(false)}
         fileName="Default Dataset"
-        filePreview={chatInput.filePreview}
+        filePreview={chatInput.filePreview || undefined}
         onConfirm={(name, description) => {
           chatInput.setDatasetDescription({ name, description })
           chatInput.setShowPreview(false)
@@ -496,7 +496,7 @@ const ChatInput = forwardRef<ChatInputRef, ChatInputProps>((props, ref) => {
           setTimeout(() => chatInput.setUploadSuccess(false), 3000)
         }}
         isSubmitting={false}
-        sessionId={chatInput.sessionId} // Add sessionId
+        sessionId={chatInput.sessionId || ''}
       />
     </div>
   )

@@ -173,7 +173,7 @@ const SettingsPopup: React.FC<SettingsPopupProps> = ({ isOpen, onClose, initialS
             </label>
             <select
               value={selectedProvider}
-              onChange={(e) => setSelectedProvider(e.target.value)}
+              onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setSelectedProvider(e.target.value)}
               className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-[#FF7F7F] focus:border-transparent bg-white"
             >
               {MODEL_PROVIDERS.map((provider) => (
@@ -213,7 +213,7 @@ const SettingsPopup: React.FC<SettingsPopupProps> = ({ isOpen, onClose, initialS
               type="checkbox"
               id="useCustomAPI"
               checked={useCustomAPI}
-              onChange={(e) => setUseCustomAPI(e.target.checked)}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setUseCustomAPI(e.target.checked)}
               className="rounded bg-white border-white text-[#FF7F7F] focus:ring-[#FF7F7F]"
             />
             <label htmlFor="useCustomAPI" className="text-sm font-medium text-gray-700">
@@ -267,10 +267,10 @@ const SettingsPopup: React.FC<SettingsPopupProps> = ({ isOpen, onClose, initialS
                 <input
                   type="range"
                   min="0"
-                  max="1"
+                  max="2"
                   step="0.1"
                   value={temperature}
-                  onChange={(e) => setTemperature(parseFloat(e.target.value))}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setTemperature(parseFloat(e.target.value))}
                   className="w-full accent-[#FF7F7F]"
                 />
                 <div className="flex justify-between text-xs text-gray-500">

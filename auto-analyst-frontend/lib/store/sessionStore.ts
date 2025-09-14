@@ -86,18 +86,18 @@ export const useSessionStore = create<SessionStore>()(
     {
       name: 'session-storage',
       // Add partialize to only persist sessionId
-      partialize: (state) => ({ sessionId: state.sessionId }),
+      partialize: (state: SessionStore) => ({ sessionId: state.sessionId }),
       // Add storage configuration for better persistence
       storage: {
-        getItem: (name) => {
+        getItem: (name: string) => {
           const str = localStorage.getItem(name);
           if (!str) return null;
           return JSON.parse(str);
         },
-        setItem: (name, value) => {
+        setItem: (name: string, value: any) => {
           localStorage.setItem(name, JSON.stringify(value));
         },
-        removeItem: (name) => {
+        removeItem: (name: string) => {
           localStorage.removeItem(name);
         },
       },

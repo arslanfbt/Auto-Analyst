@@ -52,3 +52,8 @@ export interface ChatInputRef {
   handlePreviewDefaultDataset: () => void;
   handleSilentDefaultDataset: () => void;
 }
+
+export interface ErrorNotification {
+  message: string;
+  details: string;
+}

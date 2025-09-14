@@ -76,10 +76,10 @@ export default function UploadSummaryDialog({
                 <div className="flex-1">
                   <h3 className="font-medium text-blue-900 mb-2">Selected Sheets</h3>
                   <div className="flex flex-wrap gap-2">
-                    {selectedSheets.map((sheet, index) => (
+                    {selectedSheets.map((sheet: string, index: number) => (
                       <span
                         key={index}
-                        className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800"
+                        className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800"
                       >
                         {sheet}
                       </span>

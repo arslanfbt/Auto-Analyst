@@ -132,7 +132,7 @@ export default function CSVUploadDialog({
               id="datasetName"
               placeholder="Enter dataset name..."
               value={datasetName}
-              onChange={(e) => setDatasetName(e.target.value)}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setDatasetName(e.target.value)}
               disabled={isSubmitting}
               className="focus:ring-[#FF7F7F] focus:border-[#FF7F7F]"
             />
@@ -158,7 +158,7 @@ export default function CSVUploadDialog({
               </Button>
             </div>
 
-            <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as "edit" | "preview")} className="w-full">
+            <Tabs value={activeTab} onValueChange={(value: string) => setActiveTab(value as "edit" | "preview")} className="w-full">
               <TabsList className="grid w-full grid-cols-2 h-8">
                 <TabsTrigger value="edit" className="text-xs">Edit</TabsTrigger>
                 <TabsTrigger value="preview" className="text-xs">Preview</TabsTrigger>
@@ -168,7 +168,7 @@ export default function CSVUploadDialog({
                 <Textarea
                   placeholder="Describe what this dataset contains and its purpose..."
                   value={description}
-                  onChange={(e) => setDescription(e.target.value)}
+                  onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setDescription(e.target.value)}
                   disabled={isSubmitting}
                   className="min-h-[120px] focus:ring-[#FF7F7F] focus:border-[#FF7F7F]"
                 />
@@ -196,7 +196,7 @@ export default function CSVUploadDialog({
                   <table className="w-full text-xs min-w-max">
                     <thead className="sticky top-0 bg-gray-100">
                       <tr>
-                        {filePreview.headers.map((header, index) => (
+                        {filePreview.headers.map((header: string, index: number) => (
                           <th key={index} className="px-2 py-1 text-left font-medium text-gray-700 border-r whitespace-nowrap">
                             {header}
                           </th>
@@ -204,9 +204,9 @@ export default function CSVUploadDialog({
                       </tr>
                     </thead>
                     <tbody>
-                      {filePreview.rows.map((row, rowIndex) => (
+                      {filePreview.rows.map((row: any[], rowIndex: number) => (
                         <tr key={rowIndex} className="border-b hover:bg-gray-50">
-                          {row.map((cell, cellIndex) => (
+                          {row.map((cell: any, cellIndex: number) => (
                             <td key={cellIndex} className="px-2 py-1 border-r text-gray-600 whitespace-nowrap">
                               {cell !== null && cell !== undefined ? String(cell) : ''}
                             </td>

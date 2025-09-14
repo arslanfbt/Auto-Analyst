@@ -41,7 +41,7 @@ const PlotlyChart: React.FC<PlotlyChartProps> = ({ data, layout = {}, isFullscre
           availableHeight 
         })
         
-        setDimensions((prev) => {
+        setDimensions((prev: { width: number; height: number }) => {
           if (prev.width !== width || prev.height !== height) {
             return { width, height }
           }
@@ -52,7 +52,7 @@ const PlotlyChart: React.FC<PlotlyChartProps> = ({ data, layout = {}, isFullscre
         const parentWidth = container.parentElement?.getBoundingClientRect().width || 0
         const width = Math.max(parentWidth - 40, 600)
         const height = Math.max(width * 0.6, 400)
-        setDimensions((prev) => {
+        setDimensions((prev: { width: number; height: number }) => {
           if (prev.width !== width || prev.height !== height) {
             return { width, height }
           }
