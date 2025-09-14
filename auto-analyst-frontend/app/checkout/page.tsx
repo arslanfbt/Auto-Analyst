@@ -130,6 +130,7 @@ export default function CheckoutPage() {
     console.log('🔍 Price ID:', planData.priceId)
     console.log('🔍 Plan name:', planData.name)
     console.log('🔍 Interval:', planData.cycle)
+    console.log('🔍 Promo code:', promoCodeValue)
 
     setPaymentLoading(true)
     
@@ -137,7 +138,14 @@ export default function CheckoutPage() {
     setClientSecret('')
     setSetupIntentId('')
     setPaymentError('')
+    
+    // Always clear promo-related state when creating new payment intent
     if (!promoCodeValue) {
+      setPromoError('')
+      setDiscountApplied(false)
+      setDiscountInfo(null)
+    } else {
+      // Clear previous promo state when applying new code
       setPromoError('')
       setDiscountApplied(false)
       setDiscountInfo(null)
@@ -161,11 +169,14 @@ export default function CheckoutPage() {
 
       if (data.message) {
         console.error('❌ API Error:', data.message)
-        if (promoCodeValue) {
-          setPromoError(data.message)
-          setDiscountApplied(false)
-          setDiscountInfo(null)
-        } else {
+        // Set appropriate error state
+        setPromoError(data.message)
+        setDiscountApplied(false)
+        setDiscountInfo(null)
+        
+        // Don't set paymentError for promo code validation failures
+        // Only set it for actual payment setup failures
+        if (!promoCodeValue) {
           setPaymentError(data.message)
           setClientSecret('')
           setSetupIntentId('')
@@ -176,9 +187,13 @@ export default function CheckoutPage() {
         setClientSecret(data.clientSecret)
         setSetupIntentId(data.setupIntentId)
         setIsTrialSetup(data.isTrialSetup || false)
+        
+        // Only set discount state if the API confirms the discount is valid
         setDiscountApplied(data.discountApplied || false)
-        setPaymentError('')
         setPromoError('')
+        
+        // Clear payment error on success
+        setPaymentError('')
         
         if (data.discountApplied && data.couponId) {
           fetchCouponDetails(data.couponId, planData.amount)
@@ -188,6 +203,8 @@ export default function CheckoutPage() {
       }
     } catch (err) {
       console.error('❌ Error creating payment intent:', err)
+      
+      // Set appropriate error state based on whether this was a promo code validation
       if (promoCodeValue) {
         setPromoError('Failed to validate promo code. Please try again.')
         setDiscountApplied(false)
@@ -221,6 +238,11 @@ export default function CheckoutPage() {
   // Handle promo code changes
   const handlePromoCodeChange = (newPromoCode: string) => {
     if (newPromoCode.trim() && planDetails.priceId) {
+      // Clear previous discount state before validation
+      setDiscountApplied(false)
+      setDiscountInfo(null)
+      setPromoError('')
+      
       createPaymentIntent(planDetails, newPromoCode)
     } else if (!newPromoCode.trim() && clientSecret) {
       setDiscountApplied(false)
@@ -508,8 +530,8 @@ export default function CheckoutPage() {
                       </span>
                     </div>
                     
-                    {/* Show yearly savings */}
-                    {billingCycle === 'yearly' && planDetails.name === 'Standard' && (
+                    {/* Show yearly savings - only if no promo code is applied or promo code is invalid */}
+                    {billingCycle === 'yearly' && planDetails.name === 'Standard' && !discountApplied && (
                       <div className="flex justify-between mb-2">
                         <span className="text-green-700 font-medium text-sm">
                           Yearly Discount (30% off)
@@ -520,7 +542,8 @@ export default function CheckoutPage() {
                       </div>
                     )}
                     
-                    {discountApplied && discountInfo && (
+                    {/* Show promo discount - only if backend confirms it's valid */}
+                    {discountApplied && discountInfo && !promoError && (
                       <div className="flex justify-between mb-2">
                         <span className="text-green-700 font-medium">
                           Promo Discount ({discountInfo.type === 'percent' ? `${discountInfo.value}% off` : `$${discountInfo.value} off`})
@@ -530,6 +553,18 @@ export default function CheckoutPage() {
                             ? `-$${((planDetails.amount * discountInfo.value) / 100).toFixed(2)}`
                             : `-$${discountInfo.value.toFixed(2)}`
                           }
+                        </span>
+                      </div>
+                    )}
+                    
+                    {/* Show promo code error if validation failed */}
+                    {promoError && (
+                      <div className="flex justify-between mb-2">
+                        <span className="text-red-600 font-medium text-sm">
+                          Promo Code Error
+                        </span>
+                        <span className="text-red-600 font-medium text-sm">
+                          {promoError}
                         </span>
                       </div>
                     )}
@@ -545,9 +580,10 @@ export default function CheckoutPage() {
                       )}
                     </div>
                     
-                    {(discountApplied || billingCycle === 'yearly') && (
+                    {/* Success messages - only show valid discounts */}
+                    {(discountApplied || (billingCycle === 'yearly' && !discountApplied)) && (
                       <div className="mt-2 p-2 bg-green-50 border border-green-200 rounded-md">
-                        {discountApplied && (
+                        {discountApplied && !promoError && (
                           <p className="text-sm text-green-700 font-medium">✓ Promo code applied!</p>
                         )}
                         {billingCycle === 'yearly' && !discountApplied && (
