@@ -940,7 +940,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
             duration: 2000,
           });
         }
-      }, 500);
+      }, 100); // Changed from 500ms to 100ms for faster auto-run
     }
 
     // Reset fixing state

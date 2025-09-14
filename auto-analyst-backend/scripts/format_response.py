@@ -46,17 +46,21 @@ API_KEY_PATTERNS = [
 # Network request patterns
 NETWORK_REQUEST_PATTERNS = re.compile(r"(requests\.|urllib\.|http\.|\.post\(|\.get\(|\.connect\()")
 
+# DataFrame creation with hardcoded data - block only this specific pattern
+DATAFRAME_INVENTION_PATTERN = re.compile(r"\w+\s*=\s*pd\.DataFrame\s*\(\s*\{[^}]*\}", re.MULTILINE)
+
 def check_security_concerns(code_str):
     """Check code for security concerns and return info about what was found"""
     security_concerns = {
         "has_concern": False,
-        "messages": [],
         "blocked_imports": False,
         "blocked_dynamic_imports": False,
         "blocked_env_access": False,
         "blocked_file_access": False,
         "blocked_api_keys": False,
-        "blocked_network": False
+        "blocked_network": False,
+        "blocked_dataframe_invention": False,  # Add this new field
+        "messages": []
     }
     
     # Check for sensitive imports
@@ -97,6 +101,12 @@ def check_security_concerns(code_str):
         security_concerns["blocked_network"] = True
         security_concerns["messages"].append("Network requests blocked")
     
+    # Check for DataFrame invention patterns
+    if DATAFRAME_INVENTION_PATTERN.search(code_str):
+        security_concerns["has_concern"] = True
+        security_concerns["blocked_dataframe_invention"] = True
+        security_concerns["messages"].append("DataFrame creation with hardcoded data blocked")
+    
     return security_concerns
 
 def clean_code_for_security(code_str, security_concerns):
@@ -128,6 +138,13 @@ def clean_code_for_security(code_str, security_concerns):
     # Block network requests if needed
     if security_concerns["blocked_network"]:
         modified_code = NETWORK_REQUEST_PATTERNS.sub(r'"BLOCKED_NETWORK_REQUEST"', modified_code)
+    
+    # Block DataFrame creation with hardcoded data if detected
+    if security_concerns["blocked_dataframe_invention"]:
+        modified_code = DATAFRAME_INVENTION_PATTERN.sub(
+            r"# BLOCKED_DATAFRAME_INVENTION: \g<0>", 
+            modified_code
+        )
     
     # Add warning banner if needed
     if security_concerns["has_concern"]:

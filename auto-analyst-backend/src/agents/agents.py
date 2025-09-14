@@ -412,26 +412,7 @@ Summary of Column Metadata
 | property_type  | str         | Inconsistent capitalization (e.g., "Condo", "condo")      | Normalize using `.str.lower()` or `.str.title()`                                                        |
 | agent_id       | str         | Appears numeric but is an identifier                      | Convert to string; do not perform numeric operations; treat as categorical or ID field                  |
 
-
-Preprocessing Checklist (Before Modeling or Aggregation)
----------------------------------------------------------
-- [ ] Convert all date fields to datetime.
-- [ ] Convert numeric-looking strings to float or int as needed.
-- [ ] Ensure categorical variables are correctly typed and cleaned.
-- [ ] Handle nulls via imputation or exclusion strategies.
-- [ ] Remove or flag outliers if impacting modeling quality.
-- [ ] Normalize textual categorical fields (case, whitespace).
-- [ ] Treat identifier fields as str, not numeric.
-- [ ] Validate ranges (e.g., age should be 0–120, not 300).
-
-Deliverables for Production Analysis Pipelines
------------------------------------------------
-- A cleaned version of the dataset with:
-  - Standardized data types.
-  - Normalized categories and strings.
-  - Consistent date formats.
-  - All columns typed appropriately (see table above).
-- Documentation of any assumptions or decisions made during preprocessing.
+MAKE SURE TO USE EXACT NAMES FOR COLUMNS
 
     """
     dataset = dspy.InputField(desc="The dataset to describe, including headers, sample data, null counts, and data types.")
