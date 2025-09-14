@@ -389,6 +389,9 @@ export const useChatInput = (props: ChatInputProps) => {
         status: 'error', 
         errorMessage: getErrorMessage(error)
       } : null)
+      
+      // Automatically restore default dataset on failure
+      await handleRestoreDefaultDataset()
     } finally {
       setIsExcelSubmitting(false)
     }
@@ -457,6 +460,37 @@ export const useChatInput = (props: ChatInputProps) => {
     } catch (error) {
       console.error('Error previewing file:', error)
       throw error
+    }
+  }
+
+  // Add restore default dataset function
+  const handleRestoreDefaultDataset = async () => {
+    try {
+      const response = await axios.post(`${PREVIEW_API_URL}/reset-session`, {}, {
+        headers: getHeaders(),
+      })
+      
+      if (response.status === 200) {
+        // Clear any error states
+        setFileUpload(null)
+        setErrorNotification(null)
+        setUploadSuccess(false)
+        
+        // Show success message
+        setUploadSuccess(true)
+        setTimeout(() => setUploadSuccess(false), 3000)
+        
+        // Update session ID if provided
+        if (response.data.session_id) {
+          updateSessionIdSafely(response.data.session_id)
+        }
+      }
+    } catch (error) {
+      console.error('Failed to restore default dataset:', error)
+      setErrorNotification({
+        message: 'Failed to restore default dataset',
+        details: getErrorMessage(error)
+      })
     }
   }
 
@@ -533,6 +567,7 @@ export const useChatInput = (props: ChatInputProps) => {
     handleCSVConfirmUpload,
     handleFilePreview,
     clearSessionId, // Add this new function
+    handleRestoreDefaultDataset,
     
     // Props
     ...props

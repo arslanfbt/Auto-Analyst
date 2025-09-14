@@ -13,12 +13,14 @@ interface UploadSummaryDialogProps {
     selectedSheets: string[]
     isExcel: boolean
   }
+  onRestoreDefault?: () => void
 }
 
 export default function UploadSummaryDialog({
   isOpen,
   onClose,
-  uploadData
+  uploadData,
+  onRestoreDefault
 }: UploadSummaryDialogProps) {
   const { fileName, datasetName, description, selectedSheets, isExcel } = uploadData
   const [showFullDescription, setShowFullDescription] = useState(false)
@@ -124,7 +126,19 @@ export default function UploadSummaryDialog({
           </div>
 
           {/* Actions */}
-          <div className="flex justify-end pt-4 border-t">
+          <div className="flex justify-between items-center pt-4 border-t">
+            <div className="flex items-center gap-2">
+              {onRestoreDefault && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={onRestoreDefault}
+                  className="text-xs h-8 px-3 hover:bg-blue-50 hover:border-blue-300"
+                >
+                  Restore Default Dataset
+                </Button>
+              )}
+            </div>
             <Button
               onClick={onClose}
               className="bg-[#FF7F7F] hover:bg-[#FF6666] text-white"

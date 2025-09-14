@@ -500,6 +500,7 @@ const ChatInput = forwardRef<ChatInputRef, ChatInputProps>((props, ref) => {
           selectedSheets: chatInput.fileUpload?.selectedSheets || [],
           isExcel: chatInput.fileUpload?.isExcel || false
         }}
+        onRestoreDefault={chatInput.handleRestoreDefaultDataset}
       />
 
       {/* Default Dataset Upload Dialog - show dialog instead of preview */}
