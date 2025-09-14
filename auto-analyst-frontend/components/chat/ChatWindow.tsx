@@ -1761,6 +1761,47 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
                   <Button
                     variant={isPinned ? "default" : "outline"}
                     size="sm"
+                    onClick={() => {
+                      const currentCode = codeEntries.find(entry => entry.id === output.codeId)?.code || '';
+                      
+                      if (currentCode) {
+                        togglePinVisualization(output.content, currentCode, 'matplotlib', idx);
+                      } else {
+                        // FALLBACK: Always allow pinning with fallback
+                        console.warn('No code found for matplotlib codeId:', output.codeId);
+                        
+                        // Try to extract code from message content
+                        const messageWithCode = localMessages.find(msg => 
+                          msg.text && typeof msg.text === 'string' && 
+                          msg.text.includes('```') && 
+                          msg.text.includes('python')
+                        );
+                        
+                        let fallbackCode = '';
+                        if (messageWithCode && typeof messageWithCode.text === 'string') {
+                          const codeMatch = messageWithCode.text.match(/```python\n([\s\S]*?)\n```/);
+                          if (codeMatch && codeMatch[1]) {
+                            fallbackCode = codeMatch[1];
+                          }
+                        }
+                        
+                        // ALWAYS allow pinning
+                        const codeToUse = fallbackCode || `matplotlib_${output.codeId}_${idx}`;
+                        togglePinVisualization(output.content, codeToUse, 'matplotlib', idx);
+                        
+                        if (!fallbackCode) {
+                          toast({
+                            title: "Pinned with limited info",
+                            description: "Visualization pinned but code reference may be incomplete.",
+                            variant: "default",
+                            duration: 3000
+                          });
+                        }
+                      }
+                    }}
+                    className={`flex items-center gap-1 h-7 px-2 text-xs ${
+                      isPinned 
+                        ? 'bg-[#FF7F7F] hover:bg-[#FF6666] text-white' 
                     onClick={() => togglePinVisualization(output.content, currentCode, 'matplotlib', idx)}
                     className={`flex items-center gap-1 h-7 px-2 text-xs ${
                       isPinned 
