@@ -142,9 +142,7 @@ This dataset appears clean with consistent formatting and no missing values, mak
             logger.log_message(f"Creating new session state for session_id: {session_id}", level=logging.INFO)
             
             # Initialize DuckDB connection for this session
-            duckdb_conn = duckdb.connect(':memory:')
-            if self._default_df is not None:
-                duckdb_conn.register("df", self._default_df)
+
             
             # Initialize with default state
             self._sessions[session_id] = {
@@ -157,7 +155,7 @@ This dataset appears clean with consistent formatting and no missing values, mak
                 "name": self._default_name,
                 "model_config": default_model_config,
                 "creation_time": time.time(),
-                "duckdb_conn": duckdb_conn,
+                "duckdb_conn": None,
             }
         else:
             # Verify dataset integrity in existing session
@@ -186,25 +184,7 @@ This dataset appears clean with consistent formatting and no missing values, mak
             
         return self._sessions[session_id]
 
-    def clear_session_state(self, session_id: str):
-        """
-        Clear session-specific state
-        
-        Args:
-            session_id: The session identifier
-        """
-        if session_id in self._sessions:
-            # Close DuckDB connection before clearing session
-            duckdb_conn = self._sessions[session_id].get("duckdb_conn")
-            if duckdb_conn:
-                try:
-                    duckdb_conn.close()
-                    logger.log_message(f"Closed DuckDB connection for session {session_id}", level=logging.INFO)
-                except Exception as e:
-                    logger.log_message(f"Error closing DuckDB connection for session {session_id}: {str(e)}", level=logging.WARNING)
-            
-            del self._sessions[session_id]
-            logger.log_message(f"Cleared session state for session {session_id}", level=logging.INFO)
+   
 
 
     def update_session_dataset(self, session_id: str, datasets, names, desc: str):
@@ -257,7 +237,7 @@ This dataset appears clean with consistent formatting and no missing values, mak
                 "make_data": self._make_data,
                 "description": desc,
                 "name": names[0],
-                "duckdb_conn": duckdb_conn,
+                "duckdb_conn": None,
                 "model_config": default_model_config,
             }
             
@@ -301,11 +281,6 @@ This dataset appears clean with consistent formatting and no missing values, mak
                 logger.log_message(f"Cleared existing state for session {session_id} before reset.", level=logging.INFO)
 
             # Create new DuckDB connection for default session
-            duckdb_conn = duckdb.connect(':memory:')
-
-            # Register default DataFrame in DuckDB
-            if self._default_df is not None:
-                duckdb_conn.register("current_data", self._default_df)
 
             # Initialize with default state
             self._sessions[session_id] = {
@@ -317,7 +292,7 @@ This dataset appears clean with consistent formatting and no missing values, mak
                 "name": self._default_name, # Explicitly set the default name
                 "make_data": None, # Clear any custom make_data
                 "model_config": default_model_config, # Initialize with default model config
-                "duckdb_conn": duckdb_conn, # Create new DuckDB connection
+                "duckdb_conn": None, # Create new DuckDB connection
             }
             logger.log_message(f"Reset session {session_id} to default dataset: {self._default_name}", level=logging.INFO)
         except Exception as e:
