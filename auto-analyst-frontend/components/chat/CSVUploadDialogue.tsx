@@ -114,17 +114,17 @@ export default function CSVUploadDialog({
 
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
-      <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
-        <DialogHeader>
+      <DialogContent className="max-w-5xl max-h-[90vh] flex flex-col">
+        <DialogHeader className="flex-shrink-0">
           <DialogTitle className="flex items-center gap-2">
             <FileText className="w-5 h-5 text-[#FF7F7F]" />
             Dataset Details
           </DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-6">
-          {/* Dataset Name */}
-          <div className="space-y-2">
+        <div className="flex-1 min-h-0 flex flex-col space-y-4 overflow-hidden">
+          {/* Dataset Name - Fixed height */}
+          <div className="flex-shrink-0 space-y-2">
             <label htmlFor="datasetName" className="text-sm font-medium">
               Dataset Name
             </label>
@@ -138,8 +138,8 @@ export default function CSVUploadDialog({
             />
           </div>
 
-          {/* Description with smaller tabs */}
-          <div className="space-y-3">
+          {/* Description - Fixed height */}
+          <div className="flex-shrink-0 space-y-3">
             <div className="flex items-center justify-between">
               <label className="text-sm font-medium">Description</label>
               <Button
@@ -184,15 +184,15 @@ export default function CSVUploadDialog({
             </Tabs>
           </div>
 
-          {/* Data Preview */}
+          {/* Data Preview - Flexible height with internal scrolling */}
           {filePreview && (
-            <div className="space-y-3">
-              <label className="text-sm font-medium">Data Preview</label>
-              <div className="border rounded-md overflow-hidden">
-                <div className="bg-gray-50 px-3 py-2 text-xs font-medium text-gray-600 border-b">
+            <div className="flex-1 min-h-0 flex flex-col space-y-3">
+              <label className="text-sm font-medium flex-shrink-0">Data Preview</label>
+              <div className="flex-1 min-h-0 border rounded-md overflow-hidden flex flex-col">
+                <div className="bg-gray-50 px-3 py-2 text-xs font-medium text-gray-600 border-b flex-shrink-0">
                   {filePreview.headers.length} columns, {filePreview.rows.length} sample rows
                 </div>
-                <div className="overflow-x-auto max-h-[300px]">
+                <div className="flex-1 min-h-0 overflow-auto">
                   <table className="w-full text-xs min-w-max">
                     <thead className="sticky top-0 bg-gray-100">
                       <tr>
@@ -220,8 +220,8 @@ export default function CSVUploadDialog({
             </div>
           )}
 
-          {/* Action Buttons */}
-          <div className="flex justify-end gap-3 pt-4 border-t">
+          {/* Action Buttons - Fixed at bottom */}
+          <div className="flex-shrink-0 flex justify-end gap-3 pt-4 border-t">
             <Button
               variant="outline"
               onClick={handleClose}
