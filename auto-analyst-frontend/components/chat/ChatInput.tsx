@@ -245,12 +245,12 @@ const ChatInput = forwardRef<ChatInputRef, ChatInputProps>((props, ref) => {
   }
 
   // Check if we should show loading indicator near Preview Default Dataset button
-  const showLoadingNearPreview = chatInput.fileUpload && chatInput.fileUpload.status === 'loading'
+  const showLoadingNearPreview = chatInput.fileUpload && chatInput.fileUpload.status === 'uploading' // Fixed from 'loading' to 'uploading'
 
   return (
     <div className="relative w-full max-w-5xl mx-auto px-4">
       {/* Action buttons row - ChatGPT style above input */}
-      <div className="flex items-center justify-center gap-2 mb-2"> {/* Reduced margin from mb-3 to mb-2 */}
+      <div className="flex items-center justify-center gap-2 mb-2">
         {/* Preview Default Dataset Button - only show if no file uploaded */}
         {!chatInput.fileUpload && (
           <div className="relative flex items-center gap-2">
@@ -264,25 +264,25 @@ const ChatInput = forwardRef<ChatInputRef, ChatInputProps>((props, ref) => {
               <Eye className="h-4 w-4" />
               <span className="text-sm font-medium">Preview Default Dataset</span>
             </Button>
-            
-            {/* Loading indicator next to Preview Default Dataset button */}
-            <AnimatePresence>
-              {showLoadingNearPreview && (
-                <motion.div
-                  initial={{ opacity: 0, scale: 0.8 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.8 }}
-                  className="flex items-center gap-1 bg-blue-50 border border-blue-200 rounded-full px-3 py-1.5 shadow-sm"
-                >
-                  <Loader2 className="h-3 w-3 animate-spin text-blue-500" />
-                  <span className="text-xs text-blue-600 font-medium">
-                    Uploading...
-                  </span>
-                </motion.div>
-              )}
-            </AnimatePresence>
           </div>
         )}
+        
+        {/* Loading indicator when file is being uploaded - OUTSIDE the !chatInput.fileUpload block */}
+        <AnimatePresence>
+          {showLoadingNearPreview && (
+            <motion.div
+              initial={{ opacity: 0, scale: 0.8 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.8 }}
+              className="flex items-center gap-1 bg-blue-50 border border-blue-200 rounded-full px-3 py-1.5 shadow-sm"
+            >
+              <Loader2 className="h-3 w-3 animate-spin text-blue-500" />
+              <span className="text-xs text-blue-600 font-medium">
+                Processing {chatInput.fileUpload?.file.name}...
+              </span>
+            </motion.div>
+          )}
+        </AnimatePresence>
         
         {/* Dataset Info - show after upload - clickable to show details */}
         {chatInput.fileUpload && chatInput.fileUpload.status === 'success' && (
@@ -318,12 +318,12 @@ const ChatInput = forwardRef<ChatInputRef, ChatInputProps>((props, ref) => {
           </Button>
         )}
         
-        {/* Deep Analysis Button */}
+        {/* Deep Analysis Button - always available */}
         <Button
           variant="outline"
           size="sm"
           onClick={() => chatInput.setShowDeepAnalysisSidebar(true)}
-          className="bg-white/90 border-gray-200 text-gray-600 hover:text-[#FF7F7F] hover:bg-[#FF7F7F]/10 hover:border-[#FF7F7F]/30 transition-all duration-200 flex items-center gap-2 px-4 py-2 rounded-full shadow-sm relative"
+          className="bg-white/90 border-gray-200 text-[#FF7F7F] hover:text-[#FF6666] hover:bg-[#FF7F7F]/10 hover:border-[#FF7F7F]/30 transition-all duration-200 flex items-center gap-2 px-4 py-2 rounded-full shadow-sm relative"
           disabled={chatInput.disabled || chatInput.isLoading}
         >
           <Zap className="h-4 w-4" />

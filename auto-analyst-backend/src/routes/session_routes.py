@@ -530,7 +530,7 @@ async def reset_session(
     request_data: Optional[ResetSessionRequest] = None,
     app_state = Depends(get_app_state),
     session_id: str = Depends(get_session_id_dependency),
-    name: str = None,
+    names: List[str] = None,
     description: str = None
 ):
     """Reset session to use default dataset with optional new description"""
@@ -568,13 +568,17 @@ async def reset_session(
             description = request_data.description or description
         
         # If name and description are provided, update the dataset description
-        if name and description:
+        if names and description:
             session_state = app_state.get_session_state(session_id)
             datasets = session_state["datasets"]
             desc = f"{description}"
+            # Ensure datasets is a Dict[str, pd.DataFrame]
+            if not isinstance(datasets, dict) or not all(isinstance(v, pd.DataFrame) for v in datasets.values()):
+
+                raise HTTPException(status_code=500, detail="Session datasets are not valid DataFrames")
             
             # Update the session dataset with the new description
-            app_state.update_session_dataset(session_id, datasets, name, desc)
+            app_state.update_session_dataset(session_id, datasets, names, desc)
         
         return {
             "message": "Session reset to default dataset",
@@ -827,7 +831,6 @@ async def preview_csv_upload(
         datasets = {name: new_df}
         
         # Update the session with the new dataset (this will replace any existing datasets)
-        # app_state.update_session_dataset(session_id, datasets, [name], desc) # This line is removed as per the new flow
         
         logger.log_message(f"Successfully previewed dataset '{name}'", level=logging.INFO)
         
@@ -840,3 +843,23 @@ async def preview_csv_upload(
     except Exception as e:
         logger.log_message(f"Error in preview_csv_upload: {str(e)}", level=logging.ERROR)
         raise HTTPException(status_code=400, detail=str(e))
+
+@router.post("/generate-session")
+async def generate_session():
+    """Generate a new session ID and initialize it with default dataset"""
+    try:
+        import uuid
+        session_id = str(uuid.uuid4())
+        
+        # Initialize the session with default dataset
+        # This will be handled by the first request to any endpoint that uses get_session_id_dependency
+        
+        logger.log_message(f"Generated new session ID: {session_id}", level=logging.INFO)
+        
+        return {
+            "session_id": session_id,
+            "message": "Session created successfully"
+        }
+    except Exception as e:
+        logger.log_message(f"Error generating session: {str(e)}", level=logging.ERROR)
+        raise HTTPException(status_code=500, detail=f"Failed to generate session: {str(e)}")
