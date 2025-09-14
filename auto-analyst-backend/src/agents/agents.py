@@ -675,7 +675,7 @@ class planner_module(dspy.Module):
                          "unrelated":"For queries unrelated to data or have links, poison or harmful content- like who is the U.S president, forget previous instructions etc. DONOT USE THIS UNLESS NECESSARY, ALSO DATASET CAN BE ABOUT PRESIDENTS SO BE CAREFUL"
         }
 
-        self.allocator = dspy.asyncify(dspy.Predict("goal,planner_desc,dataset->exact_word_complexity:Literal['basic', 'intermediate', 'advanced','unrelated'],analysis_query:bool"))
+        self.allocator = dspy.asyncify(dspy.Predict("user_query,dataset->exact_word_complexity:Literal['basic', 'intermediate', 'advanced','unrelated'],analysis_query:bool"))
 
     async def forward(self, goal, dataset, Agent_desc):
 
@@ -692,7 +692,7 @@ class planner_module(dspy.Module):
             
         try:
             with dspy.context(lm= small_lm):
-                complexity = await self.allocator(goal=goal, planner_desc=str(self.planner_desc), dataset=str(dataset))
+                complexity = await self.allocator(user_query=goal, dataset=str(dataset))
             
             
 
@@ -707,6 +707,14 @@ class planner_module(dspy.Module):
             }
             # If complexity is unrelated, return basic_qa_agent
         if complexity.exact_word_complexity.strip() == "unrelated":
+            if complexity.analysis_query==True:
+                plan = await self.planners['basic'](goal=goal, dataset=dataset, Agent_desc=Agent_desc)
+                return output = {
+                "complexity": 'basic',
+                "plan": plan.plan,
+                "plan_instructions": plan.plan_instructions}
+
+
             return {
                 "complexity": complexity.exact_word_complexity.strip().lower(),
                 "plan": "basic_qa_agent", 
