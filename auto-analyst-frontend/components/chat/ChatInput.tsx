@@ -463,7 +463,7 @@ const ChatInput = forwardRef<ChatInputRef, ChatInputProps>((props, ref) => {
       <DeepAnalysisSidebar
         isOpen={chatInput.showDeepAnalysisSidebar}
         onClose={() => chatInput.setShowDeepAnalysisSidebar(false)}
-        sessionId={chatInput.sessionId}
+        sessionId={chatInput.sessionId || undefined}
         userId={props.userId}
       />
 
