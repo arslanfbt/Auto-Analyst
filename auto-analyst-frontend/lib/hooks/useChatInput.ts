@@ -142,7 +142,9 @@ export const useChatInput = (props: ChatInputProps) => {
       // Handle CSV files - upload temporarily, get preview, show dialog
       try {
         setCSVFileName(file.name)
-        setFileUpload({ file, status: 'loading', isExcel: false })
+        // Add debugging to track status changes
+        console.log('Setting status to uploading for:', file.name)
+        setFileUpload({ file, status: 'uploading', isExcel: false })
 
         // Upload the CSV file temporarily with basic info
         const uploadFormData = new FormData()
@@ -151,14 +153,23 @@ export const useChatInput = (props: ChatInputProps) => {
         uploadFormData.append('description', `CSV data from ${file.name}`)
 
         // Upload the file to set it as current session dataset
-        await axios.post(`${PREVIEW_API_URL}/upload_dataframe`, uploadFormData, {
+        console.log('Starting CSV upload...')
+        const uploadResponse = await axios.post(`${PREVIEW_API_URL}/upload_dataframe`, uploadFormData, {
           headers: getHeaders({ 'X-Force-Refresh': 'true' }),
         })
+        console.log('CSV upload completed')
+
+        // Update session ID if backend generated a new one
+        if (uploadResponse.data && uploadResponse.data.session_id) {
+          updateSessionIdSafely(uploadResponse.data.session_id)
+        }
 
         // Get the preview of the uploaded dataset
+        console.log('Getting CSV preview...')
         const response = await axios.post(`${PREVIEW_API_URL}/api/preview-csv`, {}, {
           headers: getHeaders(),
         })
+        console.log('CSV preview completed')
 
         const preview = {
           headers: response.data.headers || [],
@@ -172,6 +183,7 @@ export const useChatInput = (props: ChatInputProps) => {
           name: preview.name,
           description: preview.description
         })
+        console.log('Setting status to success')
         setFileUpload(prev => (prev ? { ...prev, status: 'success' } : null))
         setShowCSVDialog(true)
       } catch (error: any) {
@@ -221,6 +233,11 @@ export const useChatInput = (props: ChatInputProps) => {
         headers: getHeaders(),
       })
 
+      // Update session ID if backend generated a new one
+      if (response.data && response.data.session_id) {
+        updateSessionIdSafely(response.data.session_id)
+      }
+
       const sheets: string[] = Array.isArray(response.data?.sheets) ? response.data.sheets : []
       if (!sheets.length) throw new Error('No sheets found in Excel file')
 
@@ -260,6 +277,11 @@ export const useChatInput = (props: ChatInputProps) => {
         headers: getHeaders(),
       });
       
+      // Update session ID if backend generated a new one
+      if (response.data && response.data.session_id) {
+        updateSessionIdSafely(response.data.session_id)
+      }
+
       const defaultDescription = response.data.description || 'Default housing dataset containing information about residential properties';
       
       setFilePreview({
@@ -275,11 +297,6 @@ export const useChatInput = (props: ChatInputProps) => {
       });
       
       setShowPreview(true);
-      
-      // Only update session ID if it's provided and different
-      if (response.data.session_id) {
-        updateSessionIdSafely(response.data.session_id);
-      }
       
       setDatasetMismatch(false);
     } catch (error) {
@@ -302,6 +319,11 @@ export const useChatInput = (props: ChatInputProps) => {
         headers: getHeaders(),
       });
       
+      // Update session ID if backend generated a new one
+      if (response.data && response.data.session_id) {
+        updateSessionIdSafely(response.data.session_id)
+      }
+
       const defaultDescription = response.data.description || 'Default housing dataset containing information about residential properties';
       
       setFilePreview({
@@ -315,11 +337,6 @@ export const useChatInput = (props: ChatInputProps) => {
         name: response.data.name || 'Dataset',
         description: defaultDescription
       });
-      
-      // Only update session ID if it's provided and different
-      if (response.data.session_id) {
-        updateSessionIdSafely(response.data.session_id);
-      }
       
       setDatasetMismatch(false);
     } catch (error) {
@@ -336,9 +353,14 @@ export const useChatInput = (props: ChatInputProps) => {
       // Only reset session if we're uploading a new custom dataset
       if (sessionId) {
         try {
-          await axios.post(`${PREVIEW_API_URL}/reset-session`, null, {
+          const response = await axios.post(`${PREVIEW_API_URL}/reset-session`, null, {
             headers: getHeaders(),
           })
+          
+          // Update session ID if backend generated a new one
+          if (response.data && response.data.session_id) {
+            updateSessionIdSafely(response.data.session_id)
+          }
         } catch (resetError) {
           console.warn('Session reset failed, continuing with upload:', resetError);
         }
@@ -353,6 +375,11 @@ export const useChatInput = (props: ChatInputProps) => {
       const response = await axios.post(`${PREVIEW_API_URL}/upload_excel`, formData, {
         headers: getHeaders({ 'X-Force-Refresh': 'true' }),
       })
+
+      // Update session ID if backend generated a new one
+      if (response.data && response.data.session_id) {
+        updateSessionIdSafely(response.data.session_id)
+      }
 
       if (response.status === 200) {
         // Only update session ID if it's provided and different
@@ -410,6 +437,11 @@ export const useChatInput = (props: ChatInputProps) => {
         headers: getHeaders(),
       })
       
+      // Update session ID if backend generated a new one
+      if (response.data && response.data.session_id) {
+        updateSessionIdSafely(response.data.session_id)
+      }
+
       if (response.data) {
         // Update local state
         setDatasetDescription({ name, description })
@@ -440,6 +472,11 @@ export const useChatInput = (props: ChatInputProps) => {
         headers: getHeaders(),
       })
       
+      // Update session ID if backend generated a new one
+      if (response.data && response.data.session_id) {
+        updateSessionIdSafely(response.data.session_id)
+      }
+
       if (response.data) {
         const { headers, rows, name, description } = response.data
         const fileName = name || file.name.replace('.csv', '')
@@ -469,6 +506,11 @@ export const useChatInput = (props: ChatInputProps) => {
       const response = await axios.post(`${PREVIEW_API_URL}/reset-session`, {}, {
         headers: getHeaders(),
       })
+      
+      // Update session ID if backend generated a new one
+      if (response.data && response.data.session_id) {
+        updateSessionIdSafely(response.data.session_id)
+      }
       
       if (response.status === 200) {
         // Clear any error states

@@ -62,8 +62,8 @@ export class SessionRecovery {
     
     // Check for valid session ID patterns
     const patterns = [
-      /^session_\d+_[a-z0-9]+$/,  // session_1234567890_abc123
-      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,  // UUID
+      /^session_\d+_[a-z0-9]+$/,  // session_1234567890_abc123 (frontend fallback)
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,  // UUID (backend)
       /^user_\d+$/,  // user_123
     ];
     
