@@ -13,6 +13,8 @@ import DeepAnalysisSidebar from '../deep-analysis/DeepAnalysisSidebar'
 import UploadSummaryDialog from './UploadSummaryDialog'
 import axios from 'axios'
 import API_URL from '@/config/api'
+import { useUserSubscriptionStore } from '@/lib/store/userSubscriptionStore'
+import { useFeatureAccess } from '@/lib/hooks/useFeatureAccess'
 
 interface AgentInfo {
   name: string
@@ -244,6 +246,10 @@ const ChatInput = forwardRef<ChatInputRef, ChatInputProps>((props, ref) => {
     }
   }
 
+  // Add feature access logic
+  const { subscription } = useUserSubscriptionStore()
+  const deepAnalysisAccess = useFeatureAccess('DEEP_ANALYSIS', subscription)
+
   return (
     <div className="relative w-full max-w-5xl mx-auto px-4">
       {/* Action buttons row - ChatGPT style above input */}
@@ -298,7 +304,7 @@ const ChatInput = forwardRef<ChatInputRef, ChatInputProps>((props, ref) => {
           </Button>
         )}
         
-        {/* Deep Analysis Button - always available */}
+        {/* Deep Analysis Button - conditional based on access */}
         <Button
           variant="outline"
           size="sm"
@@ -308,9 +314,12 @@ const ChatInput = forwardRef<ChatInputRef, ChatInputProps>((props, ref) => {
         >
           <Zap className="h-4 w-4" />
           <span className="text-sm font-medium">Deep Analysis</span>
-          <span className="absolute -top-1 -right-1 bg-[#FF7F7F] text-white text-xs px-1.5 py-0.5 rounded-full">
-            Premium
-          </span>
+          {/* Only show Premium badge if user doesn't have access */}
+          {!deepAnalysisAccess.hasAccess && (
+            <span className="absolute -top-1 -right-1 bg-[#FF7F7F] text-white text-xs px-1.5 py-0.5 rounded-full">
+              Premium
+            </span>
+          )}
         </Button>
       </div>
 

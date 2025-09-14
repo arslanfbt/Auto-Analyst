@@ -1623,79 +1623,50 @@ class auto_analyst_ind(dspy.Module):
 
 class data_context_gen(dspy.Signature):
     """
-    Generate a compact JSON data context for datasets ingested from Excel or CSV files.
-    The JSON must include:
-    - Exact datasets table names
-    - Source sheet or file name for each table
-    - Table role (fact/dimension)
-    - Primary key (pk)
-    - Columns with type and role (pk, fk, attr, cat, measure, temporal)
-    - Relationships between tables (foreign keys), with cardinality types (1:1, 1:M, M:1, M:M)
-    - Business purpose of each table
-    - Metrics expressed as formulas
-    - Use cases for the dataset
+        Generate a Python-friendly JSON structure that describes one or more datasets
+    loaded from Excel or CSV files. This helps the system understand the dataset
+    structure, semantics, and use cases.
 
-    Example JSON format:
+    The JSON should include:
+    - Dataset name and source (file or sheet)
+    - Dataset role (transactional or reference)
+    - Description or business purpose
+    - Column names with:
+        - Data type (string, int, float, date, etc.)
+        - Semantic role: identifier, attribute, category, measure, temporal
+    - Relationships to other datasets (optional, natural-language style)
+    - Common metrics (as formulas or derived fields)
+    - Example use cases
+
+    Example format:
     {
-      "tables": {
-        "customer_master": {
-          "source": "Customer_Master sheet",
-          "role": "dimension",
-          "pk": "customer_id",
-          "columns": {
-            "customer_id": {"type": "string", "role": "pk"},
-            "name": {"type": "string", "role": "attr"},
-            "region": {"type": "string", "role": "cat"},
-            "signup_date": {"type": "date", "role": "temporal"}
-          },
-          "purpose": "Customer attributes for segmentation"
-        },
+      "datasets": {
         "sales_data": {
-          "source": "Sales_Data sheet",
-          "role": "fact",
-          "pk": "order_id",
+          "source": "Sales_Data.csv",
+          "role": "transactional",
+          "description": "Sales transactions across regions and products.",
           "columns": {
-            "order_id": {"type": "string", "role": "pk"},
-            "customer_id": {"type": "string", "role": "fk"},
-            "product_id": {"type": "string", "role": "fk"},
+            "order_id": {"type": "string", "role": "identifier"},
             "order_date": {"type": "date", "role": "temporal"},
+            "region": {"type": "string", "role": "category"},
+            "product_id": {"type": "string", "role": "identifier"},
             "quantity": {"type": "int", "role": "measure"},
-            "unit_price": {"type": "decimal", "role": "measure"}
+            "unit_price": {"type": "float", "role": "measure"}
           },
-          "purpose": "Transaction records for revenue analysis"
-        },
-        "product_catalog": {
-          "source": "Product_Catalog sheet",
-          "role": "dimension",
-          "pk": "product_id",
-          "columns": {
-            "product_id": {"type": "string", "role": "pk"},
-            "product_name": {"type": "string", "role": "attr"},
-            "category": {"type": "string", "role": "cat"},
-            "subcategory": {"type": "string", "role": "cat"},
-            "brand": {"type": "string", "role": "cat"}
-          },
-          "purpose": "Product hierarchy for analysis"
+          "metrics": [
+            "revenue = quantity * unit_price"
+          ],
+          "use_cases": [
+            "Revenue trend analysis",
+            "Regional sales comparison"
+          ]
         }
-      },
-      "relationships": [
-        {"from": "sales_data.customer_id", "to": "customer_master.customer_id", "type": "M:1"},
-        {"from": "sales_data.product_id", "to": "product_catalog.product_id", "type": "M:1"}
-      ],
-      "metrics": [
-        "revenue = quantity * unit_price",
-        "customer_lifetime_value"
-      ],
-      "use_cases": [
-        "cohort analysis",
-        "product performance",
-        "regional sales"
-      ]
+      }
     }
 
-    Column roles: pk (primary key), fk (foreign key), attr (attribute), cat (categorical), measure (numerical), temporal (date/time)
-    Table roles: fact (transactional), dimension (reference data)
-    Relationship types: 1:1, 1:M, M:1, M:M
+    Column roles: identifier, attribute, category, measure, temporal
+    Dataset roles: transactional, reference
+
     """
     user_description = dspy.InputField(desc="User's description of the data, including relationships")
     dataset_view = dspy.InputField(desc="Dataset name with sample head(5 rows) view")
