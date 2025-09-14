@@ -1802,10 +1802,6 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
                     className={`flex items-center gap-1 h-7 px-2 text-xs ${
                       isPinned 
                         ? 'bg-[#FF7F7F] hover:bg-[#FF6666] text-white' 
-                    onClick={() => togglePinVisualization(output.content, currentCode, 'matplotlib', idx)}
-                    className={`flex items-center gap-1 h-7 px-2 text-xs ${
-                      isPinned 
-                        ? 'bg-[#FF7F7F] hover:bg-[#FF6666] text-white' 
                         : 'text-[#FF7F7F] border-[#FF7F7F] hover:bg-[#FF7F7F] hover:text-white'
                     }`}
                   >
