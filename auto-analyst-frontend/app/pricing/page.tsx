@@ -539,10 +539,6 @@ export default function PricingPage() {
               <p className="mt-2 text-gray-600">Credits are reset each month from your individual checkout date, not on the first of the month.</p>
             </div>
             <div className="py-6">
-              <h3 className="text-lg font-medium text-gray-900">What happens during the {TrialUtils.getDurationDescription()} trial?</h3>
-              <p className="mt-2 text-gray-600">You get immediate access to {TrialUtils.getTrialCredits()} credits and all Standard plan features. Your card is authorized but not charged until day {TrialUtils.getTrialConfig().duration}. You can cancel anytime during the trial without being charged.</p>
-            </div>
-            <div className="py-6">
               <h3 className="text-lg font-medium text-gray-900">Can I upgrade or downgrade my plan?</h3>
               <p className="mt-2 text-gray-600">Yes, you can change your plan at any time. Changes will be reflected in your next billing cycle.</p>
             </div>
