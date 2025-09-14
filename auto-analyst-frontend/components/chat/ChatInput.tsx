@@ -15,23 +15,23 @@ import axios from 'axios'
 import API_URL from '@/config/api'
 import { useUserSubscriptionStore } from '@/lib/store/userSubscriptionStore'
 import { useFeatureAccess } from '@/lib/hooks/useFeatureAccess'
-
-interface AgentInfo {
-  name: string
-  description: string
-}
+import { useAgentMentions } from '@/lib/hooks/useAgentMentions'
+import AgentMentionDropdown from './AgentMentionDropdown'
 
 const ChatInput = forwardRef<ChatInputRef, ChatInputProps>((props, ref) => {
   const chatInput = useChatInput(props)
   
   // Agent mention functionality
-  const [availableAgents, setAvailableAgents] = useState<AgentInfo[]>([])
-  const [showAgentMentions, setShowAgentMentions] = useState(false)
-  const [mentionQuery, setMentionQuery] = useState('')
-  const [mentionPosition, setMentionPosition] = useState({ top: 0, left: 0 })
-  const [filteredAgents, setFilteredAgents] = useState<AgentInfo[]>([])
-  const [selectedMentionIndex, setSelectedMentionIndex] = useState(0)
-  const mentionRef = useRef<HTMLDivElement>(null)
+  const {
+    showAgentMentions,
+    mentionPosition,
+    filteredAgents,
+    selectedMentionIndex,
+    mentionRef,
+    handleInputChange,
+    handleMentionSelect,
+    handleKeyDown
+  } = useAgentMentions()
   
   // File upload status display
   const [showUploadStatus, setShowUploadStatus] = useState(false)
@@ -44,32 +44,12 @@ const ChatInput = forwardRef<ChatInputRef, ChatInputProps>((props, ref) => {
     handleSilentDefaultDataset: chatInput.handleSilentDefaultDataset
   }))
 
-  // Fetch available agents on component mount
-  useEffect(() => {
-    const fetchAgents = async () => {
-      try {
-        const response = await axios.get(`${API_URL}/agents`)
-        if (response.data && response.data.available_agents) {
-          const agentList: AgentInfo[] = response.data.available_agents.map((name: string) => ({
-            name,
-            description: `Specialized ${name.replace(/_/g, " ")} agent`,
-          }))
-          setAvailableAgents(agentList)
-        }
-      } catch (error) {
-        console.error("Error fetching agents:", error)
-      }
-    }
-
-    fetchAgents()
-  }, [])
-
   // Monitor file upload status and show loading indicator
   useEffect(() => {
     if (chatInput.fileUpload) {
       const { status, file, errorMessage } = chatInput.fileUpload
       
-      if (status === 'uploading') {  // Changed from 'loading' to 'uploading'
+      if (status === 'uploading') {
         setShowUploadStatus(true)
         setUploadStatusType('loading')
         setUploadStatusMessage(`Uploading ${file.name}...`)
@@ -106,109 +86,54 @@ const ChatInput = forwardRef<ChatInputRef, ChatInputProps>((props, ref) => {
     }
   }
 
-  // Handle agent mention input
+  // Handle input changes
   const handleInput = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const value = e.target.value
-    const cursorPosition = e.target.selectionStart
+    const cursorPosition = e.target.selectionStart || 0
     
     chatInput.setMessage(value)
     
-    // Check for @ mention
-    const textBeforeCursor = value.substring(0, cursorPosition)
-    const mentionMatch = textBeforeCursor.match(/@(\w*)$/)
-    
-    if (mentionMatch) {
-      const query = mentionMatch[1].toLowerCase()
-      setMentionQuery(query)
-      
-      // Filter agents based on query
-      const filtered = availableAgents.filter(agent => 
-        agent.name.toLowerCase().includes(query)
-      )
-      setFilteredAgents(filtered)
-      
-      if (filtered.length > 0) {
-        // Calculate position for mention dropdown
-        const textarea = e.target
-        const rect = textarea.getBoundingClientRect()
-        const lineHeight = 24 // Approximate line height
-        const lines = textBeforeCursor.split('\n').length
-        const linePosition = (lines - 1) * lineHeight
-        
-        setMentionPosition({
-          top: rect.top + linePosition - 10,
-          left: rect.left + 20
-        })
-        setShowAgentMentions(true)
-        setSelectedMentionIndex(0)
-      } else {
-        setShowAgentMentions(false)
-      }
-    } else {
-      setShowAgentMentions(false)
-    }
+    // Handle agent mentions
+    handleInputChange(value, cursorPosition, e.target)
     
     // Auto-resize textarea with reduced max height
     const textarea = e.target
     textarea.style.height = 'auto'
-    textarea.style.height = Math.min(textarea.scrollHeight, 150) + 'px' // Reduced from 200 to 150
+    textarea.style.height = Math.min(textarea.scrollHeight, 150) + 'px'
   }
 
-  // Handle agent mention selection
-  const handleMentionSelect = (agent: AgentInfo) => {
-    const value = chatInput.message
-    const cursorPosition = chatInput.inputRef.current?.selectionStart || 0
-    const textBeforeCursor = value.substring(0, cursorPosition)
-    const textAfterCursor = value.substring(cursorPosition)
-    
-    // Replace the @query with @agent_name
-    const newValue = textBeforeCursor.replace(/@\w*$/, `@${agent.name} `) + textAfterCursor
-    
-    chatInput.setMessage(newValue)
-    setShowAgentMentions(false)
-    
-    // Focus back on textarea
-    setTimeout(() => {
-      chatInput.inputRef.current?.focus()
-    }, 0)
-  }
-
-  // Handle keyboard navigation in mentions
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (showAgentMentions && filteredAgents.length > 0) {
-      if (e.key === 'ArrowDown') {
-        e.preventDefault()
-        setSelectedMentionIndex(prev => 
-          prev < filteredAgents.length - 1 ? prev + 1 : 0
-        )
-      } else if (e.key === 'ArrowUp') {
-        e.preventDefault()
-        setSelectedMentionIndex(prev => 
-          prev > 0 ? prev - 1 : filteredAgents.length - 1
-        )
-      } else if (e.key === 'Enter') {
-        e.preventDefault()
-        handleMentionSelect(filteredAgents[selectedMentionIndex])
-      } else if (e.key === 'Escape') {
-        e.preventDefault()
-        setShowAgentMentions(false)
-      }
-    } else {
-      // Normal Enter key behavior
-      if (e.key === 'Enter' && !e.shiftKey) {
-        e.preventDefault()
+  // Handle key down events
+  const handleKeyDownEvent = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    handleKeyDown(
+      e,
+      chatInput.message,
+      chatInput.inputRef.current?.selectionStart || 0,
+      chatInput.setMessage,
+      chatInput.inputRef,
+      () => {
         if (!chatInput.disabled && !chatInput.isLoading && chatInput.message.trim()) {
           chatInput.handleSendMessage()
         }
       }
-    }
+    )
+  }
+
+  // Handle agent selection
+  const handleAgentSelect = (agent: any) => {
+    handleMentionSelect(
+      agent,
+      chatInput.message,
+      chatInput.inputRef.current?.selectionStart || 0,
+      chatInput.setMessage,
+      chatInput.inputRef
+    )
   }
 
   // Close mentions when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (mentionRef.current && !mentionRef.current.contains(event.target as Node)) {
-        setShowAgentMentions(false)
+        // setShowAgentMentions(false) // This is now handled by useAgentMentions
       }
     }
 
@@ -365,7 +290,7 @@ const ChatInput = forwardRef<ChatInputRef, ChatInputProps>((props, ref) => {
               ref={chatInput.inputRef}
               value={chatInput.message}
               onChange={handleInput}
-              onKeyDown={handleKeyDown}
+              onKeyDown={handleKeyDownEvent}
               placeholder="Ask anything"
               disabled={chatInput.disabled}
               className="min-h-[44px] max-h-[150px] resize-none border-0 shadow-none focus:ring-0 focus-visible:ring-0 bg-transparent text-gray-900 placeholder-gray-500 text-base leading-6 pr-16 py-2.5 w-full" // Reduced min-height from 52px to 44px, max-height from 200px to 150px, padding from py-3 to py-2.5
@@ -417,35 +342,13 @@ const ChatInput = forwardRef<ChatInputRef, ChatInputProps>((props, ref) => {
 
       {/* Agent Mention Dropdown */}
       <AnimatePresence>
-        {showAgentMentions && filteredAgents.length > 0 && (
-          <motion.div
-            ref={mentionRef}
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            className="absolute z-50 bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto"
-            style={{
-              top: `${mentionPosition.top + 40}px`,
-              left: `${mentionPosition.left}px`,
-              minWidth: '200px'
-            }}
-          >
-            {filteredAgents.map((agent, index) => (
-              <div
-                key={agent.name}
-                className={`px-3 py-2 cursor-pointer border-b border-gray-100 last:border-b-0 ${
-                  index === selectedMentionIndex 
-                    ? 'bg-[#FF7F7F]/10 text-[#FF7F7F]' 
-                    : 'hover:bg-gray-50'
-                }`}
-                onClick={() => handleMentionSelect(agent)}
-              >
-                <div className="font-medium text-sm">@{agent.name}</div>
-                <div className="text-xs text-gray-500">{agent.description}</div>
-              </div>
-            ))}
-          </motion.div>
-        )}
+        <AgentMentionDropdown
+          show={showAgentMentions}
+          agents={filteredAgents}
+          selectedIndex={selectedMentionIndex}
+          position={mentionPosition}
+          onSelect={handleAgentSelect}
+        />
       </AnimatePresence>
 
       {/* Deep Analysis Sidebar */}
@@ -513,4 +416,4 @@ const ChatInput = forwardRef<ChatInputRef, ChatInputProps>((props, ref) => {
 
 ChatInput.displayName = "ChatInput"
 
-export default ChatInput
+export default React.memo(ChatInput)
