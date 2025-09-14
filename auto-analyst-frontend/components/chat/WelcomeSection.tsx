@@ -10,25 +10,20 @@ interface WelcomeSectionProps {
 
 const sampleQueries = [
   {
-    text: "Analyze this dataset for trends and patterns",
+    text: "@data_viz_agent tell me visually how the numbers are changing, what is growing & what is in decline",
     icon: <LineChart className="w-5 h-5" />,
     description: "Get comprehensive data analysis and visualizations",
   },
   {
-    text: "@data_viz_agent visualize this data",
+    text: "@data_viz_agent visualize this data, look",
     icon: <Bot className="w-5 h-5" />,
     description: "Use specialized agents for specific tasks",
   },
   {
-    text: "What are the key insights from this data?",
+    text: "What are the key insights from this data? @statistical_analytics_agent?",
     icon: <Database className="w-5 h-5" />,
     description: "Extract meaningful insights from your data",
-  },
-  {
-    text: "Generate Python code to clean this dataset",
-    icon: <Code2 className="w-5 h-5" />,
-    description: "Get code snippets for data manipulation",
-  },
+  }
 ]
 
 export default function WelcomeSection({ onSampleQueryClick }: WelcomeSectionProps) {
