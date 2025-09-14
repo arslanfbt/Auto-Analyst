@@ -126,6 +126,11 @@ export default function CheckoutPage() {
   const createPaymentIntent = async (planData: any, promoCodeValue: string = '') => {
     if (!planData.priceId || !session) return
 
+    console.log('🔍 Creating payment intent with plan data:', planData)
+    console.log('🔍 Price ID:', planData.priceId)
+    console.log('🔍 Plan name:', planData.name)
+    console.log('🔍 Interval:', planData.cycle)
+
     setPaymentLoading(true)
     
     // Clear previous state to avoid stale data
@@ -152,8 +157,10 @@ export default function CheckoutPage() {
       })
 
       const data = await response.json()
+      console.log('📡 API Response:', data)
 
       if (data.message) {
+        console.error('❌ API Error:', data.message)
         if (promoCodeValue) {
           setPromoError(data.message)
           setDiscountApplied(false)
@@ -165,6 +172,7 @@ export default function CheckoutPage() {
         }
       } else {
         // Successfully created new setup intent
+        console.log('✅ Setup intent created:', data.setupIntentId)
         setClientSecret(data.clientSecret)
         setSetupIntentId(data.setupIntentId)
         setIsTrialSetup(data.isTrialSetup || false)
@@ -177,11 +185,9 @@ export default function CheckoutPage() {
         } else {
           setDiscountInfo(null)
         }
-        
-        
       }
     } catch (err) {
-      console.error('Error creating payment intent:', err)
+      console.error('❌ Error creating payment intent:', err)
       if (promoCodeValue) {
         setPromoError('Failed to validate promo code. Please try again.')
         setDiscountApplied(false)

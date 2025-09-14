@@ -70,23 +70,38 @@ export async function POST(request: NextRequest) {
         
             const coupon = promotionCode.coupon
             
-            // Check if coupon has product restrictions
-            if (coupon.applies_to && coupon.applies_to.products && coupon.applies_to.products.length > 0) {
-              // Get the product ID from our price
-              const price = await stripe.prices.retrieve(priceId)
-              const productId = price.product as string
+            // Check if coupon has restrictions - now check for BOTH product AND price restrictions
+            if (coupon.applies_to) {
+              // Check product restrictions
+              if (coupon.applies_to.products && coupon.applies_to.products.length > 0) {
+                // Get the product ID from our price
+                const price = await stripe.prices.retrieve(priceId)
+                const productId = price.product as string
+                
+                // Check if our product is in the allowed list
+                const isProductAllowed = coupon.applies_to.products.includes(productId)
+                
+                if (!isProductAllowed) {
+                  return NextResponse.json({ 
+                    message: 'This promo code is not valid for the selected plan' 
+                  }, { status: 400 })
+                }
+              }
               
-              // Check if our product is in the allowed list
-              const isProductAllowed = coupon.applies_to.products.includes(productId)
-              
-              if (!isProductAllowed) {
-                return NextResponse.json({ 
-                  message: 'This promo code is not valid for the selected plan' 
-                }, { status: 400 })
+              // Check price restrictions (this is the key fix!)
+              if (coupon.applies_to.prices && coupon.applies_to.prices.length > 0) {
+                // Check if our specific price ID is in the allowed list
+                const isPriceAllowed = coupon.applies_to.prices.includes(priceId)
+                
+                if (!isPriceAllowed) {
+                  return NextResponse.json({ 
+                    message: 'This promo code is not valid for the selected billing cycle' 
+                  }, { status: 400 })
+                }
               }
             }
             
-            // If we get here, the promo code is valid for this product
+            // If we get here, the promo code is valid for this product and price
             couponId = coupon.id
           } else {
             return NextResponse.json({ message: 'Promo code has expired or is no longer active' }, { status: 400 })
@@ -96,17 +111,31 @@ export async function POST(request: NextRequest) {
           try {
             const coupon = await stripe.coupons.retrieve(promoCode)
             if (coupon.valid) {
-              // Check product restrictions for direct coupons too
-              if (coupon.applies_to && coupon.applies_to.products && coupon.applies_to.products.length > 0) {
-                const price = await stripe.prices.retrieve(priceId)
-                const productId = price.product as string
+              // Check restrictions for direct coupons too
+              if (coupon.applies_to) {
+                // Check product restrictions
+                if (coupon.applies_to.products && coupon.applies_to.products.length > 0) {
+                  const price = await stripe.prices.retrieve(priceId)
+                  const productId = price.product as string
+                  
+                  const isProductAllowed = coupon.applies_to.products.includes(productId)
+                  
+                  if (!isProductAllowed) {
+                    return NextResponse.json({ 
+                      message: 'This promo code is not valid for the selected plan' 
+                    }, { status: 400 })
+                  }
+                }
                 
-                const isProductAllowed = coupon.applies_to.products.includes(productId)
-                
-                if (!isProductAllowed) {
-                  return NextResponse.json({ 
-                    message: 'This promo code is not valid for the selected plan' 
-                  }, { status: 400 })
+                // Check price restrictions
+                if (coupon.applies_to.prices && coupon.applies_to.prices.length > 0) {
+                  const isPriceAllowed = coupon.applies_to.prices.includes(priceId)
+                  
+                  if (!isPriceAllowed) {
+                    return NextResponse.json({ 
+                      message: 'This promo code is not valid for the selected billing cycle' 
+                    }, { status: 400 })
+                  }
                 }
               }
               
