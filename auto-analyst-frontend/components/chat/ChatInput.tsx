@@ -451,10 +451,11 @@ const ChatInput = forwardRef<ChatInputRef, ChatInputProps>((props, ref) => {
       <ExcelUploadDialog
         isOpen={chatInput.showExcelDialog}
         onClose={() => chatInput.setShowExcelDialog(false)}
+        sheets={chatInput.excelSheets}
         fileName={chatInput.excelFileName}
         onConfirm={chatInput.handleExcelConfirmUpload}
         isSubmitting={chatInput.isExcelSubmitting}
-        sessionId={chatInput.sessionId || ''} // Provide empty string fallback
+        sessionId={chatInput.sessionId || ''}
       />
 
       {/* CSV Upload Dialog */}
