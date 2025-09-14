@@ -454,7 +454,7 @@ const ChatInput = forwardRef<ChatInputRef, ChatInputProps>((props, ref) => {
         fileName={chatInput.excelFileName}
         onConfirm={chatInput.handleExcelConfirmUpload}
         isSubmitting={chatInput.isExcelSubmitting}
-        sessionId={chatInput.sessionId || undefined} // Convert null to undefined
+        sessionId={chatInput.sessionId || ''} // Provide empty string fallback
       />
 
       {/* CSV Upload Dialog */}
