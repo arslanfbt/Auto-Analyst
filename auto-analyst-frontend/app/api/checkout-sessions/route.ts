@@ -89,9 +89,11 @@ export async function POST(request: NextRequest) {
               }
               
               // Check price restrictions (this is the key fix!)
-              if (coupon.applies_to.prices && coupon.applies_to.prices.length > 0) {
+              // Use type assertion since Stripe types might not include prices property
+              const appliesToWithPrices = coupon.applies_to as any
+              if (appliesToWithPrices.prices && appliesToWithPrices.prices.length > 0) {
                 // Check if our specific price ID is in the allowed list
-                const isPriceAllowed = coupon.applies_to.prices.includes(priceId)
+                const isPriceAllowed = appliesToWithPrices.prices.includes(priceId)
                 
                 if (!isPriceAllowed) {
                   return NextResponse.json({ 
@@ -128,8 +130,9 @@ export async function POST(request: NextRequest) {
                 }
                 
                 // Check price restrictions
-                if (coupon.applies_to.prices && coupon.applies_to.prices.length > 0) {
-                  const isPriceAllowed = coupon.applies_to.prices.includes(priceId)
+                const appliesToWithPrices = coupon.applies_to as any
+                if (appliesToWithPrices.prices && appliesToWithPrices.prices.length > 0) {
+                  const isPriceAllowed = appliesToWithPrices.prices.includes(priceId)
                   
                   if (!isPriceAllowed) {
                     return NextResponse.json({ 
