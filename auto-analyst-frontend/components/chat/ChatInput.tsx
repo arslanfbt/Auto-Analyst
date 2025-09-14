@@ -67,7 +67,7 @@ const ChatInput = forwardRef<ChatInputRef, ChatInputProps>((props, ref) => {
     if (chatInput.fileUpload) {
       const { status, file, errorMessage } = chatInput.fileUpload
       
-      if (status === 'loading') {
+      if (status === 'uploading') {  // Changed from 'loading' to 'uploading'
         setShowUploadStatus(true)
         setUploadStatusType('loading')
         setUploadStatusMessage(`Uploading ${file.name}...`)

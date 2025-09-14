@@ -221,6 +221,14 @@ async def upload_dataframe(
         # Log the incoming request details
         logger.log_message(f"Upload request for session {session_id}: name='{name}', description='{description}'", level=logging.INFO)
         
+        # Check if we need to force a complete session reset before upload
+        force_refresh = request.headers.get("X-Force-Refresh") == "true" if request else False
+        
+        if force_refresh:
+            logger.log_message(f"Force refresh requested for session {session_id} before CSV upload", level=logging.INFO)
+            # Reset the session but don't completely wipe it, so we maintain user association
+            app_state.reset_session_to_default(session_id)
+        
         # Clean and validate the name
         name = name.replace(' ', '_').lower().strip()
         
