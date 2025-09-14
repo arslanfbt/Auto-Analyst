@@ -222,18 +222,8 @@ This dataset appears clean with consistent formatting and no missing values, mak
             }
             
             # Get or create DuckDB connection for this session
-            duckdb_conn = None
-            if session_id in self._sessions and "duckdb_conn" in self._sessions[session_id]:
-                duckdb_conn = self._sessions[session_id]["duckdb_conn"]
-            else:
-                # Create new DuckDB connection if it doesn't exist
-                duckdb_conn = duckdb.connect(':memory:')
             
             # Register the new dataset in DuckDB
-            try:
-                duckdb_conn.execute("DROP TABLE IF EXISTS current_data")
-            except:
-                pass
             
             # Auto-generate description if we have datasets
             if datasets:
@@ -283,7 +273,7 @@ This dataset appears clean with consistent formatting and no missing values, mak
             # Replace the entire session with the new state
             self._sessions[session_id] = session_state
             
-            logger.log_message(f"Updated session {session_id} with completely fresh dataset state: {names}", level=logging.INFO)
+            logger.log_message(f"Updated session {session_id} with completely fresh dataset state: {str(names)}", level=logging.INFO)
         except Exception as e:
             logger.log_message(f"Error updating dataset for session {session_id}: {str(e)}", level=logging.ERROR)
             raise e

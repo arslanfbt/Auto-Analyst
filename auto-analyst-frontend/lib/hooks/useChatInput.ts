@@ -154,8 +154,9 @@ export const useChatInput = (props: ChatInputProps) => {
 
         // Upload the file to set it as current session dataset
         console.log('Starting CSV upload...')
+        // For CSV upload - remove the X-Force-Refresh header
         const uploadResponse = await axios.post(`${PREVIEW_API_URL}/upload_dataframe`, uploadFormData, {
-          headers: getHeaders({ 'X-Force-Refresh': 'true' }),
+          headers: getHeaders(), // Remove { 'X-Force-Refresh': 'true' }
         })
         console.log('CSV upload completed')
 
@@ -373,7 +374,7 @@ export const useChatInput = (props: ChatInputProps) => {
       formData.append('selected_sheets', JSON.stringify(selectedSheets))
 
       const response = await axios.post(`${PREVIEW_API_URL}/upload_excel`, formData, {
-        headers: getHeaders({ 'X-Force-Refresh': 'true' }),
+        headers: getHeaders(), // Remove { 'X-Force-Refresh': 'true' }
       })
 
       // Update session ID if backend generated a new one

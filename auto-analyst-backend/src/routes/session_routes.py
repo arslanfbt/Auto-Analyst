@@ -127,11 +127,10 @@ async def upload_excel(
 
             # Get session state and DuckDB connection
             session_state = app_state.get_session_state(session_id)
-            duckdb_conn = session_state.get("duckdb_conn")
+
             datasets = {}
             
-            if not duckdb_conn:
-                raise HTTPException(status_code=500, detail="DuckDB connection not found for session")
+
             
             # Process all sheets and register them in DuckDB
             processed_sheets = []
@@ -160,15 +159,11 @@ async def upload_excel(
                         
                         clean_sheet_name = f"{clean_sheet_name}_{random.randint(1000, 9999)}"
                     # First drop the table if it exists
-                    try:
-                        duckdb_conn.execute(f"DROP TABLE IF EXISTS {clean_sheet_name}")
-                    except:
-                        pass
+
 
                     # Then register the new table
                     datasets[clean_sheet_name] = sheet_df  # Store the DataFrame, not the name
-                    duckdb_conn.register(clean_sheet_name, sheet_df)
-                    # exec(f"{clean_sheet_name} = duckdb_conn.execute('SELECT * FROM {clean_sheet_name}').fetchdf()")
+
                     
                     processed_sheets.append(clean_sheet_name)
                         
@@ -224,10 +219,20 @@ async def upload_dataframe(
         # Check if we need to force a complete session reset before upload
         force_refresh = request.headers.get("X-Force-Refresh") == "true" if request else False
         
+        # Log session state BEFORE any changes
+        session_state_before = app_state.get_session_state(session_id)
+        datasets_before = session_state_before.get("datasets", {})
+        logger.log_message(f"Session state BEFORE upload - datasets: {list(datasets_before.keys())}", level=logging.INFO)
+        
         if force_refresh:
             logger.log_message(f"Force refresh requested for session {session_id} before CSV upload", level=logging.INFO)
             # Reset the session but don't completely wipe it, so we maintain user association
             app_state.reset_session_to_default(session_id)
+            
+            # Log session state AFTER reset
+            session_state_after_reset = app_state.get_session_state(session_id)
+            datasets_after_reset = session_state_after_reset.get("datasets", {})
+            logger.log_message(f"Session state AFTER reset - datasets: {list(datasets_after_reset.keys())}", level=logging.INFO)
         
         # Clean and validate the name
         name = name.replace(' ', '_').lower().strip()
@@ -271,6 +276,11 @@ async def upload_dataframe(
         
         # Update the session with the new dataset (this will replace any existing datasets)
         app_state.update_session_dataset(session_id, datasets, [name], desc)
+        
+        # Log session state AFTER upload
+        session_state_after_upload = app_state.get_session_state(session_id)
+        datasets_after_upload = session_state_after_upload.get("datasets", {})
+        logger.log_message(f"Session state AFTER upload - datasets: {list(datasets_after_upload.keys())}", level=logging.INFO)
         
         logger.log_message(f"Successfully uploaded dataset '{name}' for session {session_id}", level=logging.INFO)
         
@@ -403,6 +413,8 @@ async def preview_csv(app_state = Depends(get_app_state), session_id: str = Depe
         session_state = app_state.get_session_state(session_id)
         datasets = session_state.get("datasets", {})
         
+        logger.log_message(f"Preview request for session {session_id} - available datasets: {list(datasets.keys())}", level=logging.INFO)
+        
         if not datasets:
             logger.log_message(f"No datasets found in session {session_id}, using default", level=logging.WARNING)
             # Create a new default session for this session ID
@@ -489,6 +501,7 @@ async def preview_csv(app_state = Depends(get_app_state), session_id: str = Depe
             "description": description
         }
         
+        logger.log_message(f"Preview returning dataset: '{current_dataset_name}' for session {session_id}", level=logging.INFO)
         return preview_data
     except Exception as e:
         logger.log_message(f"Error in preview_csv: {str(e)}", level=logging.ERROR)

@@ -244,9 +244,6 @@ const ChatInput = forwardRef<ChatInputRef, ChatInputProps>((props, ref) => {
     }
   }
 
-  // Check if we should show loading indicator near Preview Default Dataset button
-  const showLoadingNearPreview = chatInput.fileUpload && chatInput.fileUpload.status === 'uploading' // Fixed from 'loading' to 'uploading'
-
   return (
     <div className="relative w-full max-w-5xl mx-auto px-4">
       {/* Action buttons row - ChatGPT style above input */}
@@ -266,23 +263,6 @@ const ChatInput = forwardRef<ChatInputRef, ChatInputProps>((props, ref) => {
             </Button>
           </div>
         )}
-        
-        {/* Loading indicator when file is being uploaded - OUTSIDE the !chatInput.fileUpload block */}
-        <AnimatePresence>
-          {showLoadingNearPreview && (
-            <motion.div
-              initial={{ opacity: 0, scale: 0.8 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.8 }}
-              className="flex items-center gap-1 bg-blue-50 border border-blue-200 rounded-full px-3 py-1.5 shadow-sm"
-            >
-              <Loader2 className="h-3 w-3 animate-spin text-blue-500" />
-              <span className="text-xs text-blue-600 font-medium">
-                Processing {chatInput.fileUpload?.file.name}...
-              </span>
-            </motion.div>
-          )}
-        </AnimatePresence>
         
         {/* Dataset Info - show after upload - clickable to show details */}
         {chatInput.fileUpload && chatInput.fileUpload.status === 'success' && (
