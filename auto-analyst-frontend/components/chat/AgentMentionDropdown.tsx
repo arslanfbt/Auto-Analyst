@@ -27,14 +27,15 @@ export default function AgentMentionDropdown({
     <AnimatePresence>
       {show && agents.length > 0 && (
         <motion.div
-          initial={{ opacity: 0, y: -10 }}
+          initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -10 }}
-          className="absolute z-50 bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto"
+          exit={{ opacity: 0, y: 10 }}
+          className="fixed z-50 bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto"
           style={{
-            top: `${position.top + 40}px`,
+            top: `${position.top}px`,
             left: `${position.left}px`,
-            minWidth: '200px'
+            minWidth: '200px',
+            maxWidth: '300px'
           }}
         >
           {agents.map((agent, index) => (
