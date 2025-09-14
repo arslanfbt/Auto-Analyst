@@ -430,20 +430,24 @@ export const useChatInput = (props: ChatInputProps) => {
     try {
       setIsCSVSubmitting(true)
       
-      // Call the reset-session endpoint to update the dataset description
-      const response = await axios.post(`${PREVIEW_API_URL}/reset-session`, {
-        name: name,
-        description: description
-      }, {
-        headers: getHeaders(),
+      if (!fileUpload?.file) return
+      
+      // DON'T reset session - just upload the CSV file directly
+      const uploadFormData = new FormData()
+      uploadFormData.append('file', fileUpload.file)
+      uploadFormData.append('name', name)
+      uploadFormData.append('description', description)
+
+      const uploadResponse = await axios.post(`${PREVIEW_API_URL}/upload_dataframe`, uploadFormData, {
+        headers: getHeaders(), // No X-Force-Refresh needed
       })
       
       // Update session ID if backend generated a new one
-      if (response.data && response.data.session_id) {
-        updateSessionIdSafely(response.data.session_id)
+      if (uploadResponse.data && uploadResponse.data.session_id) {
+        updateSessionIdSafely(uploadResponse.data.session_id)
       }
 
-      if (response.data) {
+      if (uploadResponse.data) {
         // Update local state
         setDatasetDescription({ name, description })
         setUploadSuccess(true)
@@ -456,8 +460,11 @@ export const useChatInput = (props: ChatInputProps) => {
         }, 500)
       }
     } catch (error) {
-      console.error('Error updating CSV description:', error)
+      console.error('Error uploading CSV file:', error)
       setUploadSuccess(false)
+      
+      // Automatically restore default dataset on failure
+      await handleRestoreDefaultDataset()
     } finally {
       setIsCSVSubmitting(false)
     }
