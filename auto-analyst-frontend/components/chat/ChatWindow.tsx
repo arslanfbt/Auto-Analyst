@@ -85,7 +85,7 @@ const SimpleThinkingLoader = () => {
 
   useEffect(() => {
     const interval = setInterval(() => {
-      setCurrentIndex((prev) => (prev + 1) % thinkingTexts.length)
+      setCurrentIndex((prev: number) => (prev + 1) % thinkingTexts.length)
     }, 1500) // Change text every 1.5 seconds
 
     return () => clearInterval(interval)
@@ -265,7 +265,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
     // If no latest code found, extract code blocks from messages as before
     const codeByLanguage: Record<string, { code: string, blocks: string[], agents: string[] }> = {};
     
-    messagesToExtract.forEach((message) => {
+    messagesToExtract.forEach((message: any) => {
       if (message.sender === "ai" && typeof message.text === "string") {
         const codeBlockRegex = /```([a-zA-Z0-9_]+)?\n([\s\S]*?)```/g;
         
@@ -1107,12 +1107,12 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
           <div className={message.sender === "ai" ? "overflow-x-auto" : ""}>
             {Array.isArray(messageContent) ? (
               // Render message with code indicators
-              messageContent.map((part, partIndex) => {
+              messageContent.map((part: any, partIndex: number) => {
                 if (typeof part === 'string') {
                   // Handle plotly blocks embedded in the string
                   if (part.includes('```plotly')) {
                     const plotlyParts = part.split(/(```plotly[\s\S]*?```)/);
-                    return plotlyParts.map((plotlyPart, plotlyIndex) => {
+                    return plotlyParts.map((plotlyPart: string, plotlyIndex: number) => {
                       if (plotlyPart.startsWith('```plotly') && plotlyPart.endsWith('```')) {
                         return renderPlotlyBlock(plotlyPart, `${index}-${partIndex}-${plotlyIndex}`);
                       } else if (plotlyPart.trim()) {

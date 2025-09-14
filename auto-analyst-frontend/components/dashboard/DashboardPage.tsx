@@ -120,7 +120,7 @@ export default function DashboardPage() {
             <Button 
               variant="outline" 
               size="sm"
-              onClick={(e) => handleFullscreen(viz, e)}
+              onClick={(e: React.MouseEvent<HTMLButtonElement>) => handleFullscreen(viz, e)}
               className="h-8 w-8 p-0 bg-white/90 backdrop-blur-sm"
             >
               <Maximize2 className="h-4 w-4" />
@@ -128,7 +128,7 @@ export default function DashboardPage() {
             <Button 
               variant="outline" 
               size="sm"
-              onClick={(e) => handleUnpin(viz, e)}
+              onClick={(e: React.MouseEvent<HTMLButtonElement>) => handleUnpin(viz, e)}
               className="h-8 w-8 p-0 bg-white/90 backdrop-blur-sm hover:bg-red-50 hover:border-red-300"
             >
               <PinOff className="h-4 w-4 text-red-500" />
@@ -151,7 +151,7 @@ export default function DashboardPage() {
             <Button 
               variant="outline" 
               size="sm"
-              onClick={(e) => handleFullscreen(viz, e)}
+              onClick={(e: React.MouseEvent<HTMLButtonElement>) => handleFullscreen(viz, e)}
               className="h-8 w-8 p-0 bg-white/90 backdrop-blur-sm"
             >
               <Maximize2 className="h-4 w-4" />
@@ -159,7 +159,7 @@ export default function DashboardPage() {
             <Button 
               variant="outline" 
               size="sm"
-              onClick={(e) => handleUnpin(viz, e)}
+              onClick={(e: React.MouseEvent<HTMLButtonElement>) => handleUnpin(viz, e)}
               className="h-8 w-8 p-0 bg-white/90 backdrop-blur-sm hover:bg-red-50 hover:border-red-300"
             >
               <PinOff className="h-4 w-4 text-red-500" />

@@ -97,7 +97,7 @@ export default function ExcelUploadDialog({
               id="datasetName"
               placeholder="Enter dataset name..."
               value={datasetName}
-              onChange={(e) => setDatasetName(e.target.value)}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setDatasetName(e.target.value)}
               disabled={isSubmitting}
               className="focus:ring-[#FF7F7F] focus:border-[#FF7F7F]"
             />
@@ -162,7 +162,7 @@ export default function ExcelUploadDialog({
               id="description"
               placeholder="Brief description of your dataset..."
               value={description}
-              onChange={(e) => setDescription(e.target.value)}
+              onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setDescription(e.target.value)}
               disabled={isSubmitting}
               rows={3}
               className="focus:ring-[#FF7F7F] focus:border-[#FF7F7F]"
