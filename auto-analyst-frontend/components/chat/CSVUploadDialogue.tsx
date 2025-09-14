@@ -53,6 +53,15 @@ export default function CSVUploadDialog({
     }
   }, [fileName, datasetName, existingData])
 
+  // Add a new useEffect to handle when filePreview changes (for already uploaded datasets)
+  useEffect(() => {
+    if (filePreview && !existingData) {
+      // If we have filePreview but no existingData, this is an already uploaded dataset
+      setDatasetName(filePreview.name || fileName)
+      setDescription(filePreview.description || '')
+    }
+  }, [filePreview, fileName, existingData])
+
   const handleClose = () => {
     if (!isSubmitting) {
       setDatasetName('')
@@ -68,17 +77,19 @@ export default function CSVUploadDialog({
   }
 
   const handleAutoGenerate = async () => {
-    if (!sessionId) {
-      console.error('No session ID available for description generation')
+    if (!sessionId || !filePreview) {
+      console.error('No session ID or file preview available for description generation')
       return
     }
     
     setIsGeneratingDescription(true)
     
     try {
-      // Always use the create-dataset-description endpoint (same as Excel)
-      const response = await axios.post(`${API_URL}/create-dataset-description`, {
-        sessionId: sessionId,
+      // Use the new endpoint that works with preview data
+      const response = await axios.post(`${API_URL}/generate-description-from-preview`, {
+        headers: filePreview.headers,
+        rows: filePreview.rows,
+        datasetName: datasetName,
         existingDescription: description
       }, {
         headers: {
@@ -181,12 +192,12 @@ export default function CSVUploadDialog({
                 <div className="bg-gray-50 px-3 py-2 text-xs font-medium text-gray-600 border-b">
                   {filePreview.headers.length} columns, {filePreview.rows.length} sample rows
                 </div>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-xs">
-                    <thead>
-                      <tr className="bg-gray-100">
+                <div className="overflow-x-auto max-h-[300px]">
+                  <table className="w-full text-xs min-w-max">
+                    <thead className="sticky top-0 bg-gray-100">
+                      <tr>
                         {filePreview.headers.map((header, index) => (
-                          <th key={index} className="px-2 py-1 text-left font-medium text-gray-700 border-r">
+                          <th key={index} className="px-2 py-1 text-left font-medium text-gray-700 border-r whitespace-nowrap">
                             {header}
                           </th>
                         ))}
@@ -194,9 +205,9 @@ export default function CSVUploadDialog({
                     </thead>
                     <tbody>
                       {filePreview.rows.map((row, rowIndex) => (
-                        <tr key={rowIndex} className="border-b">
+                        <tr key={rowIndex} className="border-b hover:bg-gray-50">
                           {row.map((cell, cellIndex) => (
-                            <td key={cellIndex} className="px-2 py-1 border-r text-gray-600">
+                            <td key={cellIndex} className="px-2 py-1 border-r text-gray-600 whitespace-nowrap">
                               {cell !== null && cell !== undefined ? String(cell) : ''}
                             </td>
                           ))}

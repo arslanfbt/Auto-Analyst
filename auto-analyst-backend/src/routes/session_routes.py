@@ -9,17 +9,18 @@ import random
 import pandas as pd
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.security import APIKeyHeader
-from pydantic import BaseModel
 
+import numpy as np
 from src.managers.session_manager import get_session_id
 from src.schemas.model_settings_schema import ModelSettings
 from src.utils.logger import Logger
+from pydantic import BaseModel
 # data context is for excelsheets with multiple sheets and dataset_descrp is for single sheet or csv
 from src.agents.agents import data_context_gen, dataset_description_agent
 from src.utils.model_registry import MODEL_OBJECTS, mid_lm
 from src.utils.dataset_description_generator import generate_dataset_description
 import dspy
-
+import re
 
 logger = Logger("session_routes", see_time=False, console_log=False)
 
@@ -216,74 +217,57 @@ async def upload_dataframe(
     session_id: str = Depends(get_session_id_dependency),
     request: Request = None
 ):
-    
     try:
         # Log the incoming request details
-        # logger.log_message(f"Upload request for session {session_id}: name='{name}', description='{description}'", level=logging.INFO)
+        logger.log_message(f"Upload request for session {session_id}: name='{name}', description='{description}'", level=logging.INFO)
         
-        # Check if we need to force a complete session reset before upload
-
-
-
-        # If name is longer than 30 characters, shorten it
+        # Clean and validate the name
         name = name.replace(' ', '_').lower().strip()
-
-
-
-        force_refresh = request.headers.get("X-Force-Refresh") == "true" if request else False
         
-        if force_refresh:
-            # logger.log_message(f"Force refresh requested for session {session_id} before upload", level=logging.INFO)
-            # Reset the session but don't completely wipe it, so we maintain user association
-            app_state.reset_session_to_default(session_id)
+        # Validate name length and create safe variable name
+        if len(name) > 30:
+            name = name[:30]
         
-        # Now process the new file
-        contents = await file.read()
-        # Note: There is no reliable way to determine the encoding of a file just from its bytes.
-        # We have to try common encodings or rely on user input/metadata.
-        # Try a list of common encodings to read the CSV
-        encodings_to_try = ['utf-8', 'utf-8-sig', 'unicode_escape', 'ISO-8859-1', 'latin1', 'cp1252']
+        # Ensure it's a safe Python identifier
+        if not is_safe_variable_name(name):
+            import random
+            name = f"{name}_{random.randint(1000, 9999)}"
         
+        # Read and process the CSV file
+        content = await file.read()
         new_df = None
-        
         last_exception = None
-        for enc in encodings_to_try:
+        
+        # Try different encodings
+        encodings_to_try = ['utf-8', 'latin-1', 'cp1252', 'iso-8859-1']
+        
+        for encoding in encodings_to_try:
             try:
-                new_df = pd.read_csv(io.BytesIO(contents), encoding=enc)
+                csv_content = content.decode(encoding)
+                new_df = pd.read_csv(io.StringIO(csv_content))
+                logger.log_message(f"Successfully read CSV with encoding: {encoding}", level=logging.INFO)
                 break
             except Exception as e:
                 last_exception = e
+                logger.log_message(f"Failed to read CSV with encoding {encoding}: {str(e)}", level=logging.WARNING)
                 continue
-
+        
         if new_df is None:
             raise HTTPException(status_code=400, detail=f"Error reading file with tried encodings: {encodings_to_try}. Last error: {str(last_exception)}")
-        session_state = app_state.get_session_state(session_id)
-        duckdb_conn = session_state.get("duckdb_conn")
         
-        
+        # Format the description
         desc = f" exact_python_name: `{name}` Dataset: {description}"
         
-        # logger.log_message(f"Updating session dataset with description: '{desc}'", level=logging.INFO)
-        datasets = {name:new_df}
-        app_state.update_session_dataset(session_id, datasets , [name], desc)
+        # Create datasets dictionary with the new dataset
+        datasets = {name: new_df}
         
-        # Log the final state
-        session_state = app_state.get_session_state(session_id)
-
-        # conn = session_state.get('duckdb_conn')
-        # if conn is None:
-        #     raise HTTPException(status_code=500, detail="DuckDB connection not available for session")
-
-        # try:
-        #     conn.execute("DROP TABLE IF EXISTS df")
-        #     conn.execute(f"DROP TABLE IF EXISTS {name}")
-        # except:
-        #     pass
-
+        # Update the session with the new dataset (this will replace any existing datasets)
+        app_state.update_session_dataset(session_id, datasets, [name], desc)
         
-        # logger.log_message(f"Session dataset updated with description: '{session_state.get('description')}'", level=logging.INFO)
+        logger.log_message(f"Successfully uploaded dataset '{name}' for session {session_id}", level=logging.INFO)
         
         return {"message": "Dataframe uploaded successfully", "session_id": session_id}
+        
     except Exception as e:
         logger.log_message(f"Error in upload_dataframe: {str(e)}", level=logging.ERROR)
         raise HTTPException(status_code=400, detail=str(e))
@@ -409,20 +393,37 @@ async def preview_csv(app_state = Depends(get_app_state), session_id: str = Depe
     try:
         # Get the session state to ensure we're using the current dataset
         session_state = app_state.get_session_state(session_id)
-        datasets = session_state.get("datasets")
-        keys = list(datasets.keys())
-        df = datasets[keys[0]]
+        datasets = session_state.get("datasets", {})
         
-        # Handle case where dataset might be missing
-        if df is None:
-            logger.log_message(f"Dataset not found in session {session_id}, using default", level=logging.WARNING)
+        if not datasets:
+            logger.log_message(f"No datasets found in session {session_id}, using default", level=logging.WARNING)
             # Create a new default session for this session ID
             app_state.reset_session_to_default(session_id)
             # Get the session state again
             session_state = app_state.get_session_state(session_id)
-            datasets = session_state.get("datasets")
-            keys = list(datasets.keys())
-            df = datasets[keys[0]]
+            datasets = session_state.get("datasets", {})
+        
+        # Get the most recently added dataset (last one in the dictionary)
+        # This should be the newly uploaded CSV
+        dataset_names = list(datasets.keys())
+        if not dataset_names:
+            raise HTTPException(status_code=404, detail="No datasets available")
+        
+        # Get the last dataset (most recently uploaded)
+        current_dataset_name = dataset_names[-1]
+        df = datasets[current_dataset_name]
+        
+        # Handle case where dataset might be missing
+        if df is None:
+            logger.log_message(f"Dataset '{current_dataset_name}' not found in session {session_id}, using default", level=logging.WARNING)
+            # Create a new default session for this session ID
+            app_state.reset_session_to_default(session_id)
+            # Get the session state again
+            session_state = app_state.get_session_state(session_id)
+            datasets = session_state.get("datasets", {})
+            dataset_names = list(datasets.keys())
+            current_dataset_name = dataset_names[-1]
+            df = datasets[current_dataset_name]
 
         # Replace NaN values with None (which becomes null in JSON)
         df = df.where(pd.notna(df), None)
@@ -581,31 +582,78 @@ async def reset_session(
         )
 
 
-@router.post("/create-dataset-description")
-async def create_dataset_description(
+
+@router.post("/generate-description-from-preview")
+async def generate_description_from_preview(
     request: dict,
     app_state = Depends(get_app_state)
 ):
-    session_id = request.get("sessionId")
-    if not session_id:
-        raise HTTPException(status_code=400, detail="Session ID is required")
-    
+    """Generate description from CSV preview data (headers, rows, user description)"""
     try:
-        # Get the session state to access the dataset
-        session_state = app_state.get_session_state(session_id)
-        
-        tables = session_state['datasets']
-        dataset_names = session_state.get('dataset_names', list(tables.keys()))
-        
-        # Get any existing description provided by the user
+        headers = request.get("headers", [])
+        rows = request.get("rows", [])
         user_description = request.get("existingDescription", "")
+        dataset_name = request.get("datasetName", "Dataset")
+        dataset_name = dataset_name.replace('_','').strip().lower()
         
-        # Use the utility function to generate description with proper formatting
-        generated_description = generate_dataset_description(tables, user_description, dataset_names)
+        # Make dataset_name a safe Python identifier: remove dangerous characters, allow only alphanumerics and underscores, and ensure it starts with a letter or underscore
         
-        return {"description": generated_description}
+        dataset_name = re.sub(r'[^a-zA-Z0-9_]', '', dataset_name)
+        if not re.match(r'^[a-zA-Z_]', dataset_name):
+            dataset_name = f"ds_{dataset_name}"
+        dataset_name = dataset_name[:30]  # limit length for safety
+        if not headers or not rows:
+            raise HTTPException(status_code=400, detail="Headers and sample rows are required")
+        
+        # Create a mock DataFrame from the preview data
+
+        
+        # Convert rows to DataFrame
+        df = pd.DataFrame(rows, columns=headers)
+        
+        # Infer data types from the sample data
+        for col in df.columns:
+            try:
+                # Try to convert to numeric
+                pd.to_numeric(df[col], errors='raise')
+                df[col] = pd.to_numeric(df[col], errors='coerce')
+            except:
+                try:
+                    # Try to convert to datetime (suppress warnings)
+                    import warnings
+                    with warnings.catch_warnings():
+                        warnings.simplefilter("ignore", UserWarning)
+                        df[col] = pd.to_datetime(df[col], errors='coerce')
+                    # If all values became NaT, it's probably not a date column
+                    if df[col].isna().all():
+                        df[col] = df[col].astype(str)
+                except:
+                    # Keep as string
+                    df[col] = df[col].astype(str)
+        
+        # Build dataset view for description generation
+        dataset_view = ""
+        head_data = df.head(3)
+        columns = [{col: str(head_data[col].dtype)} for col in head_data.columns]
+        dataset_view += f"exact_table_name={dataset_name}\n:columns:{str(columns)}\n{head_data.to_markdown()}\n"
+        
+        # Generate description using AI
+
+        
+        with dspy.context(lm=mid_lm):
+            data_context = dspy.Predict(dataset_description_agent)(
+                existing_description=user_description,
+                dataset=dataset_view
+            )
+            generated_desc = data_context.description
+        
+        # Format the description with exact_python_name
+        formatted_desc = f" exact_python_name: `{dataset_name}` Dataset: {generated_desc}"
+        
+        return {"description": formatted_desc}
         
     except Exception as e:
+        logger.log_message(f"Failed to generate description from preview: {str(e)}", level=logging.ERROR)
         raise HTTPException(status_code=500, detail=f"Failed to generate description: {str(e)}")
 
 @router.get("/api/session-info")
@@ -724,3 +772,63 @@ async def set_message_info(
     except Exception as e:
         logger.log_message(f"Error setting message info: {str(e)}", level=logging.ERROR)
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/preview-csv-upload")
+async def preview_csv_upload(
+    file: UploadFile = File(...),
+):
+    """Preview CSV file without modifying session"""
+    try:
+        # Process file and return preview data only
+        content = await file.read()
+        # Try different encodings
+        encodings_to_try = ['utf-8', 'latin-1', 'cp1252', 'iso-8859-1']
+        new_df = None
+        last_exception = None
+        
+        for encoding in encodings_to_try:
+            try:
+                csv_content = content.decode(encoding)
+                new_df = pd.read_csv(io.StringIO(csv_content))
+                logger.log_message(f"Successfully read CSV with encoding: {encoding}", level=logging.INFO)
+                break
+            except Exception as e:
+                last_exception = e
+                logger.log_message(f"Failed to read CSV with encoding {encoding}: {str(e)}", level=logging.WARNING)
+                continue
+        
+        if new_df is None:
+            raise HTTPException(status_code=400, detail=f"Error reading file with tried encodings: {encodings_to_try}. Last error: {str(last_exception)}")
+        
+        # Clean and validate the name
+        name = file.filename.replace('.csv', '').replace(' ', '_').lower().strip()
+        
+        # Validate name length and create safe variable name
+        if len(name) > 30:
+            name = name[:30]
+        
+        # Ensure it's a safe Python identifier
+        if not is_safe_variable_name(name):
+            import random
+            name = f"{name}_{random.randint(1000, 9999)}"
+        
+        # Format the description
+        desc = f" exact_python_name: `{name}` Dataset: {file.filename}"
+        
+        # Create datasets dictionary with the new dataset
+        datasets = {name: new_df}
+        
+        # Update the session with the new dataset (this will replace any existing datasets)
+        # app_state.update_session_dataset(session_id, datasets, [name], desc) # This line is removed as per the new flow
+        
+        logger.log_message(f"Successfully previewed dataset '{name}'", level=logging.INFO)
+        
+        return {
+            "headers": new_df.columns.tolist(),
+            "rows": new_df.head(10).values.tolist(),
+            "name": name,
+            "description": desc
+        }
+    except Exception as e:
+        logger.log_message(f"Error in preview_csv_upload: {str(e)}", level=logging.ERROR)
+        raise HTTPException(status_code=400, detail=str(e))
