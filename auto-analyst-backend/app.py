@@ -430,6 +430,26 @@ async def chat_with_agent(
             logger.log_message(f"[DEBUG] No dataset loaded", level=logging.DEBUG)
             raise HTTPException(status_code=400, detail=RESPONSE_ERROR_NO_DATASET)
 
+        # Log the dataset being used for analysis with detailed information
+        datasets = session_state["datasets"]
+        dataset_names = list(datasets.keys())
+        if dataset_names:
+            current_dataset_name = dataset_names[-1]  # Get the last (most recent) dataset
+            dataset_shape = datasets[current_dataset_name].shape
+            
+            # Check if this is the default dataset and explain why
+            session_name = session_state.get("name", "")
+            is_default_dataset = (current_dataset_name == "df" and session_name == "Housing.csv") or current_dataset_name == "Housing.csv"
+            
+            if is_default_dataset:
+                logger.log_message(f"[ANALYSIS] Using DEFAULT dataset 'Housing.csv' for analysis (shape: {dataset_shape[0]} rows, {dataset_shape[1]} columns)", level=logging.INFO)
+                logger.log_message(f"[ANALYSIS] Reason: No custom dataset uploaded yet - using default Housing.csv dataset", level=logging.INFO)
+            else:
+                logger.log_message(f"[ANALYSIS] Using CUSTOM dataset '{current_dataset_name}' for analysis (shape: {dataset_shape[0]} rows, {dataset_shape[1]} columns)", level=logging.INFO)
+                logger.log_message(f"[ANALYSIS] This is a user-uploaded dataset, not the default", level=logging.INFO)
+        else:
+            logger.log_message(f"[ANALYSIS] No datasets available in session {session_id}", level=logging.WARNING)
+
         logger.log_message(f"[DEBUG] About to validate agent name: '{agent_name}'", level=logging.DEBUG)
         _validate_agent_name(agent_name, session_state)
         logger.log_message(f"[DEBUG] Agent validation completed successfully", level=logging.DEBUG)
