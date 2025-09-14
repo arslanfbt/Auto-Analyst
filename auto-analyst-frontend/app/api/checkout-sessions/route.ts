@@ -67,7 +67,27 @@ export async function POST(request: NextRequest) {
           // Check if promotion code is valid and not expired
           if (promotionCode.active && 
               (!promotionCode.expires_at || promotionCode.expires_at > Math.floor(Date.now() / 1000))) {
-            couponId = promotionCode.coupon.id
+        
+            const coupon = promotionCode.coupon
+            
+            // Check if coupon has product restrictions
+            if (coupon.applies_to && coupon.applies_to.products && coupon.applies_to.products.length > 0) {
+              // Get the product ID from our price
+              const price = await stripe.prices.retrieve(priceId)
+              const productId = price.product as string
+              
+              // Check if our product is in the allowed list
+              const isProductAllowed = coupon.applies_to.products.includes(productId)
+              
+              if (!isProductAllowed) {
+                return NextResponse.json({ 
+                  message: 'This promo code is not valid for the selected plan' 
+                }, { status: 400 })
+              }
+            }
+            
+            // If we get here, the promo code is valid for this product
+            couponId = coupon.id
           } else {
             return NextResponse.json({ message: 'Promo code has expired or is no longer active' }, { status: 400 })
           }
@@ -76,6 +96,20 @@ export async function POST(request: NextRequest) {
           try {
             const coupon = await stripe.coupons.retrieve(promoCode)
             if (coupon.valid) {
+              // Check product restrictions for direct coupons too
+              if (coupon.applies_to && coupon.applies_to.products && coupon.applies_to.products.length > 0) {
+                const price = await stripe.prices.retrieve(priceId)
+                const productId = price.product as string
+                
+                const isProductAllowed = coupon.applies_to.products.includes(productId)
+                
+                if (!isProductAllowed) {
+                  return NextResponse.json({ 
+                    message: 'This promo code is not valid for the selected plan' 
+                  }, { status: 400 })
+                }
+              }
+              
               couponId = coupon.id
             }
           } catch (couponError) {

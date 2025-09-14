@@ -90,29 +90,29 @@ export async function POST(request: NextRequest) {
     await redis.set(`stripe:customer:${customerId}`, String(userId))
 
     // NOW create the subscription (after payment method is confirmed)
-    const trialEndTimestamp = TrialUtils.getTrialEndTimestamp()
+    const now = new Date()
+    const trialEndDate = TrialUtils.getTrialEndDate(now)
     
+    // Calculate credit reset date - 1 month from checkout (not trial end)
+    const creditResetDate = new Date(now)
+    creditResetDate.setMonth(creditResetDate.getMonth() + 1)
+    
+    // Remove trial_end from subscription creation
     const subscriptionParams: Stripe.SubscriptionCreateParams = {
       customer: customerId,
       items: [{ price: priceId }],
-      trial_end: trialEndTimestamp,
       expand: ['latest_invoice.payment_intent'],
       payment_behavior: 'default_incomplete',
       default_payment_method: setupIntent.payment_method as string,
       payment_settings: {
         save_default_payment_method: 'on_subscription',
       },
-      trial_settings: {
-        end_behavior: {
-          missing_payment_method: 'cancel'
-        }
-      },
       metadata: {
         userId: userId || 'anonymous',
         planName: metadata.planName || planName || 'Standard',
         interval: metadata.interval || interval || 'month',
         priceId,
-        isTrial: 'true',
+        isTrial: 'false', // Change to false since we're removing trial
         trialEndDate: TrialUtils.getTrialEndDate(),
         createdFromSetupIntent: setupIntentId,
       },
@@ -123,38 +123,29 @@ export async function POST(request: NextRequest) {
       subscriptionParams.discounts = [{ coupon: couponId }]
     }
 
-    // Create subscription with trial
+    // Create subscription WITHOUT trial
     const subscription = await stripe.subscriptions.create(subscriptionParams)
 
-    if (subscription.status !== 'trialing') {
+    // Change status check from 'trialing' to 'active' or 'incomplete'
+    if (subscription.status !== 'active' && subscription.status !== 'incomplete') {
       return NextResponse.json({ 
-        error: 'Failed to create trial subscription',
+        error: 'Failed to create subscription',
         subscriptionStatus: subscription.status 
       }, { status: 500 })
     }
 
-    const now = new Date()
-    const trialEndDate = TrialUtils.getTrialEndDate(now)
-    
-    // Calculate credit reset date - 1 month from checkout (not trial end)
-    const creditResetDate = new Date(now)
-    creditResetDate.setMonth(creditResetDate.getMonth() + 1)
-    
-    // Set up trial subscription with STANDARD plan type but trial status
+    // Update subscription data to reflect no trial
     const subscriptionData = {
       plan: 'Standard Plan',
-      planType: 'STANDARD', // Immediate Standard access as requested
-      status: 'trialing', // Use Stripe's standard trialing status
+      planType: 'STANDARD',
+      status: subscription.status, // Use actual subscription status
       amount: amount?.toString() || '15',
       interval: interval || 'month',
       purchaseDate: now.toISOString(),
-      trialStartDate: now.toISOString(),
-      trialEndDate: trialEndDate,
-      creditResetDate: creditResetDate.toISOString().split('T')[0], // Store reset date
+      creditResetDate: creditResetDate.toISOString().split('T')[0],
       lastUpdated: now.toISOString(),
       stripeCustomerId: customerId,
-      stripeSubscriptionId: subscription.id, // Store actual subscription ID
-      willChargeOn: trialEndDate
+      stripeSubscriptionId: subscription.id,
     }
     
     // Initialize trial credits (500 credits immediately) with custom reset date
