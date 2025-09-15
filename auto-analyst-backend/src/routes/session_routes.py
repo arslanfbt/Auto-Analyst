@@ -646,26 +646,19 @@ async def generate_description_from_preview(
     request: dict,
     app_state = Depends(get_app_state)
 ):
-    """Generate description from CSV preview data (headers, rows, user description)"""
+    
     try:
         headers = request.get("headers", [])
         rows = request.get("rows", [])
-        user_description = request.get("existingDescription", "")
-        dataset_name = request.get("datasetName", "Dataset")
-        dataset_name = dataset_name.replace('_','').strip().lower()
+        user_description = request.get("description", "")
+        dataset_name = request.get("name", "Dataset")
         
-        # Make dataset_name a safe Python identifier: remove dangerous characters, allow only alphanumerics and underscores, and ensure it starts with a letter or underscore
+        # Clean the dataset name
+        dataset_name = clean_dataset_name(dataset_name)
         
-        dataset_name = re.sub(r'[^a-zA-Z0-9_]', '', dataset_name)
-        if not re.match(r'^[a-zA-Z_]', dataset_name):
-            dataset_name = f"ds_{dataset_name}"
-        dataset_name = dataset_name[:30]  # limit length for safety
         if not headers or not rows:
-            raise HTTPException(status_code=400, detail="Headers and sample rows are required")
-        
-        # Create a mock DataFrame from the preview data
+            raise HTTPException(status_code=400, detail="Headers and rows are required")
 
-        
         # Convert rows to DataFrame
         df = pd.DataFrame(rows, columns=headers)
         
@@ -696,8 +689,6 @@ async def generate_description_from_preview(
         dataset_view += f"exact_table_name={dataset_name}\n:columns:{str(columns)}\n{head_data.to_markdown()}\n"
         
         # Generate description using AI
-
-        
         with dspy.context(lm=mid_lm):
             data_context = dspy.Predict(dataset_description_agent)(
                 existing_description=user_description,
@@ -705,8 +696,19 @@ async def generate_description_from_preview(
             )
             generated_desc = data_context.description
         
+        # Clean the generated description to ensure it's valid JSON if it's JSON
+        try:
+            # Try to parse as JSON to validate it
+            import json
+            parsed_desc = json.loads(generated_desc)
+            # If it's valid JSON, format it properly
+            cleaned_desc = json.dumps(parsed_desc, indent=2)
+        except json.JSONDecodeError:
+            # If it's not JSON, use as-is but clean any problematic characters
+            cleaned_desc = generated_desc.replace('\\r\\n', '\n').replace('\\n', '\n').replace("\\'", "'")
+        
         # Format the description with exact_python_name
-        formatted_desc = f" exact_python_name: `{dataset_name}` Dataset: {generated_desc}"
+        formatted_desc = f" exact_python_name: `{dataset_name}` Dataset: {cleaned_desc}"
         
         return {"description": formatted_desc}
         
