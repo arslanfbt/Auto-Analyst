@@ -1,6 +1,6 @@
 import { Redis } from '@upstash/redis'
 import logger from '@/lib/utils/logger'
-import { CreditConfig, CREDIT_THRESHOLDS, TrialUtils } from './credits-config'
+import { CreditConfig, CREDIT_THRESHOLDS } from './credits-config'
 // Initialize Redis client with Upstash credentials
 const redis = new Redis({
   url: process.env.UPSTASH_REDIS_REST_URL || '',
@@ -81,7 +81,7 @@ export const creditUtils = {
   // Initialize credits for a trial user (500 credits)
   async initializeTrialCredits(userId: string, paymentIntentId: string, trialEndDate: string): Promise<void> {
     try {
-      const trialCredits = TrialUtils.getTrialCredits()
+      const trialCredits = 0 // Remove trial functionality
       
       await redis.hset(KEYS.USER_CREDITS(userId), {
         total: trialCredits.toString(),
