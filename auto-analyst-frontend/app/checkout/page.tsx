@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import Head from 'next/head'
 import Link from 'next/link'
 import { Elements } from '@stripe/react-stripe-js'
 import { loadStripe, StripeElementsOptions } from '@stripe/stripe-js'
@@ -361,10 +360,6 @@ export default function CheckoutPage() {
   
   return (
     <>
-      <Head>
-        <title>Checkout | Auto-Analyst</title>
-      </Head>
-      
       <div className="min-h-screen bg-gray-50 py-16 px-4 sm:px-6 lg:px-8">
         <div className="max-w-5xl mx-auto">
           <div className="flex items-center justify-between mb-10">
@@ -644,34 +639,37 @@ export default function CheckoutPage() {
                     <div className="flex justify-between font-medium text-gray-900">
                       <span>Total (USD)</span>
                       <span>
-                        {(discountApplied && discountAmount > 0 && !promoError) || billingCycle === 'yearly' ? (
-                          <div className="text-right">
-                            <div className="text-lg font-bold text-green-600">
-                              {(() => {
-                                if (discountApplied && discountAmount > 0 && !promoError) {
-                                  const total = (planDetails.amount * 100 - discountAmount) / 100 // Use discountAmount directly
-                                  return total.toFixed(2)
-                                }
-                                
-                                // For yearly billing without promo code
-                                return planDetails.amount.toFixed(2)
-                              })()}
-                            </div>
-                            <div className="text-xs text-gray-500">
-                              {billingCycle === 'yearly' && planDetails.name === 'Standard' && !discountApplied && (
-                                'You save $54.00 with yearly billing!'
-                              )}
-                              {discountApplied && discountAmount > 0 && (
-                                `You save $${(discountAmount / 100).toFixed(2)} with promo code!` {/* Use discountAmount directly */}
-                              )}
-                              {billingCycle === 'yearly' && planDetails.name === 'Standard' && discountApplied && discountAmount > 0 && (
-                                `Total savings: $${(54 + (discountAmount / 100)).toFixed(2)}!` {/* Use discountAmount directly */}
-                              )}
-                            </div>
-                          </div>
-                        ) : (
-                          `$${planDetails.amount}`
-                        )}
+                        {(() => {
+                          if (discountApplied && discountAmount > 0 && !promoError) {
+                            const total = (planDetails.amount * 100 - discountAmount) / 100
+                            return (
+                              <div className="text-right">
+                                <div className="text-lg font-bold text-green-600">
+                                  {total.toFixed(2)}
+                                </div>
+                                <div className="text-xs text-gray-500">
+                                  {`You save $${(discountAmount / 100).toFixed(2)} with promo code!`}
+                                  {billingCycle === 'yearly' && planDetails.name === 'Standard' && (
+                                    ` Total savings: $${(54 + (discountAmount / 100)).toFixed(2)}!`
+                                  )}
+                                </div>
+                              </div>
+                            )
+                          } else {
+                            return (
+                              <div className="text-right">
+                                <div className="text-lg font-bold text-green-600">
+                                  {planDetails.amount.toFixed(2)}
+                                </div>
+                                {billingCycle === 'yearly' && planDetails.name === 'Standard' && !discountApplied && (
+                                  <div className="text-xs text-gray-500">
+                                    You save $54.00 with yearly billing!
+                                  </div>
+                                )}
+                              </div>
+                            )
+                          }
+                        })()}
                       </span>
                     </div>
                   </div>
