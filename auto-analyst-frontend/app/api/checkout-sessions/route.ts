@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import Stripe from 'stripe'
-import { TrialUtils } from '@/lib/credits-config'
+// Remove: import { TrialUtils } from '@/lib/credits-config'
 
 export const dynamic = 'force-dynamic'
 
