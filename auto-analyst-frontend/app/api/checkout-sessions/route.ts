@@ -7,7 +7,7 @@ export const dynamic = 'force-dynamic'
 // Initialize Stripe only if the secret key exists
 const stripe = process.env.STRIPE_SECRET_KEY 
   ? new Stripe(process.env.STRIPE_SECRET_KEY, {
-      apiVersion: '2025-05-28.basil',
+      apiVersion: '2023-10-16', // Fixed: Use a valid Stripe API version
     })
   : null
 
@@ -190,8 +190,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // CHANGED: Create only a setup intent for payment method collection
-    // Do NOT create subscription until user confirms payment
+    // Create only a setup intent for payment method collection
     const setupIntent = await stripe.setupIntents.create({
       customer: customerId,
       usage: 'off_session',
@@ -254,59 +253,3 @@ async function calculateDiscountedAmount(amount: number, couponId: string): Prom
   }
 }
 ```
-
-## Key Enhancements Added:
-
-### 1. **Enhanced Price ID Restrictions**
-- Now checks both `coupon.applies_to.products` AND `coupon.applies_to.prices`
-- Price restrictions allow you to target specific billing cycles (monthly vs yearly)
-
-### 2. **Comprehensive Logging**
-- Added detailed console logs to track validation flow
-- Shows what restrictions are being checked
-- Helps debug promo code issues
-
-### 3. **Three Levels of Restriction Support**
-1. **No Restrictions** → Works on all products and billing cycles
-2. **Product-Only Restrictions** → Works on all billing cycles of specific products
-3. **Price-Specific Restrictions** → Works only on specific billing cycles
-
-### 4. **Better Error Messages**
-- "This promo code is not valid for the selected plan" (product restriction)
-- "This promo code is not valid for the selected billing cycle" (price restriction)
-
-## How to Set Up Price Restrictions in Stripe:
-
-### For Monthly-Only Promo Codes:
-```javascript
-// Create a coupon that only applies to monthly Standard plan
-await stripe.coupons.create({
-  id: 'MONTHLY20',
-  percent_off: 20,
-  applies_to: {
-    prices: ['price_monthly_standard_xyz'] // Only monthly Standard
-  }
-})
-```
-
-### For Yearly-Only Promo Codes:
-```javascript
-// Create a coupon that only applies to yearly plans
-await stripe.coupons.create({
-  id: 'YEARLY30',
-  percent_off: 30,
-  applies_to: {
-    prices: [
-      'price_yearly_standard_xyz',
-      'price_yearly_pro_xyz'
-    ] // Only yearly plans
-  }
-})
-```
-
-### For Product-Wide Promo Codes:
-```javascript
-<code_block_to_apply_changes_from>
-```
-
-This gives you fine-grained control over exactly which plans and billing cycles each promo code can be applied to!
