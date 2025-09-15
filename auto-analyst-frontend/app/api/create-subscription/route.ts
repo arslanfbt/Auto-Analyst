@@ -57,18 +57,15 @@ export async function POST(request: NextRequest) {
       
       // Get the promotion code object
       const promotionCode = await stripe.promotionCodes.list({
-        code: promoCodeInfo.promotionCode || 'REDUCE', // Fallback to the promo code from validation
+        code: promoCodeInfo.promotionCode || 'REDUCE',
         active: true,
         limit: 1
       })
 
       if (promotionCode.data.length > 0) {
-        // Apply promotion code to subscription items - use promotion_code, not coupon
-        subscriptionParams.items = [{
-          price: priceId,
-          discounts: [{
-            promotion_code: promotionCode.data[0].id  // Use promotion code ID, not coupon ID
-          }]
+        // Apply promotion code to the subscription itself, not individual items
+        subscriptionParams.discounts = [{
+          promotion_code: promotionCode.data[0].id
         }]
         console.log('✅ Promo code applied:', promotionCode.data[0].id)
       } else {
