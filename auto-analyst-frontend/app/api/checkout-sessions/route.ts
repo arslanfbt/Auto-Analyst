@@ -131,6 +131,9 @@ export async function POST(request: NextRequest) {
     const originalAmount = price.unit_amount || 0
     const finalAmount = Math.max(0, originalAmount - discountAmount)
 
+    // Get product details for better messaging
+    const product = await stripe.products.retrieve(productId)
+
     return NextResponse.json({
       clientSecret: setupIntent.client_secret,
       priceId,
@@ -139,7 +142,18 @@ export async function POST(request: NextRequest) {
       discountAmount,
       finalAmount,
       promotionCode: validatedPromotionCode,
-      billingCycle: price.recurring?.interval || 'one_time'
+      billingCycle: price.recurring?.interval || 'one_time',
+      // Enhanced promo code information
+      promoCodeInfo: validatedPromotionCode ? {
+        productName: product.name,
+        billingCycle: price.recurring?.interval || 'one_time',
+        discountType: coupon.percent_off ? 'percentage' : 'amount',
+        discountValue: coupon.percent_off || (coupon.amount_off / 100),
+        appliesTo: {
+          products: coupon.applies_to?.products || [],
+          prices: (coupon.applies_to as any)?.prices || []
+        }
+      } : null
     })
 
   } catch (error) {

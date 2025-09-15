@@ -42,6 +42,16 @@ export default function CheckoutPage() {
   const [promoCode, setPromoCode] = useState('')
   const [discountApplied, setDiscountApplied] = useState(false)
   const [discountInfo, setDiscountInfo] = useState<{type: string, value: number} | null>(null)
+  const [promoCodeInfo, setPromoCodeInfo] = useState<{
+    productName: string
+    billingCycle: string
+    discountType: 'percentage' | 'amount'
+    discountValue: number
+    appliesTo: {
+      products: string[]
+      prices: string[]
+    }
+  } | null>(null)
 
   // Plan configurations with both monthly and yearly options
   const pricingTiers = [
@@ -199,6 +209,13 @@ export default function CheckoutPage() {
           fetchCouponDetails(data.couponId, planData.amount)
         } else {
           setDiscountInfo(null)
+        }
+
+        // Set promo code info for display
+        if (data.promoCodeInfo) {
+          setPromoCodeInfo(data.promoCodeInfo)
+        } else {
+          setPromoCodeInfo(null)
         }
       }
     } catch (err) {
