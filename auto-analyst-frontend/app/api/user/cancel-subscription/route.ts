@@ -72,7 +72,7 @@ export async function POST(request: NextRequest) {
 
       // Add period end date if we have it from Stripe
       if (!isLegacyUser && canceledSubscription) {
-        updateData.periodEndDate = new Date(canceledSubscription.current_period_end * 1000).toISOString()
+        updateData.periodEndDate = new Date((canceledSubscription as any).current_period_end * 1000).toISOString()
       }
 
       await redis.hset(KEYS.USER_SUBSCRIPTION(userId), updateData)
@@ -88,7 +88,7 @@ export async function POST(request: NextRequest) {
       // Get period end date from Stripe subscription for better user feedback
       let periodEndDate = null
       if (!isLegacyUser && canceledSubscription) {
-        periodEndDate = new Date(canceledSubscription.current_period_end * 1000).toISOString()
+        periodEndDate = new Date((canceledSubscription as any).current_period_end * 1000).toISOString()
       }
 
       return NextResponse.json({
