@@ -42,6 +42,11 @@ export default function CheckoutForm({ planName, amount, interval, clientSecret,
     setProcessing(true)
     
     // NEW FLOW: Always use confirmSetup for trial signups
+    console.log('🔍 About to confirm setup with:', {
+      clientSecret,
+      elements: !!elements,
+      stripe: !!stripe
+    })
     const { error: submitError, setupIntent } = await stripe.confirmSetup({
       elements,
       confirmParams: {
