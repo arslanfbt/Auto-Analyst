@@ -7,7 +7,7 @@ export const dynamic = 'force-dynamic'
 
 const stripe = process.env.STRIPE_SECRET_KEY 
   ? new Stripe(process.env.STRIPE_SECRET_KEY, {
-      apiVersion: '2024-06-20',
+      apiVersion: '2025-05-28.basil',
     })
   : null
 
@@ -48,13 +48,13 @@ export async function POST(request: NextRequest) {
     const subscriptionData = {
       id: subscription.id,
       status: subscription.status,
-      current_period_start: subscription.current_period_start,
-      current_period_end: subscription.current_period_end,
+      current_period_start: (subscription as any).current_period_start,
+      current_period_end: (subscription as any).current_period_end,
       priceId: priceId,
       created: subscription.created
     }
 
-    await redis.hset(KEYS.userSubscription(userId), subscriptionData)
+    await redis.hset(KEYS.USER_SUBSCRIPTION(userId), subscriptionData)
     
     // Add credits based on plan
     const price = await stripe.prices.retrieve(priceId)
@@ -62,17 +62,20 @@ export async function POST(request: NextRequest) {
     
     // Determine credits based on product name
     let credits = 0
-    if (product.name.includes('Standard')) {
-      credits = 1000 // Monthly credits for Standard plan
-    } else if (product.name.includes('Enterprise')) {
-      credits = 5000 // Monthly credits for Enterprise plan
+    if (product.name && product.name.includes('Standard')) {
+      credits = 500 // Standard plan gets 500 credits
+    } else if (product.name && product.name.includes('Enterprise')) {
+      credits = 2000 // Enterprise plan (when defined)
+    } else {
+      // This shouldn't happen for subscription creation, but fallback
+      credits = 20 // Free plan default
     }
 
     if (credits > 0) {
-      await redis.hset(KEYS.userCredits(userId), {
-        available: credits,
-        used: 0,
-        lastReset: Date.now()
+      await redis.hset(KEYS.USER_CREDITS(userId), {
+        available: String(credits),
+        used: '0',
+        lastReset: String(Date.now())
       })
     }
 
