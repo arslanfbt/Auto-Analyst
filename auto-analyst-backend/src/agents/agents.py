@@ -796,6 +796,8 @@ class planner_module(dspy.Module):
             "plan": plan.plan,
             "plan_instructions": plan.plan_instructions
         }
+        
+        return output
 
 
 
