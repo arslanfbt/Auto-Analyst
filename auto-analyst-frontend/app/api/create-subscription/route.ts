@@ -23,7 +23,14 @@ export async function POST(request: NextRequest) {
     }
 
     const { setupIntentId, priceId, promoCodeInfo, promotionCode } = await request.json()
-    console.log('🔍 Creating subscription with:', { setupIntentId, priceId, promoCodeInfo, promotionCode })
+    console.log('🔍 FULL REQUEST DATA:', { 
+      setupIntentId, 
+      priceId, 
+      promoCodeInfo: JSON.stringify(promoCodeInfo, null, 2),
+      promotionCode,
+      hasPromoCodeInfo: !!promoCodeInfo,
+      hasPromotionCodeField: !!promoCodeInfo?.promotionCode
+    })
 
     if (!setupIntentId || !priceId) {
       return NextResponse.json({ error: 'Missing required parameters' }, { status: 400 })
@@ -53,52 +60,72 @@ export async function POST(request: NextRequest) {
     }
 
     // Apply promo code if provided from frontend
-    if (promoCodeInfo && promoCodeInfo.promotionCode) {
-      console.log('🔍 Applying promo code from frontend:', promoCodeInfo.promotionCode)
+    if (promoCodeInfo?.promotionCode) {
+      console.log('🔍 APPLYING PROMO CODE:', {
+        promotionCode: promoCodeInfo.promotionCode,
+        discountType: promoCodeInfo.discountType,
+        discountValue: promoCodeInfo.discountValue
+      })
       
-      // Look up the promotion code object by the code string
-      const promotionCodeList = await stripe.promotionCodes.list({
-        code: promoCodeInfo.promotionCode,
-        active: true,
-        limit: 1
-      })
-
-      console.log('🔍 Promotion code lookup result:', {
-        searchedCode: promoCodeInfo.promotionCode,
-        found: promotionCodeList.data.length > 0,
-        promotionCodeId: promotionCodeList.data[0]?.id,
-        couponId: promotionCodeList.data[0]?.coupon?.id
-      })
-
-      if (promotionCodeList.data.length > 0) {
-        const promotionCode = promotionCodeList.data[0]
-        const couponId = promotionCode.coupon.id  // Get the coupon ID from promotion code
-        
-        // Apply coupon to the subscription
-        subscriptionParams.discounts = [{
-          coupon: couponId  // Use coupon ID, not promotion_code ID
-        }]
-        
-        console.log('✅ Coupon applied to subscription:', {
-          promotionCodeString: promoCodeInfo.promotionCode,
-          promotionCodeId: promotionCode.id,
-          couponId: couponId
+      try {
+        // Look up the promotion code object by the code string
+        const promotionCodeList = await stripe.promotionCodes.list({
+          code: promoCodeInfo.promotionCode,
+          active: true,
+          limit: 1
         })
-      } else {
-        console.log('⚠️ Promo code not found in Stripe:', promoCodeInfo.promotionCode)
+
+        console.log('🔍 STRIPE PROMOTION CODE LOOKUP:', {
+          searchedCode: promoCodeInfo.promotionCode,
+          foundCount: promotionCodeList.data.length,
+          foundCodes: promotionCodeList.data.map(pc => ({
+            id: pc.id,
+            code: pc.code,
+            active: pc.active,
+            couponId: pc.coupon?.id
+          }))
+        })
+
+        if (promotionCodeList.data.length > 0) {
+          const promotionCodeObj = promotionCodeList.data[0]
+          const couponId = promotionCodeObj.coupon.id
+          
+          // Apply coupon to the subscription
+          subscriptionParams.discounts = [{
+            coupon: couponId
+          }]
+          
+          console.log('✅ COUPON ADDED TO SUBSCRIPTION PARAMS:', {
+            promotionCodeString: promoCodeInfo.promotionCode,
+            promotionCodeId: promotionCodeObj.id,
+            couponId: couponId,
+            finalSubscriptionParams: JSON.stringify(subscriptionParams, null, 2)
+          })
+        } else {
+          console.log('❌ PROMO CODE NOT FOUND IN STRIPE:', promoCodeInfo.promotionCode)
+        }
+      } catch (promoError) {
+        console.error('❌ ERROR LOOKING UP PROMO CODE:', promoError)
       }
     } else {
-      console.log('🔍 No promo code provided from frontend')
+      console.log('❌ NO PROMO CODE TO APPLY:', {
+        hasPromoCodeInfo: !!promoCodeInfo,
+        hasPromotionCode: !!promoCodeInfo?.promotionCode,
+        promoCodeInfo: JSON.stringify(promoCodeInfo, null, 2)
+      })
     }
 
-    // Create subscription
-    console.log('🔍 Creating subscription with parameters:', {
-      customer: setupIntent.customer,
-      items: subscriptionParams.items,
-      discounts: subscriptionParams.discounts
-    })
+    // Create subscription with detailed logging
+    console.log('🔍 CREATING SUBSCRIPTION WITH FINAL PARAMS:', JSON.stringify(subscriptionParams, null, 2))
+    
     const subscription = await stripe.subscriptions.create(subscriptionParams)
-    console.log('✅ Subscription created:', subscription.id)
+    
+    console.log('✅ SUBSCRIPTION CREATED:', {
+      id: subscription.id,
+      status: subscription.status,
+      hasDiscounts: !!(subscription.discounts && subscription.discounts.length > 0),
+      discounts: subscription.discounts
+    })
 
     // Update Redis with subscription info
     const userId = token.sub
