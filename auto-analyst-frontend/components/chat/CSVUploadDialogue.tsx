@@ -33,34 +33,38 @@ export default function CSVUploadDialog({
   onConfirm,
   isSubmitting,
   existingData,
-  sessionId // Use the prop instead of useSession
+  sessionId
 }: CSVUploadDialogProps) {
-  const [datasetName, setDatasetName] = useState<string>("")
-  const [description, setDescription] = useState<string>("")
-  const [activeTab, setActiveTab] = useState<"edit" | "preview">("edit")
+  const [datasetName, setDatasetName] = useState('')
+  const [description, setDescription] = useState('')
   const [isGeneratingDescription, setIsGeneratingDescription] = useState(false)
 
-  // Initialize with existing data if provided, otherwise use props
+  // Auto-trigger description generation when dialog opens with preview data
   useEffect(() => {
-    if (existingData) {
-      // If we have existing data (from uploaded dataset), use it
-      setDatasetName(existingData.name || fileName)
-      setDescription(existingData.description || '')
-    } else if (fileName && !datasetName) {
-      // If it's a new upload, use filename
-      const baseFileName = fileName.replace(/\.csv$/i, '').replace('Default Dataset', 'Housing Dataset')
-      setDatasetName(baseFileName)
+    if (isOpen && filePreview && !description) {
+      // Set the dataset name from preview
+      setDatasetName(filePreview.name || fileName.replace(/\.csv$/i, ''))
+      
+      // Set basic description
+      setDescription(filePreview.description || `CSV data from ${fileName}`)
+      
+      // Auto-trigger description generation after a small delay
+      const timer = setTimeout(() => {
+        handleGenerateDescription()
+      }, 100) // Small delay to ensure component is fully mounted
+      
+      return () => clearTimeout(timer)
     }
-  }, [fileName, datasetName, existingData])
+  }, [isOpen, filePreview])
 
-  // Add a new useEffect to handle when filePreview changes (for already uploaded datasets)
+  // Reset form when dialog closes
   useEffect(() => {
-    if (filePreview && !existingData) {
-      // If we have filePreview but no existingData, this is an already uploaded dataset
-      setDatasetName(filePreview.name || fileName)
-      setDescription(filePreview.description || '')
+    if (!isOpen) {
+      setDatasetName('')
+      setDescription('')
+      setIsGeneratingDescription(false)
     }
-  }, [filePreview, fileName, existingData])
+  }, [isOpen])
 
   const handleClose = () => {
     if (!isSubmitting) {
