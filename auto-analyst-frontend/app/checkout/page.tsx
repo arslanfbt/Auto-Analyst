@@ -34,8 +34,6 @@ export default function CheckoutPage() {
   const [billingCycle, setBillingCycle] = useState<'monthly' | 'yearly'>(initialCycle === 'yearly' ? 'yearly' : 'monthly')
   
   const [clientSecret, setClientSecret] = useState('')
-  const [setupIntentId, setSetupIntentId] = useState('')
-  const [isTrialSetup, setIsTrialSetup] = useState(false)
   const [paymentLoading, setPaymentLoading] = useState(false)
   const [paymentError, setPaymentError] = useState('')
   const [promoError, setPromoError] = useState('')
@@ -120,7 +118,6 @@ export default function CheckoutPage() {
     
     // Clear existing payment intents to force creation of new ones
     setClientSecret('')
-    setSetupIntentId('')
     setPaymentError('')
     setPromoError('')
     
@@ -146,7 +143,6 @@ export default function CheckoutPage() {
     
     // Clear previous state to avoid stale data
     setClientSecret('')
-    setSetupIntentId('')
     setPaymentError('')
     
     // Always clear promo-related state when creating new payment intent
@@ -189,11 +185,10 @@ export default function CheckoutPage() {
         return
       }
 
-      // Success case
+      // Success case - setup intent created
       console.log('✅ Setup intent created:', data.clientSecret)
       setClientSecret(data.clientSecret)
-      setSetupIntentId(data.setupIntentId)
-      setIsTrialSetup(data.isTrialSetup || false)
+      setPaymentError('')
       
       // Handle promo code success
       if (data.discountAmount > 0 && data.promoCodeInfo) {
@@ -225,7 +220,6 @@ export default function CheckoutPage() {
       } else {
         setPaymentError('Failed to set up payment. Please try again.')
         setClientSecret('')
-        setSetupIntentId('')
       }
     } finally {
       setPaymentLoading(false)
@@ -455,14 +449,12 @@ export default function CheckoutPage() {
                       amount={planDetails.amount}
                       interval={planDetails.cycle as 'month' | 'year' | 'day'}
                       clientSecret={clientSecret}
-                      isTrialSetup={isTrialSetup}
-                      setupIntentId={setupIntentId}
                     />
                     
                     {/* Debug info - remove in production */}
-                    {process.env.NODE_ENV === 'development' && setupIntentId && (
+                    {process.env.NODE_ENV === 'development' && clientSecret && (
                       <div className="mt-2 p-2 bg-gray-100 rounded text-xs text-gray-600">
-                        <strong>Debug:</strong> Setup Intent: {setupIntentId.substring(0, 20)}...
+                        <strong>Debug:</strong> Setup Intent: {clientSecret.split('_secret_')[0]}...
                         <br />
                         <strong>Plan:</strong> {planDetails.name} {planDetails.cycle} (${planDetails.amount})
                       </div>

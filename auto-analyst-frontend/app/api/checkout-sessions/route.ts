@@ -148,7 +148,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Create setup intent for subscription
+    // Create setup intent for subscription (remove trial metadata)
     const setupIntent = await stripe.setupIntents.create({
       usage: 'off_session',
       payment_method_types: ['card'],
@@ -156,7 +156,7 @@ export async function POST(request: NextRequest) {
         priceId,
         productId,
         promotionCode: validatedPromotionCode || '',
-        isTrial: 'false', // Remove trial functionality
+        // Remove: isTrial: 'false'
       }
     })
 
