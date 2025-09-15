@@ -29,12 +29,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Missing required parameters' }, { status: 400 })
     }
 
-    // Retrieve the setup intent to get the payment method
+    // Retrieve the setup intent to get the payment method and metadata
     const setupIntent = await stripe.setupIntents.retrieve(setupIntentId)
     console.log('🔍 Setup intent retrieved:', { 
       status: setupIntent.status, 
       payment_method: setupIntent.payment_method,
-      customer: setupIntent.customer 
+      customer: setupIntent.customer,
+      metadata: setupIntent.metadata
     })
     
     if (setupIntent.status !== 'succeeded' || !setupIntent.payment_method) {
@@ -42,6 +43,9 @@ export async function POST(request: NextRequest) {
         error: `Invalid setup intent: status=${setupIntent.status}, payment_method=${setupIntent.payment_method}` 
       }, { status: 400 })
     }
+
+    // Get promotion code from setup intent metadata (already validated)
+    const promotionCodeFromMetadata = setupIntent.metadata?.promotionCode
 
     // Prepare subscription parameters
     const subscriptionParams: Stripe.SubscriptionCreateParams = {
@@ -51,48 +55,39 @@ export async function POST(request: NextRequest) {
       expand: ['latest_invoice.payment_intent'],
     }
 
-    // Apply promo code if provided
-    if (promoCodeInfo && promoCodeInfo.discountType) {
-      console.log('🔍 Applying promo code:', {
-        promoCodeInfo,
-        promotionCode: promoCodeInfo.promotionCode,
-        discountType: promoCodeInfo.discountType,
-        discountValue: promoCodeInfo.discountValue
-      })
+    // Apply promo code if it was validated during setup intent creation
+    if (promotionCodeFromMetadata && promotionCodeFromMetadata !== '') {
+      console.log('🔍 Applying validated promo code from setup intent:', promotionCodeFromMetadata)
       
-      // Get the promotion code object
-      const promotionCode = await stripe.promotionCodes.list({
-        code: promoCodeInfo.promotionCode || 'REDUCE',
+      // Look up the promotion code object by the code string
+      const promotionCodeList = await stripe.promotionCodes.list({
+        code: promotionCodeFromMetadata,
         active: true,
         limit: 1
       })
 
-      console.log('🔍 Promotion code search result:', {
-        found: promotionCode.data.length > 0,
-        searchedCode: promoCodeInfo.promotionCode,
-        foundCode: promotionCode.data[0]?.code,
-        promotionCodeId: promotionCode.data[0]?.id
-      })
-
-      if (promotionCode.data.length > 0) {
-        // Apply promotion code to the subscription itself, not individual items
+      if (promotionCodeList.data.length > 0) {
+        // Apply promotion code to the subscription
         subscriptionParams.discounts = [{
-          promotion_code: promotionCode.data[0].id
+          promotion_code: promotionCodeList.data[0].id
         }]
-        console.log('✅ Promo code applied:', promotionCode.data[0].id)
+        console.log('✅ Promo code applied to subscription:', {
+          code: promotionCodeFromMetadata,
+          promotionCodeId: promotionCodeList.data[0].id
+        })
       } else {
-        console.log('⚠️ Promo code not found in Stripe for code:', promoCodeInfo.promotionCode)
+        console.log('⚠️ Previously validated promo code not found:', promotionCodeFromMetadata)
       }
     } else {
-      console.log(' No promo code to apply:', {
-        hasPromoCodeInfo: !!promoCodeInfo,
-        hasDiscountType: !!promoCodeInfo?.discountType,
-        promoCodeInfo
-      })
+      console.log('🔍 No promo code in setup intent metadata')
     }
 
     // Create subscription
-    console.log('🔍 Creating subscription with customer:', setupIntent.customer)
+    console.log('🔍 Creating subscription with parameters:', {
+      customer: setupIntent.customer,
+      items: subscriptionParams.items,
+      discounts: subscriptionParams.discounts
+    })
     const subscription = await stripe.subscriptions.create(subscriptionParams)
     console.log('✅ Subscription created:', subscription.id)
 
