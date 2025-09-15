@@ -50,7 +50,10 @@ export default function CheckoutForm({ planName, amount, interval, clientSecret,
     
     if (existingSetupIntentId || setupIntentId) {
       // If we already have a setup intent, try to create subscription directly
-      await createSubscription(existingSetupIntentId || setupIntentId)
+      const intentId = existingSetupIntentId || setupIntentId
+      if (intentId) {
+        await createSubscription(intentId)
+      }
       return
     }
 
