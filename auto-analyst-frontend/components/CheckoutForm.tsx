@@ -34,7 +34,14 @@ export default function CheckoutForm({ planName, amount, interval, clientSecret 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault()
 
-    if (!stripe || !elements) {
+    if (!stripe || !elements || !clientSecret) {
+      setError('Payment system not ready. Please refresh and try again.')
+      return
+    }
+
+    // Validate client secret format
+    if (!clientSecret.includes('_secret_')) {
+      setError('Invalid payment configuration. Please refresh and try again.')
       return
     }
 
@@ -49,9 +56,20 @@ export default function CheckoutForm({ planName, amount, interval, clientSecret 
       redirect: 'if_required',
     })
 
+    // Better error handling for specific Stripe errors
     if (submitError) {
+      console.error('Setup intent confirmation error:', submitError)
+      
+      // Handle specific error types
+      if (submitError.code === 'setup_intent_unexpected_state') {
+        setError('This payment method has already been processed. Please refresh the page and try again.')
+      } else if (submitError.code === 'payment_method_unexpected_state') {
+        setError('Payment method is in an unexpected state. Please try again.')
+      } else {
+        setError(submitError.message || 'An error occurred during payment setup')
+      }
+      
       setProcessing(false)
-      setError(submitError.message || 'An error occurred during payment setup')
       return
     }
 

@@ -72,13 +72,31 @@ export async function POST(request: NextRequest) {
           )
         }
 
-        coupon = promotionCodeObj.coupon
-        console.log('🔍 Coupon details:', {
-          id: coupon.id,
-          percent_off: coupon.percent_off,
-          amount_off: coupon.amount_off,
-          applies_to: coupon.applies_to
-        })
+        // Safely access coupon with error handling
+        try {
+          coupon = promotionCodeObj.coupon
+          
+          if (!coupon) {
+            console.log('❌ No coupon associated with promotion code')
+            return NextResponse.json(
+              { error: 'Invalid promotion code configuration' },
+              { status: 400 }
+            )
+          }
+          
+          console.log('🔍 Coupon details:', {
+            id: coupon.id,
+            percent_off: coupon.percent_off,
+            amount_off: coupon.amount_off,
+            applies_to: coupon.applies_to
+          })
+        } catch (couponError) {
+          console.error('❌ Error accessing coupon:', couponError)
+          return NextResponse.json(
+            { error: 'Failed to access promotion code details' },
+            { status: 400 }
+          )
+        }
 
         // Check if coupon has restrictions
         if (coupon.applies_to) {
