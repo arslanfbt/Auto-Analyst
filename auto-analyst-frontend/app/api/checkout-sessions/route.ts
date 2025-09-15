@@ -267,6 +267,7 @@ export async function POST(request: NextRequest) {
       billingCycle: price.recurring?.interval || 'one_time',
       // Enhanced promo code information
       promoCodeInfo: validatedPromotionCode && coupon ? {
+        promotionCode: validatedPromotionCode, // Add this field
         productName: product.name,
         billingCycle: price.recurring?.interval || 'one_time',
         discountType: coupon.percent_off ? 'percentage' : 'amount',

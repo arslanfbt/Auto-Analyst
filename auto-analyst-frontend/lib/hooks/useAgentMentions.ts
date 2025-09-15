@@ -18,16 +18,22 @@ export function useAgentMentions() {
   useEffect(() => {
     const fetchAgents = async () => {
       try {
+        console.log('🔍 Fetching agents from:', `${API_URL}/agents`)
         const response = await axios.get(`${API_URL}/agents`)
+        console.log('🔍 Agents response:', response.data)
+        
         if (response.data && response.data.available_agents) {
           const agentList: AgentInfo[] = response.data.available_agents.map((name: string) => ({
             name,
             description: `Specialized ${name.replace(/_/g, " ")} agent`,
           }))
           setAvailableAgents(agentList)
+          console.log('✅ Agents set:', agentList)
+        } else {
+          console.log('❌ No available_agents in response')
         }
       } catch (error) {
-        console.error("Error fetching agents:", error)
+        console.error("❌ Error fetching agents:", error)
       }
     }
 
@@ -40,19 +46,26 @@ export function useAgentMentions() {
     cursorPosition: number,
     textareaElement: HTMLTextAreaElement
   ) => {
+    console.log('🔍 Input change detected:', { value, cursorPosition, availableAgents })
+    
     // Check for @ mention
     const textBeforeCursor = value.substring(0, cursorPosition)
     const mentionMatch = textBeforeCursor.match(/@(\w*)$/)
+    
+    console.log(' Mention match:', mentionMatch)
     
     if (mentionMatch) {
       const query = mentionMatch[1].toLowerCase()
       setMentionQuery(query)
       
+      console.log(' Query:', query)
+      
       // Filter agents based on query
       const filtered = availableAgents.filter(agent => 
         agent.name.toLowerCase().includes(query)
       )
-      setFilteredAgents(filtered)
+      
+      console.log('🔍 Filtered agents:', filtered)
       
       if (filtered.length > 0) {
         // Calculate position for mention dropdown - position above the chat input
@@ -64,8 +77,11 @@ export function useAgentMentions() {
         })
         setShowAgentMentions(true)
         setSelectedMentionIndex(0)
+        
+        console.log('✅ Showing agent mentions:', filtered.length)
       } else {
         setShowAgentMentions(false)
+        console.log('❌ No agents found for query')
       }
     } else {
       setShowAgentMentions(false)
