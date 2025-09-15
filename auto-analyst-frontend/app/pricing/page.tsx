@@ -9,7 +9,6 @@ import Link from 'next/link';
 import { Infinity as InfinityIcon } from 'lucide-react';
 import { MODEL_TIERS } from '@/lib/model-tiers';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { TrialUtils } from '@/lib/credits-config';
 
 // Define pricing tiers with both monthly and yearly options
 const pricingTiers = [
@@ -325,7 +324,7 @@ export default function PricingPage() {
                   {tier.name === 'Free'
                     ? 'Get Started'
                     : tier.trial
-                      ? `Start ${TrialUtils.getTrialDisplayText()}`
+                      ? `Get Started`
                       : tier.name === 'Enterprise'
                         ? 'Contact Sales'
                         : 'Subscribe'}
