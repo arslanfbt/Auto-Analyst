@@ -121,7 +121,8 @@ export default function CheckoutForm({ planName, amount, interval, clientSecret,
         body: JSON.stringify({
           setupIntentId: intentId,
           priceId: priceId,
-          promoCodeInfo: promoCodeInfo // Add this
+          promoCodeInfo: promoCodeInfo,
+          promotionCode: promoCodeInfo?.promotionCode // Add the actual promo code string
         }),
       })
 
