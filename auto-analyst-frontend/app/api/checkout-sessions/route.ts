@@ -150,8 +150,25 @@ export async function POST(request: NextRequest) {
               console.log('🔍 Product allowed:', isProductAllowed)
               
               if (!isProductAllowed) {
+                // Get product names for better error message
+                const allowedProductIds = coupon.applies_to.products
+                const allowedProductNames = []
+                
+                for (const allowedProductId of allowedProductIds) {
+                  try {
+                    const allowedProduct = await stripe.products.retrieve(allowedProductId)
+                    allowedProductNames.push(allowedProduct.name)
+                  } catch (err) {
+                    console.log('Could not retrieve product name for:', allowedProductId)
+                  }
+                }
+                
+                const errorMessage = allowedProductNames.length > 0 
+                  ? `This promo code is valid only for ${allowedProductNames.join(' and ')} and does not apply to your selected ${price.recurring?.interval || 'unknown'} plan.`
+                  : 'This promo code is not valid for the selected plan.'
+                
                 return NextResponse.json(
-                  { error: 'This promo code is not valid for the selected plan' },
+                  { error: errorMessage },
                   { status: 400 }
                 )
               }
@@ -172,8 +189,15 @@ export async function POST(request: NextRequest) {
               console.log('🔍 Price allowed:', isPriceAllowed)
               
               if (!isPriceAllowed) {
+                // Get billing cycle info for better error message
+                const priceInfo = await stripe.prices.retrieve(priceId)
+                const productInfo = await stripe.products.retrieve(priceInfo.product as string)
+                const currentBillingCycle = priceInfo.recurring?.interval || 'unknown'
+                
                 return NextResponse.json(
-                  { error: 'This promo code is not valid for the selected billing cycle' },
+                  { 
+                    error: `This promo code is valid only for ${productInfo.name} (${currentBillingCycle === 'month' ? 'monthly' : 'yearly'} billing) and does not apply to your selected ${price.recurring?.interval || 'unknown'} plan.` 
+                  },
                   { status: 400 }
                 )
               }
