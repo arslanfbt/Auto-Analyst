@@ -72,84 +72,145 @@ class DeepAnalysisResponse(BaseModel):
     final_conclusion: str
     html_report: Optional[str] = None
 
-styling_instructions = [
-    """
-        Dont ignore any of these instructions.
-        For a line chart always use plotly_white template, reduce x axes & y axes line to 0.2 & x & y grid width to 1. 
-        Always give a title and make bold using html tag axis label and try to use multiple colors if more than one line
-        Annotate the min and max of the line
-        Display numbers in thousand(K) or Million(M) if larger than 1000/100000 
-        Show percentages in 2 decimal points with '%' sign
-        Default size of chart should be height =1200 and width =1000
-        
-        """
-        
-   , """
-        Dont ignore any of these instructions.
-        For a bar chart always use plotly_white template, reduce x axes & y axes line to 0.2 & x & y grid width to 1. 
-        Always give a title and make bold using html tag axis label 
-        Always display numbers in thousand(K) or Million(M) if larger than 1000/100000. 
-        Annotate the values of the bar chart
-        If variable is a percentage show in 2 decimal points with '%' sign.
-        Default size of chart should be height =1200 and width =1000
-        """
-        ,
-
-          """
-        For a histogram chart choose a bin_size of 50
-        Do not ignore any of these instructions
-        always use plotly_white template, reduce x & y axes line to 0.2 & x & y grid width to 1. 
-        Always give a title and make bold using html tag axis label 
-        Always display numbers in thousand(K) or Million(M) if larger than 1000/100000. Add annotations x values
-        If variable is a percentage show in 2 decimal points with '%'
-        Default size of chart should be height =1200 and width =1000
-        """,
-
-
-          """
-        For a pie chart only show top 10 categories, bundle rest as others
-        Do not ignore any of these instructions
-        always use plotly_white template, reduce x & y axes line to 0.2 & x & y grid width to 1. 
-        Always give a title and make bold using html tag axis label 
-        Always display numbers in thousand(K) or Million(M) if larger than 1000/100000. Add annotations x values
-        If variable is a percentage show in 2 decimal points with '%'
-        Default size of chart should be height =1200 and width =1000
-        """,
-
-          """
-        Do not ignore any of these instructions
-        always use plotly_white template, reduce x & y axes line to 0.2 & x & y grid width to 1. 
-        Always give a title and make bold using html tag axis label 
-        Always display numbers in thousand(K) or Million(M) if larger than 1000/100000. Add annotations x values
-        Don't add K/M if number already in , or value is not a number
-        If variable is a percentage show in 2 decimal points with '%'
-        Default size of chart should be height =1200 and width =1000
-        """,
-"""
-    For a heat map
-    Use the 'plotly_white' template for a clean, white background. 
-    Set a chart title 
-    Style the X-axis with a black line color, 0.2 line width, 1 grid width, format 1000/1000000 as K/M
-    Do not format non-numerical numbers 
-    .style the Y-axis with a black line color, 0.2 line width, 1 grid width format 1000/1000000 as K/M
-    Do not format non-numerical numbers 
-
-    . Set the figure dimensions to a height of 1200 pixels and a width of 1000 pixels.
-""",
-"""
-    For a Histogram, used for returns/distribution plotting
-    Use the 'plotly_white' template for a clean, white background. 
-    Set a chart title 
-    Style the X-axis  1 grid width, format 1000/1000000 as K/M
-    Do not format non-numerical numbers 
-    .style the Y-axis, 1 grid width format 1000/1000000 as K/M
-    Do not format non-numerical numbers 
-    
-    Use an opacity of 0.75
-
-     Set the figure dimensions to a height of 1200 pixels and a width of 1000 pixels.
-"""
+styling_instructions =  [
+    {
+        "category": "line_charts",
+        "description": "Used to visualize trends and changes over time, often with multiple series.",
+        "styling": {
+            "template": "plotly_white",
+            "axes_line_width": 0.2,
+            "grid_width": 1,
+            "title": {
+                "bold_html": True,
+                "include": True
+            },
+            "colors": "use multiple colors if more than one line",
+            "annotations": ["min", "max"],
+            "number_format": {
+                "apply_k_m": True,
+                "thresholds": {"K": 1000, "M": 100000},
+                "percentage_decimals": 2,
+                "percentage_sign": True
+            },
+            "default_size": {"height": 1200, "width": 1000}
+        }
+    },
+    {
+        "category": "bar_charts",
+        "description": "Useful for comparing discrete categories or groups with bars representing values.",
+        "styling": {
+            "template": "plotly_white",
+            "axes_line_width": 0.2,
+            "grid_width": 1,
+            "title": {"bold_html": True, "include": True},
+            "annotations": ["bar values"],
+            "number_format": {
+                "apply_k_m": True,
+                "thresholds": {"K": 1000, "M": 100000},
+                "percentage_decimals": 2,
+                "percentage_sign": True
+            },
+            "default_size": {"height": 1200, "width": 1000}
+        }
+    },
+    {
+        "category": "histograms",
+        "description": "Display the distribution of a data set, useful for returns or frequency distributions.",
+        "styling": {
+            "template": "plotly_white",
+            "bin_size": 50,
+            "axes_line_width": 0.2,
+            "grid_width": 1,
+            "title": {"bold_html": True, "include": True},
+            "annotations": ["x values"],
+            "number_format": {
+                "apply_k_m": True,
+                "thresholds": {"K": 1000, "M": 100000},
+                "percentage_decimals": 2,
+                "percentage_sign": True
+            },
+            "default_size": {"height": 1200, "width": 1000}
+        }
+    },
+    {
+        "category": "pie_charts",
+        "description": "Show composition or parts of a whole with slices representing categories.",
+        "styling": {
+            "template": "plotly_white",
+            "top_categories_to_show": 10,
+            "bundle_rest_as": "Others",
+            "axes_line_width": 0.2,
+            "grid_width": 1,
+            "title": {"bold_html": True, "include": True},
+            "annotations": ["x values"],
+            "number_format": {
+                "apply_k_m": True,
+                "thresholds": {"K": 1000, "M": 100000},
+                "percentage_decimals": 2,
+                "percentage_sign": True
+            },
+            "default_size": {"height": 1200, "width": 1000}
+        }
+    },
+    {
+        "category": "tabular_and_generic_charts",
+        "description": "Applies to charts where number formatting needs flexibility, including mixed or raw data.",
+        "styling": {
+            "template": "plotly_white",
+            "axes_line_width": 0.2,
+            "grid_width": 1,
+            "title": {"bold_html": True, "include": True},
+            "annotations": ["x values"],
+            "number_format": {
+                "apply_k_m": True,
+                "thresholds": {"K": 1000, "M": 100000},
+                "exclude_if_commas_present": True,
+                "exclude_if_not_numeric": True,
+                "percentage_decimals": 2,
+                "percentage_sign": True
+            },
+            "default_size": {"height": 1200, "width": 1000}
+        }
+    },
+    {
+        "category": "heat_maps",
+        "description": "Show data density or intensity using color scales on a matrix or grid.",
+        "styling": {
+            "template": "plotly_white",
+            "axes_styles": {
+                "line_color": "black",
+                "line_width": 0.2,
+                "grid_width": 1,
+                "format_numbers_as_k_m": True,
+                "exclude_non_numeric_formatting": True
+            },
+            "title": {"bold_html": True, "include": True},
+            "default_size": {"height": 1200, "width": 1000}
+        }
+    },
+    {
+        "category": "histogram_distribution",
+        "description": "Specialized histogram for return distributions with opacity control.",
+        "styling": {
+            "template": "plotly_white",
+            "opacity": 0.75,
+            "axes_styles": {
+                "grid_width": 1,
+                "format_numbers_as_k_m": True,
+                "exclude_non_numeric_formatting": True
+            },
+            "title": {"bold_html": True, "include": True},
+            "default_size": {"height": 1200, "width": 1000}
+        }
+    }
 ]
+
+# Convert to list of JSON strings
+styling_instructions = [str(chart_dict) for chart_dict in styling_instructions]
+
+# Output (just show first 2 for readability)
+
+
 
 # Add near the top of the file, after imports
 DEFAULT_MODEL_CONFIG = {

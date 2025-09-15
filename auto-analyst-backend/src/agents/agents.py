@@ -392,27 +392,55 @@ class chat_history_name_agent(dspy.Signature):
 class dataset_description_agent(dspy.Signature):
     """
 
-Generate the dataset description by following these instructions!
-Dataset Description
-
-TECHNICAL CONSIDERATIONS FOR ANALYSIS (For Analysts & Data Scientists)
------------------------------------------------------------------------
-To ensure reliable analysis, please review and apply the following data handling instructions. These include data type enforcement, format normalization, missing value management, and preprocessing needs.
-
-Summary of Column Metadata
----------------------------
-| Column Name     | Python Type | Issues to Address                                         | Handling Instructions                                                                                   |
-|----------------|-------------|------------------------------------------------------------|----------------------------------------------------------------------------------------------------------|
-| price          | float       | Stored as string with "$" and ","                         | Use `.str.replace('$','').replace(',','')` then convert to float                                        |
-| square_footage | int         | Stored as string with "sq ft" and ","                     | Remove "sq ft" and "," using `.str.replace()`, then convert to int                                      |
-| bedrooms       | int         | ~5% missing values                                        | Impute using median or mode (e.g., `df['bedrooms'].fillna(df['bedrooms'].median())`)                    |
-| zip_code       | str         | Numeric values may lose leading zeros                     | Convert to string using `.astype(str)`; treat as categorical                                            |
-| year_built     | float       | ~15% missing values                                       | Impute with median or domain-specific value; optionally convert to nullable Int (`Int64`)               |
-| listing_date   | datetime    | Stored as string in MM/DD/YYYY format                     | Convert using `pd.to_datetime(df['listing_date'], format='%m/%d/%Y')`                                   |
-| property_type  | str         | Inconsistent capitalization (e.g., "Condo", "condo")      | Normalize using `.str.lower()` or `.str.title()`                                                        |
-| agent_id       | str         | Appears numeric but is an identifier                      | Convert to string; do not perform numeric operations; treat as categorical or ID field                  |
-
-MAKE SURE TO USE EXACT NAMES FOR COLUMNS
+    Generate a structured dataset context/description like this, you will be given headers for the data & existing description!
+{
+  "exact": "apple_stock_historical_data",
+  "description": "Daily historical stock market data for Apple Inc. including open, close, high, low prices, trading volume, and adjusted close for accurate return calculations.",
+  "columns": {
+    "Date": {
+      "type": "datetime",
+      "format": "YYYY-MM-DD",
+      "description": "Trading date",
+      "preprocessing": "Convert strings using pd.to_datetime(df['Date'], format='%Y-%m-%d')",
+      "missing_values_handling": "Interpolate or forward-fill missing dates for continuity"
+    },
+    "Open": {
+      "type": "float",
+      "description": "Opening stock price in USD",
+      "preprocessing": "Direct float conversion"
+    },
+    "High": {
+      "type": "float",
+      "description": "Highest stock price in USD during the trading day",
+      "preprocessing": "Direct float conversion"
+    },
+    "Low": {
+      "type": "float",
+      "description": "Lowest stock price in USD during the trading day",
+      "preprocessing": "Direct float conversion"
+    },
+    "Close": {
+      "type": "float",
+      "description": "Closing stock price in USD",
+      "preprocessing": "Direct float conversion"
+    },
+    "Adj Close": {
+      "type": "float",
+      "description": "Adjusted closing price accounting for dividends and splits",
+      "preprocessing": "Direct float conversion"
+    },
+    "Volume": {
+      "type": "integer",
+      "description": "Number of shares traded during the day",
+      "preprocessing": "Direct integer conversion"
+    }
+  },
+  "statistics": {
+    "date_range": "01/01/2000 - 08/31/2025",
+    "total_records": 6300,
+    "missing_data_percentage": 0.1
+  },
+  "usage_notes": "Ensure adjusted close prices are used for return calculations. Use consistent timezone if merging with other datasets. Handle missing values carefully to maintain temporal continuity.",
 
     """
     dataset = dspy.InputField(desc="The dataset to describe, including headers, sample data, null counts, and data types.")
