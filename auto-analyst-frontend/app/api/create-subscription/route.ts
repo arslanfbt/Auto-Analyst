@@ -23,6 +23,7 @@ export async function POST(request: NextRequest) {
     }
 
     const { setupIntentId, priceId } = await request.json()
+    console.log('🔍 Creating subscription with:', { setupIntentId, priceId })
 
     if (!setupIntentId || !priceId) {
       return NextResponse.json({ error: 'Missing required parameters' }, { status: 400 })
@@ -30,18 +31,27 @@ export async function POST(request: NextRequest) {
 
     // Retrieve the setup intent to get the payment method
     const setupIntent = await stripe.setupIntents.retrieve(setupIntentId)
+    console.log('🔍 Setup intent retrieved:', { 
+      status: setupIntent.status, 
+      payment_method: setupIntent.payment_method,
+      customer: setupIntent.customer 
+    })
     
     if (setupIntent.status !== 'succeeded' || !setupIntent.payment_method) {
-      return NextResponse.json({ error: 'Invalid setup intent' }, { status: 400 })
+      return NextResponse.json({ 
+        error: `Invalid setup intent: status=${setupIntent.status}, payment_method=${setupIntent.payment_method}` 
+      }, { status: 400 })
     }
 
     // Create subscription
+    console.log('🔍 Creating subscription with customer:', setupIntent.customer)
     const subscription = await stripe.subscriptions.create({
       customer: setupIntent.customer as string,
       items: [{ price: priceId }],
       default_payment_method: setupIntent.payment_method as string,
       expand: ['latest_invoice.payment_intent'],
     })
+    console.log('✅ Subscription created:', subscription.id)
 
     // Update Redis with subscription info
     const userId = token.sub
@@ -55,10 +65,12 @@ export async function POST(request: NextRequest) {
     }
 
     await redis.hset(KEYS.USER_SUBSCRIPTION(userId), subscriptionData)
+    console.log('✅ Redis subscription data updated')
     
     // Add credits based on plan
     const price = await stripe.prices.retrieve(priceId)
     const product = await stripe.products.retrieve(price.product as string)
+    console.log('🔍 Retrieved product:', { name: product.name, priceId })
     
     // Determine credits based on product name
     let credits = 0
@@ -77,6 +89,7 @@ export async function POST(request: NextRequest) {
         used: '0',
         lastReset: String(Date.now())
       })
+      console.log('✅ Redis credits updated:', credits)
     }
 
     return NextResponse.json({
@@ -86,9 +99,16 @@ export async function POST(request: NextRequest) {
     })
 
   } catch (error) {
-    console.error('Error creating subscription:', error)
+    console.error('❌ Error creating subscription:', error)
+    
+    // Return more specific error information
+    let errorMessage = 'Failed to create subscription'
+    if (error instanceof Error) {
+      errorMessage = error.message
+    }
+    
     return NextResponse.json(
-      { error: 'Failed to create subscription' },
+      { error: errorMessage },
       { status: 500 }
     )
   }
