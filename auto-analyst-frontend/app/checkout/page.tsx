@@ -522,14 +522,32 @@ export default function CheckoutPage() {
                       </button>
                     )}
                   </div>
+                  
+                  {/* Promo Code Validation Messages */}
                   {promoError && (
-                    <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-md">
-                      <p className="text-sm text-red-600 text-center sm:text-left">{promoError}</p>
-                    </div>
+                    <p className="text-sm text-red-600 mt-2">{promoError}</p>
                   )}
-                  {discountApplied && (
-                    <div className="mt-3 p-3 bg-green-50 border border-green-200 rounded-md">
-                      <p className="text-sm text-green-600 text-center sm:text-left">✓ Promo code applied!</p>
+                  
+                  {/* Promo Code Success Message */}
+                  {promoCodeInfo && !promoError && (
+                    <div className="bg-green-50 border border-green-200 rounded-md p-3 mt-3">
+                      <div className="flex items-start">
+                        <CheckCircle className="h-5 w-5 text-green-400 mt-0.5 mr-2 flex-shrink-0" />
+                        <div className="text-sm">
+                          <p className="font-medium text-green-800">
+                            Promo code applied successfully!
+                          </p>
+                          <p className="text-green-700 mt-1">
+                            This promo code applies to: <strong>{promoCodeInfo.productName}</strong> ({promoCodeInfo.billingCycle} billing)
+                          </p>
+                          <p className="text-green-700">
+                            Discount: {promoCodeInfo.discountType === 'percentage' 
+                              ? `${promoCodeInfo.discountValue}% off` 
+                              : `$${promoCodeInfo.discountValue} off`
+                            }
+                          </p>
+                        </div>
+                      </div>
                     </div>
                   )}
                 </div>
