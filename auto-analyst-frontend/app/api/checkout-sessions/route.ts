@@ -252,4 +252,3 @@ async function calculateDiscountedAmount(amount: number, couponId: string): Prom
     return amount
   }
 }
-```
