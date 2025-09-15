@@ -108,15 +108,10 @@ export async function POST(request: NextRequest) {
 
         // Safely access coupon with error handling
         try {
-          coupon = promotionCodeObj.coupon
-          
-          if (!coupon) {
-            console.log('❌ No coupon associated with promotion code')
-            return NextResponse.json(
-              { error: 'Invalid promotion code configuration' },
-              { status: 400 }
-            )
-          }
+          // Retrieve the coupon with expanded applies_to information
+          coupon = await stripe.coupons.retrieve(promotionCodeObj.coupon.id, {
+            expand: ['applies_to']
+          })
           
           console.log('🔍 Coupon details:', {
             id: coupon.id,
@@ -125,9 +120,9 @@ export async function POST(request: NextRequest) {
             applies_to: coupon.applies_to
           })
         } catch (couponError) {
-          console.error('❌ Error accessing coupon:', couponError)
+          console.error('❌ Error retrieving coupon:', couponError)
           return NextResponse.json(
-            { error: 'Failed to access promotion code details' },
+            { error: 'Failed to retrieve promotion code details' },
             { status: 400 }
           )
         }
