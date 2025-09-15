@@ -237,46 +237,25 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Create setup intent for subscription
-    const setupIntent = await stripe.setupIntents.create({
-      customer: customer.id, // Add customer ID
-      usage: 'off_session',
+    // Instead of creating Setup Intent, create Checkout Session
+    const session = await stripe.checkout.sessions.create({
+      mode: 'subscription',
+      customer: customer.id,
+      line_items: [{ 
+        price: priceId, 
+        quantity: 1 
+      }],
+      allow_promotion_codes: true, // ← This enables promo code input
+      success_url: `${process.env.NEXT_PUBLIC_APP_URL}/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${process.env.NEXT_PUBLIC_APP_URL}/checkout/cancel`,
       payment_method_types: ['card'],
-      metadata: {
-        priceId,
-        productId,
-        promotionCode: validatedPromotionCode || '',
-      }
+      billing_address_collection: 'auto',
     })
 
-    // Calculate final amount after discount
-    const originalAmount = price.unit_amount || 0
-    const finalAmount = Math.max(0, originalAmount - discountAmount)
-
-    // Get product details for better messaging
-    const product = await stripe.products.retrieve(productId)
-
     return NextResponse.json({
-      clientSecret: setupIntent.client_secret,
-      priceId,
-      productId,
-      originalAmount,
-      discountAmount,
-      finalAmount,
-      promotionCode: validatedPromotionCode,
-      billingCycle: price.recurring?.interval || 'one_time',
-      // Enhanced promo code information
-      promoCodeInfo: validatedPromotionCode && coupon ? {
-        promotionCode: validatedPromotionCode, // Add this field
-        productName: product.name,
-        billingCycle: price.recurring?.interval || 'one_time',
-        discountType: coupon.percent_off ? 'percentage' : 'amount',
-        discountValue: coupon.percent_off ? coupon.percent_off / 100 : (coupon.amount_off ? coupon.amount_off / 100 : 0),
-        appliesTo: {
-          products: coupon.applies_to?.products || [],
-          prices: (coupon.applies_to as any)?.prices || []
-        }
-      } : null
+      sessionId: session.id,
+      url: session.url, // Redirect user to this URL
+      success: true
     })
 
   } catch (error) {
