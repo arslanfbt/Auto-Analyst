@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getToken } from 'next-auth/jwt'
 import redis, { KEYS } from '@/lib/redis'
 import Stripe from 'stripe'
-import { CreditConfig } from '@/lib/credits-config'
 
 // Initialize Stripe
 const stripe = process.env.STRIPE_SECRET_KEY 
@@ -20,7 +19,6 @@ export async function POST(request: NextRequest) {
     }
 
     const userId = token.sub
-    const userEmail = token.email
 
     // Check if Stripe is initialized
     if (!stripe) {
@@ -35,8 +33,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'No active subscription found' }, { status: 400 })
     }
 
-    // Use 'id' field instead of 'stripeSubscriptionId' for consistency
-    const stripeSubscriptionId = subscriptionData.id as string
+    // Use stripeSubscriptionId field (like the working code)
+    const stripeSubscriptionId = subscriptionData.stripeSubscriptionId as string
     const isLegacyUser = !stripeSubscriptionId || !stripeSubscriptionId.startsWith('sub_')
     
     try {
@@ -44,55 +42,28 @@ export async function POST(request: NextRequest) {
       
       // Only make Stripe API calls for new users with proper subscription IDs
       if (!isLegacyUser) {
-        console.log('🔍 Attempting to cancel Stripe subscription:', stripeSubscriptionId)
-        
-        try {
-          // Cancel the subscription in Stripe
-          // Using cancel_at_period_end: true to let the user keep access until the end of their current billing period
-          canceledSubscription = await stripe.subscriptions.update(stripeSubscriptionId, {
-            cancel_at_period_end: true,
-          })
-          console.log('✅ Stripe subscription canceled successfully:', canceledSubscription.id)
-        } catch (stripeUpdateError) {
-          console.error('❌ Stripe subscription update failed:', stripeUpdateError)
-          throw stripeUpdateError // Re-throw to be caught by outer catch
-        }
+        // Cancel the subscription in Stripe
+        // Using cancel_at_period_end: true to let the user keep access until the end of their current billing period
+        canceledSubscription = await stripe.subscriptions.update(stripeSubscriptionId, {
+          cancel_at_period_end: true,
+        })
       } else {
         console.log(`Legacy user ${userId} - skipping Stripe API calls, updating Redis only`)
       }
       
       // Update the subscription data in Redis with cancellation info (for both legacy and new users)
       const now = new Date()
-      const updateData: {
-        status: string;
-        canceledAt: string;
-        lastUpdated: string;
-        subscriptionCanceled: string;
-        cancel_at_period_end: string;
-        periodEndDate?: string;
-      } = {
-        status: 'canceling', // Both legacy and new users get 'canceling' status
+      await redis.hset(KEYS.USER_SUBSCRIPTION(userId), {
+        status: isLegacyUser ? 'canceled' : 'canceling', // Legacy users get immediate cancellation
         canceledAt: now.toISOString(),
         lastUpdated: now.toISOString(),
-        subscriptionCanceled: 'true', // Mark as canceled
-        cancel_at_period_end: 'true', // Both user types cancel at period end
-      }
-
-      // Add period end date if we have it from Stripe
-      if (!isLegacyUser && canceledSubscription) {
-        updateData.periodEndDate = new Date((canceledSubscription as any).current_period_end * 1000).toISOString()
-      }
-
-      await redis.hset(KEYS.USER_SUBSCRIPTION(userId), updateData)
+        cancel_at_period_end: 'true',
+        subscriptionCanceled: 'true'
+      })
       
       // Handle credits - ALL users keep their credits until period ends
-      // Don't modify credits here - they should remain until the subscription actually ends
-      // The webhook will handle credit reset to free plan (20 credits) when period ends
       console.log(`User ${userId} - keeping current credits until subscription period ends`)
       
-      // Return appropriate message - same for all users
-      const message = 'Subscription will be canceled at the end of the current billing period'
-
       // Get period end date from Stripe subscription for better user feedback
       let periodEndDate = null
       if (!isLegacyUser && canceledSubscription) {
@@ -101,16 +72,35 @@ export async function POST(request: NextRequest) {
 
       return NextResponse.json({
         success: true,
-        message: message,
+        message: isLegacyUser 
+          ? 'Subscription canceled successfully. Your access has been removed.'
+          : 'Subscription will be canceled at the end of the current billing period',
         canceledAt: now.toISOString(),
-        periodEndDate: periodEndDate, // Add this
+        periodEndDate: periodEndDate,
         immediateCancellation: isLegacyUser
       })
-
+      
     } catch (stripeError: any) {
       console.error('Stripe error canceling subscription:', stripeError)
+      
+      // Handle common Stripe errors (like the working code)
+      if (stripeError.code === 'resource_missing') {
+        // Subscription doesn't exist in Stripe but exists in our DB
+        // Update our records to show there's no subscription
+        await redis.hset(KEYS.USER_SUBSCRIPTION(userId), {
+          status: 'inactive',
+          stripeSubscriptionId: '',
+          lastUpdated: new Date().toISOString(),
+        })
+        
+        return NextResponse.json({
+          success: true,
+          message: 'Subscription record updated',
+        })
+      }
+      
       return NextResponse.json(
-        { error: 'Refresh to see if cancelled' },
+        { error: 'Failed to cancel subscription with payment provider' },
         { status: 500 }
       )
     }
