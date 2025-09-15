@@ -177,20 +177,28 @@ export default function CheckoutPage() {
       const data = await response.json()
       console.log('📡 API Response:', data)
 
-      if (data.message) {
-        console.error('❌ API Error:', data.message)
+      if (data.error) {
+        console.error('❌ API Error:', data.error)
         // Set appropriate error state
-        setPromoError(data.message)
+        setPromoError(data.error)
         setDiscountApplied(false)
         setDiscountInfo(null)
+        setPromoCodeInfo(null)
         
         // Don't set paymentError for promo code validation failures
         // Only set it for actual payment setup failures
         if (!promoCodeValue) {
-          setPaymentError(data.message)
+          setPaymentError(data.error)
           setClientSecret('')
           setSetupIntentId('')
         }
+      } else if (data.message) {
+        console.error('❌ API Message:', data.message)
+        // Handle other types of messages
+        setPromoError(data.message)
+        setDiscountApplied(false)
+        setDiscountInfo(null)
+        setPromoCodeInfo(null)
       } else {
         // Successfully created new setup intent
         console.log('✅ Setup intent created:', data.setupIntentId)
