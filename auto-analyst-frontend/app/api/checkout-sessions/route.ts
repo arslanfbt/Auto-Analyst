@@ -37,6 +37,7 @@ export async function POST(request: NextRequest) {
     // Validate promotion code if provided
     let validatedPromotionCode = null
     let discountAmount = 0
+    let coupon = null // Declare coupon outside the if block
 
     if (promotionCode) {
       try {
@@ -64,7 +65,7 @@ export async function POST(request: NextRequest) {
           )
         }
 
-        const coupon = promotionCodeObj.coupon
+        coupon = promotionCodeObj.coupon // Set the coupon variable
         
         // Check if coupon has restrictions - now check for BOTH product AND price restrictions
         if (coupon.applies_to) {
@@ -144,7 +145,7 @@ export async function POST(request: NextRequest) {
       promotionCode: validatedPromotionCode,
       billingCycle: price.recurring?.interval || 'one_time',
       // Enhanced promo code information
-      promoCodeInfo: validatedPromotionCode ? {
+      promoCodeInfo: validatedPromotionCode && coupon ? {
         productName: product.name,
         billingCycle: price.recurring?.interval || 'one_time',
         discountType: coupon.percent_off ? 'percentage' : 'amount',
