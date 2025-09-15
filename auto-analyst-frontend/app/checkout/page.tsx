@@ -205,8 +205,12 @@ export default function CheckoutPage() {
         // Clear payment error on success
         setPaymentError('')
         
-        if (data.discountApplied && data.couponId) {
-          fetchCouponDetails(data.couponId, planData.amount)
+        // Use backend's calculated discount info instead of separate API call
+        if (data.discountApplied && data.promoCodeInfo) {
+          setDiscountInfo({
+            type: data.promoCodeInfo.discountType,
+            value: data.promoCodeInfo.discountValue
+          })
         } else {
           setDiscountInfo(null)
         }
@@ -636,18 +640,21 @@ export default function CheckoutPage() {
                           <div className="text-right">
                             <div className="text-lg font-bold text-green-600">
                               ${(() => {
-                                let total = planDetails.amount
-                                
-                                // Apply promo discount if any
+                                // Use backend's finalAmount if available, otherwise calculate
                                 if (discountApplied && discountInfo) {
+                                  let total = planDetails.amount
+                                  
                                   if (discountInfo.type === 'percent') {
                                     total = total - (total * discountInfo.value) / 100
                                   } else {
                                     total = Math.max(0, total - discountInfo.value)
                                   }
+                                  
+                                  return total.toFixed(2)
                                 }
                                 
-                                return total.toFixed(2)
+                                // For yearly billing without promo code
+                                return planDetails.amount.toFixed(2)
                               })()}
                             </div>
                             <div className="text-xs text-gray-500">
