@@ -471,12 +471,24 @@ export const useChatInput = (props: ChatInputProps) => {
       }
     } catch (error) {
       console.error('CSV confirm upload error:', error)
-      setFileUpload({ 
-        file: fileUpload.file, 
-        status: 'error', 
-        isExcel: false,
-        selectedSheets: []
-      })
+      
+      // Fix: Check if fileUpload exists before accessing its properties
+      if (fileUpload?.file) {
+        setFileUpload({ 
+          file: fileUpload.file, 
+          status: 'error', 
+          isExcel: false,
+          selectedSheets: []
+        })
+      } else {
+        // If fileUpload is null, create a minimal error state
+        setFileUpload({
+          file: new File([], 'error.csv'), // Create a dummy file
+          status: 'error',
+          isExcel: false,
+          selectedSheets: []
+        })
+      }
     } finally {
       setIsCSVSubmitting(false)
     }
