@@ -41,6 +41,8 @@ export async function POST(request: NextRequest) {
 
     if (promotionCode) {
       try {
+        console.log('🔍 Validating promo code:', promotionCode)
+        
         // List promotion codes to find the one with the given code
         const promotionCodes = await stripe.promotionCodes.list({
           code: promotionCode,
@@ -48,17 +50,22 @@ export async function POST(request: NextRequest) {
           limit: 1
         })
 
+        console.log('🔍 Found promotion codes:', promotionCodes.data.length)
+
         if (promotionCodes.data.length === 0) {
+          console.log('❌ No promotion code found')
           return NextResponse.json(
-            { error: 'Invalid or inactive promotion code' },
+            { error: `Promo code "${promotionCode}" is invalid or inactive` },
             { status: 400 }
           )
         }
 
         const promotionCodeObj = promotionCodes.data[0]
+        console.log('✅ Found promotion code:', promotionCodeObj.id)
         
         // Check if the promotion code has expired
         if (promotionCodeObj.expires_at && promotionCodeObj.expires_at < Math.floor(Date.now() / 1000)) {
+          console.log('❌ Promotion code expired')
           return NextResponse.json(
             { error: 'This promotion code has expired' },
             { status: 400 }
@@ -66,12 +73,24 @@ export async function POST(request: NextRequest) {
         }
 
         coupon = promotionCodeObj.coupon
+        console.log('🔍 Coupon details:', {
+          id: coupon.id,
+          percent_off: coupon.percent_off,
+          amount_off: coupon.amount_off,
+          applies_to: coupon.applies_to
+        })
 
         // Check if coupon has restrictions
         if (coupon.applies_to) {
+          console.log('🔍 Checking coupon restrictions...')
+          
           // Check product restrictions
           if (coupon.applies_to.products && coupon.applies_to.products.length > 0) {
+            console.log('🔍 Product restrictions:', coupon.applies_to.products)
+            console.log('🔍 Current product:', productId)
+            
             const isProductAllowed = coupon.applies_to.products.includes(productId)
+            console.log('🔍 Product allowed:', isProductAllowed)
             
             if (!isProductAllowed) {
               return NextResponse.json(
@@ -84,7 +103,11 @@ export async function POST(request: NextRequest) {
           // Check price restrictions
           const appliesTo = coupon.applies_to as any
           if (appliesTo.prices && appliesTo.prices.length > 0) {
+            console.log('🔍 Price restrictions:', appliesTo.prices)
+            console.log('🔍 Current price:', priceId)
+            
             const isPriceAllowed = appliesTo.prices.includes(priceId)
+            console.log('🔍 Price allowed:', isPriceAllowed)
             
             if (!isPriceAllowed) {
               return NextResponse.json(
@@ -98,12 +121,15 @@ export async function POST(request: NextRequest) {
         // Calculate discount amount
         if (coupon.amount_off) {
           discountAmount = coupon.amount_off
+          console.log('💰 Fixed discount:', discountAmount)
         } else if (coupon.percent_off) {
           discountAmount = Math.round((price.unit_amount || 0) * (coupon.percent_off / 100))
+          console.log('💰 Percentage discount:', coupon.percent_off, '% =', discountAmount)
         }
 
         // If no discount was calculated, the promo code doesn't apply
         if (discountAmount === 0) {
+          console.log('❌ No discount calculated')
           return NextResponse.json(
             { error: 'This promo code does not provide any discount for the selected plan' },
             { status: 400 }
@@ -111,10 +137,12 @@ export async function POST(request: NextRequest) {
         }
 
         validatedPromotionCode = promotionCodeObj.id
+        console.log('✅ Promo code validated successfully')
+        
       } catch (error) {
-        console.error('Error validating promotion code:', error)
+        console.error('❌ Error validating promotion code:', error)
         return NextResponse.json(
-          { error: 'Failed to validate promotion code' },
+          { error: 'Failed to validate promotion code. Please try again.' },
           { status: 500 }
         )
       }
