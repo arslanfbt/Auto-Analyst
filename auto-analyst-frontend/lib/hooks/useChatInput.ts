@@ -131,10 +131,9 @@ export const useChatInput = (props: ChatInputProps) => {
     const isExcel = file.name.endsWith('.xlsx') || file.name.endsWith('.xls')
     
     if (isCSV) {
-      // Handle CSV files - upload temporarily, get preview, show dialog
+      // Handle CSV files - preview first, then generate description, then show dialog
       try {
         setCSVFileName(file.name)
-        // Add debugging to track status changes
         console.log('Setting status to uploading for:', file.name)
         setFileUpload({ 
           file, 
@@ -143,55 +142,60 @@ export const useChatInput = (props: ChatInputProps) => {
           selectedSheets: []
         })
 
-        // Upload the CSV file temporarily with basic info
-        const uploadFormData = new FormData()
-        uploadFormData.append('file', file)
-        uploadFormData.append('name', file.name.replace(/\.csv$/i, ''))
-        uploadFormData.append('description', `CSV data from ${file.name}`)
+        // Step 1: Upload for preview only (non-destructive)
+        const previewFormData = new FormData()
+        previewFormData.append('file', file)
+        previewFormData.append('name', file.name.replace(/\.csv$/i, ''))
 
-        // Upload the file to set it as current session dataset
-        console.log('Starting CSV upload...')
-        // For CSV upload - remove the X-Force-Refresh header
-        const uploadResponse = await axios.post(`${PREVIEW_API_URL}/upload_dataframe`, uploadFormData, {
-          headers: getHeaders(), // Remove { 'X-Force-Refresh': 'true' }
-        })
-        console.log('CSV upload completed')
-
-        // Update session ID if backend generated a new one
-        if (uploadResponse.data && uploadResponse.data.session_id) {
-          updateSessionIdSafely(uploadResponse.data.session_id)
-        }
-
-        // Get the preview of the uploaded dataset
-        console.log('Getting CSV preview...')
-        const response = await axios.post(`${PREVIEW_API_URL}/api/preview-csv`, {}, {
+        console.log('Starting CSV preview upload...')
+        const previewResponse = await axios.post(`${PREVIEW_API_URL}/preview-csv-upload`, previewFormData, {
           headers: getHeaders(),
         })
-        console.log('CSV preview completed')
+        console.log('CSV preview upload completed')
+
+        // Update session ID if backend generated a new one
+        if (previewResponse.data && previewResponse.data.session_id) {
+          updateSessionIdSafely(previewResponse.data.session_id)
+        }
+
+        // Step 2: Generate description from preview
+        console.log('Generating description from preview...')
+        const descriptionResponse = await axios.post(`${PREVIEW_API_URL}/generate-description-from-preview`, {
+          headers: previewResponse.data.headers || [],
+          rows: previewResponse.data.rows || [],
+          name: previewResponse.data.name || file.name.replace(/\.csv$/i, ''),
+          description: `CSV data from ${file.name}`
+        }, {
+          headers: getHeaders(),
+        })
+        console.log('Description generation completed')
 
         const preview = {
-          headers: response.data.headers || [],
-          rows: response.data.rows || [],
-          name: response.data.name || file.name.replace(/\.csv$/i, ''),
-          description: response.data.description || `CSV data from ${file.name}`
+          headers: previewResponse.data.headers || [],
+          rows: previewResponse.data.rows || [],
+          name: previewResponse.data.name || file.name.replace(/\.csv$/i, ''),
+          description: descriptionResponse.data.description || `CSV data from ${file.name}`
         }
 
         setCSVPreview(preview)
-        setDatasetDescription({
-          name: preview.name,
-          description: preview.description
+        setFileUpload({ 
+          file, 
+          status: 'success', 
+          preview: preview,
+          isExcel: false,
+          selectedSheets: []
         })
-        console.log('Setting status to success')
-        setFileUpload(prev => (prev ? { ...prev, status: 'success' } : null))
+        
+        // Show the Dataset Preview dialog
         setShowCSVDialog(true)
-      } catch (error: any) {
-        console.error('Error processing CSV file:', error)
-        setFileUpload(prev =>
-          prev ? { ...prev, status: 'error', errorMessage: error?.message || 'Failed to read CSV file' } : null
-        )
-        setErrorNotification({
-          message: 'CSV processing failed',
-          details: error?.message || 'Failed to read CSV file'
+        
+      } catch (error) {
+        console.error('CSV upload error:', error)
+        setFileUpload({ 
+          file, 
+          status: 'error', 
+          isExcel: false,
+          selectedSheets: []
         })
       }
     } else if (isExcel) {
@@ -436,15 +440,17 @@ export const useChatInput = (props: ChatInputProps) => {
       
       if (!fileUpload?.file) return
       
-      // DON'T reset session - just upload the CSV file directly
+      // Step 3: Final upload with user's name and description
       const uploadFormData = new FormData()
       uploadFormData.append('file', fileUpload.file)
       uploadFormData.append('name', name)
       uploadFormData.append('description', description)
 
+      console.log('Starting final CSV upload...')
       const uploadResponse = await axios.post(`${PREVIEW_API_URL}/upload_dataframe`, uploadFormData, {
-        headers: getHeaders(), // No X-Force-Refresh needed
+        headers: getHeaders(),
       })
+      console.log('Final CSV upload completed')
       
       // Update session ID if backend generated a new one
       if (uploadResponse.data && uploadResponse.data.session_id) {
@@ -461,14 +467,16 @@ export const useChatInput = (props: ChatInputProps) => {
         setTimeout(() => {
           setShowUploadSummary(true)
           setUploadSuccess(false)
-        }, 500)
+        }, 1000)
       }
     } catch (error) {
-      console.error('Error uploading CSV file:', error)
-      setUploadSuccess(false)
-      
-      // Automatically restore default dataset on failure
-      await handleRestoreDefaultDataset()
+      console.error('CSV confirm upload error:', error)
+      setFileUpload({ 
+        file: fileUpload.file, 
+        status: 'error', 
+        isExcel: false,
+        selectedSheets: []
+      })
     } finally {
       setIsCSVSubmitting(false)
     }

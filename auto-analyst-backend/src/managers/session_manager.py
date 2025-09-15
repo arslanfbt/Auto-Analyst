@@ -187,7 +187,7 @@ This dataset appears clean with consistent formatting and no missing values, mak
    
 
 
-    def update_session_dataset(self, session_id: str, datasets, names, desc: str):
+    def update_session_dataset(self, session_id: str, datasets, names, desc: str, pre_generated=False):
         """
         Update session with new dataset and optionally auto-generate description
         """
@@ -206,7 +206,7 @@ This dataset appears clean with consistent formatting and no missing values, mak
             # Register the new dataset in DuckDB
             
             # Auto-generate description if we have datasets
-            if datasets:
+            if datasets and pre_generated==False:
                 try:
                     generated_desc = generate_dataset_description(datasets, desc, names)
                     desc = generated_desc  # No need to format again since it's already formatted

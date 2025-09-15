@@ -435,11 +435,8 @@ class dataset_description_agent(dspy.Signature):
       "preprocessing": "Direct integer conversion"
     }
   },
-  "statistics": {
-    "date_range": "01/01/2000 - 08/31/2025",
-    "total_records": 6300,
-    "missing_data_percentage": 0.1
-  },
+
+
   "usage_notes": "Ensure adjusted close prices are used for return calculations. Use consistent timezone if merging with other datasets. Handle missing values carefully to maintain temporal continuity.",
 
     """
