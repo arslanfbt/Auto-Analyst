@@ -408,7 +408,7 @@ export default function AccountPage() {
   const executeCancellation = async () => {
     setIsRefreshing(true)
     try {
-      const response = await fetch('/api/trial/cancel', {
+      const response = await fetch('/api/user/cancel-subscription', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
