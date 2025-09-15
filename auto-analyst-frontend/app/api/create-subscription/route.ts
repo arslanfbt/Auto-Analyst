@@ -22,8 +22,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Stripe not configured' }, { status: 500 })
     }
 
-    const { setupIntentId, priceId, promoCodeInfo } = await request.json()
-    console.log('🔍 Creating subscription with:', { setupIntentId, priceId, promoCodeInfo })
+    const { setupIntentId, priceId, promoCodeInfo, promotionCode } = await request.json()
+    console.log('🔍 Creating subscription with:', { setupIntentId, priceId, promoCodeInfo, promotionCode })
 
     if (!setupIntentId || !priceId) {
       return NextResponse.json({ error: 'Missing required parameters' }, { status: 400 })
@@ -44,9 +44,6 @@ export async function POST(request: NextRequest) {
       }, { status: 400 })
     }
 
-    // Get promotion code from setup intent metadata (already validated)
-    const promotionCodeFromMetadata = setupIntent.metadata?.promotionCode
-
     // Prepare subscription parameters
     const subscriptionParams: Stripe.SubscriptionCreateParams = {
       customer: setupIntent.customer as string,
@@ -55,15 +52,21 @@ export async function POST(request: NextRequest) {
       expand: ['latest_invoice.payment_intent'],
     }
 
-    // Apply promo code if it was validated during setup intent creation
-    if (promotionCodeFromMetadata && promotionCodeFromMetadata !== '') {
-      console.log('🔍 Applying validated promo code from setup intent:', promotionCodeFromMetadata)
+    // Apply promo code if provided from frontend
+    if (promoCodeInfo && promoCodeInfo.promotionCode) {
+      console.log('🔍 Applying promo code from frontend:', promoCodeInfo.promotionCode)
       
       // Look up the promotion code object by the code string
       const promotionCodeList = await stripe.promotionCodes.list({
-        code: promotionCodeFromMetadata,
+        code: promoCodeInfo.promotionCode,
         active: true,
         limit: 1
+      })
+
+      console.log('🔍 Promotion code lookup result:', {
+        searchedCode: promoCodeInfo.promotionCode,
+        found: promotionCodeList.data.length > 0,
+        promotionCodeId: promotionCodeList.data[0]?.id
       })
 
       if (promotionCodeList.data.length > 0) {
@@ -72,14 +75,14 @@ export async function POST(request: NextRequest) {
           promotion_code: promotionCodeList.data[0].id
         }]
         console.log('✅ Promo code applied to subscription:', {
-          code: promotionCodeFromMetadata,
+          code: promoCodeInfo.promotionCode,
           promotionCodeId: promotionCodeList.data[0].id
         })
       } else {
-        console.log('⚠️ Previously validated promo code not found:', promotionCodeFromMetadata)
+        console.log('⚠️ Promo code not found in Stripe:', promoCodeInfo.promotionCode)
       }
     } else {
-      console.log('🔍 No promo code in setup intent metadata')
+      console.log('🔍 No promo code provided from frontend')
     }
 
     // Create subscription

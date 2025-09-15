@@ -110,7 +110,7 @@ export async function POST(request: NextRequest) {
     } catch (stripeError: any) {
       console.error('Stripe error canceling subscription:', stripeError)
       return NextResponse.json(
-        { error: 'Failed to cancel subscription with payment provider' },
+        { error: 'Refresh to see if cancelled' },
         { status: 500 }
       )
     }

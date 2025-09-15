@@ -1006,7 +1006,7 @@ export default function AccountPage() {
               <AlertDialogTitle>Cancel your subscription?</AlertDialogTitle>
               <AlertDialogDescription>
                 Your subscription will remain active until the end of your current billing period.
-                After that, your account will be downgraded to the Free plan with 100 credits per month.
+                After that, your account will be downgraded to the Free plan
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
