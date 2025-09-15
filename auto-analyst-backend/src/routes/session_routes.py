@@ -153,11 +153,9 @@ async def upload_excel(
                         continue
                     
                     # Register each sheet in DuckDB with a clean table name
-                    clean_sheet_name = sheet_name.replace(' ', '_').replace('-', '_').lower()
+                    clean_sheet_name = clean_dataset_name(sheet_name)
                     # Check if the clean_sheet_name is a safe Python variable name; if not, append a random int
-                    if not is_safe_variable_name(clean_sheet_name):
-                        
-                        clean_sheet_name = f"{clean_sheet_name}_{random.randint(1000, 9999)}"
+
                     # First drop the table if it exists
 
 
@@ -198,11 +196,48 @@ async def upload_excel(
         raise HTTPException(status_code=400, detail=str(e))
 
 
+def clean_dataset_name(name: str) -> str:
+    """
+    Clean dataset name to be a safe Python identifier.
+    Removes all characters that would cause issues in Python code execution.
+    """
+    if not name:
+        return "dataset"
+    
+    # Convert to string and strip whitespace
+    name = str(name).strip()
+    
+    # Replace spaces and common separators with underscores
+    name = re.sub(r'[\s\-\.]+', '_', name)
+    
+    # Remove all non-alphanumeric characters except underscores
+    name = re.sub(r'[^a-zA-Z0-9_]', '', name)
+    
+    # Remove multiple consecutive underscores
+    name = re.sub(r'_+', '_', name)
+    
+    # Remove leading/trailing underscores
+    name = name.strip('_')
+    
+    # Ensure it starts with a letter or underscore (Python identifier rule)
+    if name and not re.match(r'^[a-zA-Z_]', name):
+        name = f"dataset_{name}"
+    
+    # If empty after cleaning, use default
+    if not name:
+        name = "dataset"
+    
+    # Limit length to 30 characters
+    if len(name) > 30:
+        name = name[:30]
+    
+    # Ensure it's still a valid identifier after truncation
+    if not re.match(r'^[a-zA-Z_]', name):
+        name = f"dataset_{name}"
+    
 
-def is_safe_variable_name(name: str) -> bool:
-    """Check if name is a safe Python identifier"""
-    return bool(re.match(r'^[a-zA-Z_][a-zA-Z0-9_]*$', name)) and len(name) <= 30
-
+    
+    return name
 @router.post("/upload_dataframe")
 async def upload_dataframe(
     file: UploadFile = File(...),
@@ -235,16 +270,14 @@ async def upload_dataframe(
             logger.log_message(f"Session state AFTER reset - datasets: {list(datasets_after_reset.keys())}", level=logging.INFO)
         
         # Clean and validate the name
-        name = name.replace(' ', '_').lower().strip()
+        name = clean_dataset_name(name)
         
         # Validate name length and create safe variable name
         if len(name) > 30:
             name = name[:30]
         
         # Ensure it's a safe Python identifier
-        if not is_safe_variable_name(name):
-            import random
-            name = f"{name}_{random.randint(1000, 9999)}"
+
         
         # Read and process the CSV file
         content = await file.read()
@@ -274,8 +307,8 @@ async def upload_dataframe(
         # Create datasets dictionary with the new dataset
         datasets = {name: new_df}
         
-        # Update the session with the new dataset (this will replace any existing datasets)
-        app_state.update_session_dataset(session_id, datasets, [name], desc)
+        # Update the session with the new dataset (this will replace any existing datasets) but not update desc, as that is passed already
+        app_state.update_session_dataset(session_id, datasets, [name], desc, pre_generated=True)
         
         # Log session state AFTER upload
         session_state_after_upload = app_state.get_session_state(session_id)
@@ -829,13 +862,10 @@ async def preview_csv_upload(
         name = file.filename.replace('.csv', '').replace(' ', '_').lower().strip()
         
         # Validate name length and create safe variable name
-        if len(name) > 30:
-            name = name[:30]
+        name = clean_dataset_name(name)
         
         # Ensure it's a safe Python identifier
-        if not is_safe_variable_name(name):
-            import random
-            name = f"{name}_{random.randint(1000, 9999)}"
+
         
         # Format the description
         desc = f" exact_python_name: `{name}` Dataset: {file.filename}"
