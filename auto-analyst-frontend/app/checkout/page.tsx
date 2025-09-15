@@ -174,7 +174,7 @@ export default function CheckoutPage() {
           userId: session.user?.email,
           planName: planData.name,
           interval: planData.cycle,
-          promoCode: promoCodeValue.trim() || undefined,
+          promotionCode: promoCodeValue.trim() || undefined, // Fixed: was promoCode, should be promotionCode
         }),
       })
 

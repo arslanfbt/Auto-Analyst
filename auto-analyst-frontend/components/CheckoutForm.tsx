@@ -29,12 +29,28 @@ export default function CheckoutForm({ planName, amount, interval, clientSecret,
   const [error, setError] = useState<string | null>(null)
   const [processing, setProcessing] = useState(false)
   const [succeeded, setSucceeded] = useState(false)
+  const [setupIntentId, setSetupIntentId] = useState<string | null>(null)
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault()
 
     if (!stripe || !elements || !clientSecret) {
       setError('Payment system not ready. Please refresh and try again.')
+      return
+    }
+
+    // Prevent multiple submissions
+    if (processing || succeeded) {
+      return
+    }
+
+    // Check if we already have a setup intent ID (from URL params or previous submission)
+    const urlParams = new URLSearchParams(window.location.search)
+    const existingSetupIntentId = urlParams.get('setup_intent')
+    
+    if (existingSetupIntentId || setupIntentId) {
+      // If we already have a setup intent, try to create subscription directly
+      await createSubscription(existingSetupIntentId || setupIntentId)
       return
     }
 
@@ -46,64 +62,80 @@ export default function CheckoutForm({ planName, amount, interval, clientSecret,
 
     setProcessing(true)
     
-    // Direct payment confirmation - no trial setup
-    const { error: submitError, setupIntent } = await stripe.confirmSetup({
-      elements,
-      confirmParams: {
-        return_url: `${window.location.origin}/checkout/success`,
-      },
-      redirect: 'if_required',
-    })
+    try {
+      // Direct payment confirmation - no trial setup
+      const { error: submitError, setupIntent } = await stripe.confirmSetup({
+        elements,
+        confirmParams: {
+          return_url: `${window.location.origin}/checkout/success`,
+        },
+        redirect: 'if_required',
+      })
 
-    // Better error handling for specific Stripe errors
-    if (submitError) {
-      console.error('Setup intent confirmation error:', submitError)
-      
-      // Handle specific error types
-      if (submitError.code === 'setup_intent_unexpected_state') {
-        setError('This payment method has already been processed. Please refresh the page and try again.')
-      } else if (submitError.code === 'payment_method_unexpected_state') {
-        setError('Payment method is in an unexpected state. Please try again.')
-      } else {
-        setError(submitError.message || 'An error occurred during payment setup')
+      // Better error handling for specific Stripe errors
+      if (submitError) {
+        console.error('Setup intent confirmation error:', submitError)
+        
+        // Handle specific error types
+        if (submitError.code === 'setup_intent_unexpected_state') {
+          // Setup intent already succeeded, try to create subscription
+          if (submitError.setup_intent?.id) {
+            await createSubscription(submitError.setup_intent.id)
+            return
+          }
+          setError('Payment was already processed. Please refresh the page.')
+        } else if (submitError.code === 'payment_method_unexpected_state') {
+          setError('Payment method is in an unexpected state. Please try again.')
+        } else {
+          setError(submitError.message || 'An error occurred during payment setup')
+        }
+        
+        setProcessing(false)
+        return
       }
-      
-      setProcessing(false)
-      return
-    }
 
-    if (setupIntent && setupIntent.status === 'succeeded') {
+      if (setupIntent && setupIntent.status === 'succeeded') {
+        setSetupIntentId(setupIntent.id)
+        await createSubscription(setupIntent.id)
+      }
+
+    } catch (err) {
+      console.error('Payment error:', err)
+      setError('Payment failed. Please try again.')
+      setProcessing(false)
+    }
+  }
+
+  const createSubscription = async (intentId: string) => {
+    try {
       setError(null)
       setSucceeded(true)
       
-      // Create subscription after successful setup
-      try {
-        const response = await fetch('/api/create-subscription', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            setupIntentId: setupIntent.id,
-            priceId: priceId // Use the actual priceId prop, not planName
-          }),
-        })
+      const response = await fetch('/api/create-subscription', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          setupIntentId: intentId,
+          priceId: priceId
+        }),
+      })
 
-        const data = await response.json()
+      const data = await response.json()
 
-        if (!response.ok) {
-          throw new Error(data.error || 'Failed to create subscription')
-        }
-
-        // Redirect to success page with subscription ID
-        setTimeout(() => {
-          router.push(`/checkout/success?subscription_id=${data.subscriptionId}`)
-        }, 1500)
-
-      } catch (subscriptionError) {
-        console.error('Subscription creation error:', subscriptionError)
-        setError('Payment setup succeeded but subscription creation failed. Please contact support.')
-        setSucceeded(false)
-        setProcessing(false)
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to create subscription')
       }
+
+      // Redirect to success page with subscription ID
+      setTimeout(() => {
+        router.push(`/checkout/success?subscription_id=${data.subscriptionId}`)
+      }, 1500)
+
+    } catch (subscriptionError) {
+      console.error('Subscription creation error:', subscriptionError)
+      setError('Payment setup succeeded but subscription creation failed. Please contact support.')
+      setSucceeded(false)
+      setProcessing(false)
     }
   }
 
