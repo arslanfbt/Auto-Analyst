@@ -49,8 +49,8 @@ export async function POST(request: NextRequest) {
       ...subscriptionData,
       priceId: newPriceId,
       status: subscription.status,
-      current_period_start: subscription.current_period_start,
-      current_period_end: subscription.current_period_end,
+      current_period_start: String(subscription.current_period_start || ''),
+      current_period_end: String(subscription.current_period_end || ''),
     })
 
     // Update credits based on new plan
