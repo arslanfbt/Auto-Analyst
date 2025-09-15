@@ -21,12 +21,46 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const { priceId, promotionCode } = await request.json()
+    const { priceId, promotionCode, userId } = await request.json()
 
     if (!priceId) {
       return NextResponse.json(
         { error: 'Price ID is required' },
         { status: 400 }
+      )
+    }
+
+    if (!userId) {
+      return NextResponse.json(
+        { error: 'User ID is required' },
+        { status: 400 }
+      )
+    }
+
+    // Create or get customer for the user
+    let customer
+    try {
+      // Try to find existing customer by email
+      const customers = await stripe.customers.list({
+        email: userId,
+        limit: 1
+      })
+      
+      if (customers.data.length > 0) {
+        customer = customers.data[0]
+        console.log('✅ Found existing customer:', customer.id)
+      } else {
+        // Create new customer
+        customer = await stripe.customers.create({
+          email: userId,
+        })
+        console.log('✅ Created new customer:', customer.id)
+      }
+    } catch (customerError) {
+      console.error('❌ Error with customer:', customerError)
+      return NextResponse.json(
+        { error: 'Failed to create customer account' },
+        { status: 500 }
       )
     }
 
@@ -166,15 +200,15 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Create setup intent for subscription (remove trial metadata)
+    // Create setup intent for subscription
     const setupIntent = await stripe.setupIntents.create({
+      customer: customer.id, // Add customer ID
       usage: 'off_session',
       payment_method_types: ['card'],
       metadata: {
         priceId,
         productId,
         promotionCode: validatedPromotionCode || '',
-        // Remove: isTrial: 'false'
       }
     })
 
