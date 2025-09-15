@@ -20,7 +20,7 @@ interface CheckoutFormProps {
   priceId: string // Add this
 }
 
-export default function CheckoutForm({ planName, amount, interval, clientSecret }: CheckoutFormProps) {
+export default function CheckoutForm({ planName, amount, interval, clientSecret, priceId }: CheckoutFormProps) {
   const router = useRouter()
   const { data: session } = useSession()
   const stripe = useStripe()
@@ -83,7 +83,7 @@ export default function CheckoutForm({ planName, amount, interval, clientSecret 
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             setupIntentId: setupIntent.id,
-            priceId: planName // You'll need to pass this from props
+            priceId: priceId // Use the actual priceId prop, not planName
           }),
         })
 
