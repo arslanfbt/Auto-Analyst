@@ -779,6 +779,7 @@ class planner_module(dspy.Module):
                 "plan": "planning_error",
                 "plan_instructions": {"error": "Planner did not return a valid plan. Please try again or check agent configuration."}
             }
+        
         logger.log_message(f"Plan generated successfully: {plan}", level=logging.DEBUG)
         
         # Check if the planner returned no_agents_available
@@ -789,12 +790,12 @@ class planner_module(dspy.Module):
                 "plan": "no_agents_available",
                 "plan_instructions": {"message": "No agents are currently enabled for analysis. Please enable at least one agent (preprocessing, statistical analysis, machine learning, or visualization) in your template preferences to proceed with data analysis."}
             }
-        else:
-            output = {
-                "complexity": complexity.exact_word_complexity.strip().lower(),
-                "plan": plan.plan,
-                "plan_instructions": plan.plan_instructions
-            }
+
+        output = {
+            "complexity": complexity.exact_word_complexity.strip().lower(),
+            "plan": plan.plan,
+            "plan_instructions": plan.plan_instructions
+        }
 
 
 
@@ -805,7 +806,7 @@ class preprocessing_agent(dspy.Signature):
     """
 You are a preprocessing agent that can work both individually and in multi-agent data analytics systems.
 You are given:
-* A dataset (already loaded as `df`).
+* A dataset (already loaded as with exact_python_name mentioned).
 * A user-defined analysis goal (e.g., predictive modeling, exploration, cleaning).
 * Optional plan instructions that tell you what variables you are expected to create and what variables you are receiving from previous agents.
 
