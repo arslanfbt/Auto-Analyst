@@ -50,10 +50,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ message: 'Unable to create or retrieve customer' }, { status: 400 })
     }
 
-    // Validate promo code if provided
+    // Validate promo code if provided with enhanced price ID restrictions
     let couponId = null
     if (promoCode) {
       try {
+        console.log(`🔍 Validating promo code: ${promoCode} for price: ${priceId}`)
+        
         // First try to find a promotion code
         const promotionCodes = await stripe.promotionCodes.list({
           code: promoCode,
@@ -69,50 +71,74 @@ export async function POST(request: NextRequest) {
               (!promotionCode.expires_at || promotionCode.expires_at > Math.floor(Date.now() / 1000))) {
         
             const coupon = promotionCode.coupon
+            console.log(`📋 Coupon restrictions:`, {
+              products: coupon.applies_to?.products,
+              prices: (coupon.applies_to as any)?.prices
+            })
             
-            // Check if coupon has restrictions - now check for BOTH product AND price restrictions
+            // Enhanced validation with both product AND price restrictions
             if (coupon.applies_to) {
-              // Check product restrictions
+              // 1. Check product restrictions first
               if (coupon.applies_to.products && coupon.applies_to.products.length > 0) {
                 // Get the product ID from our price
                 const price = await stripe.prices.retrieve(priceId)
                 const productId = price.product as string
                 
+                console.log(`🏷️ Checking product restriction. Required: ${coupon.applies_to.products}, Current: ${productId}`)
+                
                 // Check if our product is in the allowed list
                 const isProductAllowed = coupon.applies_to.products.includes(productId)
                 
                 if (!isProductAllowed) {
+                  console.log(`❌ Product not allowed`)
                   return NextResponse.json({ 
                     message: 'This promo code is not valid for the selected plan' 
                   }, { status: 400 })
                 }
+                console.log(`✅ Product restriction passed`)
               }
               
-              // Check price restrictions (this is the key fix!)
-              // Use type assertion since Stripe types might not include prices property
+              // 2. Check price restrictions (specific billing cycles)
               const appliesToWithPrices = coupon.applies_to as any
               if (appliesToWithPrices.prices && appliesToWithPrices.prices.length > 0) {
+                console.log(`💰 Checking price restriction. Required: ${appliesToWithPrices.prices}, Current: ${priceId}`)
+                
                 // Check if our specific price ID is in the allowed list
                 const isPriceAllowed = appliesToWithPrices.prices.includes(priceId)
                 
                 if (!isPriceAllowed) {
+                  console.log(`❌ Price/billing cycle not allowed`)
                   return NextResponse.json({ 
                     message: 'This promo code is not valid for the selected billing cycle' 
                   }, { status: 400 })
                 }
+                console.log(`✅ Price restriction passed`)
+              }
+              
+              // 3. If no restrictions at all, allow everything
+              if (!coupon.applies_to.products && !appliesToWithPrices.prices) {
+                console.log(`🌟 No restrictions - promo code applies to everything`)
               }
             }
             
             // If we get here, the promo code is valid for this product and price
             couponId = coupon.id
+            console.log(`✅ Promo code validation successful. Coupon ID: ${couponId}`)
           } else {
+            console.log(`❌ Promo code expired or inactive`)
             return NextResponse.json({ message: 'Promo code has expired or is no longer active' }, { status: 400 })
           }
         } else {
           // If no promotion code found, try direct coupon lookup
+          console.log(`🔄 Promotion code not found, trying direct coupon lookup`)
           try {
             const coupon = await stripe.coupons.retrieve(promoCode)
             if (coupon.valid) {
+              console.log(`📋 Direct coupon found. Restrictions:`, {
+                products: coupon.applies_to?.products,
+                prices: (coupon.applies_to as any)?.prices
+              })
+              
               // Check restrictions for direct coupons too
               if (coupon.applies_to) {
                 // Check product restrictions
@@ -120,35 +146,46 @@ export async function POST(request: NextRequest) {
                   const price = await stripe.prices.retrieve(priceId)
                   const productId = price.product as string
                   
+                  console.log(`🏷️ Checking direct coupon product restriction. Required: ${coupon.applies_to.products}, Current: ${productId}`)
+                  
                   const isProductAllowed = coupon.applies_to.products.includes(productId)
                   
                   if (!isProductAllowed) {
+                    console.log(`❌ Direct coupon product not allowed`)
                     return NextResponse.json({ 
                       message: 'This promo code is not valid for the selected plan' 
                     }, { status: 400 })
                   }
+                  console.log(`✅ Direct coupon product restriction passed`)
                 }
                 
-                // Check price restrictions
+                // Check price restrictions for direct coupons
                 const appliesToWithPrices = coupon.applies_to as any
                 if (appliesToWithPrices.prices && appliesToWithPrices.prices.length > 0) {
+                  console.log(`💰 Checking direct coupon price restriction. Required: ${appliesToWithPrices.prices}, Current: ${priceId}`)
+                  
                   const isPriceAllowed = appliesToWithPrices.prices.includes(priceId)
                   
                   if (!isPriceAllowed) {
+                    console.log(`❌ Direct coupon price/billing cycle not allowed`)
                     return NextResponse.json({ 
                       message: 'This promo code is not valid for the selected billing cycle' 
                     }, { status: 400 })
                   }
+                  console.log(`✅ Direct coupon price restriction passed`)
                 }
               }
               
               couponId = coupon.id
+              console.log(`✅ Direct coupon validation successful. Coupon ID: ${couponId}`)
             }
           } catch (couponError) {
+            console.log(`❌ Invalid promo code:`, couponError)
             return NextResponse.json({ message: 'Invalid promo code' }, { status: 400 })
           }
         }
       } catch (error) {
+        console.error(`❌ Error validating promo code:`, error)
         return NextResponse.json({ message: 'Error validating promo code' }, { status: 400 })
       }
     }
@@ -170,6 +207,15 @@ export async function POST(request: NextRequest) {
       },
     })
 
+    console.log(`🎯 Setup intent created successfully:`, {
+      setupIntentId: setupIntent.id,
+      customerId,
+      planName,
+      interval,
+      priceId,
+      discountApplied: !!couponId
+    })
+
     return NextResponse.json({ 
       setupIntentId: setupIntent.id,
       clientSecret: setupIntent.client_secret,
@@ -183,6 +229,7 @@ export async function POST(request: NextRequest) {
     })
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred'
+    console.error(`❌ Stripe error:`, errorMessage)
     return NextResponse.json({ message: `Stripe error: ${errorMessage}` }, { status: 500 })
   }
 }
@@ -205,4 +252,61 @@ async function calculateDiscountedAmount(amount: number, couponId: string): Prom
     console.error('Error calculating discount:', error)
     return amount
   }
-} 
+}
+```
+
+## Key Enhancements Added:
+
+### 1. **Enhanced Price ID Restrictions**
+- Now checks both `coupon.applies_to.products` AND `coupon.applies_to.prices`
+- Price restrictions allow you to target specific billing cycles (monthly vs yearly)
+
+### 2. **Comprehensive Logging**
+- Added detailed console logs to track validation flow
+- Shows what restrictions are being checked
+- Helps debug promo code issues
+
+### 3. **Three Levels of Restriction Support**
+1. **No Restrictions** → Works on all products and billing cycles
+2. **Product-Only Restrictions** → Works on all billing cycles of specific products
+3. **Price-Specific Restrictions** → Works only on specific billing cycles
+
+### 4. **Better Error Messages**
+- "This promo code is not valid for the selected plan" (product restriction)
+- "This promo code is not valid for the selected billing cycle" (price restriction)
+
+## How to Set Up Price Restrictions in Stripe:
+
+### For Monthly-Only Promo Codes:
+```javascript
+// Create a coupon that only applies to monthly Standard plan
+await stripe.coupons.create({
+  id: 'MONTHLY20',
+  percent_off: 20,
+  applies_to: {
+    prices: ['price_monthly_standard_xyz'] // Only monthly Standard
+  }
+})
+```
+
+### For Yearly-Only Promo Codes:
+```javascript
+// Create a coupon that only applies to yearly plans
+await stripe.coupons.create({
+  id: 'YEARLY30',
+  percent_off: 30,
+  applies_to: {
+    prices: [
+      'price_yearly_standard_xyz',
+      'price_yearly_pro_xyz'
+    ] // Only yearly plans
+  }
+})
+```
+
+### For Product-Wide Promo Codes:
+```javascript
+<code_block_to_apply_changes_from>
+```
+
+This gives you fine-grained control over exactly which plans and billing cycles each promo code can be applied to!
