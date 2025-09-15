@@ -177,59 +177,43 @@ export default function CheckoutPage() {
       const data = await response.json()
       console.log('📡 API Response:', data)
 
-      if (data.error) {
+      // Check for HTTP error status
+      if (!response.ok) {
         console.error('❌ API Error:', data.error)
-        // Set appropriate error state
-        setPromoError(data.error)
+        setPromoError(data.error || 'An error occurred')
         setDiscountApplied(false)
         setDiscountInfo(null)
         setPromoCodeInfo(null)
         
-        // Don't set paymentError for promo code validation failures
-        // Only set it for actual payment setup failures
-        if (!promoCodeValue) {
-          setPaymentError(data.error)
-          setClientSecret('')
-          setSetupIntentId('')
-        }
-      } else if (data.message) {
-        console.error('❌ API Message:', data.message)
-        // Handle other types of messages
-        setPromoError(data.message)
-        setDiscountApplied(false)
-        setDiscountInfo(null)
-        setPromoCodeInfo(null)
-      } else {
-        // Successfully created new setup intent
-        console.log('✅ Setup intent created:', data.setupIntentId)
-        setClientSecret(data.clientSecret)
-        setSetupIntentId(data.setupIntentId)
-        setIsTrialSetup(data.isTrialSetup || false)
-        
-        // Only set discount state if the API confirms the discount is valid
-        setDiscountApplied(data.discountApplied || false)
-        setPromoError('')
-        
-        // Clear payment error on success
-        setPaymentError('')
-        
-        // Use backend's calculated discount info instead of separate API call
-        if (data.discountApplied && data.promoCodeInfo) {
-          setDiscountInfo({
-            type: data.promoCodeInfo.discountType,
-            value: data.promoCodeInfo.discountValue
-          })
-        } else {
-          setDiscountInfo(null)
-        }
-
-        // Set promo code info for display
-        if (data.promoCodeInfo) {
-          setPromoCodeInfo(data.promoCodeInfo)
-        } else {
-          setPromoCodeInfo(null)
-        }
+        // Don't set clientSecret or other success states
+        return
       }
+
+      // Success case
+      console.log('✅ Setup intent created:', data.clientSecret)
+      setClientSecret(data.clientSecret)
+      setSetupIntentId(data.setupIntentId)
+      setIsTrialSetup(data.isTrialSetup || false)
+      
+      // Handle promo code success
+      if (data.discountAmount > 0 && data.promoCodeInfo) {
+        setDiscountApplied(true)
+        setPromoError('')
+        setDiscountInfo({
+          type: data.promoCodeInfo.discountType,
+          value: data.promoCodeInfo.discountValue
+        })
+        setPromoCodeInfo(data.promoCodeInfo)
+      } else {
+        // No promo code or no discount
+        setDiscountApplied(false)
+        setPromoError('')
+        setDiscountInfo(null)
+        setPromoCodeInfo(null)
+      }
+      
+      setPaymentError('')
+
     } catch (err) {
       console.error('❌ Error creating payment intent:', err)
       
@@ -596,10 +580,10 @@ export default function CheckoutPage() {
                           Promo Discount ({discountInfo.type === 'percent' ? `${discountInfo.value}% off` : `$${discountInfo.value} off`})
                         </span>
                         <span className="text-green-700 font-medium">
-                          {discountInfo.type === 'percent' 
-                            ? `-$${((planDetails.amount * discountInfo.value) / 100).toFixed(2)}`
-                            : `-$${discountInfo.value.toFixed(2)}`
-                          }
+                          -${(discountInfo.type === 'percent' 
+                            ? (planDetails.amount * discountInfo.value) / 100 
+                            : discountInfo.value
+                          ).toFixed(2)}
                         </span>
                       </div>
                     )}

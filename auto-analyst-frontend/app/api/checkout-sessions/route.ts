@@ -37,7 +37,7 @@ export async function POST(request: NextRequest) {
     // Validate promotion code if provided
     let validatedPromotionCode = null
     let discountAmount = 0
-    let coupon = null // Declare coupon outside the if block
+    let coupon = null
 
     if (promotionCode) {
       try {
@@ -65,13 +65,12 @@ export async function POST(request: NextRequest) {
           )
         }
 
-        coupon = promotionCodeObj.coupon // Set the coupon variable
-        
-        // Check if coupon has restrictions - now check for BOTH product AND price restrictions
+        coupon = promotionCodeObj.coupon
+
+        // Check if coupon has restrictions
         if (coupon.applies_to) {
           // Check product restrictions
           if (coupon.applies_to.products && coupon.applies_to.products.length > 0) {
-            // Check if our product is in the allowed list
             const isProductAllowed = coupon.applies_to.products.includes(productId)
             
             if (!isProductAllowed) {
@@ -82,12 +81,9 @@ export async function POST(request: NextRequest) {
             }
           }
           
-          // Check price restrictions (this is the key fix!)
-          // Note: The Stripe TypeScript types might not include 'prices' property
-          // So we'll use type assertion to access it safely
+          // Check price restrictions
           const appliesTo = coupon.applies_to as any
           if (appliesTo.prices && appliesTo.prices.length > 0) {
-            // Check if our specific price ID is in the allowed list
             const isPriceAllowed = appliesTo.prices.includes(priceId)
             
             if (!isPriceAllowed) {
@@ -104,6 +100,14 @@ export async function POST(request: NextRequest) {
           discountAmount = coupon.amount_off
         } else if (coupon.percent_off) {
           discountAmount = Math.round((price.unit_amount || 0) * (coupon.percent_off / 100))
+        }
+
+        // If no discount was calculated, the promo code doesn't apply
+        if (discountAmount === 0) {
+          return NextResponse.json(
+            { error: 'This promo code does not provide any discount for the selected plan' },
+            { status: 400 }
+          )
         }
 
         validatedPromotionCode = promotionCodeObj.id
