@@ -66,17 +66,23 @@ export async function POST(request: NextRequest) {
       console.log('🔍 Promotion code lookup result:', {
         searchedCode: promoCodeInfo.promotionCode,
         found: promotionCodeList.data.length > 0,
-        promotionCodeId: promotionCodeList.data[0]?.id
+        promotionCodeId: promotionCodeList.data[0]?.id,
+        couponId: promotionCodeList.data[0]?.coupon?.id
       })
 
       if (promotionCodeList.data.length > 0) {
-        // Apply promotion code to the subscription
+        const promotionCode = promotionCodeList.data[0]
+        const couponId = promotionCode.coupon.id  // Get the coupon ID from promotion code
+        
+        // Apply coupon to the subscription
         subscriptionParams.discounts = [{
-          promotion_code: promotionCodeList.data[0].id
+          coupon: couponId  // Use coupon ID, not promotion_code ID
         }]
-        console.log('✅ Promo code applied to subscription:', {
-          code: promoCodeInfo.promotionCode,
-          promotionCodeId: promotionCodeList.data[0].id
+        
+        console.log('✅ Coupon applied to subscription:', {
+          promotionCodeString: promoCodeInfo.promotionCode,
+          promotionCodeId: promotionCode.id,
+          couponId: couponId
         })
       } else {
         console.log('⚠️ Promo code not found in Stripe:', promoCodeInfo.promotionCode)
