@@ -131,7 +131,7 @@ export const useChatInput = (props: ChatInputProps) => {
     const isExcel = file.name.endsWith('.xlsx') || file.name.endsWith('.xls')
     
     if (isCSV) {
-      // Handle CSV files - preview first, then show dialog with auto-generation
+      // Handle CSV files - preview first, then show dialog
       try {
         setCSVFileName(file.name)
         console.log('Setting status to uploading for:', file.name)
@@ -162,7 +162,7 @@ export const useChatInput = (props: ChatInputProps) => {
           headers: previewResponse.data.headers || [],
           rows: previewResponse.data.rows || [],
           name: previewResponse.data.name || file.name.replace(/\.csv$/i, ''),
-          description: `CSV data from ${file.name}` // Start with basic description
+          description: `CSV data from ${file.name}` // Basic description to start
         }
 
         setCSVPreview(preview)
@@ -176,34 +176,6 @@ export const useChatInput = (props: ChatInputProps) => {
         
         // Show the Dataset Preview dialog
         setShowCSVDialog(true)
-        
-        // Auto-generate description after dialog opens
-        setTimeout(async () => {
-          try {
-            console.log('Auto-generating description from preview...')
-            const descriptionResponse = await axios.post(`${PREVIEW_API_URL}/generate-description-from-preview`, {
-              headers: preview.headers,
-              rows: preview.rows,
-              name: preview.name,
-              description: preview.description
-            }, {
-              headers: getHeaders(),
-            })
-            console.log('Auto-description generation completed')
-
-            if (descriptionResponse.data && descriptionResponse.data.description) {
-              // Update the preview with the generated description
-              const updatedPreview = {
-                ...preview,
-                description: descriptionResponse.data.description
-              }
-              setCSVPreview(updatedPreview)
-            }
-          } catch (error) {
-            console.error('Auto-description generation failed:', error)
-            // Don't show error to user, just log it
-          }
-        }, 50) // Small delay to ensure dialog is fully loaded
         
       } catch (error) {
         console.error('CSV upload error:', error)
