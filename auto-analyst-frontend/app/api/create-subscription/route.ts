@@ -80,6 +80,16 @@ export async function POST(request: NextRequest) {
 
     // Update Redis with subscription info
     const userId = token.sub
+    
+    // Check if user has existing subscription data and clear it if it exists
+    const existingSubscriptionData = await redis.hgetall(KEYS.USER_SUBSCRIPTION(userId))
+    if (existingSubscriptionData && Object.keys(existingSubscriptionData).length > 0) {
+      console.log('🔍 Found existing subscription data, clearing it for clean state')
+      await redis.del(KEYS.USER_SUBSCRIPTION(userId))
+    } else {
+      console.log('🔍 No existing subscription data found, proceeding with new subscription')
+    }
+    
     const subscriptionData = {
       id: subscription.id,
       stripeSubscriptionId: subscription.id,
