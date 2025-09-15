@@ -22,8 +22,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Stripe not configured' }, { status: 500 })
     }
 
-    const { setupIntentId, priceId } = await request.json()
-    console.log('🔍 Creating subscription with:', { setupIntentId, priceId })
+    const { setupIntentId, priceId, promoCodeInfo } = await request.json()
+    console.log('🔍 Creating subscription with:', { setupIntentId, priceId, promoCodeInfo })
 
     if (!setupIntentId || !priceId) {
       return NextResponse.json({ error: 'Missing required parameters' }, { status: 400 })
@@ -43,26 +43,54 @@ export async function POST(request: NextRequest) {
       }, { status: 400 })
     }
 
-    // Create subscription
-    console.log('🔍 Creating subscription with customer:', setupIntent.customer)
-    const subscription = await stripe.subscriptions.create({
+    // Prepare subscription parameters
+    const subscriptionParams: Stripe.SubscriptionCreateParams = {
       customer: setupIntent.customer as string,
       items: [{ price: priceId }],
       default_payment_method: setupIntent.payment_method as string,
       expand: ['latest_invoice.payment_intent'],
-    })
+    }
+
+    // Apply promo code if provided
+    if (promoCodeInfo && promoCodeInfo.discountType) {
+      console.log('🔍 Applying promo code:', promoCodeInfo)
+      
+      // Get the promotion code object
+      const promotionCode = await stripe.promotionCodes.list({
+        code: promoCodeInfo.promotionCode || 'REDUCE', // Fallback to the promo code from validation
+        active: true,
+        limit: 1
+      })
+
+      if (promotionCode.data.length > 0) {
+        subscriptionParams.coupon = promotionCode.data[0].coupon.id
+        console.log('✅ Promo code applied:', promotionCode.data[0].coupon.id)
+      } else {
+        console.log('⚠️ Promo code not found in Stripe')
+      }
+    }
+
+    // Create subscription
+    console.log('🔍 Creating subscription with customer:', setupIntent.customer)
+    const subscription = await stripe.subscriptions.create(subscriptionParams)
     console.log('✅ Subscription created:', subscription.id)
 
     // Update Redis with subscription info
     const userId = token.sub
     const subscriptionData = {
       id: subscription.id,
-      stripeSubscriptionId: subscription.id, // Add this for consistency
+      stripeSubscriptionId: subscription.id,
       status: subscription.status,
       current_period_start: String((subscription as any).current_period_start || ''),
       current_period_end: String((subscription as any).current_period_end || ''),
       priceId: priceId,
-      created: String(subscription.created)
+      created: String(subscription.created),
+      // Add promo code info to Redis for tracking
+      ...(promoCodeInfo && { 
+        promoCodeApplied: 'true',
+        promoCodeValue: String(promoCodeInfo.discountValue || ''),
+        promoCodeType: promoCodeInfo.discountType || ''
+      })
     }
 
     await redis.hset(KEYS.USER_SUBSCRIPTION(userId), subscriptionData)
@@ -80,14 +108,13 @@ export async function POST(request: NextRequest) {
     } else if (product.name && product.name.includes('Enterprise')) {
       credits = 2000 // Enterprise plan (when defined)
     } else {
-      // This shouldn't happen for subscription creation, but fallback
       credits = 20 // Free plan default
     }
 
     if (credits > 0) {
       await redis.hset(KEYS.USER_CREDITS(userId), {
-        total: String(credits),        // ✅ Add this line
-        available: String(credits),    // ✅ Keep this for compatibility
+        total: String(credits),
+        available: String(credits),
         used: '0',
         lastReset: String(Date.now())
       })
@@ -97,13 +124,13 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       subscriptionId: subscription.id,
-      status: subscription.status
+      status: subscription.status,
+      promoCodeApplied: !!promoCodeInfo
     })
 
   } catch (error) {
     console.error('❌ Error creating subscription:', error)
     
-    // Return more specific error information
     let errorMessage = 'Failed to create subscription'
     if (error instanceof Error) {
       errorMessage = error.message

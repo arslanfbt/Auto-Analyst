@@ -63,6 +63,11 @@ export async function POST(request: NextRequest) {
         cancel_at_period_end: 'true', // Both user types cancel at period end
       }
 
+      // Add period end date if we have it from Stripe
+      if (!isLegacyUser && canceledSubscription) {
+        updateData.periodEndDate = new Date(canceledSubscription.current_period_end * 1000).toISOString()
+      }
+
       await redis.hset(KEYS.USER_SUBSCRIPTION(userId), updateData)
       
       // Handle credits - ALL users keep their credits until period ends
@@ -73,10 +78,17 @@ export async function POST(request: NextRequest) {
       // Return appropriate message - same for all users
       const message = 'Subscription will be canceled at the end of the current billing period'
 
+      // Get period end date from Stripe subscription for better user feedback
+      let periodEndDate = null
+      if (!isLegacyUser && canceledSubscription) {
+        periodEndDate = new Date(canceledSubscription.current_period_end * 1000).toISOString()
+      }
+
       return NextResponse.json({
         success: true,
         message: message,
         canceledAt: now.toISOString(),
+        periodEndDate: periodEndDate, // Add this
         immediateCancellation: isLegacyUser
       })
 

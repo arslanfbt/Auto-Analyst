@@ -544,11 +544,11 @@ export default function CheckoutPage() {
                             Promo code applied successfully!
                           </p>
                           <p className="text-green-700 mt-1">
-                            This promo code applies to: <strong>{promoCodeInfo.productName}</strong> ({promoCodeInfo.billingCycle} billing)
+                            This promo code applies to: <strong>{promoCodeInfo.productName}</strong> ({promoCodeInfo.billingCycle === 'month' ? 'monthly' : promoCodeInfo.billingCycle === 'year' ? 'yearly' : promoCodeInfo.billingCycle} billing)
                           </p>
                           <p className="text-green-700">
                             Discount: {promoCodeInfo.discountType === 'percentage' 
-                              ? `${promoCodeInfo.discountValue}% off` 
+                              ? `${(promoCodeInfo.discountValue * 100)}% off` 
                               : `$${promoCodeInfo.discountValue} off`
                             }
                           </p>
@@ -587,11 +587,11 @@ export default function CheckoutPage() {
                     {discountApplied && discountInfo && !promoError && (
                       <div className="flex justify-between mb-2">
                         <span className="text-green-700 font-medium">
-                          Promo Discount ({discountInfo.type === 'percent' ? `${discountInfo.value}% off` : `$${discountInfo.value} off`})
+                          Promo Discount ({discountInfo.type === 'percent' ? `${(discountInfo.value * 100)}% off` : `$${discountInfo.value} off`})
                         </span>
                         <span className="text-green-700 font-medium">
                           -${(discountInfo.type === 'percent' 
-                            ? (planDetails.amount * discountInfo.value) / 100 
+                            ? (planDetails.amount * discountInfo.value) 
                             : discountInfo.value
                           ).toFixed(2)}
                         </span>
@@ -664,11 +664,11 @@ export default function CheckoutPage() {
                                 'You save $54.00 with yearly billing!'
                               )}
                               {discountApplied && discountInfo && (
-                                `You save $${
-                              discountInfo.type === 'percent' 
-                                ? ((planDetails.amount * discountInfo.value) / 100).toFixed(2)
-                                : discountInfo.value.toFixed(2)
-                                } with promo code!`
+                                `You save $${(
+                                  discountInfo.type === 'percent' 
+                                    ? ((planDetails.amount * discountInfo.value)).toFixed(2)
+                                    : discountInfo.value.toFixed(2)
+                                )} with promo code!`
                               )}
                               {billingCycle === 'yearly' && planDetails.name === 'Standard' && discountApplied && discountInfo && (
                                 `Total savings: $${(54 + (
