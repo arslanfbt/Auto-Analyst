@@ -466,6 +466,7 @@ export default function CheckoutPage() {
                       interval={planDetails.cycle as 'month' | 'year' | 'day'}
                       clientSecret={clientSecret}
                       priceId={planDetails.priceId}
+                      promoCodeInfo={promoCodeInfo} // Add this
                     />
                     
                     {/* Debug info - remove in production */}

@@ -233,7 +233,7 @@ export async function POST(request: NextRequest) {
         productName: product.name,
         billingCycle: price.recurring?.interval || 'one_time',
         discountType: coupon.percent_off ? 'percentage' : 'amount',
-        discountValue: coupon.percent_off || (coupon.amount_off ? coupon.amount_off / 100 : 0),
+        discountValue: coupon.percent_off ? coupon.percent_off / 100 : (coupon.amount_off ? coupon.amount_off / 100 : 0),
         appliesTo: {
           products: coupon.applies_to?.products || [],
           prices: (coupon.applies_to as any)?.prices || []

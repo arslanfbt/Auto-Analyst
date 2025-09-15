@@ -17,10 +17,11 @@ interface CheckoutFormProps {
   amount: number
   interval: 'month' | 'year' | 'day'
   clientSecret: string
-  priceId: string // Add this
+  priceId: string
+  promoCodeInfo?: any // Add this
 }
 
-export default function CheckoutForm({ planName, amount, interval, clientSecret, priceId }: CheckoutFormProps) {
+export default function CheckoutForm({ planName, amount, interval, clientSecret, priceId, promoCodeInfo }: CheckoutFormProps) {
   const router = useRouter()
   const { data: session } = useSession()
   const stripe = useStripe()
@@ -119,7 +120,8 @@ export default function CheckoutForm({ planName, amount, interval, clientSecret,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           setupIntentId: intentId,
-          priceId: priceId
+          priceId: priceId,
+          promoCodeInfo: promoCodeInfo // Add this
         }),
       })
 
