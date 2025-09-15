@@ -86,7 +86,8 @@ export async function POST(request: NextRequest) {
 
     if (credits > 0) {
       await redis.hset(KEYS.USER_CREDITS(userId), {
-        available: String(credits),
+        total: String(credits),        // ✅ Add this line
+        available: String(credits),    // ✅ Keep this for compatibility
         used: '0',
         lastReset: String(Date.now())
       })
