@@ -427,7 +427,7 @@ export default function AccountPage() {
       
       toast({
         title: 'Subscription canceled',
-        description: result.message || 'Your subscription has been canceled',
+        description: result.message + (result.periodEndDate ? ` Your access continues until ${new Date(result.periodEndDate).toLocaleDateString()}.` : ''),
         duration: 5000
       })
     } catch (error) {
