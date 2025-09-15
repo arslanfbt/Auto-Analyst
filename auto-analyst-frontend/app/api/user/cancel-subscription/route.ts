@@ -43,84 +43,56 @@ export async function POST(request: NextRequest) {
       
       // Only make Stripe API calls for new users with proper subscription IDs
       if (!isLegacyUser) {
-      // Cancel the subscription in Stripe
-      // Using cancel_at_period_end: true to let the user keep access until the end of their current billing period
+        // Cancel the subscription in Stripe
+        // Using cancel_at_period_end: true to let the user keep access until the end of their current billing period
         canceledSubscription = await stripe.subscriptions.update(stripeSubscriptionId, {
-        cancel_at_period_end: true,
-      })
+          cancel_at_period_end: true,
+        })
       } else {
         console.log(`Legacy user ${userId} - skipping Stripe API calls, updating Redis only`)
       }
       
       // Update the subscription data in Redis with cancellation info (for both legacy and new users)
       const now = new Date()
-      await redis.hset(KEYS.USER_SUBSCRIPTION(userId), {
-        status: isLegacyUser ? 'canceled' : 'canceling', // Legacy users get immediate cancellation
+      const updateData: any = {
+        status: 'canceling', // Both legacy and new users get 'canceling' status
         canceledAt: now.toISOString(),
         lastUpdated: now.toISOString(),
-        pendingDowngrade: 'true',
-        nextPlanType: 'STANDARD' // Changed from FREE to STANDARD since no more free plan
-      })
-      
-      // Handle credits based on user type
-      if (isLegacyUser) {
-        // Legacy users: Set credits to 0 immediately
-        await redis.hset(KEYS.USER_CREDITS(userId), {
-          total: '0',
-          used: '0',
-          resetDate: '',
-          lastUpdate: now.toISOString(),
-          downgradedAt: now.toISOString(),
-          canceledAt: now.toISOString()
-        })
-      } else {
-        // New users: Mark for downgrade at period end
-        const creditData = await redis.hgetall(KEYS.USER_CREDITS(userId))
-        if (creditData && creditData.resetDate) {
-          await redis.hset(KEYS.USER_CREDITS(userId), {
-            nextTotalCredits: '0', // No credits after cancellation
-          pendingDowngrade: 'true',
-            lastUpdate: now.toISOString()
-        })
+        subscriptionCanceled: 'true', // Mark as canceled
+        cancel_at_period_end: true, // Both user types cancel at period end
       }
-      }
+
+      // Remove the legacy-specific logic since all users should behave the same
+      // await redis.hset(KEYS.USER_SUBSCRIPTION(userId), updateData)
       
+      // Handle credits - ALL users keep their credits until period ends
+      // Don't modify credits here - they should remain until the subscription actually ends
+      // The webhook will handle credit reset to free plan (20 credits) when period ends
+      console.log(`User ${userId} - keeping current credits until subscription period ends`)
+      
+      // Return appropriate message - same for all users
+      const message = 'Subscription will be canceled at the end of the current billing period'
+
       return NextResponse.json({
         success: true,
-        message: isLegacyUser 
-          ? 'Subscription canceled successfully. Your access has been removed.'
-          : 'Subscription will be canceled at the end of the current billing period',
-        subscription: {
-          ...subscriptionData,
-          status: isLegacyUser ? 'canceled' : 'canceling',
-          canceledAt: now.toISOString(),
-        }
+        message: message,
+        canceledAt: now.toISOString(),
+        immediateCancellation: isLegacyUser
       })
+
     } catch (stripeError: any) {
       console.error('Stripe error canceling subscription:', stripeError)
-      
-      // Handle common Stripe errors
-      if (stripeError.code === 'resource_missing') {
-        // Subscription doesn't exist in Stripe but exists in our DB
-        // Update our records to show there's no subscription
-        await redis.hset(KEYS.USER_SUBSCRIPTION(userId), {
-          status: 'inactive',
-          stripeSubscriptionId: '',
-          lastUpdated: new Date().toISOString(),
-        })
-        
-        return NextResponse.json({
-          success: true,
-          message: 'Subscription record updated',
-        })
-      }
-      
-      throw stripeError
+      return NextResponse.json(
+        { error: 'Failed to cancel subscription with payment provider' },
+        { status: 500 }
+      )
     }
+
   } catch (error: any) {
     console.error('Error canceling subscription:', error)
-    return NextResponse.json({ 
-      error: error.message || 'Failed to cancel subscription' 
-    }, { status: 500 })
+    return NextResponse.json(
+      { error: error.message || 'Failed to cancel subscription' },
+      { status: 500 }
+    )
   }
 } 

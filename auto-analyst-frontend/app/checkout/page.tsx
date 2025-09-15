@@ -449,6 +449,7 @@ export default function CheckoutPage() {
                       amount={planDetails.amount}
                       interval={planDetails.cycle as 'month' | 'year' | 'day'}
                       clientSecret={clientSecret}
+                      priceId={planDetails.priceId}
                     />
                     
                     {/* Debug info - remove in production */}

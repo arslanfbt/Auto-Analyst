@@ -3,6 +3,13 @@ import { getToken } from 'next-auth/jwt'
 import Stripe from 'stripe'
 import redis, { KEYS } from '@/lib/redis'
 
+// Initialize Stripe with the same pattern as working files
+const stripe = process.env.STRIPE_SECRET_KEY 
+  ? new Stripe(process.env.STRIPE_SECRET_KEY, {
+      apiVersion: '2025-05-28.basil',
+    })
+  : null
+
 export async function POST(request: NextRequest) {
   try {
     const token = await getToken({ req: request })
@@ -11,25 +18,34 @@ export async function POST(request: NextRequest) {
     const { newPriceId } = await request.json()
     if (!newPriceId) return NextResponse.json({ error: 'Missing price ID' }, { status: 400 })
 
+    if (!stripe) return NextResponse.json({ error: 'Stripe not configured' }, { status: 500 })
+
     const userId = token.sub
     
     // Get current subscription from Redis
-    const subscriptionData = await redis.hgetall(KEYS.userSubscription(userId))
+    const subscriptionData = await redis.hgetall(KEYS.USER_SUBSCRIPTION(userId))
     if (!subscriptionData?.id) {
       return NextResponse.json({ error: 'No active subscription found' }, { status: 400 })
     }
 
+    // Get current subscription from Stripe to access the items
+    const subscriptionId = String(subscriptionData.id) // Ensure it's a string
+    const currentSubscription = await stripe!.subscriptions.retrieve(subscriptionId)
+
     // Update subscription in Stripe
-    const subscription = await stripe.subscriptions.update(subscriptionData.id, {
+    const subscriptionResponse = await stripe!.subscriptions.update(subscriptionId, {
       items: [{
-        id: subscription.items.data[0].id,
+        id: currentSubscription.items.data[0].id,
         price: newPriceId,
       }],
-      proration_behavior: 'create_prorations', // Prorate the billing
+      proration_behavior: 'create_prorations',
     })
 
+    // Extract the subscription object from the response
+    const subscription = subscriptionResponse as any // Type assertion for Stripe API version compatibility
+
     // Update Redis with new subscription data
-    await redis.hset(KEYS.userSubscription(userId), {
+    await redis.hset(KEYS.USER_SUBSCRIPTION(userId), {
       ...subscriptionData,
       priceId: newPriceId,
       status: subscription.status,
@@ -38,21 +54,24 @@ export async function POST(request: NextRequest) {
     })
 
     // Update credits based on new plan
-    const price = await stripe.prices.retrieve(newPriceId)
-    const product = await stripe.products.retrieve(price.product as string)
+    const price = await stripe!.prices.retrieve(newPriceId)
+    const product = await stripe!.products.retrieve(price.product as string)
     
     let newCredits = 0
-    if (product.name.includes('Standard')) {
-      newCredits = 1000
-    } else if (product.name.includes('Enterprise')) {
-      newCredits = 5000
+    if (product.name && product.name.includes('Standard')) {
+      newCredits = 500 // Standard plan gets 500 credits
+    } else if (product.name && product.name.includes('Enterprise')) {
+      newCredits = 2000 // Enterprise plan (when defined)
+    } else {
+      // This shouldn't happen for subscription changes, but fallback
+      newCredits = 20 // Free plan default
     }
 
     if (newCredits > 0) {
-      await redis.hset(KEYS.userCredits(userId), {
-        available: newCredits,
-        used: 0,
-        lastReset: Date.now()
+      await redis.hset(KEYS.USER_CREDITS(userId), {
+        available: String(newCredits),
+        used: '0',
+        lastReset: String(Date.now())
       })
     }
 
