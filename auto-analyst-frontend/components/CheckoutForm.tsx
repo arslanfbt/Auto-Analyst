@@ -17,8 +17,7 @@ interface CheckoutFormProps {
   amount: number
   interval: 'month' | 'year' | 'day'
   clientSecret: string
-  // Remove: isTrialSetup?: boolean
-  // Remove: setupIntentId?: string
+  priceId: string // Add this
 }
 
 export default function CheckoutForm({ planName, amount, interval, clientSecret }: CheckoutFormProps) {
@@ -77,10 +76,34 @@ export default function CheckoutForm({ planName, amount, interval, clientSecret 
       setError(null)
       setSucceeded(true)
       
-      // Direct redirect to success page - no trial API call
-      setTimeout(() => {
-        router.push(`/checkout/success?setup_intent=${setupIntent.id}`)
-      }, 1500)
+      // Create subscription after successful setup
+      try {
+        const response = await fetch('/api/create-subscription', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            setupIntentId: setupIntent.id,
+            priceId: planName // You'll need to pass this from props
+          }),
+        })
+
+        const data = await response.json()
+
+        if (!response.ok) {
+          throw new Error(data.error || 'Failed to create subscription')
+        }
+
+        // Redirect to success page with subscription ID
+        setTimeout(() => {
+          router.push(`/checkout/success?subscription_id=${data.subscriptionId}`)
+        }, 1500)
+
+      } catch (subscriptionError) {
+        console.error('Subscription creation error:', subscriptionError)
+        setError('Payment setup succeeded but subscription creation failed. Please contact support.')
+        setSucceeded(false)
+        setProcessing(false)
+      }
     }
   }
 
