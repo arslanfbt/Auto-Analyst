@@ -135,33 +135,51 @@ export async function POST(request: NextRequest) {
         // Check if coupon has restrictions
         if (coupon.applies_to) {
           console.log('🔍 Checking coupon restrictions...')
+          console.log('🔍 Full applies_to object:', JSON.stringify(coupon.applies_to, null, 2))
+          console.log('🔍 Current priceId:', priceId)
+          console.log('🔍 Current productId:', productId)
           
           // Check product restrictions
-          if (coupon.applies_to.products && coupon.applies_to.products.length > 0) {
+          if (coupon.applies_to.products !== undefined) {
             console.log('🔍 Product restrictions:', coupon.applies_to.products)
-            console.log('🔍 Current product:', productId)
+            console.log('🔍 Product restrictions length:', coupon.applies_to.products.length)
             
-            const isProductAllowed = coupon.applies_to.products.includes(productId)
-            console.log('🔍 Product allowed:', isProductAllowed)
-            
-            if (!isProductAllowed) {
-              return NextResponse.json(
-                { error: 'This promo code is not valid for the selected plan' },
-                { status: 400 }
-              )
+            // If products array exists (even if empty), check restrictions
+            if (coupon.applies_to.products.length > 0) {
+              const isProductAllowed = coupon.applies_to.products.includes(productId)
+              console.log('🔍 Product allowed:', isProductAllowed)
+              
+              if (!isProductAllowed) {
+                return NextResponse.json(
+                  { error: 'This promo code is not valid for the selected plan' },
+                  { status: 400 }
+                )
+              }
+            } else {
+              console.log('✅ No specific product restrictions - applies to all products')
             }
           }
           
           // Check price restrictions
           const appliesTo = coupon.applies_to as any
-          if (appliesTo.prices && appliesTo.prices.length > 0) {
+          if (appliesTo.prices !== undefined) {
             console.log('🔍 Price restrictions:', appliesTo.prices)
-            console.log('🔍 Current price:', priceId)
+            console.log('🔍 Price restrictions length:', appliesTo.prices.length)
             
-            const isPriceAllowed = appliesTo.prices.includes(priceId)
-            console.log('🔍 Price allowed:', isPriceAllowed)
-            
-            if (!isPriceAllowed) {
+            // If prices array exists (even if empty), check restrictions
+            if (appliesTo.prices.length > 0) {
+              const isPriceAllowed = appliesTo.prices.includes(priceId)
+              console.log('🔍 Price allowed:', isPriceAllowed)
+              
+              if (!isPriceAllowed) {
+                return NextResponse.json(
+                  { error: 'This promo code is not valid for the selected billing cycle' },
+                  { status: 400 }
+                )
+              }
+            } else {
+              // Empty prices array means NO prices are allowed
+              console.log('❌ Empty price restrictions - promo code applies to NO prices')
               return NextResponse.json(
                 { error: 'This promo code is not valid for the selected billing cycle' },
                 { status: 400 }

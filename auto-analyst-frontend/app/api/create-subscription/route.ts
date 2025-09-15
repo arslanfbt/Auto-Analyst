@@ -63,14 +63,14 @@ export async function POST(request: NextRequest) {
       })
 
       if (promotionCode.data.length > 0) {
-        // Apply coupon to subscription items instead of subscription directly
+        // Apply promotion code to subscription items - use promotion_code, not coupon
         subscriptionParams.items = [{
           price: priceId,
           discounts: [{
-            coupon: promotionCode.data[0].coupon.id
+            promotion_code: promotionCode.data[0].id  // Use promotion code ID, not coupon ID
           }]
         }]
-        console.log('✅ Promo code applied:', promotionCode.data[0].coupon.id)
+        console.log('✅ Promo code applied:', promotionCode.data[0].id)
       } else {
         console.log('⚠️ Promo code not found in Stripe')
       }
