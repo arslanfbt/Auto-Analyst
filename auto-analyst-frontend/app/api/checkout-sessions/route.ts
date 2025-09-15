@@ -68,7 +68,7 @@ export async function POST(request: NextRequest) {
     const price = await stripe.prices.retrieve(priceId)
     const productId = price.product as string
 
-    // Validate promotion code if provided
+    // Validate promotion code if provided (keep existing validation logic)
     let validatedPromotionCode = null
     let discountAmount = 0
     let coupon = null
@@ -225,7 +225,7 @@ export async function POST(request: NextRequest) {
           )
         }
 
-        validatedPromotionCode = promotionCodeObj.id
+        validatedPromotionCode = promotionCodeObj.code // Store the actual code string
         console.log('✅ Promo code validated successfully')
         
       } catch (error) {
@@ -237,31 +237,53 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Instead of creating Setup Intent, create Checkout Session
-    const session = await stripe.checkout.sessions.create({
-      mode: 'subscription',
+    // Create Setup Intent with promo code support
+    const setupIntentParams: Stripe.SetupIntentCreateParams = {
       customer: customer.id,
-      line_items: [{ 
-        price: priceId, 
-        quantity: 1 
-      }],
-      allow_promotion_codes: true, // ← This enables promo code input
-      success_url: `${process.env.NEXT_PUBLIC_APP_URL}/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${process.env.NEXT_PUBLIC_APP_URL}/checkout/cancel`,
       payment_method_types: ['card'],
-      billing_address_collection: 'auto',
-    })
+      usage: 'off_session',
+      metadata: {
+        priceId: priceId,
+        userId: userId,
+        // Store promo code in metadata for later use during subscription creation
+        ...(validatedPromotionCode && { promotionCode: validatedPromotionCode })
+      }
+    }
 
-    return NextResponse.json({
-      sessionId: session.id,
-      url: session.url, // Redirect user to this URL
-      success: true
-    })
+    const setupIntent = await stripe.setupIntents.create(setupIntentParams)
+
+    // Get product information for response
+    const product = await stripe.products.retrieve(productId)
+    
+    const response = {
+      clientSecret: setupIntent.client_secret,
+      priceId: priceId,
+      productId: productId,
+      originalAmount: price.unit_amount || 0,
+      discountAmount: discountAmount,
+      finalAmount: (price.unit_amount || 0) - discountAmount,
+      ...(validatedPromotionCode && { promotionCode: validatedPromotionCode }),
+      billingCycle: price.recurring?.interval || 'month',
+      // Include detailed promo code info for frontend display
+      ...(validatedPromotionCode && coupon && {
+        promoCodeInfo: {
+          productName: product.name || 'Unknown Product',
+          billingCycle: price.recurring?.interval || 'month',
+          discountType: coupon.percent_off ? 'percentage' : 'amount',
+          discountValue: coupon.percent_off ? coupon.percent_off / 100 : (coupon.amount_off ? coupon.amount_off / 100 : 0),
+          appliesTo: coupon.applies_to || { products: [], prices: [] },
+          promotionCode: validatedPromotionCode
+        }
+      })
+    }
+
+    console.log('✅ Setup Intent created successfully with promo code support:', setupIntent.id)
+    return NextResponse.json(response)
 
   } catch (error) {
-    console.error('Error creating checkout session:', error)
+    console.error('Error creating setup intent:', error)
     return NextResponse.json(
-      { error: 'Failed to create checkout session' },
+      { error: 'Failed to create setup intent' },
       { status: 500 }
     )
   }

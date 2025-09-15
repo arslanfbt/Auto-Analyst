@@ -1679,41 +1679,25 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
                     <span className="hidden sm:inline">Fullscreen</span>
                   </Button>
                   <Button
+                    key={`pin-plotly-${output.codeId}-${idx}-${visualizations.length}`} // Add key that changes with store
                     variant={isPinned ? "default" : "outline"}
                     size="sm"
                     onClick={() => {
                       const currentCode = codeEntries.find(entry => entry.id === output.codeId)?.code || '';
-                      console.log('Pin click - Code found:', !!currentCode, 'CodeId:', output.codeId, 'Available entries:', codeEntries.map(e => e.id));
+                      console.log('Pin click - Code found:', !!currentCode, 'CodeId:', output.codeId);
                       
                       if (currentCode) {
                         togglePinVisualization(output.content, currentCode, 'plotly', idx);
                       } else {
-                        // FALLBACK: Try to extract code from the output content itself
-                        console.warn('No code found for codeId:', output.codeId);
+                        // FALLBACK: Always allow pinning
+                        const codeToUse = `plotly_${output.codeId}_${idx}`;
+                        togglePinVisualization(output.content, codeToUse, 'plotly', idx);
                         
-                        // Check if we can get the code from the message content
-                        const messageWithCode = localMessages.find(msg => 
-                          msg.text && typeof msg.text === 'string' && 
-                          msg.text.includes('```') && 
-                          msg.text.includes('python')
-                        );
-                        
-                        if (messageWithCode && typeof messageWithCode.text === 'string') {
-                          // Extract code from markdown
-                          const codeMatch = messageWithCode.text.match(/```python\n([\s\S]*?)\n```/);
-                          if (codeMatch && codeMatch[1]) {
-                            console.log('Using fallback code extraction');
-                            togglePinVisualization(output.content, codeMatch[1], 'plotly', idx);
-                            return;
-                          }
-                        }
-                        
-                        // If still no code found, show error
                         toast({
-                          title: "Cannot Pin Visualization",
-                          description: "Code data is missing. Please refresh and try again.",
-                          variant: "destructive",
-                          duration: 5000
+                          title: "Pinned with limited info", 
+                          description: "Visualization pinned but code reference may be incomplete.",
+                          variant: "default",
+                          duration: 3000
                         });
                       }
                     }}
@@ -1759,6 +1743,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
                     <span className="hidden sm:inline">Fullscreen</span>
                   </Button>
                   <Button
+                    key={`pin-${output.codeId}-${idx}-${visualizations.length}`} // Add key that changes with store
                     variant={isPinned ? "default" : "outline"}
                     size="sm"
                     onClick={() => {
@@ -1769,34 +1754,15 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
                       } else {
                         // FALLBACK: Always allow pinning with fallback
                         console.warn('No code found for matplotlib codeId:', output.codeId);
-                        
-                        // Try to extract code from message content
-                        const messageWithCode = localMessages.find(msg => 
-                          msg.text && typeof msg.text === 'string' && 
-                          msg.text.includes('```') && 
-                          msg.text.includes('python')
-                        );
-                        
-                        let fallbackCode = '';
-                        if (messageWithCode && typeof messageWithCode.text === 'string') {
-                          const codeMatch = messageWithCode.text.match(/```python\n([\s\S]*?)\n```/);
-                          if (codeMatch && codeMatch[1]) {
-                            fallbackCode = codeMatch[1];
-                          }
-                        }
-                        
-                        // ALWAYS allow pinning
-                        const codeToUse = fallbackCode || `matplotlib_${output.codeId}_${idx}`;
+                        const codeToUse = `matplotlib_${output.codeId}_${idx}`;
                         togglePinVisualization(output.content, codeToUse, 'matplotlib', idx);
                         
-                        if (!fallbackCode) {
-                          toast({
-                            title: "Pinned with limited info",
-                            description: "Visualization pinned but code reference may be incomplete.",
-                            variant: "default",
-                            duration: 3000
-                          });
-                        }
+                        toast({
+                          title: "Pinned with limited info",
+                          description: "Visualization pinned but code reference may be incomplete.",
+                          variant: "default",
+                          duration: 3000
+                        });
                       }
                     }}
                     className={`flex items-center gap-1 h-7 px-2 text-xs ${
