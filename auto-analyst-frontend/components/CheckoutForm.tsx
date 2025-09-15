@@ -17,11 +17,11 @@ interface CheckoutFormProps {
   amount: number
   interval: 'month' | 'year' | 'day'
   clientSecret: string
-  isTrialSetup?: boolean
-  setupIntentId?: string
+  // Remove: isTrialSetup?: boolean
+  // Remove: setupIntentId?: string
 }
 
-export default function CheckoutForm({ planName, amount, interval, clientSecret, isTrialSetup, setupIntentId }: CheckoutFormProps) {
+export default function CheckoutForm({ planName, amount, interval, clientSecret }: CheckoutFormProps) {
   const router = useRouter()
   const { data: session } = useSession()
   const stripe = useStripe()
@@ -30,23 +30,17 @@ export default function CheckoutForm({ planName, amount, interval, clientSecret,
   const [error, setError] = useState<string | null>(null)
   const [processing, setProcessing] = useState(false)
   const [succeeded, setSucceeded] = useState(false)
-  
-  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+
+  const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault()
 
     if (!stripe || !elements) {
-      setError('Stripe.js has not loaded yet')
       return
     }
 
     setProcessing(true)
     
-    // NEW FLOW: Always use confirmSetup for trial signups
-    console.log('🔍 About to confirm setup with:', {
-      clientSecret,
-      elements: !!elements,
-      stripe: !!stripe
-    })
+    // Direct payment confirmation - no trial setup
     const { error: submitError, setupIntent } = await stripe.confirmSetup({
       elements,
       confirmParams: {
@@ -57,113 +51,81 @@ export default function CheckoutForm({ planName, amount, interval, clientSecret,
 
     if (submitError) {
       setProcessing(false)
-      setError(submitError.message || 'An error occurred when setting up your payment method')
+      setError(submitError.message || 'An error occurred during payment setup')
       return
     }
 
     if (setupIntent && setupIntent.status === 'succeeded') {
       setError(null)
-      
-      // Now call our trial/start endpoint to create the subscription
-      try {
-        const response = await fetch('/api/trial/start', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            setupIntentId: setupIntent.id,
-            planName,
-            interval,
-            amount
-          }),
-        })
-
-        const data = await response.json()
-
-        if (!response.ok) {
-          throw new Error(data.error || 'Failed to start trial')
-        }
-
       setSucceeded(true)
       
-        // Show success animation before redirecting
+      // Direct redirect to success page - no trial API call
       setTimeout(() => {
-          router.push(`/checkout/success?subscription_id=${data.subscriptionId}`)
+        router.push(`/checkout/success?setup_intent=${setupIntent.id}`)
       }, 1500)
-
-      } catch (trialError: any) {
-        setProcessing(false)
-        setError(trialError.message || 'Failed to start trial after payment setup')
-      }
-    } else {
-      setProcessing(false)
-      setError('Payment setup was not completed successfully')
     }
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
-      <div className="bg-white p-6 rounded-lg shadow-md border border-gray-100 w-full">
-        <div className="flex justify-between items-center mb-6">
-          <h3 className="text-lg font-medium text-gray-900">{planName} Plan</h3>
-          <div className="text-gray-900 font-medium">
-            ${amount}{' '}
-            <span className="text-sm text-gray-500">
-              / {interval}
-            </span>
-          </div>
-        </div>
-        
+    <div className="bg-white p-6 rounded-lg shadow-md border border-gray-100">
+      <form onSubmit={handleSubmit}>
         <div className="mb-6">
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Payment Details
-          </label>
-          <div className="p-4 border border-gray-300 rounded-md focus-within:ring-2 focus-within:ring-[#FF7F7F] focus-within:border-[#FF7F7F] transition-all">
-            <PaymentElement options={{
-              layout: 'accordion',
-              defaultValues: {
-                billingDetails: {
-                  email: ''
-                }
-              }
-            }} />
-          </div>
+          <h3 className="text-lg font-medium text-gray-900 mb-4">Payment Information</h3>
+          <PaymentElement 
+            options={{
+              layout: 'tabs'
+            }}
+          />
         </div>
-        
+
         {error && (
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
-            className="p-3 mb-4 bg-red-50 text-red-500 rounded-md flex items-center gap-2"
+            className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md flex items-center"
           >
-            <AlertCircle size={16} />
-            <span className="text-sm">{error}</span>
+            <AlertCircle className="h-5 w-5 text-red-500 mr-2 flex-shrink-0" />
+            <p className="text-sm text-red-600">{error}</p>
           </motion.div>
         )}
-        
+
+        {succeeded && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="mb-4 p-4 bg-green-50 border border-green-200 rounded-md flex items-center justify-center"
+          >
+            <CheckCircle className="h-6 w-6 text-green-500 mr-2" />
+            <p className="text-green-700 font-medium">Payment setup successful!</p>
+          </motion.div>
+        )}
+
         <Button
           type="submit"
           disabled={!stripe || processing || succeeded}
-          className="w-full bg-[#FF7F7F] hover:bg-[#FF6666] text-white h-12 rounded-md transition-all disabled:opacity-70 disabled:cursor-not-allowed font-medium"
+          className="w-full bg-[#FF7F7F] hover:bg-[#FF6666] text-white font-medium py-3 px-4 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {processing ? (
-            <div className="flex items-center justify-center gap-2">
-              <Loader2 className="animate-spin" size={16} />
+            <div className="flex items-center justify-center">
+              <Loader2 className="animate-spin h-5 w-5 mr-2" />
               Processing...
             </div>
           ) : succeeded ? (
-            <div className="flex items-center justify-center gap-2">
-              <CheckCircle size={16} />
-              Payment Successful!
+            <div className="flex items-center justify-center">
+              <CheckCircle className="h-5 w-5 mr-2" />
+              Complete!
             </div>
           ) : (
-            `Proceed to Payment`
+            `Subscribe to ${planName} - $${amount}/${interval === 'year' ? 'year' : 'month'}`
           )}
         </Button>
-        
-        <p className="text-xs text-gray-500 mt-4 text-center">
-          Your payment is secure and encrypted. We use Stripe for secure payment processing.
+      </form>
+
+      <div className="mt-4 text-center">
+        <p className="text-xs text-gray-500">
+          Your payment information is secure and encrypted
         </p>
       </div>
-    </form>
+    </div>
   )
 } 
