@@ -35,7 +35,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'No active subscription found' }, { status: 400 })
     }
 
-    const stripeSubscriptionId = subscriptionData.stripeSubscriptionId as string
+    // Use 'id' field instead of 'stripeSubscriptionId' for consistency
+    const stripeSubscriptionId = subscriptionData.id as string
     const isLegacyUser = !stripeSubscriptionId || !stripeSubscriptionId.startsWith('sub_')
     
     try {

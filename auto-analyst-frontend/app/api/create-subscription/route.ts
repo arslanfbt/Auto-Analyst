@@ -57,6 +57,7 @@ export async function POST(request: NextRequest) {
     const userId = token.sub
     const subscriptionData = {
       id: subscription.id,
+      stripeSubscriptionId: subscription.id, // Add this for consistency
       status: subscription.status,
       current_period_start: (subscription as any).current_period_start,
       current_period_end: (subscription as any).current_period_end,
