@@ -53,13 +53,25 @@ export async function POST(request: NextRequest) {
 
     // Apply promo code if provided
     if (promoCodeInfo && promoCodeInfo.discountType) {
-      console.log('🔍 Applying promo code:', promoCodeInfo)
+      console.log('🔍 Applying promo code:', {
+        promoCodeInfo,
+        promotionCode: promoCodeInfo.promotionCode,
+        discountType: promoCodeInfo.discountType,
+        discountValue: promoCodeInfo.discountValue
+      })
       
       // Get the promotion code object
       const promotionCode = await stripe.promotionCodes.list({
         code: promoCodeInfo.promotionCode || 'REDUCE',
         active: true,
         limit: 1
+      })
+
+      console.log('🔍 Promotion code search result:', {
+        found: promotionCode.data.length > 0,
+        searchedCode: promoCodeInfo.promotionCode,
+        foundCode: promotionCode.data[0]?.code,
+        promotionCodeId: promotionCode.data[0]?.id
       })
 
       if (promotionCode.data.length > 0) {
@@ -69,8 +81,14 @@ export async function POST(request: NextRequest) {
         }]
         console.log('✅ Promo code applied:', promotionCode.data[0].id)
       } else {
-        console.log('⚠️ Promo code not found in Stripe')
+        console.log('⚠️ Promo code not found in Stripe for code:', promoCodeInfo.promotionCode)
       }
+    } else {
+      console.log(' No promo code to apply:', {
+        hasPromoCodeInfo: !!promoCodeInfo,
+        hasDiscountType: !!promoCodeInfo?.discountType,
+        promoCodeInfo
+      })
     }
 
     // Create subscription
