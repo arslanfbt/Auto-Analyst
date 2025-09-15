@@ -35,6 +35,7 @@ export default function CheckoutPage() {
   
   const [clientSecret, setClientSecret] = useState('')
   const [paymentLoading, setPaymentLoading] = useState(false)
+  const [promoLoading, setPromoLoading] = useState(false) // Add separate loading state for promo codes
   const [paymentError, setPaymentError] = useState('')
   const [promoError, setPromoError] = useState('')
   const [promoCode, setPromoCode] = useState('')
@@ -139,10 +140,17 @@ export default function CheckoutPage() {
     console.log('🔍 Interval:', planData.cycle)
     console.log('🔍 Promo code:', promoCodeValue)
 
-    setPaymentLoading(true)
+    // Set appropriate loading state
+    if (promoCodeValue) {
+      setPromoLoading(true)
+    } else {
+      setPaymentLoading(true)
+    }
     
     // Clear previous state to avoid stale data
-    setClientSecret('')
+    if (!promoCodeValue) {
+      setClientSecret('')
+    }
     setPaymentError('')
     
     // Always clear promo-related state when creating new payment intent
@@ -181,7 +189,10 @@ export default function CheckoutPage() {
         setDiscountInfo(null)
         setPromoCodeInfo(null)
         
-        // Don't set clientSecret or other success states
+        // Don't set clientSecret or other success states for promo code errors
+        if (!promoCodeValue) {
+          setClientSecret('')
+        }
         return
       }
 
@@ -222,7 +233,12 @@ export default function CheckoutPage() {
         setClientSecret('')
       }
     } finally {
-      setPaymentLoading(false)
+      // Clear appropriate loading state
+      if (promoCodeValue) {
+        setPromoLoading(false)
+      } else {
+        setPaymentLoading(false)
+      }
     }
   }
 
@@ -492,10 +508,10 @@ export default function CheckoutPage() {
                             handlePromoCodeChange(promoCode.trim())
                           }
                         }}
-                        disabled={!promoCode.trim() || paymentLoading}
+                        disabled={!promoCode.trim() || promoLoading}
                         className="h-12 px-8 bg-[#FF7F7F] hover:bg-[#FF6666] text-white rounded-md transition-all disabled:opacity-50 disabled:cursor-not-allowed font-medium whitespace-nowrap w-full sm:w-auto"
                       >
-                        Apply
+                        {promoLoading ? 'Validating...' : 'Apply'}
                       </button>
                     ) : (
                       <button
@@ -504,7 +520,7 @@ export default function CheckoutPage() {
                           setPromoCode('')
                           handlePromoCodeChange('')
                         }}
-                        disabled={paymentLoading}
+                        disabled={promoLoading}
                         className="h-12 px-8 bg-gray-500 hover:bg-gray-600 text-white rounded-md transition-all disabled:opacity-50 disabled:cursor-not-allowed font-medium whitespace-nowrap w-full sm:w-auto"
                       >
                         Clear
