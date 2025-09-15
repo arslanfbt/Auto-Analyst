@@ -55,7 +55,14 @@ export async function POST(request: NextRequest) {
       
       // Update the subscription data in Redis with cancellation info (for both legacy and new users)
       const now = new Date()
-      const updateData = {
+      const updateData: {
+        status: string;
+        canceledAt: string;
+        lastUpdated: string;
+        subscriptionCanceled: string;
+        cancel_at_period_end: string;
+        periodEndDate?: string;
+      } = {
         status: 'canceling', // Both legacy and new users get 'canceling' status
         canceledAt: now.toISOString(),
         lastUpdated: now.toISOString(),
