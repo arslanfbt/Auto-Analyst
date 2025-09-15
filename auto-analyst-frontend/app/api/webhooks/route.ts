@@ -106,9 +106,9 @@ export async function POST(request: NextRequest) {
             
         // Always sync the status with Stripe, but handle special cases
         const updateData: any = {
-          status: subscription.status,
-              lastUpdated: new Date().toISOString(),
-          stripeSubscriptionStatus: subscription.status
+          status: subscription.status || '',
+          lastUpdated: new Date().toISOString(),
+          stripeSubscriptionStatus: subscription.status || ''
         }
         
         // Handle specific status transitions

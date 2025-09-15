@@ -55,16 +55,15 @@ export async function POST(request: NextRequest) {
       
       // Update the subscription data in Redis with cancellation info (for both legacy and new users)
       const now = new Date()
-      const updateData: any = {
+      const updateData = {
         status: 'canceling', // Both legacy and new users get 'canceling' status
         canceledAt: now.toISOString(),
         lastUpdated: now.toISOString(),
         subscriptionCanceled: 'true', // Mark as canceled
-        cancel_at_period_end: true, // Both user types cancel at period end
+        cancel_at_period_end: 'true', // Both user types cancel at period end
       }
 
-      // Remove the legacy-specific logic since all users should behave the same
-      // await redis.hset(KEYS.USER_SUBSCRIPTION(userId), updateData)
+      await redis.hset(KEYS.USER_SUBSCRIPTION(userId), updateData)
       
       // Handle credits - ALL users keep their credits until period ends
       // Don't modify credits here - they should remain until the subscription actually ends
