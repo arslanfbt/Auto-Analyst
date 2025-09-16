@@ -526,10 +526,17 @@ async def preview_csv(app_state = Depends(get_app_state), session_id: str = Depe
             else:
                 description = session_desc
                 
-        # Get rows and convert to dict
+        # Get rows and convert to dict - FIXED: Handle NaN values during JSON serialization
+        # Create a copy of the dataframe for JSON conversion
+        df_for_json = df.head(5).copy()
+        
+        # Replace any remaining NaN/None values with "NaN" string for JSON compatibility
+        df_for_json = df_for_json.fillna("NaN")
+        
+        # Convert to JSON with proper NaN handling
         preview_data = {
             "headers": df.columns.tolist(),
-            "rows": json.loads(df.head(5).to_json(orient="values")),
+            "rows": json.loads(df_for_json.to_json(orient="values")),
             "name": name,
             "description": description
         }
