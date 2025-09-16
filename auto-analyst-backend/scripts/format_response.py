@@ -659,6 +659,12 @@ def execute_code_from_markdown(code_str, datasets=None):
             # Clear captured outputs for each block
             captured_outputs.clear()
             
+            # Fix indentation issues before execution
+            try:
+                block_code = textwrap.dedent(block_code)
+            except Exception as dedent_error:
+                logger.log_message(f"Failed to dedent code block '{block_name}': {str(dedent_error)}", level=logging.WARNING)
+            
             with stdoutIO() as s:
                 exec(block_code, context)  # Execute the block
             
