@@ -37,6 +37,7 @@ export default function CSVUploadDialog({
 }: CSVUploadDialogProps) {
   const [datasetName, setDatasetName] = useState('')
   const [description, setDescription] = useState('')
+  const [activeTab, setActiveTab] = useState<"edit" | "preview">("edit") // Add missing state
   const [isGeneratingDescription, setIsGeneratingDescription] = useState(false)
 
   // Auto-trigger description generation when dialog opens with preview data
@@ -62,6 +63,7 @@ export default function CSVUploadDialog({
     if (!isOpen) {
       setDatasetName('')
       setDescription('')
+      setActiveTab("edit")
       setIsGeneratingDescription(false)
     }
   }, [isOpen])
