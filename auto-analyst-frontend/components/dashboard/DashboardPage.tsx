@@ -138,7 +138,7 @@ export default function DashboardPage() {
           {viz.title && (
             <h3 className="text-xl font-semibold mb-4">{viz.title}</h3>
           )}
-          <div className="h-64 w-full">
+          <div className="h-80 w-full">
             <PlotlyChart data={viz.data} layout={viz.layout} />
           </div>
         </div>
@@ -169,7 +169,7 @@ export default function DashboardPage() {
           {viz.title && (
             <h3 className="text-xl font-semibold mb-4">{viz.title}</h3>
           )}
-          <div className="h-64 w-full flex items-center justify-center">
+          <div className="h-80 w-full flex items-center justify-center">
             <MatplotlibChart imageData={viz.imageData} />
           </div>
         </div>

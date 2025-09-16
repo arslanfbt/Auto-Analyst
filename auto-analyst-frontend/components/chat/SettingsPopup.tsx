@@ -23,19 +23,19 @@ const SettingsPopup: React.FC<SettingsPopupProps> = ({ isOpen, onClose, initialS
   
   // Function to ensure we have a session ID
   const ensureSessionId = useCallback(() => {
+    // Don't generate temporary session IDs in SettingsPopup
+    // The session ID should be managed by the main chat components
     if (!sessionId) {
-      // Generate a temporary session ID if none exists
-      const tempId = `temp-${Date.now()}`;
-      setSessionId(tempId);
+      console.warn('No session ID available in SettingsPopup');
     }
-  }, [sessionId, setSessionId]);
+  }, [sessionId]);
   
   // Check session ID on load
   useEffect(() => {
     if (!sessionId) {
-      ensureSessionId();
+      console.warn('SettingsPopup opened without session ID');
     }
-  }, [sessionId, ensureSessionId]);
+  }, [sessionId]);
   
   const [selectedProvider, setSelectedProvider] = useState(initialSettings?.provider || MODEL_PROVIDERS[0].name);
   const [selectedModel, setSelectedModel] = useState(initialSettings?.model || MODEL_PROVIDERS[0].models[0].id);
