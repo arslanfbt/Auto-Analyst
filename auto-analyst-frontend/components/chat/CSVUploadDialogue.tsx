@@ -128,7 +128,7 @@ export default function CSVUploadDialog({
       const response = await axios.post(`${API_URL}/generate-description-from-preview`, {
         headers: filePreview.headers,
         rows: filePreview.rows,
-        datasetName: currentDatasetName, // Use the explicit dataset name
+        name: currentDatasetName, // FIXED: Use 'name' instead of 'datasetName'
         existingDescription: description
       }, {
         headers: {
