@@ -74,6 +74,8 @@ from src.managers.ai_manager import AI_Manager
 
 from src.managers.session_manager import SessionManager
 
+from src.managers.app_manager import AppState
+
 from src.routes.analytics_routes import router as analytics_router
 
 from src.routes.blog_routes import router as blog_router
@@ -409,269 +411,7 @@ X_SESSION_ID = APIKeyHeader(name="X-Session-ID", auto_error=False)
 
 # Update AppState class to use SessionManager
 
-class AppState:
-
-    def __init__(self):
-
-        self._session_manager = SessionManager(styling_instructions, {})  # Empty dict, agents loaded from DB
-
-        self.model_config = DEFAULT_MODEL_CONFIG.copy()
-
-        # Update the SessionManager with the current model_config
-
-        self._session_manager._app_model_config = self.model_config
-
-        self.ai_manager = AI_Manager()
-
-        self.chat_name_agent = chat_history_name_agent
-
-        # Initialize deep analysis module
-
-        self.deep_analyzer = None
-
-    
-
-    def get_session_state(self, session_id: str):
-
-        """Get or create session-specific state using the SessionManager"""
-
-        return self._session_manager.get_session_state(session_id)
-
-
-
-    def clear_session_state(self, session_id: str):
-
-        """Clear session-specific state using the SessionManager"""
-
-        self._session_manager.clear_session_state(session_id)
-
-
-
-    def update_session_dataset(self, session_id: str, datasets, names, desc, pre_generated=False):
-        """Update dataset for a specific session using the SessionManager"""
-
-        self._session_manager.update_session_dataset(session_id, datasets, names, desc, pre_generated=pre_generated)
-
-
-    def reset_session_to_default(self, session_id: str):
-
-        """Reset a session to use the default dataset using the SessionManager"""
-
-        self._session_manager.reset_session_to_default(session_id)
-
-    
-
-    def set_session_user(self, session_id: str, user_id: int, chat_id: int = None):
-
-        """Associate a user with a session using the SessionManager"""
-
-        return self._session_manager.set_session_user(session_id, user_id, chat_id)
-
-    
-
-    def get_ai_manager(self):
-
-        """Get the AI Manager instance"""
-
-        return self.ai_manager
-
-    
-
-    def get_provider_for_model(self, model_name):
-
-        return self.ai_manager.get_provider_for_model(model_name)
-
-    
-
-    def calculate_cost(self, model_name, input_tokens, output_tokens):
-
-        return self.ai_manager.calculate_cost(model_name, input_tokens, output_tokens)
-
-    
-
-    def save_usage_to_db(self, user_id, chat_id, model_name, provider, prompt_tokens, completion_tokens, total_tokens, query_size, response_size, cost, request_time_ms, is_streaming=False):
-
-        return self.ai_manager.save_usage_to_db(user_id, chat_id, model_name, provider, prompt_tokens, completion_tokens, total_tokens, query_size, response_size, round(cost, 7), request_time_ms, is_streaming)
-
-    
-
-    def get_tokenizer(self):
-
-        return self.ai_manager.tokenizer
-
-    
-
-    def get_chat_history_name_agent(self):
-
-        return dspy.Predict(self.chat_name_agent)
-
-
-
-    def get_deep_analyzer(self, session_id: str):
-
-        """Get or create deep analysis module for a session"""
-
-        session_state = self.get_session_state(session_id)
-
-        user_id = session_state.get("user_id")
-
-        
-
-        # Check if we need to recreate the deep analyzer (user changed or doesn't exist)
-
-        current_analyzer = session_state.get('deep_analyzer')
-
-        analyzer_user_id = session_state.get('deep_analyzer_user_id')
-
-        
-
-        logger.log_message(f"Deep analyzer check - session: {session_id}, current_user: {user_id}, analyzer_user: {analyzer_user_id}, has_analyzer: {current_analyzer is not None}", level=logging.INFO)
-
-        
-
-        if (not current_analyzer or 
-
-            analyzer_user_id != user_id or 
-
-            not hasattr(session_state, 'deep_analyzer')):
-
-            
-
-            logger.log_message(f"Creating/recreating deep analyzer for session {session_id}, user_id: {user_id} (reason: analyzer_exists={current_analyzer is not None}, user_match={analyzer_user_id == user_id})", level=logging.INFO)
-
-            
-
-            # Load user-enabled agents from database using preference system
-
-            from src.db.init_db import session_factory
-
-            from src.agents.agents import load_user_enabled_templates_for_planner_from_db
-
-            
-
-            db_session = session_factory()
-
-            try:
-
-                # Load user-enabled agents for planner (respects preferences)
-
-                if user_id:
-
-                    enabled_agents_dict = load_user_enabled_templates_for_planner_from_db(user_id, db_session)
-
-                    logger.log_message(f"Deep analyzer loaded {len(enabled_agents_dict)} enabled agents for user {user_id}: {list(enabled_agents_dict.keys())}", level=logging.INFO)
-
-                    
-
-                    if not enabled_agents_dict:
-
-                        logger.log_message(f"WARNING: No enabled agents found for user {user_id}, falling back to defaults", level=logging.WARNING)
-
-                        # Fallback to default agents if no enabled agents
-
-                        from src.agents.agents import preprocessing_agent, statistical_analytics_agent, sk_learn_agent, data_viz_agent
-
-                        enabled_agents_dict = {
-
-                            "preprocessing_agent": preprocessing_agent,
-
-                            "statistical_analytics_agent": statistical_analytics_agent,
-
-                            "sk_learn_agent": sk_learn_agent,
-
-                            "data_viz_agent": data_viz_agent
-
-                        }
-
-                else:
-
-                    # Fallback to default agents if no user_id
-
-                    logger.log_message("No user_id in session, loading default agents for deep analysis", level=logging.WARNING)
-
-                    from src.agents.agents import preprocessing_agent, statistical_analytics_agent, sk_learn_agent, data_viz_agent
-
-                    enabled_agents_dict = {
-
-                        "preprocessing_agent": preprocessing_agent,
-
-                        "statistical_analytics_agent": statistical_analytics_agent,
-
-                        "sk_learn_agent": sk_learn_agent,
-
-                        "data_viz_agent": data_viz_agent
-
-                    }
-
-                
-
-                # Create agents dictionary for deep analysis using enabled agents
-
-                deep_agents = {}
-
-                deep_agents_desc = {}
-
-                
-
-                for agent_name, signature in enabled_agents_dict.items():
-
-                    deep_agents[agent_name] = dspy.asyncify(dspy.ChainOfThought(signature))
-
-                    # Get agent description from database
-
-                    deep_agents_desc[agent_name] = get_agent_description(agent_name)
-
-                
-
-                logger.log_message(f"Deep analyzer initialized with {len(deep_agents)} agents: {list(deep_agents.keys())}", level=logging.INFO)
-
-                
-
-            except Exception as e:
-
-                logger.log_message(f"Error loading agents for deep analysis: {str(e)}", level=logging.ERROR)
-
-                # Fallback to minimal set
-
-                from src.agents.agents import preprocessing_agent, statistical_analytics_agent, sk_learn_agent, data_viz_agent
-
-                deep_agents = {
-
-                    "preprocessing_agent": dspy.asyncify(dspy.Predict(preprocessing_agent)),
-
-                    "statistical_analytics_agent": dspy.asyncify(dspy.Predict(statistical_analytics_agent)),
-
-                    "sk_learn_agent": dspy.asyncify(dspy.Predict(sk_learn_agent)),
-
-                    "data_viz_agent": dspy.asyncify(dspy.Predict(data_viz_agent))
-
-                }
-
-                deep_agents_desc = {name: get_agent_description(name) for name in deep_agents.keys()}
-
-                logger.log_message(f"Using fallback agents: {list(deep_agents.keys())}", level=logging.WARNING)
-
-            finally:
-
-                db_session.close()
-
-            
-
-            session_state['deep_analyzer'] = deep_analysis_module(
-                agents=deep_agents, 
-                agents_desc=deep_agents_desc
-            )
-            # Set datasets separately or pass them when needed
-            session_state['deep_analyzer'].datasets = session_state.get("datasets")
-            session_state['deep_analyzer_user_id'] = user_id  # Track which user this analyzer was created for
-
-        else:
-
-            logger.log_message(f"Using existing deep analyzer for session {session_id}, user_id: {user_id}", level=logging.INFO)
-
-        
-
-        return session_state['deep_analyzer']
+# The AppState class is now in src.managers.app_manager
 
 
 
@@ -679,7 +419,8 @@ class AppState:
 
 app = FastAPI(title="AI Analytics API", version="1.0")
 
-app.state = AppState()
+# Pass required parameters to AppState
+app.state = AppState(styling_instructions, chat_history_name_agent, DEFAULT_MODEL_CONFIG)
 
 
 
@@ -2484,17 +2225,19 @@ async def _generate_deep_analysis_stream(session_state: dict, goal: str, session
     try:
 
         # Get dataset info
-
         datasets = session_state["datasets"]
-        dtypes_info = pd.DataFrame({
-
-            'Column': df.columns,
-
-            'Data Type': df.dtypes.astype(str)
-
-        }).to_markdown()
-
-        dataset_info = f"Sample Data:\n{df.head(2).to_markdown()}\n\nData Types:\n{dtypes_info}"
+        
+        # Generate dataset info for all datasets
+        dataset_info_parts = []
+        for dataset_name, dataset_df in datasets.items():
+            dtypes_info = pd.DataFrame({
+                'Column': dataset_df.columns,
+                'Data Type': dataset_df.dtypes.astype(str)
+            }).to_markdown()
+            
+            dataset_info_parts.append(f"Dataset '{dataset_name}':\nSample Data:\n{dataset_df.head(2).to_markdown()}\n\nData Types:\n{dtypes_info}")
+        
+        dataset_info = "\n\n".join(dataset_info_parts)
 
         
 
@@ -2690,24 +2433,18 @@ async def _generate_deep_analysis_stream(session_state: dict, goal: str, session
 
             
 
-            # Make the dataset available globally for code execution
+            # Make all datasets available globally for code execution
 
-            globals()['df'] = df
-
+            for dataset_name, dataset_df in datasets.items():
+                globals()[dataset_name] = dataset_df
             
-
             # Use the new streaming method and forward all progress updates
-
             final_result = None
 
             async for update in deep_analyzer.execute_deep_analysis_streaming(
-
                 goal=goal,
-
                 dataset_info=dataset_info,
-
-                session_df=df
-
+                session_datasets=datasets  # Pass all datasets instead of single df
             ):
 
                 # Convert the update to the expected format and yield it
