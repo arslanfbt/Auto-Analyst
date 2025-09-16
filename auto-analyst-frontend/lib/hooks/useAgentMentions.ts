@@ -19,6 +19,7 @@ export function useAgentMentions(sessionId?: string | null) {
     const fetchAgents = async () => {
       try {
         console.log('🔍 Fetching agents from:', `${API_URL}/agents`)
+        console.log('🔍 Current sessionId:', sessionId)
         
         // Try to get session ID from localStorage if not provided
         const currentSessionId = sessionId || 
@@ -62,6 +63,7 @@ export function useAgentMentions(sessionId?: string | null) {
       }
     }
 
+    // Always try to fetch agents, even if sessionId is null/undefined
     fetchAgents()
   }, [sessionId]) // Re-fetch when session ID changes
 
@@ -75,7 +77,8 @@ export function useAgentMentions(sessionId?: string | null) {
       value, 
       cursorPosition, 
       availableAgents: availableAgents.length,
-      lastChar: value[cursorPosition - 1]
+      lastChar: value[cursorPosition - 1],
+      sessionId: sessionId
     })
     
     // Check for @ mention
@@ -120,78 +123,38 @@ export function useAgentMentions(sessionId?: string | null) {
     }
   }
 
-  // Handle agent mention selection
-  const handleMentionSelect = (
-    agent: AgentInfo,
-    currentValue: string,
-    cursorPosition: number,
-    setValue: (value: string) => void,
-    textareaRef: React.RefObject<HTMLTextAreaElement>
-  ) => {
-    const textBeforeCursor = currentValue.substring(0, cursorPosition)
-    const textAfterCursor = currentValue.substring(cursorPosition)
-    
-    // Find the @ mention and replace it with the selected agent
-    const mentionMatch = textBeforeCursor.match(/@(\w*)$/)
-    if (mentionMatch) {
-      const beforeMention = textBeforeCursor.substring(0, mentionMatch.index)
-      const newValue = `${beforeMention}@${agent.name} ${textAfterCursor}`
-      setValue(newValue)
-      
-      // Focus back to textarea and set cursor position
-      if (textareaRef.current) {
-        setTimeout(() => {
-          const newCursorPos = beforeMention.length + agent.name.length + 2 // +2 for @ and space
-          textareaRef.current?.setSelectionRange(newCursorPos, newCursorPos)
-          textareaRef.current?.focus()
-        }, 0)
-      }
-    }
-    
+  // Handle mention selection
+  const handleMentionSelect = (agent: AgentInfo) => {
+    console.log('🔍 Agent selected:', agent)
     setShowAgentMentions(false)
+    // This will be handled by the parent component
   }
 
   // Handle keyboard navigation
   const handleKeyDown = (
     e: React.KeyboardEvent<HTMLTextAreaElement>,
-    currentValue: string,
+    value: string,
     cursorPosition: number,
-    setValue: (value: string) => void,
-    textareaRef: React.RefObject<HTMLTextAreaElement>,
-    onEnter?: () => void
+    textareaElement: HTMLTextAreaElement
   ) => {
-    if (!showAgentMentions) {
-      if (e.key === 'Enter' && !e.shiftKey && onEnter) {
-        e.preventDefault()
-        onEnter()
-      }
-      return
-    }
+    if (!showAgentMentions) return
 
     switch (e.key) {
       case 'ArrowDown':
         e.preventDefault()
         setSelectedMentionIndex(prev => 
-          prev < filteredAgents.length - 1 ? prev + 1 : 0
+          Math.min(prev + 1, filteredAgents.length - 1)
         )
         break
       case 'ArrowUp':
         e.preventDefault()
-        setSelectedMentionIndex(prev => 
-          prev > 0 ? prev - 1 : filteredAgents.length - 1
-        )
+        setSelectedMentionIndex(prev => Math.max(prev - 1, 0))
         break
       case 'Enter':
       case 'Tab':
         e.preventDefault()
         if (filteredAgents[selectedMentionIndex]) {
-          handleMentionSelect(
-            filteredAgents[selectedMentionIndex],
-            currentValue,
-            cursorPosition,
-            setValue,
-            textareaRef
-          )
+          handleMentionSelect(filteredAgents[selectedMentionIndex])
         }
         break
       case 'Escape':
@@ -201,9 +164,7 @@ export function useAgentMentions(sessionId?: string | null) {
   }
 
   return {
-    availableAgents,
     showAgentMentions,
-    mentionQuery,
     mentionPosition,
     filteredAgents,
     selectedMentionIndex,
