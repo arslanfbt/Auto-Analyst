@@ -51,10 +51,10 @@ export function useModelSettings() {
     // Use a function to initialize state to avoid multiple localStorage reads
     const localSettings = getSettingsFromLocalStorage()
     return {
-      provider: localSettings?.provider || process.env.DEFAULT_MODEL_PROVIDER || 'openai',
-      model: localSettings?.model || process.env.DEFAULT_PUBLIC_MODEL || 'gpt-5-mini',
+      provider: localSettings?.provider || process.env.DEFAULT_MODEL_PROVIDER || 'anthropic',
+      model: localSettings?.model || process.env.DEFAULT_PUBLIC_MODEL || 'claude-3-5-sonnet-latest',
       hasCustomKey: localSettings?.hasCustomKey || false,
-      apiKey: process.env.NEXT_PUBLIC_OPENAI_API_KEY || '', // Never load API key from localStorage
+      apiKey: process.env.NEXT_PUBLIC_ANTHROPIC_API_KEY || '', // Never load API key from localStorage
       temperature: localSettings?.temperature || process.env.DEFAULT_TEMPERATURE || 1,
       maxTokens: localSettings?.maxTokens || process.env.PUBLIC_DEFAULT_MAX_TOKENS || 2500
     }
@@ -107,8 +107,8 @@ export function useModelSettings() {
       
       // Ensure we have complete settings with defaults for any missing values
       const completeSettings = {
-        provider: localSettings.provider || 'openai',
-        model: localSettings.model || 'gpt-4o-mini',
+        provider: localSettings.provider || 'anthropic',
+        model: localSettings.model || 'claude-3-5-sonnet-latest',
         api_key: '', // Never send API key from localStorage
         temperature: localSettings.temperature || 0.7,
         max_tokens: localSettings.maxTokens || 6000

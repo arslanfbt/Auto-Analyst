@@ -104,13 +104,7 @@ def score_code(args, code):
         return 0
    
 
-refine_fixer = dspy.Refine(
-    module=dspy.ChainOfThought(code_fix), 
-    N=3,
-    threshold=1.0,
-    reward_fn=score_code, 
-    fail_count=3
-)
+# Remove the global refine_fixer declaration
 
 
 def format_code(code: str) -> str:
@@ -287,131 +281,145 @@ def extract_relevant_error_section(error_message: str) -> str:
     # If the error is short enough, return as is
     return error_message
 
-async def fix_code_with_dspy(code: str, error: str, dataset_context: str = ""):
+async def fix_code_with_dspy(code: str, error: str, dataset_context: str = "", datasets: dict = None):
     """
-    Fix code with errors by identifying faulty blocks and fixing them individually using async refine
-    
-    Args:
-        code (str): The code containing errors
-        error (str): Error message from execution
-        dataset_context (str): Context about the dataset
-        
-    Returns:
-        str: The fixed code
+    Fix code using DSPy with dataset context and actual datasets
     """
-    import asyncio
-    
-    # Check if we have valid API key
-    anthropic_key = os.environ.get('ANTHROPIC_API_KEY')
-    if not anthropic_key:
-        raise ValueError("ANTHROPIC_API_KEY environment variable is not set")
-    
-    # Find the blocks with errors
-    faulty_blocks = identify_error_blocks(code, error)
-    
-    if not faulty_blocks:
-        # If no specific errors found, fix the entire code using refine
-        try:
-            # Create the LM instance that will be used
-            # thread_lm = dspy.LM("anthropic/claude-3-5-sonnet-latest", api_key=anthropic_key, max_tokens=2500)
-            thread_lm = MODEL_OBJECTS['claude-3-5-sonnet-latest']
-            
-            # Define the blocking function to run in thread
-            def run_refine_fixer():
-                with dspy.context(lm=thread_lm):
-                    return refine_fixer(
-                        dataset_context=str(dataset_context) or "",
-                        faulty_code=str(code) or "",
-                        error=str(error) or "",
-                    )
-            
-            # Use asyncio.to_thread for better async integration
-            result = await asyncio.to_thread(run_refine_fixer)
-            return result.fixed_code
-            
-        except Exception as e:
-            logger.log_message(f"Error during refine code fixing: {str(e)}", level=logging.ERROR)
-            raise e
-    
-    # Start with the original code
-    result_code = code.replace("```python", "").replace("```", "")
-    
-    # Fix each faulty block separately using async refine
     try:
-        thread_lm = MODEL_OBJECTS['claude-3-5-sonnet-latest']
+        # Create score function with actual datasets
+        def create_score_code_with_datasets(datasets_dict):
+            def score_code_with_datasets(args, pred):
+                return score_code(args, pred, session_state_datasets=datasets_dict)
+            return score_code_with_datasets
         
-        for agent_name, block_code, specific_error in faulty_blocks:
+        # Create refine_fixer with datasets
+        if datasets:
+            score_fn = create_score_code_with_datasets(datasets)
+        else:
+            score_fn = score_code  # Fallback to original function
+            
+        refine_fixer = dspy.Refine(
+            module=dspy.ChainOfThought(code_fix), 
+            N=3,
+            threshold=1.0,
+            reward_fn=score_fn,
+            fail_count=3
+        )
+        
+        # Check if we have valid API key
+        anthropic_key = os.environ.get('ANTHROPIC_API_KEY')
+        if not anthropic_key:
+            raise ValueError("ANTHROPIC_API_KEY environment variable is not set")
+        
+        # Find the blocks with errors
+        faulty_blocks = identify_error_blocks(code, error)
+        
+        if not faulty_blocks:
+            # If no specific errors found, fix the entire code using refine
             try:
-                # Extract inner code between the markers
-                inner_code_match = re.search(r'#\s+\w+\s+code\s+start\s*\n([\s\S]*?)#\s+\w+\s+code\s+end', block_code)
-                if not inner_code_match:
-                    continue
-                    
-                inner_code = inner_code_match.group(1).strip()
+                # Create the LM instance that will be used
+                # thread_lm = dspy.LM("anthropic/claude-3-5-sonnet-latest", api_key=anthropic_key, max_tokens=2500)
+                thread_lm = MODEL_OBJECTS['claude-3-5-sonnet-latest']
                 
-                # Find markers
-                start_marker_match = re.search(r'(#\s+\w+\s+code\s+start)', block_code)
-                end_marker_match = re.search(r'(#\s+\w+\s+code\s+end)', block_code)
-                
-                if not start_marker_match or not end_marker_match:
-                    logger.log_message(f"Could not find start/end markers for {agent_name}", level=logging.WARNING)
-                    continue
-                    
-                start_marker = start_marker_match.group(1)
-                end_marker = end_marker_match.group(1)
-                
-                # Extract the error type and actual error message
-                error_type = ""
-                error_msg = specific_error
-                
-                # Look for common error patterns to provide focused context to the LLM
-                error_type_match = re.search(r'(TypeError|ValueError|AttributeError|IndexError|KeyError|NameError):\s*([^\n]+)', specific_error)
-                if error_type_match:
-                    error_type = error_type_match.group(1)
-                    error_msg = f"{error_type}: {error_type_match.group(2)}"
-                
-                # Add problem location if available
-                if "Problem at this location:" in specific_error:
-                    problem_section = re.search(r'Problem at this location:([\s\S]*?)(?:\n\n|$)', specific_error)
-                    if problem_section:
-                        error_msg = f"{error_msg}\n\nProblem at: {problem_section.group(1).strip()}"
-                
-                # Define the blocking function to run in thread for this specific block
-                def run_block_fixer():
+                # Define the blocking function to run in thread
+                def run_refine_fixer():
                     with dspy.context(lm=thread_lm):
                         return refine_fixer(
                             dataset_context=str(dataset_context) or "",
-                            faulty_code=str(inner_code) or "",
-                            error=str(error_msg) or "",
+                            faulty_code=str(code) or "",
+                            error=str(error) or "",
                         )
                 
                 # Use asyncio.to_thread for better async integration
-                result = await asyncio.to_thread(run_block_fixer)
-                
-                # Ensure the fixed code is properly stripped and doesn't include markers
-                fixed_inner_code = result.fixed_code.strip()
-                if fixed_inner_code.startswith('#') and 'code start' in fixed_inner_code:
-                    # If LLM included markers in response, extract only inner code
-                    inner_match = re.search(r'#\s+\w+\s+code\s+start\s*\n([\s\S]*?)#\s+\w+\s+code\s+end', fixed_inner_code)
-                    if inner_match:
-                        fixed_inner_code = inner_match.group(1).strip()
-                
-                # Reconstruct the block with fixed code
-                fixed_block = f"{start_marker}\n\n{fixed_inner_code}\n\n{end_marker}"
-                
-                # Replace the original block with the fixed block in the full code
-                result_code = result_code.replace(block_code, fixed_block)
+                result = await asyncio.to_thread(run_refine_fixer)
+                return result.fixed_code
                 
             except Exception as e:
-                # Log the error but continue with other blocks
-                logger.log_message(f"Error fixing {agent_name} block: {str(e)}", level=logging.ERROR)
-                continue
-    
+                logger.log_message(f"Error during refine code fixing: {str(e)}", level=logging.ERROR)
+                raise e
+        
+        # Start with the original code
+        result_code = code.replace("```python", "").replace("```", "")
+        
+        # Fix each faulty block separately using async refine
+        try:
+            thread_lm = MODEL_OBJECTS['claude-3-5-sonnet-latest']
+            
+            for agent_name, block_code, specific_error in faulty_blocks:
+                try:
+                    # Extract inner code between the markers
+                    inner_code_match = re.search(r'#\s+\w+\s+code\s+start\s*\n([\s\S]*?)#\s+\w+\s+code\s+end', block_code)
+                    if not inner_code_match:
+                        continue
+                        
+                    inner_code = inner_code_match.group(1).strip()
+                    
+                    # Find markers
+                    start_marker_match = re.search(r'(#\s+\w+\s+code\s+start)', block_code)
+                    end_marker_match = re.search(r'(#\s+\w+\s+code\s+end)', block_code)
+                    
+                    if not start_marker_match or not end_marker_match:
+                        logger.log_message(f"Could not find start/end markers for {agent_name}", level=logging.WARNING)
+                        continue
+                        
+                    start_marker = start_marker_match.group(1)
+                    end_marker = end_marker_match.group(1)
+                    
+                    # Extract the error type and actual error message
+                    error_type = ""
+                    error_msg = specific_error
+                    
+                    # Look for common error patterns to provide focused context to the LLM
+                    error_type_match = re.search(r'(TypeError|ValueError|AttributeError|IndexError|KeyError|NameError):\s*([^\n]+)', specific_error)
+                    if error_type_match:
+                        error_type = error_type_match.group(1)
+                        error_msg = f"{error_type}: {error_type_match.group(2)}"
+                    
+                    # Add problem location if available
+                    if "Problem at this location:" in specific_error:
+                        problem_section = re.search(r'Problem at this location:([\s\S]*?)(?:\n\n|$)', specific_error)
+                        if problem_section:
+                            error_msg = f"{error_msg}\n\nProblem at: {problem_section.group(1).strip()}"
+                    
+                    # Define the blocking function to run in thread for this specific block
+                    def run_block_fixer():
+                        with dspy.context(lm=thread_lm):
+                            return refine_fixer(
+                                dataset_context=str(dataset_context) or "",
+                                faulty_code=str(inner_code) or "",
+                                error=str(error_msg) or "",
+                            )
+                    
+                    # Use asyncio.to_thread for better async integration
+                    result = await asyncio.to_thread(run_block_fixer)
+                    
+                    # Ensure the fixed code is properly stripped and doesn't include markers
+                    fixed_inner_code = result.fixed_code.strip()
+                    if fixed_inner_code.startswith('#') and 'code start' in fixed_inner_code:
+                        # If LLM included markers in response, extract only inner code
+                        inner_match = re.search(r'#\s+\w+\s+code\s+start\s*\n([\s\S]*?)#\s+\w+\s+code\s+end', fixed_inner_code)
+                        if inner_match:
+                            fixed_inner_code = inner_match.group(1).strip()
+                    
+                    # Reconstruct the block with fixed code
+                    fixed_block = f"{start_marker}\n\n{fixed_inner_code}\n\n{end_marker}"
+                    
+                    # Replace the original block with the fixed block in the full code
+                    result_code = result_code.replace(block_code, fixed_block)
+                    
+                except Exception as e:
+                    # Log the error but continue with other blocks
+                    logger.log_message(f"Error fixing {agent_name} block: {str(e)}", level=logging.ERROR)
+                    continue
+        
+        except Exception as e:
+            logger.log_message(f"Error during async code fixing: {str(e)}", level=logging.ERROR)
+            raise e
+        
+        return result_code
     except Exception as e:
-        logger.log_message(f"Error during async code fixing: {str(e)}", level=logging.ERROR)
+        logger.log_message(f"Error in fix_code_with_dspy: {str(e)}", level=logging.ERROR)
         raise e
-    
-    return result_code
 
 def get_dataset_context(df):
     """
@@ -756,7 +764,8 @@ async def fix_code(
             fixed_code = await fix_code_with_dspy(
                 request_data.code, 
                 request_data.error,
-                dataset_context
+                dataset_context,
+                session_state["datasets"]  # Pass the actual datasets
             )
             
             fixed_code = format_code_block(fixed_code)
