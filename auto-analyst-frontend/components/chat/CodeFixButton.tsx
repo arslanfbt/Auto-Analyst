@@ -108,7 +108,7 @@ const CodeFixButton: React.FC<CodeFixButtonProps> = ({
       const response = await axios.post(`${API_URL}/code/fix`, {
         code: code,
         error: errorOutput,
-        session_id: sessionId,
+        // Remove session_id from body - it's sent in headers
       }, {
         headers: {
           ...(sessionId && { 'X-Session-ID': sessionId }),
