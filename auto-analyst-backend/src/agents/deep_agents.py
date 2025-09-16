@@ -353,7 +353,7 @@ def clean_and_store_code(code, session_df=None):
         
     return output_dict
 
-def score_code(args, code):
+def score_code(args, code, datasets=None):
     """
     Cleans and stores code execution results in a standardized format.
     Safely handles execution errors and returns clean output even if execution fails.
@@ -362,6 +362,7 @@ def score_code(args, code):
     Args:
         args: Arguments (unused but required for dspy.Refine)
         code: Code object with combined_code attribute
+        datasets: Dictionary of datasets from session state (optional)
         
     Returns:
         int: Score (0=error, 1=success, 2=success with plots)
@@ -399,16 +400,34 @@ def score_code(args, code):
         cleaned_code = re.sub(r'\w+_fig\w*\.show\(\s*[^)]*\s*\)', '', cleaned_code)  # *_fig*.show(any_args)
             
         cleaned_code = remove_main_block(cleaned_code)
+        
         # Capture stdout using StringIO
         from io import StringIO
         import sys
         import plotly.graph_objects as go
+        import pandas as pd
+        import numpy as np
+        
         stdout_capture = StringIO()
         original_stdout = sys.stdout
         sys.stdout = stdout_capture
         
-        # Execute code in a new namespace to avoid polluting globals
+        # Execute code in a new namespace with datasets available
         local_vars = {}
+        
+        # Add datasets to the execution context if provided
+        if datasets:
+            local_vars.update(datasets)
+        
+        # Add common imports to the execution context
+        local_vars.update({
+            'pd': pd,
+            'np': np,
+            'go': go,
+            'plt': __import__('matplotlib.pyplot'),
+            'sns': __import__('seaborn'),
+        })
+        
         exec(cleaned_code, globals(), local_vars)
         
         # Capture any plotly figures from local namespace
@@ -902,7 +921,25 @@ class deep_analysis_module(dspy.Module):
                     code.append(c.replace('try\n','try:\n'))
             
             # Create deep coder without asyncify to avoid source inspection issues
-            deep_coder = dspy.Refine(module=self.deep_code_synthesizer_sync, N=5, reward_fn=score_code, threshold=1.0, fail_count=10)
+            def create_score_code_with_datasets(datasets):
+                """
+                Creates a score_code function with access to datasets
+                
+                Args:
+                    datasets: Dictionary of datasets from session_state['datasets']
+                    
+                Returns:
+                    A reward function compatible with dspy.Refine
+                """
+                def score_code_with_datasets(args, pred):
+                    return score_code(args, pred, session_state_datasets=datasets)
+                
+                return score_code_with_datasets
+
+            # Then in your deep analysis method:
+            # Create score function with datasets
+            score_fn = create_score_code_with_datasets(self.datasets)
+            deep_coder = dspy.Refine(module=self.deep_code_synthesizer_sync, N=5, reward_fn=score_fn, threshold=1.0, fail_count=10)
             
             # Check if we have valid API key
             anthropic_key = os.environ.get('ANTHROPIC_API_KEY')

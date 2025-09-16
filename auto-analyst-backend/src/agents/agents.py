@@ -792,10 +792,10 @@ class planner_module(dspy.Module):
             }
 
         output = {
-            "complexity": complexity.exact_word_complexity.strip().lower(),
-            "plan": plan.plan,
-            "plan_instructions": plan.plan_instructions
-        }
+                "complexity": complexity.exact_word_complexity.strip().lower(),
+                "plan": plan.plan,
+                "plan_instructions": plan.plan_instructions
+            }
         
         return output
 
@@ -1670,10 +1670,10 @@ class data_context_gen(dspy.Signature):
             "quantity": {"type": "int", "role": "measure"},
             "unit_price": {"type": "float", "role": "measure"}
           },
-          "metrics": [
+      "metrics": [
             "revenue = quantity * unit_price"
-          ],
-          "use_cases": [
+      ],
+      "use_cases": [
             "Revenue trend analysis",
             "Regional sales comparison"
           ]

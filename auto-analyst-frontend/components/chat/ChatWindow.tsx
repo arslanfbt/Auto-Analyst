@@ -817,6 +817,29 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
 
   // Execute code function for auto-run after fixes
   const executeCodeFromChatWindow = useCallback(async (entryId: string, code: string, language: string) => {
+    // Use sessionId prop first, then fall back to store sessionId
+    const currentSessionId = sessionId || storeSessionId;
+    
+    // DEBUG: Log session information
+    console.log('🔍 AUTO-EXECUTE DEBUG:', {
+      entryId,
+      sessionIdProp: sessionId,
+      storeSessionId: storeSessionId,
+      currentSessionId: currentSessionId,
+      messageId: codeEntries.find(entry => entry.id === entryId)?.messageIndex,
+      codeLength: code.length
+    })
+    
+    if (!currentSessionId) {
+      console.error('❌ No session ID available for auto-execution!')
+      toast({
+        title: "Session Error",
+        description: "No session ID available. Please refresh the page.",
+        variant: "destructive"
+      })
+      return
+    }
+    
     // Only execute Python code for now
     if (language !== 'python') {
       toast({
@@ -841,24 +864,16 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
     const codeEntry = codeEntries[entryIndex]
     const messageId = codeEntry.messageIndex
     
-    // DEBUG: Log session information
-    console.log('🔍 AUTO-EXECUTE DEBUG:', {
-      entryId,
-      sessionId,
-      messageId,
-      codeLength: code.length
-    })
-    
     try {
       // Set the message ID in the session first so the backend knows which message this code belongs to
       if (messageId) {
         try {
-          console.log(`🔍 Setting message_id in backend: ${messageId} for session: ${sessionId}`)
+          console.log(`🔍 Setting message_id in backend: ${messageId} for session: ${currentSessionId}`)
           await axios.post(`${API_URL}/set-message-info`, {
             message_id: messageId
           }, {
             headers: {
-              ...(sessionId && { 'X-Session-ID': sessionId }),
+              'X-Session-ID': currentSessionId,
             },
           });
         } catch (error) {
@@ -867,14 +882,14 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
       }
       
       // Now execute the code with the associated message ID
-      console.log(`🔍 Executing code with session: ${sessionId}, message: ${messageId}`)
+      console.log(`🔍 Executing code with session: ${currentSessionId}, message: ${messageId}`)
       const response = await axios.post(`${API_URL}/code/execute`, {
         code: code.trim(),
-        session_id: sessionId,  // This might be the issue!
+        session_id: currentSessionId,
         message_id: messageId
       }, {
         headers: {
-          ...(sessionId && { 'X-Session-ID': sessionId }),
+          'X-Session-ID': currentSessionId,
         },
       })
       
@@ -890,7 +905,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
       // Pass error to handleCodeCanvasExecute
       handleCodeCanvasExecute(entryId, { error: errorMessage });
     }
-  }, [codeEntries, sessionId, handleCodeCanvasExecute, toast]);
+  }, [codeEntries, sessionId, storeSessionId, handleCodeCanvasExecute, toast]);
 
   // Handle fix complete
   const handleFixComplete = useCallback((codeId: string, fixedCode: string) => {
