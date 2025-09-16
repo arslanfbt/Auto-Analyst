@@ -296,10 +296,9 @@ const ChatInput = forwardRef<ChatInputRef, ChatInputProps>((props, ref) => {
               }}
             />
             
-            {/* Agent Mention Dropdown */}
+            {/* Agent Mention Dropdown - ONLY ONE, NO REF */}
             <AgentMentionDropdown
-              ref={mentionRef}
-              show={showAgentMentions}  // Changed from isVisible to show
+              show={showAgentMentions}
               agents={filteredAgents}
               selectedIndex={selectedMentionIndex}
               position={mentionPosition}
@@ -345,17 +344,6 @@ const ChatInput = forwardRef<ChatInputRef, ChatInputProps>((props, ref) => {
           className="hidden"
         />
       </div>
-
-      {/* Agent Mention Dropdown */}
-      <AnimatePresence>
-        <AgentMentionDropdown
-          show={showAgentMentions}
-          agents={filteredAgents}
-          selectedIndex={selectedMentionIndex}
-          position={mentionPosition}
-          onSelect={handleAgentSelect}
-        />
-      </AnimatePresence>
 
       {/* Deep Analysis Sidebar */}
       <DeepAnalysisSidebar

@@ -289,7 +289,7 @@ async def fix_code_with_dspy(code: str, error: str, dataset_context: str = "", d
         # Create score function with actual datasets
         def create_score_code_with_datasets(datasets_dict):
             def score_code_with_datasets(args, pred):
-                return score_code(args, pred, session_state_datasets=datasets_dict)
+                return score_code(args, pred, datasets=datasets_dict)  # Fixed: use datasets= instead of session_state_datasets=
             return score_code_with_datasets
         
         # Create refine_fixer with datasets
@@ -743,6 +743,11 @@ async def fix_code(
         Dictionary containing the fixed code and information about fixed blocks
     """
     try:
+        # Add debugging at the start
+        logger.log_message(f"🔧 /fix endpoint called with session_id: {session_id}", level=logging.INFO)
+        logger.log_message(f"🔧 Code length: {len(request_data.code) if request_data.code else 0}", level=logging.INFO)
+        logger.log_message(f"🔧 Error length: {len(request_data.error) if request_data.error else 0}", level=logging.INFO)
+        
         # Check if code and error are provided
         if not request_data.code or not request_data.error:
             logger.log_message(f"Error fixing code: Both code and error message are required {request_data.code} {request_data.error}", level=logging.ERROR)
@@ -752,14 +757,19 @@ async def fix_code(
         app_state = request.app.state
         session_state = app_state.get_session_state(session_id)
         
+        logger.log_message(f"🔧 Session state keys: {list(session_state.keys()) if session_state else 'None'}", level=logging.INFO)
+        
         # Get the user_id from session state if available (for logging/tracking)
         user_id = session_state.get("user_id")
         logger.log_message(f"Code fix request from user_id: {user_id}, session_id: {session_id}", level=logging.INFO)
         
         # Get dataset context
+        logger.log_message(f"🔧 Getting dataset context...", level=logging.INFO)
         dataset_context = get_dataset_context(session_state["datasets"])
+        logger.log_message(f"🔧 Dataset context length: {len(dataset_context)}", level=logging.INFO)
         
         try:
+            logger.log_message(f"🔧 Calling fix_code_with_dspy...", level=logging.INFO)
             # Use the code_fix agent to fix the code, with dataset context
             fixed_code = await fix_code_with_dspy(
                 request_data.code, 
@@ -768,14 +778,17 @@ async def fix_code(
                 session_state["datasets"]  # Pass the actual datasets
             )
             
+            logger.log_message(f"🔧 fix_code_with_dspy returned, formatting...", level=logging.INFO)
             fixed_code = format_code_block(fixed_code)
             
             logger.log_message(f"Code fix completed successfully for user_id: {user_id}", level=logging.INFO)
+            logger.log_message(f"🔧 Fixed code length: {len(fixed_code)}", level=logging.INFO)
                 
             return {
                 "fixed_code": fixed_code,
             }
         except Exception as e:
+            logger.log_message(f"🔧 Error in fix_code_with_dspy: {str(e)}", level=logging.ERROR)
             # Fallback if DSPy models are not initialized or there's an error
             logger.log_message(f"Error with DSPy models for user_id {user_id}: {str(e)}", level=logging.ERROR)
             
