@@ -744,6 +744,10 @@ async def fix_code(
         app_state = request.app.state
         session_state = app_state.get_session_state(session_id)
         
+        # Get the user_id from session state if available (for logging/tracking)
+        user_id = session_state.get("user_id")
+        logger.log_message(f"Code fix request from user_id: {user_id}, session_id: {session_id}", level=logging.INFO)
+        
         # Get dataset context
         dataset_context = get_dataset_context(session_state["datasets"])
         
@@ -756,13 +760,15 @@ async def fix_code(
             )
             
             fixed_code = format_code_block(fixed_code)
+            
+            logger.log_message(f"Code fix completed successfully for user_id: {user_id}", level=logging.INFO)
                 
             return {
                 "fixed_code": fixed_code,
             }
         except Exception as e:
             # Fallback if DSPy models are not initialized or there's an error
-            logger.log_message(f"Error with DSPy models: {str(e)}", level=logging.ERROR)
+            logger.log_message(f"Error with DSPy models for user_id {user_id}: {str(e)}", level=logging.ERROR)
             
             # Return a helpful error message that doesn't expose implementation details
             return {
