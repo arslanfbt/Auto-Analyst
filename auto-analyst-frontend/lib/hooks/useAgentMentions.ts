@@ -5,6 +5,11 @@ import axios from 'axios'
 import API_URL from '@/config/api'
 import { AgentInfo } from '@/components/chat/AgentMentionDropdown'
 
+export interface AgentInfo {
+  name: string
+  description: string
+}
+
 export function useAgentMentions(sessionId?: string | null) {
   const [availableAgents, setAvailableAgents] = useState<AgentInfo[]>([])
   const [showAgentMentions, setShowAgentMentions] = useState(false)
@@ -14,23 +19,28 @@ export function useAgentMentions(sessionId?: string | null) {
   const [selectedMentionIndex, setSelectedMentionIndex] = useState(0)
   const mentionRef = useRef<HTMLDivElement>(null)
 
-  // Fetch available agents on mount - FIXED: Handle null session ID
+  // Fetch available agents on mount and when session ID changes
   useEffect(() => {
     const fetchAgents = async () => {
-      if (!sessionId) {
-        console.log('❌ No session ID provided for agent fetching')
-        return
-      }
-      
       try {
         console.log('🔍 Fetching agents from:', `${API_URL}/agents`)
-        console.log('🔍 Using session ID:', sessionId)
         
-        const response = await axios.get(`${API_URL}/agents`, {
-          headers: {
-            'X-Session-ID': sessionId
-          }
-        })
+        // Try to get session ID from localStorage if not provided
+        const currentSessionId = sessionId || 
+                               localStorage.getItem('auto-analyst-session-id') || 
+                               sessionStorage.getItem('auto-analyst-session-id')
+        
+        console.log('🔍 Using session ID:', currentSessionId)
+        
+        const headers: any = {
+          'Content-Type': 'application/json'
+        }
+        
+        if (currentSessionId) {
+          headers['X-Session-ID'] = currentSessionId
+        }
+        
+        const response = await axios.get(`${API_URL}/agents`, { headers })
         console.log('🔍 Agents response:', response.data)
         
         if (response.data && response.data.available_agents) {
@@ -45,6 +55,15 @@ export function useAgentMentions(sessionId?: string | null) {
         }
       } catch (error) {
         console.error("❌ Error fetching agents:", error)
+        // Set some default agents as fallback
+        const defaultAgents: AgentInfo[] = [
+          { name: "preprocessing_agent", description: "Specialized preprocessing agent" },
+          { name: "statistical_analytics_agent", description: "Specialized statistical analytics agent" },
+          { name: "sk_learn_agent", description: "Specialized sk learn agent" },
+          { name: "data_viz_agent", description: "Specialized data viz agent" }
+        ]
+        setAvailableAgents(defaultAgents)
+        console.log('🔄 Using default agents as fallback')
       }
     }
 
@@ -57,19 +76,25 @@ export function useAgentMentions(sessionId?: string | null) {
     cursorPosition: number,
     textareaElement: HTMLTextAreaElement
   ) => {
-    console.log('🔍 Input change detected:', { value, cursorPosition, availableAgents })
+    console.log('🔍 Input change detected:', { 
+      value, 
+      cursorPosition, 
+      availableAgents: availableAgents.length,
+      lastChar: value[cursorPosition - 1]
+    })
     
     // Check for @ mention
     const textBeforeCursor = value.substring(0, cursorPosition)
     const mentionMatch = textBeforeCursor.match(/@(\w*)$/)
     
-    console.log(' Mention match:', mentionMatch)
+    console.log('🔍 Text before cursor:', textBeforeCursor)
+    console.log('🔍 Mention match:', mentionMatch)
     
     if (mentionMatch) {
       const query = mentionMatch[1].toLowerCase()
       setMentionQuery(query)
       
-      console.log(' Query:', query)
+      console.log('🔍 Query:', query)
       
       // Filter agents based on query
       const filtered = availableAgents.filter(agent => 
@@ -96,6 +121,7 @@ export function useAgentMentions(sessionId?: string | null) {
       }
     } else {
       setShowAgentMentions(false)
+      console.log('❌ No @ mention detected')
     }
   }
 
