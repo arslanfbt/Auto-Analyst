@@ -841,10 +841,19 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
     const codeEntry = codeEntries[entryIndex]
     const messageId = codeEntry.messageIndex
     
+    // DEBUG: Log session information
+    console.log('🔍 AUTO-EXECUTE DEBUG:', {
+      entryId,
+      sessionId,
+      messageId,
+      codeLength: code.length
+    })
+    
     try {
       // Set the message ID in the session first so the backend knows which message this code belongs to
       if (messageId) {
         try {
+          console.log(`🔍 Setting message_id in backend: ${messageId} for session: ${sessionId}`)
           await axios.post(`${API_URL}/set-message-info`, {
             message_id: messageId
           }, {
@@ -858,9 +867,10 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
       }
       
       // Now execute the code with the associated message ID
+      console.log(`🔍 Executing code with session: ${sessionId}, message: ${messageId}`)
       const response = await axios.post(`${API_URL}/code/execute`, {
         code: code.trim(),
-        session_id: sessionId,
+        session_id: sessionId,  // This might be the issue!
         message_id: messageId
       }, {
         headers: {
@@ -868,6 +878,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
         },
       })
       
+      console.log('🔍 Auto-execution response:', response.data)
       
       // Pass execution result to handleCodeCanvasExecute
       handleCodeCanvasExecute(entryId, response.data);
