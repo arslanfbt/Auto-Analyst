@@ -47,9 +47,8 @@ API_KEY_PATTERNS = [
 NETWORK_REQUEST_PATTERNS = re.compile(r"(requests\.|urllib\.|http\.|\.post\(|\.get\(|\.connect\()")
 
 # DataFrame creation with hardcoded data - block only this specific pattern
-DATAFRAME_INVENTION_PATTERN = re.compile(r"\w+\s*=\s*pd\.DataFrame\s*\(\s*\{[^}]*\}", re.MULTILINE)
 
-def check_security_concerns(code_str):
+def check_security_concerns(code_str, context_names):
     """Check code for security concerns and return info about what was found"""
     security_concerns = {
         "has_concern": False,
@@ -62,6 +61,16 @@ def check_security_concerns(code_str):
         "blocked_dataframe_invention": False,  # Add this new field
         "messages": []
     }
+
+    dataset_names_pattern = "|".join(re.escape(name) for name in context_names)
+    DATAFRAME_INVENTION_PATTERN = re.compile(
+                rf"({dataset_names_pattern})\s*=\s*pd\.DataFrame\s*\(\s*\{{\s*[^}}]*\}}", 
+                re.MULTILINE
+            )
+    if DATAFRAME_INVENTION_PATTERN.search(code_str):
+        security_concerns["has_concern"] = True
+        security_concerns["blocked_dataframe_invention"] = True
+        security_concerns["messages"].append(f"DataFrame creation blocked for dataset variables: {', '.join(dataset_names)}")
     
     # Check for sensitive imports
     if IMPORT_PATTERN.search(code_str) or FROM_IMPORT_PATTERN.search(code_str):
@@ -101,11 +110,7 @@ def check_security_concerns(code_str):
         security_concerns["blocked_network"] = True
         security_concerns["messages"].append("Network requests blocked")
     
-    # Check for DataFrame invention patterns
-    if DATAFRAME_INVENTION_PATTERN.search(code_str):
-        security_concerns["has_concern"] = True
-        security_concerns["blocked_dataframe_invention"] = True
-        security_concerns["messages"].append("DataFrame creation with hardcoded data blocked")
+    
     
     return security_concerns
 
@@ -347,8 +352,9 @@ def execute_code_from_markdown(code_str, datasets=None):
     from io import StringIO, BytesIO
     import base64
 
+    context_names = list(datasets.keys())
     # Check for security concerns in the code
-    security_concerns = check_security_concerns(code_str)
+    security_concerns = check_security_concerns(code_str, context_names)
     
     # Apply security modifications to the code
     modified_code = clean_code_for_security(code_str, security_concerns)

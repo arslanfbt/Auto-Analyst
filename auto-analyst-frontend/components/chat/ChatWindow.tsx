@@ -1679,7 +1679,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
                     <span className="hidden sm:inline">Fullscreen</span>
                   </Button>
                   <Button
-                    key={`pin-plotly-${output.codeId}-${idx}-${visualizations.length}`} // Add key that changes with store
+                    key={`pin-plotly-${output.codeId}-${idx}-${visualizations.length}`}
                     variant={isPinned ? "default" : "outline"}
                     size="sm"
                     onClick={() => {
@@ -1689,16 +1689,11 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
                       if (currentCode) {
                         togglePinVisualization(output.content, currentCode, 'plotly', idx);
                       } else {
-                        // FALLBACK: Always allow pinning
+                        // FALLBACK: Always allow pinning without warning
                         const codeToUse = `plotly_${output.codeId}_${idx}`;
                         togglePinVisualization(output.content, codeToUse, 'plotly', idx);
                         
-                        toast({
-                          title: "Pinned with limited info", 
-                          description: "Visualization pinned but code reference may be incomplete.",
-                          variant: "default",
-                          duration: 3000
-                        });
+                        // No toast warning - just pin it silently
                       }
                     }}
                     className={`flex items-center gap-1 h-7 px-2 text-xs ${
@@ -1743,7 +1738,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
                     <span className="hidden sm:inline">Fullscreen</span>
                   </Button>
                   <Button
-                    key={`pin-${output.codeId}-${idx}-${visualizations.length}`} // Add key that changes with store
+                    key={`pin-${output.codeId}-${idx}-${visualizations.length}`}
                     variant={isPinned ? "default" : "outline"}
                     size="sm"
                     onClick={() => {
@@ -1752,17 +1747,12 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
                       if (currentCode) {
                         togglePinVisualization(output.content, currentCode, 'matplotlib', idx);
                       } else {
-                        // FALLBACK: Always allow pinning with fallback
+                        // FALLBACK: Always allow pinning without warning
                         console.warn('No code found for matplotlib codeId:', output.codeId);
                         const codeToUse = `matplotlib_${output.codeId}_${idx}`;
                         togglePinVisualization(output.content, codeToUse, 'matplotlib', idx);
                         
-                        toast({
-                          title: "Pinned with limited info",
-                          description: "Visualization pinned but code reference may be incomplete.",
-                          variant: "default",
-                          duration: 3000
-                        });
+                        // No toast warning - just pin it silently
                       }
                     }}
                     className={`flex items-center gap-1 h-7 px-2 text-xs ${
