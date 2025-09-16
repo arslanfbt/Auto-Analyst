@@ -122,13 +122,7 @@ const ChatInput = forwardRef<ChatInputRef, ChatInputProps>((props, ref) => {
 
   // Handle agent selection
   const handleAgentSelect = (agent: any) => {
-    handleMentionSelect(
-      agent,
-      chatInput.message,
-      chatInput.inputRef.current?.selectionStart || 0,
-      chatInput.setMessage,
-      chatInput.inputRef
-    )
+    handleMentionSelect(agent)
   }
 
   // Close mentions when clicking outside
