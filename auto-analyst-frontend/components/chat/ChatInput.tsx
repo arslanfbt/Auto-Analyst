@@ -296,6 +296,16 @@ const ChatInput = forwardRef<ChatInputRef, ChatInputProps>((props, ref) => {
               }}
             />
             
+            {/* Agent Mention Dropdown */}
+            <AgentMentionDropdown
+              ref={mentionRef}
+              isVisible={showAgentMentions}
+              agents={filteredAgents}
+              selectedIndex={selectedMentionIndex}
+              position={mentionPosition}
+              onSelect={handleMentionSelect}
+            />
+            
             {/* Send/Stop button - better positioned and Auto-Analyst colors */}
             <div className="absolute right-3 top-1/2 -translate-y-1/2">
               {chatInput.isLoading ? (

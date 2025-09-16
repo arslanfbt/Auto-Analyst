@@ -299,7 +299,7 @@ async def fix_code_with_dspy(code: str, error: str, dataset_context: str = "", d
             score_fn = score_code  # Fallback to original function
             
         refine_fixer = dspy.Refine(
-            module=dspy.ChainOfThought(code_fix), 
+            module=dspy.Predict(code_fix), 
             N=3,
             threshold=1.0,
             reward_fn=score_fn,

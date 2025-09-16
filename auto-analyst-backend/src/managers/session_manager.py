@@ -6,6 +6,7 @@ import logging
 import pandas as pd
 from typing import Dict, Any, List
 
+from fastapi import HTTPException
 from llama_index.core import Document, VectorStoreIndex
 from src.utils.logger import Logger
 from src.managers.user_manager import get_current_user
@@ -411,10 +412,9 @@ async def get_session_id(request, session_manager):
         session_id = request.headers.get("X-Session-ID")
         logger.log_message(f"🔍 Session ID from headers: {session_id}", level=logging.DEBUG)
     
-    # If still not found, generate a new one
+    # STOP auto-generating sessions
     if not session_id:
-        session_id = str(uuid.uuid4())
-        logger.log_message(f"⚠️ Generated NEW session ID: {session_id}", level=logging.WARNING)
+        raise HTTPException(status_code=400, detail="Session ID required")
     else:
         logger.log_message(f"✅ Using existing session ID: {session_id}", level=logging.INFO)
     

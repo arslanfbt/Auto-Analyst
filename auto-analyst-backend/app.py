@@ -2226,18 +2226,14 @@ async def _generate_deep_analysis_stream(session_state: dict, goal: str, session
 
         # Get dataset info
         datasets = session_state["datasets"]
+        desc = session_state['description']
         
         # Generate dataset info for all datasets
-        dataset_info_parts = []
-        for dataset_name, dataset_df in datasets.items():
-            dtypes_info = pd.DataFrame({
-                'Column': dataset_df.columns,
-                'Data Type': dataset_df.dtypes.astype(str)
-            }).to_markdown()
-            
-            dataset_info_parts.append(f"Dataset '{dataset_name}':\nSample Data:\n{dataset_df.head(2).to_markdown()}\n\nData Types:\n{dtypes_info}")
+        logger.log_message(f"🔍 DEEP ANALYSIS START - datasets type: {type(datasets)}, keys: {list(datasets.keys()) if datasets else 'None'}", level=logging.DEBUG)
         
-        dataset_info = "\n\n".join(dataset_info_parts)
+        dataset_info = desc
+        logger.log_message(f"🔍 DEEP ANALYSIS - dataset_info type: {type(dataset_info)}, length: {len(dataset_info) if isinstance(dataset_info, str) else 'N/A'}", level=logging.DEBUG)
+        logger.log_message(f"🔍 DEEP ANALYSIS - dataset_info content: {dataset_info[:200]}...", level=logging.DEBUG)
 
         
 
@@ -2441,6 +2437,10 @@ async def _generate_deep_analysis_stream(session_state: dict, goal: str, session
             # Use the new streaming method and forward all progress updates
             final_result = None
 
+            logger.log_message(f"🔍 CALLING DEEP ANALYSIS - goal: {goal[:100]}...", level=logging.DEBUG)
+            logger.log_message(f"🔍 CALLING DEEP ANALYSIS - dataset_info type: {type(dataset_info)}, length: {len(dataset_info) if isinstance(dataset_info, str) else 'N/A'}", level=logging.DEBUG)
+            logger.log_message(f"🔍 CALLING DEEP ANALYSIS - session_datasets type: {type(datasets)}, keys: {list(datasets.keys()) if datasets else 'None'}", level=logging.DEBUG)
+            
             async for update in deep_analyzer.execute_deep_analysis_streaming(
                 goal=goal,
                 dataset_info=dataset_info,

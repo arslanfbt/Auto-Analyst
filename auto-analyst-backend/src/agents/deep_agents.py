@@ -771,10 +771,15 @@ class deep_analysis_module(dspy.Module):
         Execute deep analysis with streaming progress updates.
         This is an async generator that yields progress updates incrementally.
         """
+        logger.log_message(f"🔍 DEEP ANALYSIS STREAMING START - goal: {goal[:100]}...", level=logging.DEBUG)
+        logger.log_message(f"🔍 DEEP ANALYSIS STREAMING START - dataset_info type: {type(dataset_info)}, length: {len(dataset_info) if isinstance(dataset_info, str) else 'N/A'}", level=logging.DEBUG)
+        logger.log_message(f"🔍 DEEP ANALYSIS STREAMING START - session_datasets type: {type(session_datasets)}, keys: {list(session_datasets.keys()) if session_datasets else 'None'}", level=logging.DEBUG)
+        
         # Make all session datasets available globally for code execution
         if session_datasets is not None:
             for dataset_name, dataset_df in session_datasets.items():
                 globals()[dataset_name] = dataset_df
+                logger.log_message(f"🔍 MADE DATASET AVAILABLE GLOBALLY - {dataset_name}: shape {dataset_df.shape}", level=logging.DEBUG)
         
         try:
             # Step 1: Generate deep questions (20% progress)
@@ -785,6 +790,7 @@ class deep_analysis_module(dspy.Module):
                 "progress": 10
             }
             
+            logger.log_message(f"🔍 CALLING DEEP_QUESTIONS - dataset_info type: {type(dataset_info)}, length: {len(dataset_info) if isinstance(dataset_info, str) else 'N/A'}", level=logging.DEBUG)
             questions = await self.deep_questions(goal=goal, dataset_info=dataset_info)
             logger.log_message("Questions generated")
             
@@ -804,6 +810,7 @@ class deep_analysis_module(dspy.Module):
             }
             
             question_list = [q.strip() for q in questions.deep_questions.split('\n') if q.strip()]
+            logger.log_message(f" CALLING DEEP_PLANNER - dataset_info type: {type(dataset_info)}, length: {len(dataset_info) if isinstance(dataset_info, str) else 'N/A'}", level=logging.DEBUG)
             deep_plan = await self.deep_planner(
                 deep_questions=questions.deep_questions, 
                 dataset=dataset_info, 
@@ -850,6 +857,7 @@ class deep_analysis_module(dspy.Module):
                 "progress": 45
             }
             
+            logger.log_message(f"🔍 CREATING DSPY EXAMPLES - dataset_info type: {type(dataset_info)}, length: {len(dataset_info) if isinstance(dataset_info, str) else 'N/A'}", level=logging.DEBUG)
             queries = [
                 dspy.Example(
                     goal=questions.deep_questions,
@@ -864,7 +872,18 @@ class deep_analysis_module(dspy.Module):
                 )
                 for key in keys
             ]
+            
+            # DEBUG: Log what's in each dspy.Example
+            for i, q in enumerate(queries):
+                logger.log_message(f"🔍 DSPY EXAMPLE {i} - goal: {q.goal[:100] if hasattr(q, 'goal') else 'No goal'}...", level=logging.DEBUG)
+                logger.log_message(f" DSPY EXAMPLE {i} - dataset: {q.dataset[:100] if hasattr(q, 'dataset') else 'No dataset'}...", level=logging.DEBUG)
+                logger.log_message(f"🔍 DSPY EXAMPLE {i} - plan_instructions: {q.plan_instructions[:100] if hasattr(q, 'plan_instructions') else 'No plan_instructions'}...", level=logging.DEBUG)
+            logger.log_message(f"🔍 CALLING AGENTS - about to call {len(keys)} agents: {keys}", level=logging.DEBUG)
             tasks = [self.agents[key](**q) for q, key in zip(queries, keys)]
+            
+            # DEBUG: Log what parameters each agent will receive
+            for q, key in zip(queries, keys):
+                logger.log_message(f"🔍 AGENT {key} - will receive: goal={q.goal[:50] if hasattr(q, 'goal') else 'None'}..., dataset={q.dataset[:50] if hasattr(q, 'dataset') else 'None'}..., plan_instructions={q.plan_instructions[:50] if hasattr(q, 'plan_instructions') else 'None'}...", level=logging.DEBUG)
                         
             # Await all tasks to complete
             summaries = []
