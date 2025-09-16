@@ -108,14 +108,16 @@ const ChatInput = forwardRef<ChatInputRef, ChatInputProps>((props, ref) => {
       e,
       chatInput.message,
       chatInput.inputRef.current?.selectionStart || 0,
-      chatInput.setMessage,
-      chatInput.inputRef,
-      () => {
-        if (!chatInput.disabled && !chatInput.isLoading && chatInput.message.trim()) {
-          chatInput.handleSendMessage()
-        }
-      }
+      chatInput.inputRef.current || e.target as HTMLTextAreaElement
     )
+    
+    // Handle Enter key for sending message
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault()
+      if (!chatInput.disabled && !chatInput.isLoading && chatInput.message.trim()) {
+        chatInput.handleSendMessage()
+      }
+    }
   }
 
   // Handle agent selection
