@@ -98,7 +98,8 @@ class AppState:
                     }
                 
                 # Import deep analysis module
-                from src.agents.deep_agents import deep_analysis_module, get_agent_description
+                from src.agents.deep_agents import deep_analysis_module
+                from src.agents.agents import get_agent_description
                 
                 deep_agents = {}
                 deep_agents_desc = {}
