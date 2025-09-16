@@ -299,7 +299,7 @@ const ChatInput = forwardRef<ChatInputRef, ChatInputProps>((props, ref) => {
             {/* Agent Mention Dropdown */}
             <AgentMentionDropdown
               ref={mentionRef}
-              isVisible={showAgentMentions}
+              show={showAgentMentions}  // Changed from isVisible to show
               agents={filteredAgents}
               selectedIndex={selectedMentionIndex}
               position={mentionPosition}
