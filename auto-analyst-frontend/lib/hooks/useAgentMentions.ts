@@ -5,11 +5,6 @@ import axios from 'axios'
 import API_URL from '@/config/api'
 import { AgentInfo } from '@/components/chat/AgentMentionDropdown'
 
-export interface AgentInfo {
-  name: string
-  description: string
-}
-
 export function useAgentMentions(sessionId?: string | null) {
   const [availableAgents, setAvailableAgents] = useState<AgentInfo[]>([])
   const [showAgentMentions, setShowAgentMentions] = useState(false)
@@ -127,66 +122,81 @@ export function useAgentMentions(sessionId?: string | null) {
 
   // Handle agent mention selection
   const handleMentionSelect = (
-    agent: AgentInfo, 
+    agent: AgentInfo,
     currentValue: string,
     cursorPosition: number,
     setValue: (value: string) => void,
-    inputRef: React.RefObject<HTMLTextAreaElement>
+    textareaRef: React.RefObject<HTMLTextAreaElement>
   ) => {
     const textBeforeCursor = currentValue.substring(0, cursorPosition)
     const textAfterCursor = currentValue.substring(cursorPosition)
     
-    // Replace the @query with @agent_name
-    const newValue = textBeforeCursor.replace(/@\w*$/, `@${agent.name} `) + textAfterCursor
+    // Find the @ mention and replace it with the selected agent
+    const mentionMatch = textBeforeCursor.match(/@(\w*)$/)
+    if (mentionMatch) {
+      const beforeMention = textBeforeCursor.substring(0, mentionMatch.index)
+      const newValue = `${beforeMention}@${agent.name} ${textAfterCursor}`
+      setValue(newValue)
+      
+      // Focus back to textarea and set cursor position
+      if (textareaRef.current) {
+        setTimeout(() => {
+          const newCursorPos = beforeMention.length + agent.name.length + 2 // +2 for @ and space
+          textareaRef.current?.setSelectionRange(newCursorPos, newCursorPos)
+          textareaRef.current?.focus()
+        }, 0)
+      }
+    }
     
-    setValue(newValue)
     setShowAgentMentions(false)
-    
-    // Focus back on textarea
-    setTimeout(() => {
-      inputRef.current?.focus()
-    }, 0)
   }
 
   // Handle keyboard navigation
   const handleKeyDown = (
-    e: React.KeyboardEvent,
+    e: React.KeyboardEvent<HTMLTextAreaElement>,
     currentValue: string,
     cursorPosition: number,
     setValue: (value: string) => void,
-    inputRef: React.RefObject<HTMLTextAreaElement>,
+    textareaRef: React.RefObject<HTMLTextAreaElement>,
     onEnter?: () => void
   ) => {
-    if (showAgentMentions && filteredAgents.length > 0) {
-      if (e.key === 'ArrowDown') {
+    if (!showAgentMentions) {
+      if (e.key === 'Enter' && !e.shiftKey && onEnter) {
+        e.preventDefault()
+        onEnter()
+      }
+      return
+    }
+
+    switch (e.key) {
+      case 'ArrowDown':
         e.preventDefault()
         setSelectedMentionIndex(prev => 
           prev < filteredAgents.length - 1 ? prev + 1 : 0
         )
-      } else if (e.key === 'ArrowUp') {
+        break
+      case 'ArrowUp':
         e.preventDefault()
         setSelectedMentionIndex(prev => 
           prev > 0 ? prev - 1 : filteredAgents.length - 1
         )
-      } else if (e.key === 'Enter') {
+        break
+      case 'Enter':
+      case 'Tab':
         e.preventDefault()
-        handleMentionSelect(
-          filteredAgents[selectedMentionIndex],
-          currentValue,
-          cursorPosition,
-          setValue,
-          inputRef
-        )
-      } else if (e.key === 'Escape') {
-        e.preventDefault()
+        if (filteredAgents[selectedMentionIndex]) {
+          handleMentionSelect(
+            filteredAgents[selectedMentionIndex],
+            currentValue,
+            cursorPosition,
+            setValue,
+            textareaRef
+          )
+        }
+        break
+      case 'Escape':
         setShowAgentMentions(false)
-      }
-    } else {
-      // Normal Enter key behavior
-      if (e.key === 'Enter' && !e.shiftKey) {
-        e.preventDefault()
-        onEnter?.()
-      }
+        break
     }
   }
 
