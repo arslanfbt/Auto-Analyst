@@ -152,6 +152,11 @@ export default function CSVUploadDialog({
     }
   }
 
+  // Separate function for button click (no parameters)
+  const handleAutoGenerateClick = () => {
+    handleAutoGenerate() // Call without explicit dataset name
+  }
+
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
       <DialogContent className="max-w-5xl max-h-[90vh] flex flex-col">
@@ -185,7 +190,7 @@ export default function CSVUploadDialog({
               <Button
                 variant="outline"
                 size="sm"
-                onClick={handleAutoGenerate}
+                onClick={handleAutoGenerateClick} // Use the new function
                 disabled={isSubmitting || !filePreview || isGeneratingDescription}
                 className="text-xs hover:bg-[#FF7F7F]/10 hover:border-[#FF7F7F]/30 flex items-center gap-1"
               >
