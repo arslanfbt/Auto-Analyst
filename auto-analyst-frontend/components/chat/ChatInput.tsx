@@ -21,7 +21,7 @@ import AgentMentionDropdown from './AgentMentionDropdown'
 const ChatInput = forwardRef<ChatInputRef, ChatInputProps>((props, ref) => {
   const chatInput = useChatInput(props)
   
-  // Agent mention functionality
+  // Agent mention functionality - FIXED: Handle null session ID
   const {
     showAgentMentions,
     mentionPosition,
@@ -31,7 +31,7 @@ const ChatInput = forwardRef<ChatInputRef, ChatInputProps>((props, ref) => {
     handleInputChange,
     handleMentionSelect,
     handleKeyDown
-  } = useAgentMentions()
+  } = useAgentMentions(chatInput.sessionId || undefined) // Convert null to undefined
   
   // File upload status display
   const [showUploadStatus, setShowUploadStatus] = useState(false)

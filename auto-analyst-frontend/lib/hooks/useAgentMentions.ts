@@ -5,7 +5,7 @@ import axios from 'axios'
 import API_URL from '@/config/api'
 import { AgentInfo } from '@/components/chat/AgentMentionDropdown'
 
-export function useAgentMentions() {
+export function useAgentMentions(sessionId?: string | null) {
   const [availableAgents, setAvailableAgents] = useState<AgentInfo[]>([])
   const [showAgentMentions, setShowAgentMentions] = useState(false)
   const [mentionQuery, setMentionQuery] = useState('')
@@ -14,12 +14,23 @@ export function useAgentMentions() {
   const [selectedMentionIndex, setSelectedMentionIndex] = useState(0)
   const mentionRef = useRef<HTMLDivElement>(null)
 
-  // Fetch available agents on mount
+  // Fetch available agents on mount - FIXED: Handle null session ID
   useEffect(() => {
     const fetchAgents = async () => {
+      if (!sessionId) {
+        console.log('❌ No session ID provided for agent fetching')
+        return
+      }
+      
       try {
         console.log('🔍 Fetching agents from:', `${API_URL}/agents`)
-        const response = await axios.get(`${API_URL}/agents`)
+        console.log('🔍 Using session ID:', sessionId)
+        
+        const response = await axios.get(`${API_URL}/agents`, {
+          headers: {
+            'X-Session-ID': sessionId
+          }
+        })
         console.log('🔍 Agents response:', response.data)
         
         if (response.data && response.data.available_agents) {
@@ -38,7 +49,7 @@ export function useAgentMentions() {
     }
 
     fetchAgents()
-  }, [])
+  }, [sessionId]) // Re-fetch when session ID changes
 
   // Handle input changes for @ mentions
   const handleInputChange = (
