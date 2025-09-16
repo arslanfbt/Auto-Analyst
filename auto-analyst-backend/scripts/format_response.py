@@ -48,7 +48,7 @@ NETWORK_REQUEST_PATTERNS = re.compile(r"(requests\.|urllib\.|http\.|\.post\(|\.g
 
 # DataFrame creation with hardcoded data - block only this specific pattern
 
-def check_security_concerns(code_str, context_names):
+def check_security_concerns(code_str, dataset_names):
     """Check code for security concerns and return info about what was found"""
     security_concerns = {
         "has_concern": False,
@@ -62,7 +62,7 @@ def check_security_concerns(code_str, context_names):
         "messages": []
     }
 
-    dataset_names_pattern = "|".join(re.escape(name) for name in context_names)
+    dataset_names_pattern = "|".join(re.escape(name) for name in dataset_names)
     DATAFRAME_INVENTION_PATTERN = re.compile(
                 rf"({dataset_names_pattern})\s*=\s*pd\.DataFrame\s*\(\s*\{{\s*[^}}]*\}}", 
                 re.MULTILINE
@@ -114,9 +114,15 @@ def check_security_concerns(code_str, context_names):
     
     return security_concerns
 
-def clean_code_for_security(code_str, security_concerns):
+def clean_code_for_security(code_str, security_concerns, dataset_names):
     """Apply security modifications to the code based on detected concerns"""
+
     modified_code = code_str
+    dataset_names_pattern = "|".join(re.escape(name) for name in dataset_names)
+    DATAFRAME_INVENTION_PATTERN = re.compile(
+                rf"({dataset_names_pattern})\s*=\s*pd\.DataFrame\s*\(\s*\{{\s*[^}}]*\}}", 
+                re.MULTILINE
+            )
     
     # Block sensitive imports if needed
     if security_concerns["blocked_imports"]:
@@ -357,7 +363,7 @@ def execute_code_from_markdown(code_str, datasets=None):
     security_concerns = check_security_concerns(code_str, context_names)
     
     # Apply security modifications to the code
-    modified_code = clean_code_for_security(code_str, security_concerns)
+    modified_code = clean_code_for_security(code_str, security_concerns, context_names)
     
     # Enhanced print function that detects and formats tabular data
     captured_outputs = []
