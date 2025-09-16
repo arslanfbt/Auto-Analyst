@@ -50,7 +50,7 @@ export default function CSVUploadDialog({
       
       // Auto-trigger description generation after a small delay
       const timer = setTimeout(() => {
-        handleGenerateDescription()
+        handleAutoGenerate()
       }, 100) // Small delay to ensure component is fully mounted
       
       return () => clearTimeout(timer)
