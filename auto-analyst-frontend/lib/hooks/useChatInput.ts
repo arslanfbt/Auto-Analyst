@@ -19,7 +19,7 @@ export const useChatInput = (props: ChatInputProps) => {
   const [input, setInput] = useState('')
   const [cursorPosition, setCursorPosition] = useState(0)
   const inputRef = useRef<HTMLTextAreaElement>(null)
-  const { data: session } = useSession()
+  const { data: session, status } = useSession()
   const [showPreview, setShowPreview] = useState(false)
   const [filePreview, setFilePreview] = useState<FilePreview | null>(null)
   const [datasetDescription, setDatasetDescription] = useState<DatasetDescription>({
@@ -58,27 +58,45 @@ export const useChatInput = (props: ChatInputProps) => {
 
   // Add a ref to prevent multiple initializations
   const sessionInitialized = useRef(false)
+  const lastUserId = useRef<string | null>(null)
 
-  // Ensure we always have a session ID with proper persistence
+  // Initialize session ID ONLY after user logs in
   useEffect(() => {
-    if (!sessionId && !sessionInitialized.current) {
-      sessionInitialized.current = true
-      
-      // Try to recover existing session ID
-      const existingSessionId = SessionRecovery.getStoredSessionId();
-      
-      if (existingSessionId) {
-        console.log(`Recovering existing session ID: ${existingSessionId}`);
-        setSessionId(existingSessionId);
-      } else {
-        // Generate new session ID only if none exists
-        const newSessionId = SessionRecovery.generateSessionId();
-        console.log(`Generating new session ID: ${newSessionId}`);
-        setSessionId(newSessionId);
-        SessionRecovery.storeSessionId(newSessionId);
-      }
+    // Wait for authentication status to be determined
+    if (status === 'loading') return
+
+    const currentUserId = session?.user?.id || null
+    
+    // If user ID changed (login/logout), reset session initialization
+    if (currentUserId !== lastUserId.current) {
+      sessionInitialized.current = false
+      lastUserId.current = currentUserId
     }
-  }, [sessionId, setSessionId]);
+
+    // Skip if already initialized for this user
+    if (sessionInitialized.current) return
+
+    if (session?.user?.id) {
+      // User is logged in - generate user-specific session ID
+      const userSessionId = `user_${session.user.id}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+      console.log(`🔐 User logged in - generating new session ID: ${userSessionId}`)
+      setSessionId(userSessionId)
+      SessionRecovery.storeSessionId(userSessionId)
+      sessionInitialized.current = true
+    }
+    // No session ID for anonymous users - they must log in first
+  }, [session, status, setSessionId])
+
+  // Clear session when user logs out
+  useEffect(() => {
+    if (status === 'unauthenticated' && sessionInitialized.current) {
+      console.log('🚪 User logged out - clearing session')
+      clearSessionId()
+      SessionRecovery.clearStoredSessionId()
+      sessionInitialized.current = false
+      lastUserId.current = null
+    }
+  }, [status, clearSessionId])
 
   // Add cleanup effect to store session ID when it changes
   useEffect(() => {

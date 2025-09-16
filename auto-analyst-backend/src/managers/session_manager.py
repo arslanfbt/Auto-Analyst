@@ -399,16 +399,24 @@ async def get_session_id(request, session_manager):
     Returns:
         Session ID string
     """
+    # Debug: Log all headers
+    logger.log_message(f"🔍 Request headers: {dict(request.headers)}", level=logging.DEBUG)
+    
     # First try to get from query params
     session_id = request.query_params.get("session_id")
+    logger.log_message(f"🔍 Session ID from query params: {session_id}", level=logging.DEBUG)
     
     # If not in query params, try to get from headers
     if not session_id:
         session_id = request.headers.get("X-Session-ID")
+        logger.log_message(f"🔍 Session ID from headers: {session_id}", level=logging.DEBUG)
     
     # If still not found, generate a new one
     if not session_id:
         session_id = str(uuid.uuid4())
+        logger.log_message(f"⚠️ Generated NEW session ID: {session_id}", level=logging.WARNING)
+    else:
+        logger.log_message(f"✅ Using existing session ID: {session_id}", level=logging.INFO)
     
     # Get or create the session state
     session_state = session_manager.get_session_state(session_id)
