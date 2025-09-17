@@ -46,7 +46,7 @@ const SettingsPopup: React.FC<SettingsPopupProps> = ({ isOpen, onClose, initialS
   
   // Convert string to number for temperature if needed
   const [temperature, setTemperature] = useState<number>(() => {
-    const defaultTemp = initialSettings?.temperature || 0;
+    const defaultTemp = initialSettings?.temperature || 1;
     return typeof defaultTemp === 'string' ? parseFloat(defaultTemp as string) : (defaultTemp as number);
   });
   
