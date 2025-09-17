@@ -465,7 +465,12 @@ async def get_default_dataset(
     keys = list(datasets.keys())
     if "df" in keys:
         df = datasets['df']
-    desc = session_state["description"]
+    else:
+        df = pd.read_csv('Housing.csv')
+
+    # Load Housing.csv from the data directory (relative to backend root)
+ 
+    desc = "Housing data"
     
     # Replace NaN values with None (which becomes null in JSON)
     df = df.where(pd.notna(df), None)
