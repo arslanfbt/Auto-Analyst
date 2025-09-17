@@ -123,7 +123,7 @@ const calculateHash = (str: string): string => {
 };
 
 export const useCodeStore = create<CodeStore>()(
-  persist(
+  persist<CodeStore>(
     (set, get) => ({
       messageIndices: new Map<number, MessageCodeIndex>(),
       codeBlocks: new Map<string, CodeBlock>(),
@@ -145,8 +145,8 @@ export const useCodeStore = create<CodeStore>()(
           messageIndex
         };
         
-        set(state => {
-          const newCodeBlocks = new Map(state.codeBlocks);
+        set((state: CodeStore) => {
+          const newCodeBlocks = new Map<string, CodeBlock>(state.codeBlocks);
           newCodeBlocks.set(codeId, codeBlock);
           
           const newMessageIndices = new Map(state.messageIndices);
@@ -199,8 +199,8 @@ export const useCodeStore = create<CodeStore>()(
           timestamp: Date.now()
         };
         
-        set(state => {
-          const newCodeBlocks = new Map(state.codeBlocks);
+        set((state: CodeStore) => {
+          const newCodeBlocks = new Map<string, CodeBlock>(state.codeBlocks);
           newCodeBlocks.set(codeId, updatedCodeBlock);
           
           const newMessageIndices = new Map(state.messageIndices);
@@ -236,8 +236,8 @@ export const useCodeStore = create<CodeStore>()(
         const codeBlock = get().codeBlocks.get(codeId);
         if (!codeBlock) return;
         
-        set(state => {
-          const newCodeBlocks = new Map(state.codeBlocks);
+        set((state: CodeStore) => {
+          const newCodeBlocks = new Map<string, CodeBlock>(state.codeBlocks);
           newCodeBlocks.delete(codeId);
           
           const newMessageIndices = new Map(state.messageIndices);
@@ -262,9 +262,9 @@ export const useCodeStore = create<CodeStore>()(
         const messageIndex_data = get().messageIndices.get(messageIndex);
         if (!messageIndex_data) return;
         
-        set(state => {
-          const newCodeBlocks = new Map(state.codeBlocks);
-          const newMessageIndices = new Map(state.messageIndices);
+        set((state: CodeStore) => {
+          const newCodeBlocks = new Map<string, CodeBlock>(state.codeBlocks);
+          const newMessageIndices = new Map<number, MessageCodeIndex>(state.messageIndices);
           
           // Remove all code blocks for this message
           for (const codeId of messageIndex_data.codeBlocks.keys()) {
@@ -295,8 +295,8 @@ export const useCodeStore = create<CodeStore>()(
         
         const merkleRoot = calculateHash(codeHashes.join(''));
         
-        set(state => {
-          const newMessageIndices = new Map(state.messageIndices);
+        set((state: CodeStore) => {
+          const newMessageIndices = new Map<number, MessageCodeIndex>(state.messageIndices);
           const updatedMessageIndex_data = {
             ...messageIndex_data,
             merkleRoot,
@@ -318,22 +318,23 @@ export const useCodeStore = create<CodeStore>()(
     }),
     {
       name: 'code-store',
-      partialize: (state) => ({
+      partialize: (state: CodeStore) => ({
         messageIndices: Array.from(state.messageIndices.entries()),
-        codeBlocks: Array.from(state.codeBlocks.entries())
+        codeBlocks: Array.from(state.codeBlocks.entries()),
       }),
-      onRehydrateStorage: () => (state) => {
-        if (state) {
-          // Convert arrays back to Maps
-          state.messageIndices = new Map<number, MessageCodeIndex>(
-            Object.entries(state.messageIndices as any).map(([k, v]) => [Number(k), {
-              ...v,
-              codeBlocks: new Map<string, CodeBlock>(Object.entries(v.codeBlocks || {})),
-            }])
-          );
-          state.codeBlocks = new Map<string, CodeBlock>(Object.entries(state.codeBlocks as any));
-        }
-      }
+      onRehydrateStorage: () => (state?: CodeStore) => {
+        if (!state) return;
+        state.messageIndices = new Map<number, MessageCodeIndex>(
+          Array.isArray((state as any).messageIndices)
+            ? (state as any).messageIndices
+            : Array.from((state.messageIndices as any)?.entries?.() ?? [])
+        );
+        state.codeBlocks = new Map<string, CodeBlock>(
+          Array.isArray((state as any).codeBlocks)
+            ? (state as any).codeBlocks
+            : Array.from((state.codeBlocks as any)?.entries?.() ?? [])
+        );
+      },
     }
   )
 );
