@@ -3,7 +3,13 @@
 import { useState, useEffect, useRef } from 'react'
 import axios from 'axios'
 import API_URL from '@/config/api'
-import { AgentInfo } from '@/components/chat/AgentMentionDropdown'
+import { useSessionStore } from '@/lib/store/sessionStore'
+
+// Define AgentInfo interface here instead of importing from deleted component
+export interface AgentInfo {
+  name: string;
+  description?: string;
+}
 
 export function useAgentMentions(sessionId?: string | null) {
   const [availableAgents, setAvailableAgents] = useState<AgentInfo[]>([])
@@ -18,163 +24,120 @@ export function useAgentMentions(sessionId?: string | null) {
   useEffect(() => {
     const fetchAgents = async () => {
       try {
-        console.log('🔍 Fetching agents from:', `${API_URL}/agents`)
-        console.log('🔍 Current sessionId:', sessionId)
+        // Use sessionStore instead of localStorage
+        const { sessionId: storeSessionId } = useSessionStore.getState()
+        const currentSessionId = sessionId || storeSessionId
         
-        // Try to get session ID from localStorage if not provided
-        const currentSessionId = sessionId || 
-                               localStorage.getItem('auto-analyst-session-id') || 
-                               sessionStorage.getItem('auto-analyst-session-id')
-        
-        console.log('🔍 Using session ID:', currentSessionId)
-        
-        const headers: any = {
-          'Content-Type': 'application/json'
+        if (!currentSessionId) {
+          console.warn('No sessionId available for fetching agents')
+          setAvailableAgents([])
+          return
         }
+
+        console.log('🔍 Fetching agents with sessionId:', currentSessionId)
         
-        if (currentSessionId) {
-          headers['X-Session-ID'] = currentSessionId
-        }
+        const response = await axios.get(`${API_URL}/agents`, {
+          headers: { 'X-Session-ID': currentSessionId }
+        })
         
-        const response = await axios.get(`${API_URL}/agents`, { headers })
         console.log('🔍 Agents response:', response.data)
         
-        if (response.data && response.data.available_agents) {
-          const agentList: AgentInfo[] = response.data.available_agents.map((name: string) => ({
-            name,
-            description: `Specialized ${name.replace(/_/g, " ")} agent`,
+        if (response.data && Array.isArray(response.data)) {
+          const agentList: AgentInfo[] = response.data.map((agent: any) => ({
+            name: agent.name || agent,
+            description: agent.description || `Specialized ${agent.name?.replace(/_/g, " ") || agent} agent`,
           }))
           setAvailableAgents(agentList)
           console.log('✅ Agents set:', agentList)
         } else {
-          console.log('❌ No available_agents in response')
+          console.log('❌ Invalid agents response format')
+          setAvailableAgents([])
         }
       } catch (error) {
-        console.error("❌ Error fetching agents:", error)
-        // Set some default agents as fallback
-        const defaultAgents: AgentInfo[] = [
-          { name: "preprocessing_agent", description: "Specialized preprocessing agent" },
-          { name: "statistical_analytics_agent", description: "Specialized statistical analytics agent" },
-          { name: "sk_learn_agent", description: "Specialized sk learn agent" },
-          { name: "data_viz_agent", description: "Specialized data viz agent" }
-        ]
-        setAvailableAgents(defaultAgents)
-        console.log('🔄 Using default agents as fallback')
+        console.error('❌ Error fetching agents:', error)
+        setAvailableAgents([])
       }
     }
 
-    // Always try to fetch agents, even if sessionId is null/undefined
     fetchAgents()
-  }, [sessionId]) // Re-fetch when session ID changes
+  }, [sessionId])
 
-  // Handle input changes for @ mentions
-  const handleInputChange = (
-    value: string, 
-    cursorPosition: number,
-    textareaElement: HTMLTextAreaElement
-  ) => {
-    console.log('🔍 Input change detected:', { 
-      value, 
-      cursorPosition, 
-      availableAgents: availableAgents.length,
-      lastChar: value[cursorPosition - 1],
-      sessionId: sessionId
-    })
-    
-    // Check for @ mention
-    const textBeforeCursor = value.substring(0, cursorPosition)
-    const mentionMatch = textBeforeCursor.match(/@(\w*)$/)
-    
-    console.log('🔍 Text before cursor:', textBeforeCursor)
-    console.log('🔍 Mention match:', mentionMatch)
-    
-    if (mentionMatch) {
-      const query = mentionMatch[1].toLowerCase()
-      setMentionQuery(query)
-      
-      console.log('🔍 Query:', query)
-      
-      // Filter agents based on query
-      const filtered = availableAgents.filter(agent => 
-        agent.name.toLowerCase().includes(query)
-      )
-      
-      console.log('🔍 Filtered agents:', filtered)
-      
-      if (filtered.length > 0) {
-        // Calculate position for mention dropdown - position above the chat input
-        const rect = textareaElement.getBoundingClientRect()
-
-        const newPosition = {
-          top: rect.top - 200, // Position above the input (200px above)
-          left: rect.left + 20
-        }
-
-        console.log('🔍 Position calculated:', newPosition, 'Rect:', rect)
-
-        setMentionPosition(newPosition)
-        setShowAgentMentions(true)
-        setSelectedMentionIndex(0)
-        
-        console.log('✅ Showing agent mentions:', filtered.length)
-      } else {
-        setShowAgentMentions(false)
-        console.log('❌ No agents found for query')
-      }
+  // Filter agents based on mention query
+  useEffect(() => {
+    if (mentionQuery.trim() === '') {
+      setFilteredAgents(availableAgents)
     } else {
-      setShowAgentMentions(false)
-      console.log('❌ No @ mention detected')
+      const filtered = availableAgents.filter(agent =>
+        agent.name.toLowerCase().includes(mentionQuery.toLowerCase())
+      )
+      setFilteredAgents(filtered)
     }
+    setSelectedMentionIndex(0)
+  }, [mentionQuery, availableAgents])
+
+  const showMentions = (position: { top: number; left: number }, query: string) => {
+    setMentionPosition(position)
+    setMentionQuery(query)
+    setShowAgentMentions(true)
+    setSelectedMentionIndex(0)
   }
 
-  // Handle mention selection
-  const handleMentionSelect = (agent: AgentInfo) => {
-    console.log('🔍 Agent selected:', agent)
+  const hideMentions = () => {
     setShowAgentMentions(false)
-    // This will be handled by the parent component
+    setMentionQuery('')
+    setSelectedMentionIndex(0)
   }
 
-  // Handle keyboard navigation
-  const handleKeyDown = (
-    e: React.KeyboardEvent<HTMLTextAreaElement>,
-    value: string,
-    cursorPosition: number,
-    textareaElement: HTMLTextAreaElement
-  ) => {
-    if (!showAgentMentions) return
+  const selectAgent = (agent: AgentInfo) => {
+    hideMentions()
+    return agent
+  }
 
-    switch (e.key) {
+  const handleKeyDown = (event: KeyboardEvent) => {
+    if (!showAgentMentions || filteredAgents.length === 0) return
+
+    switch (event.key) {
       case 'ArrowDown':
-        e.preventDefault()
+        event.preventDefault()
         setSelectedMentionIndex(prev => 
-          Math.min(prev + 1, filteredAgents.length - 1)
+          prev < filteredAgents.length - 1 ? prev + 1 : 0
         )
         break
       case 'ArrowUp':
-        e.preventDefault()
-        setSelectedMentionIndex(prev => Math.max(prev - 1, 0))
+        event.preventDefault()
+        setSelectedMentionIndex(prev => 
+          prev > 0 ? prev - 1 : filteredAgents.length - 1
+        )
         break
       case 'Enter':
-      case 'Tab':
-        e.preventDefault()
+        event.preventDefault()
         if (filteredAgents[selectedMentionIndex]) {
-          handleMentionSelect(filteredAgents[selectedMentionIndex])
+          selectAgent(filteredAgents[selectedMentionIndex])
         }
         break
       case 'Escape':
-        setShowAgentMentions(false)
+        event.preventDefault()
+        hideMentions()
         break
     }
   }
 
+  // Add keyboard event listener
+  useEffect(() => {
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [showAgentMentions, filteredAgents, selectedMentionIndex])
+
   return {
+    availableAgents,
     showAgentMentions,
+    mentionQuery,
     mentionPosition,
     filteredAgents,
     selectedMentionIndex,
     mentionRef,
-    handleInputChange,
-    handleMentionSelect,
-    handleKeyDown
+    showMentions,
+    hideMentions,
+    selectAgent,
   }
 }
