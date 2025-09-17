@@ -665,40 +665,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
         )
       );
       
-      // Even for just saving code, make sure the backend knows the message_id
-      // This ensures code changes are properly tracked in the database
-      if (uniqueStorageKey && sessionId) {
-        // Log to help with debugging
-        logger.log(`Setting message_id in backend for saved code: ${uniqueStorageKey}`);
-        
-        axios.post(`${API_URL}/set-message-info`, {
-          message_id: uniqueStorageKey
-        }, {
-          headers: {
-            'X-Session-ID': sessionId
-          },
-        }).then(() => {
-          logger.log(`Successfully set message_id for saved code: ${uniqueStorageKey}`);
-        }).catch(error => {
-          console.error("Error setting message ID for saved code:", error);
-        });
-      } else {
-        // If no message ID, try to get from session
-        if (sessionId) {
-          axios.get(`${API_URL}/session-info`, {
-            headers: {
-              'X-Session-ID': sessionId
-            },
-          }).then(response => {
-            if (response.data && response.data.current_message_id) {
-              logger.log(`Using current message ID from session for saved code: ${response.data.current_message_id}`);
-            }
-          }).catch(error => {
-            console.error("Error getting session info for saved code:", error);
-          });
-        }
-      }
-      
+      // No need to set message_id for saved code - only needed for execution
       return;
     }
     
