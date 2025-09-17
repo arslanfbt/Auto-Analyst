@@ -656,26 +656,43 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
     }
     
     // SOLUTION: Always use the array index, not the messageIndex from codeEntry
-    // Find the array index by looking for the message in the messages array
     let arrayIndex = codeEntry.messageIndex;
+    
+    console.log('🔍 DEBUG: Original messageIndex:', codeEntry.messageIndex);
+    console.log('🔍 DEBUG: Messages array structure:', messages.map((msg, idx) => ({
+      idx,
+      message_id: msg.message_id,
+      sender: msg.sender,
+      hasMessageId: !!msg.message_id
+    })));
     
     // If messageIndex looks like a database ID (large number), find the actual array index
     if (typeof codeEntry.messageIndex === 'number' && codeEntry.messageIndex > 100) {
       // This is likely a database message_id, find the actual array index
       const foundIndex = messages.findIndex(msg => msg.message_id === codeEntry.messageIndex);
+      console.log('🔍 DEBUG: foundIndex for message_id', codeEntry.messageIndex, ':', foundIndex);
+      
       if (foundIndex !== -1) {
         arrayIndex = foundIndex;
+        console.log('🔍 DEBUG: Using found arrayIndex:', arrayIndex);
+      } else {
+        // FALLBACK: Use the last AI message index
+        const aiMessageIndices = messages
+          .map((msg, idx) => msg.sender === "ai" ? idx : -1)
+          .filter(idx => idx !== -1);
+        
+        if (aiMessageIndices.length > 0) {
+          arrayIndex = aiMessageIndices[aiMessageIndices.length - 1];
+          console.log('🔍 DEBUG: Fallback to last AI message index:', arrayIndex);
+        } else {
+          // LAST RESORT: Use the last message
+          arrayIndex = Math.max(0, messages.length - 1);
+          console.log('🔍 DEBUG: Last resort - using last message index:', arrayIndex);
+        }
       }
     }
     
-    console.log('🔍 Using arrayIndex:', arrayIndex, 'for messageIndex:', codeEntry.messageIndex);
-    console.log('🔍 Result contains:', {
-      hasError: !!result.error,
-      hasOutput: !!result.output,
-      hasPlotlyOutputs: !!(result.plotly_outputs && result.plotly_outputs.length > 0),
-      hasMatplotlibOutputs: !!(result.matplotlib_outputs && result.matplotlib_outputs.length > 0),
-      isSuccessful: result.is_successful
-    });
+    console.log('🔍 FINAL: Using arrayIndex:', arrayIndex, 'for messageIndex:', codeEntry.messageIndex);
     
     // If this is just a code update without execution (savedCode)
     if (result.savedCode) {
@@ -695,7 +712,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
     
     // Add error output (highest priority)
     if (result.error) {
-      console.log('🔍 Adding error output');
+      console.log('🔍 Adding error output to arrayIndex:', arrayIndex);
       newOutputs[arrayIndex].push({
         type: 'error',
         content: result.error,
@@ -706,7 +723,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
     
     // Add text output
     if (result.output) {
-      console.log('🔍 Adding text output');
+      console.log('🔍 Adding text output to arrayIndex:', arrayIndex);
       newOutputs[arrayIndex].push({
         type: 'output',
         content: result.output,
@@ -717,7 +734,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
 
     // Handle plotly outputs
     if (result.plotly_outputs && result.plotly_outputs.length > 0) {
-      console.log('🔍 Processing', result.plotly_outputs.length, 'plotly outputs');
+      console.log('🔍 Processing', result.plotly_outputs.length, 'plotly outputs for arrayIndex:', arrayIndex);
       
       result.plotly_outputs.forEach((plotlyOutput: string, vizIndex: number) => {
         try {
@@ -728,7 +745,6 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
           }
           
           const plotlyData = JSON.parse(plotlyJsonString);
-          console.log('🔍 Successfully parsed plotly output', vizIndex);
           
           newOutputs[arrayIndex].push({
             type: 'plotly',
@@ -746,7 +762,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
 
     // Handle matplotlib outputs
     if (result.matplotlib_outputs && result.matplotlib_outputs.length > 0) {
-      console.log('🔍 Processing', result.matplotlib_outputs.length, 'matplotlib outputs');
+      console.log('🔍 Processing', result.matplotlib_outputs.length, 'matplotlib outputs for arrayIndex:', arrayIndex);
       
       result.matplotlib_outputs.forEach((matplotlibOutput: string, chartIndex: number) => {
         try {
@@ -755,8 +771,6 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
           if (matplotlibOutput.startsWith('```matplotlib\n')) {
             matplotlibContent = matplotlibOutput.replace(/^```matplotlib\n/, '').replace(/\n```\n?$/, '');
           }
-          
-          console.log('🔍 Successfully processed matplotlib output', chartIndex);
           
           newOutputs[arrayIndex].push({
             type: 'matplotlib',
@@ -770,7 +784,8 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
       });
     }
     
-    console.log('🔍 Final outputs for arrayIndex', arrayIndex, ':', newOutputs[arrayIndex]);
+    console.log('🔍 STORING outputs at arrayIndex:', arrayIndex, 'with', newOutputs[arrayIndex].length, 'items');
+    console.log('🔍 codeOutputs will have keys:', Object.keys({...codeOutputs, [arrayIndex]: newOutputs[arrayIndex]}));
     
     // Update state with all the outputs
     setCodeOutputs(newOutputs);
