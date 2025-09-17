@@ -712,10 +712,23 @@ async def fix_code(
             # Fallback if DSPy models are not initialized or there's an error
             logger.log_message(f"Error with DSPy models for user_id {user_id}: {str(e)}", level=logging.ERROR)
             
-            # Return a helpful error message that doesn't expose implementation details
+            # Return the actual error details instead of generic message
+            error_message = str(e)
+            
+            # Sanitize sensitive information but keep useful details
+            if "API key" in error_message.lower():
+                error_message = "API configuration error. Please contact support."
+            elif "timeout" in error_message.lower():
+                error_message = "Request timed out. Please try again."
+            elif "rate limit" in error_message.lower():
+                error_message = "Rate limit exceeded. Please wait a moment and try again."
+            elif len(error_message) > 200:
+                # Truncate very long error messages
+                error_message = error_message[:200] + "..."
+            
             return {
                 "fixed_code": request_data.code,
-                "error": "Could not process fix request. Please try again later."
+                "error": error_message  # Return actual error instead of generic message
             }
     except Exception as e:
         logger.log_message(f"Error fixing code: {str(e)}", level=logging.ERROR)
