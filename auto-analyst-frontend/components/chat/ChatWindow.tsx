@@ -648,12 +648,23 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
       return;
     }
     
-    // Use the messageIndex as the storage key (this matches what renderCodeOutputs expects)
-    const messageIndex = codeEntry.messageIndex;
+    // SOLUTION: Always use the array index, not the messageIndex from codeEntry
+    // Find the array index by looking for the message in the messages array
+    let arrayIndex = codeEntry.messageIndex;
+    
+    // If messageIndex looks like a database ID (large number), find the actual array index
+    if (typeof codeEntry.messageIndex === 'number' && codeEntry.messageIndex > 100) {
+      // This is likely a database message_id, find the actual array index
+      const foundIndex = messages.findIndex(msg => msg.message_id === codeEntry.messageIndex);
+      if (foundIndex !== -1) {
+        arrayIndex = foundIndex;
+      }
+    }
+    
+    console.log('🔍 Using arrayIndex:', arrayIndex, 'for messageIndex:', codeEntry.messageIndex);
     
     // If this is just a code update without execution (savedCode)
     if (result.savedCode) {
-      // Update the code in our state without generating output
       setCodeEntries(prev => 
         prev.map(entry => 
           entry.id === entryId 
@@ -664,28 +675,26 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
       return;
     }
     
-    // Start with a clean slate for this message's outputs
+    // Use arrayIndex as the storage key
     const newOutputs: Record<string | number, CodeOutput[]> = { ...codeOutputs };
-    newOutputs[messageIndex] = []; // Reset outputs for this message
+    newOutputs[arrayIndex] = []; // Reset outputs for this array index
     
     // Add output if available
     if (result.error) {
-      // Add error output
-      newOutputs[messageIndex] = [
+      newOutputs[arrayIndex] = [
         {
           type: 'error',
           content: result.error,
-          messageIndex: messageIndex,
+          messageIndex: arrayIndex,
           codeId: entryId
         }
       ];
     } else if (result.output) {
-      // Add text output
-      newOutputs[messageIndex] = [
+      newOutputs[arrayIndex] = [
         {
           type: 'output',
           content: result.output,
-          messageIndex: messageIndex,
+          messageIndex: arrayIndex,
           codeId: entryId
         }
       ];
@@ -701,7 +710,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
           plotlyOutputItems.push({
             type: 'plotly',
             content: plotlyData,
-            messageIndex: messageIndex,
+            messageIndex: arrayIndex,
             codeId: entryId,
             vizIndex: vizIndex
           });
@@ -711,8 +720,8 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
       });
       
       if (plotlyOutputItems.length > 0) {
-        newOutputs[messageIndex] = [
-          ...(newOutputs[messageIndex] || []),
+        newOutputs[arrayIndex] = [
+          ...(newOutputs[arrayIndex] || []),
           ...plotlyOutputItems
         ];
       }
@@ -728,7 +737,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
           matplotlibOutputItems.push({
             type: 'matplotlib',
             content: matplotlibContent,
-            messageIndex: messageIndex,
+            messageIndex: arrayIndex,
             codeId: entryId
           });
         } catch (e) {
@@ -737,8 +746,8 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
       });
       
       if (matplotlibOutputItems.length > 0) {
-        newOutputs[messageIndex] = [
-          ...(newOutputs[messageIndex] || []),
+        newOutputs[arrayIndex] = [
+          ...(newOutputs[arrayIndex] || []),
           ...matplotlibOutputItems
         ];
       }
@@ -746,7 +755,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
     
     // Update state with all the outputs
     setCodeOutputs(newOutputs);
-  }, [codeEntries, codeOutputs]);
+  }, [codeEntries, codeOutputs, messages]);
 
   // Handle fix start
   const handleFixStart = useCallback((codeId: string) => {
@@ -1550,6 +1559,14 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
     // Simply use the messageIndex directly - no complex logic
     const relevantOutputs = codeOutputs[messageIndex] || [];
     
+    // DEBUG: Add logging to see what outputs we have
+    console.log('🔍 renderCodeOutputs DEBUG:', {
+      messageIndex,
+      codeOutputsKeys: Object.keys(codeOutputs),
+      relevantOutputsCount: relevantOutputs.length,
+      relevantOutputs: relevantOutputs.map(o => ({ type: o.type, contentLength: typeof o.content === 'string' ? o.content.length : 'object' }))
+    });
+    
     if (relevantOutputs.length === 0) return null;
     
     // Group outputs by type for organized display
@@ -1557,6 +1574,13 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
     const textOutputs = relevantOutputs.filter(output => output.type === 'output');
     const plotlyOutputs = relevantOutputs.filter(output => output.type === 'plotly');
     const matplotlibOutputs = relevantOutputs.filter(output => output.type === 'matplotlib');
+    
+    console.log('🔍 Output types:', {
+      errors: errorOutputs.length,
+      text: textOutputs.length,
+      plotly: plotlyOutputs.length,
+      matplotlib: matplotlibOutputs.length
+    });
     
     return (
       <div className="mt-2 space-y-4">
