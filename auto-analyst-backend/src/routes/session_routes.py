@@ -472,9 +472,12 @@ async def get_default_dataset(
  
     desc = "Housing data"
     
-    # Replace NaN values with None (which becomes null in JSON)
-    df = df.where(pd.notna(df), None)
-    
+    # Full JSON-safe cleanup (same as CSV preview)
+    df = df.replace([np.inf, -np.inf], None)         # Infs → null
+    df = df.where(pd.notna(df), None)                # NaN → null
+    df = df.dropna(how="all")                        # Drop fully-empty rows
+    df = df.applymap(lambda x: None if isinstance(x, str) and x.strip() == "" else x)
+
     preview_data = {
         "headers": df.columns.tolist(),
         "rows": df.head(10).values.tolist(),

@@ -201,7 +201,13 @@ export const useChatInput = (props: ChatInputProps) => {
           file, 
           status: 'error', 
           isExcel: false,
-          selectedSheets: []
+          selectedSheets: [],
+          errorMessage: getErrorMessage(error) || 'Failed to upload CSV file. Please try again.'
+        })
+        setErrorNotification({
+          message: 'CSV Upload Failed',
+          details: getErrorMessage(error) || 'There was an error processing your CSV file. Please check the file format and try again.',
+          type: 'error'
         })
       }
     } else if (isExcel) {
@@ -423,13 +429,14 @@ export const useChatInput = (props: ChatInputProps) => {
     } catch (error) {
       console.error('Excel upload failed:', error);
       setErrorNotification({ 
-        message: 'Excel upload failed', 
-        details: getErrorMessage(error)
+        message: 'Excel Upload Failed', 
+        details: getErrorMessage(error) || 'Failed to process Excel file. Please check the file format and try again.',
+        type: 'error'
       })
       setFileUpload(prev => prev ? { 
         ...prev, 
         status: 'error', 
-        errorMessage: getErrorMessage(error)
+        errorMessage: getErrorMessage(error) || 'Excel upload failed. Please try again.'
       } : null)
       
       // Automatically restore default dataset on failure
@@ -478,21 +485,19 @@ export const useChatInput = (props: ChatInputProps) => {
     } catch (error) {
       console.error('CSV confirm upload error:', error)
       
-      // Fix: Check if fileUpload exists before accessing its properties
+      setErrorNotification({
+        message: 'Dataset Upload Failed',
+        details: getErrorMessage(error) || 'Failed to upload your dataset. Please try again.',
+        type: 'error'
+      })
+      
       if (fileUpload?.file) {
         setFileUpload({ 
           file: fileUpload.file, 
           status: 'error', 
           isExcel: false,
-          selectedSheets: []
-        })
-      } else {
-        // If fileUpload is null, create a minimal error state
-        setFileUpload({
-          file: new File([], 'error.csv'), // Create a dummy file
-          status: 'error',
-          isExcel: false,
-          selectedSheets: []
+          selectedSheets: [],
+          errorMessage: getErrorMessage(error) || 'Upload failed. Please try again.'
         })
       }
     } finally {
