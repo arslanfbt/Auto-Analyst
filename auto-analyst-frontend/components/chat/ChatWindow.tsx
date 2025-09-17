@@ -622,6 +622,13 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
         if (result.plotly_outputs && result.plotly_outputs.length > 0) {
           executionResult += "\nPlotly charts generated:\n"
           result.plotly_outputs.forEach((plotlyOutput: string, index: number) => {
+            // Strip the markdown code block wrapper
+            let plotlyJsonString = plotlyOutput;
+            if (plotlyOutput.startsWith('```plotly\n')) {
+              plotlyJsonString = plotlyOutput.replace(/^```plotly\n/, '').replace(/\n```\n?$/, '');
+            }
+            
+            const plotlyData = JSON.parse(plotlyJsonString);
             executionResult += `\`\`\`plotly\n${plotlyOutput}\n\`\`\`\n\n`
           })
         }
@@ -662,6 +669,13 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
     }
     
     console.log('🔍 Using arrayIndex:', arrayIndex, 'for messageIndex:', codeEntry.messageIndex);
+    console.log('🔍 Result contains:', {
+      hasError: !!result.error,
+      hasOutput: !!result.output,
+      hasPlotlyOutputs: !!(result.plotly_outputs && result.plotly_outputs.length > 0),
+      hasMatplotlibOutputs: !!(result.matplotlib_outputs && result.matplotlib_outputs.length > 0),
+      isSuccessful: result.is_successful
+    });
     
     // If this is just a code update without execution (savedCode)
     if (result.savedCode) {
@@ -679,35 +693,44 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
     const newOutputs: Record<string | number, CodeOutput[]> = { ...codeOutputs };
     newOutputs[arrayIndex] = []; // Reset outputs for this array index
     
-    // Add output if available
+    // Add error output (highest priority)
     if (result.error) {
-      newOutputs[arrayIndex] = [
-        {
-          type: 'error',
-          content: result.error,
-          messageIndex: arrayIndex,
-          codeId: entryId
-        }
-      ];
-    } else if (result.output) {
-      newOutputs[arrayIndex] = [
-        {
-          type: 'output',
-          content: result.output,
-          messageIndex: arrayIndex,
-          codeId: entryId
-        }
-      ];
+      console.log('🔍 Adding error output');
+      newOutputs[arrayIndex].push({
+        type: 'error',
+        content: result.error,
+        messageIndex: arrayIndex,
+        codeId: entryId
+      });
+    }
+    
+    // Add text output
+    if (result.output) {
+      console.log('🔍 Adding text output');
+      newOutputs[arrayIndex].push({
+        type: 'output',
+        content: result.output,
+        messageIndex: arrayIndex,
+        codeId: entryId
+      });
     }
 
     // Handle plotly outputs
     if (result.plotly_outputs && result.plotly_outputs.length > 0) {
-      const plotlyOutputItems: CodeOutput[] = [];
+      console.log('🔍 Processing', result.plotly_outputs.length, 'plotly outputs');
       
       result.plotly_outputs.forEach((plotlyOutput: string, vizIndex: number) => {
         try {
-          const plotlyData = JSON.parse(plotlyOutput);
-          plotlyOutputItems.push({
+          // Strip the markdown code block wrapper
+          let plotlyJsonString = plotlyOutput;
+          if (plotlyOutput.startsWith('```plotly\n')) {
+            plotlyJsonString = plotlyOutput.replace(/^```plotly\n/, '').replace(/\n```\n?$/, '');
+          }
+          
+          const plotlyData = JSON.parse(plotlyJsonString);
+          console.log('🔍 Successfully parsed plotly output', vizIndex);
+          
+          newOutputs[arrayIndex].push({
             type: 'plotly',
             content: plotlyData,
             messageIndex: arrayIndex,
@@ -716,25 +739,26 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
           });
         } catch (e) {
           console.error("Error parsing plotly output:", e);
+          console.error("Raw plotly output:", plotlyOutput.substring(0, 200) + '...');
         }
       });
-      
-      if (plotlyOutputItems.length > 0) {
-        newOutputs[arrayIndex] = [
-          ...(newOutputs[arrayIndex] || []),
-          ...plotlyOutputItems
-        ];
-      }
     }
 
     // Handle matplotlib outputs
     if (result.matplotlib_outputs && result.matplotlib_outputs.length > 0) {
-      const matplotlibOutputItems: CodeOutput[] = [];
+      console.log('🔍 Processing', result.matplotlib_outputs.length, 'matplotlib outputs');
       
-      result.matplotlib_outputs.forEach((matplotlibOutput: string) => {
+      result.matplotlib_outputs.forEach((matplotlibOutput: string, chartIndex: number) => {
         try {
-          const matplotlibContent = matplotlibOutput;
-          matplotlibOutputItems.push({
+          // Strip the markdown code block wrapper
+          let matplotlibContent = matplotlibOutput;
+          if (matplotlibOutput.startsWith('```matplotlib\n')) {
+            matplotlibContent = matplotlibOutput.replace(/^```matplotlib\n/, '').replace(/\n```\n?$/, '');
+          }
+          
+          console.log('🔍 Successfully processed matplotlib output', chartIndex);
+          
+          newOutputs[arrayIndex].push({
             type: 'matplotlib',
             content: matplotlibContent,
             messageIndex: arrayIndex,
@@ -744,14 +768,9 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
           console.error("Error processing matplotlib output:", e);
         }
       });
-      
-      if (matplotlibOutputItems.length > 0) {
-        newOutputs[arrayIndex] = [
-          ...(newOutputs[arrayIndex] || []),
-          ...matplotlibOutputItems
-        ];
-      }
     }
+    
+    console.log('🔍 Final outputs for arrayIndex', arrayIndex, ':', newOutputs[arrayIndex]);
     
     // Update state with all the outputs
     setCodeOutputs(newOutputs);
