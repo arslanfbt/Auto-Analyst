@@ -24,15 +24,7 @@ import CreditBalance from '@/components/chat/CreditBalance'
 import { Avatar } from '@/components/ui/avatar'
 import UserProfilePopup from './UserProfilePopup'
 import SettingsPopup from './SettingsPopup'
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-  DialogDescription
-} from "@/components/ui/dialog"
-import { Button } from "../ui/button" 
+
 import DatasetResetPopup from './DatasetResetPopup'
 import { useModelSettings } from '@/lib/hooks/useModelSettings'
 import logger from '@/lib/utils/logger'
