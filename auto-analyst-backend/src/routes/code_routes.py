@@ -63,47 +63,38 @@ logger = Logger("code_routes", see_time=True, console_log=False)
 try_logger = Logger("try_code_routes", see_time=True, console_log=False)
 
 
-def score_code(args, code):
+def score_code(args, code, datasets=None):
     """
     Simple code scorer that checks if code runs successfully.
+    Handles both deep analysis (combined_code) and fix (fixed_code) scenarios.
     
     Args:
         args: Arguments (unused but required for dspy.Refine)
-        code: Code object with combined_code attribute
-        
+        code: Code object with combined_code, fixed_code, or string content
+        datasets: Dictionary of datasets from session state (optional)
+    
     Returns:
         int: Score (0=error, 1=success)
     """
-    code_text = code.fixed_code
     try:
-        # Fix try statement syntax
-        code_text = code_text.replace('try\n', 'try:\n')
-        code_text = code_text.replace('```python', '').replace('```', '')
+        # Handle different attribute names based on context
+        if hasattr(code, 'combined_code'):
+            code_to_execute = code.combined_code  # Deep analysis
+        elif hasattr(code, 'fixed_code'):
+            code_to_execute = code.fixed_code     # Code fix
+        else:
+            code_to_execute = str(code)           # Fallback to string
         
-        # Remove code patterns that would make the code unrunnable
-        invalid_patterns = [
-            '```', '\\n', '\\t', '\\r'
-        ]
-        
-        for pattern in invalid_patterns:
-            if pattern in code_text:
-                code_text = code_text.replace(pattern, '')
-
-        # Remove .show() method calls to prevent blocking
-        cleaned_code = re.sub(r"plt\.show\(\).*?(\n|$)", '', code_text)
-        cleaned_code = re.sub(r'\.show\([^)]*\)', '', cleaned_code)
-            
-        cleaned_code = remove_main_block(cleaned_code)
-        
-        # Execute code in a new namespace
+        # Make datasets available if provided
         local_vars = {}
-        exec(cleaned_code, globals(), local_vars)
-        
-        # If we get here, code executed successfully
-        return 1
-    
+        if datasets:
+            local_vars.update(datasets)
+            
+        # Execute the code to test if it works
+        exec(code_to_execute, local_vars)
+        return 1  # Success
     except Exception as e:
-        return 0
+        return 0  # Error
    
 
 # Remove the global refine_fixer declaration
