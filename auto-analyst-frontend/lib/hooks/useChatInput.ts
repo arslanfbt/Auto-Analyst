@@ -30,7 +30,6 @@ export const useChatInput = (props: ChatInputProps) => {
   const { sessionId, setSessionId, clearSessionId } = useSessionStore()
   const { remainingCredits, isChatBlocked, creditResetDate, checkCredits } = useCredits()
   const [showCreditInfo, setShowCreditInfo] = useState(false)
-  const [showDatasetResetPopup, setShowDatasetResetPopup] = useState(false)
   const [datasetMismatch, setDatasetMismatch] = useState(false)
   const popupShownForChatIdsRef = useRef<Set<number>>(new Set());
   const [descriptionTab, setDescriptionTab] = useState<"edit" | "preview">("edit")
@@ -637,8 +636,6 @@ export const useChatInput = (props: ChatInputProps) => {
     isChatBlocked,
     showCreditInfo,
     setShowCreditInfo,
-    showDatasetResetPopup,
-    setShowDatasetResetPopup,
     datasetMismatch,
     setDatasetMismatch,
     descriptionTab,
