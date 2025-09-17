@@ -1,6 +1,6 @@
 "use client"
 
-import React, { forwardRef, useImperativeHandle, useState, useEffect, useRef } from "react"
+import React, { forwardRef, useImperativeHandle, useState, useEffect, useRef, useCallback } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { Eye, Zap, Paperclip, Send, Square, FileText, Database, Loader2 } from 'lucide-react'
 import { Button } from "../ui/button"
@@ -15,8 +15,8 @@ import axios from 'axios'
 import API_URL from '@/config/api'
 import { useUserSubscriptionStore } from '@/lib/store/userSubscriptionStore'
 import { useFeatureAccess } from '@/lib/hooks/useFeatureAccess'
-import { useAgentMentions } from '@/lib/hooks/useAgentMentions'
-import AgentMentionDropdown from './AgentMentionDropdown'
+import { useAgentMentions, AgentInfo } from '@/lib/hooks/useAgentMentions'
+import { useSessionStore } from '@/lib/store/sessionStore';
 
 const ChatInput = forwardRef<ChatInputRef, ChatInputProps>((props, ref) => {
   const chatInput = useChatInput(props)
@@ -296,14 +296,6 @@ const ChatInput = forwardRef<ChatInputRef, ChatInputProps>((props, ref) => {
               }}
             />
             
-            {/* Agent Mention Dropdown - ONLY ONE, NO REF */}
-            <AgentMentionDropdown
-              show={showAgentMentions}
-              agents={filteredAgents}
-              selectedIndex={selectedMentionIndex}
-              position={mentionPosition}
-              onSelect={handleMentionSelect}
-            />
             
             {/* Send/Stop button - better positioned and Auto-Analyst colors */}
             <div className="absolute right-3 top-1/2 -translate-y-1/2">
