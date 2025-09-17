@@ -648,11 +648,11 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
       return;
     }
     
-    // console.log("Code canvas executed with result:", result);
-    // console.log("For code entry:", codeEntry);
+    // Use timestamp as unique storage key (simple number)
+    const uniqueStorageKey = Date.now();
     
-    // Get the unique message identifier
-    const messageId = `${codeEntry.messageIndex}_${codeEntry.timestamp}`;
+    // Keep original messageIndex for the CodeOutput objects
+    const originalMessageIndex = codeEntry.messageIndex;
     
     // If this is just a code update without execution (savedCode)
     if (result.savedCode) {
@@ -667,18 +667,18 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
       
       // Even for just saving code, make sure the backend knows the message_id
       // This ensures code changes are properly tracked in the database
-      if (messageId && sessionId) {
+      if (uniqueStorageKey && sessionId) {
         // Log to help with debugging
-        logger.log(`Setting message_id in backend for saved code: ${messageId}`);
+        logger.log(`Setting message_id in backend for saved code: ${uniqueStorageKey}`);
         
         axios.post(`${API_URL}/set-message-info`, {
-          message_id: messageId
+          message_id: uniqueStorageKey
         }, {
           headers: {
             'X-Session-ID': sessionId
           },
         }).then(() => {
-          logger.log(`Successfully set message_id for saved code: ${messageId}`);
+          logger.log(`Successfully set message_id for saved code: ${uniqueStorageKey}`);
         }).catch(error => {
           console.error("Error setting message ID for saved code:", error);
         });
@@ -702,103 +702,89 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
       return;
     }
     
-    // Start with a clean slate for this message's outputs
+    // Start with a clean slate for this unique storage key
     const newOutputs: Record<string | number, CodeOutput[]> = { ...codeOutputs };
-    newOutputs[messageId] = []; // Reset outputs for this message
+    newOutputs[uniqueStorageKey] = []; // Use unique timestamp as key
     
     // Add output if available
     if (result.error) {
       // Add error output
       // console.log("Adding error output:", result.error);
-      newOutputs[messageId] = [
+      newOutputs[uniqueStorageKey] = [
         {
           type: 'error',
           content: result.error,
-          messageIndex: messageId,
+          messageIndex: originalMessageIndex, // Use number, not string
           codeId: entryId
         }
       ];
     } else if (result.output) {
       // Add text output
-      newOutputs[messageId] = [
+      newOutputs[uniqueStorageKey] = [
         {
           type: 'output',
           content: result.output,
-          messageIndex: messageId,
+          messageIndex: originalMessageIndex, // Use number, not string
           codeId: entryId
         }
       ];
     }
     
-    // Add plotly outputs if any
+    // Handle plotly outputs
     if (result.plotly_outputs && result.plotly_outputs.length > 0) {
-      
-      // Process all plotly outputs
       const plotlyOutputItems: CodeOutput[] = [];
       
       result.plotly_outputs.forEach((plotlyOutput: string, vizIndex: number) => {
         try {
-          const plotlyContent = plotlyOutput.replace(/```plotly\n|\n```/g, "");
-          
-          const plotlyData = JSON.parse(plotlyContent);
+          const plotlyData = JSON.parse(plotlyOutput);
           plotlyOutputItems.push({
             type: 'plotly',
             content: plotlyData,
-            messageIndex: messageId,
+            messageIndex: originalMessageIndex, // Use number, not string
             codeId: entryId,
-            vizIndex: vizIndex // Add visualization index
+            vizIndex: vizIndex
           });
         } catch (e) {
-          console.error("Error parsing Plotly data:", e);
+          console.error("Error parsing plotly output:", e);
         }
       });
       
-      // Add any plotly outputs to the existing text output
       if (plotlyOutputItems.length > 0) {
-        newOutputs[messageId] = [
-          ...(newOutputs[messageId] || []),
-          ...plotlyOutputItems
-        ];
+        if (!newOutputs[uniqueStorageKey]) {
+          newOutputs[uniqueStorageKey] = [];
+        }
+        newOutputs[uniqueStorageKey] = [...newOutputs[uniqueStorageKey], ...plotlyOutputItems];
       }
     }
 
-    // Add matplotlib outputs if any
+    // Handle matplotlib outputs
     if (result.matplotlib_outputs && result.matplotlib_outputs.length > 0) {
-      
-      // Process all matplotlib outputs
       const matplotlibOutputItems: CodeOutput[] = [];
       
       result.matplotlib_outputs.forEach((matplotlibOutput: string) => {
         try {
-          const matplotlibContent = matplotlibOutput.replace(/```matplotlib\n|\n```/g, "");
-          
+          const matplotlibContent = matplotlibOutput;
           matplotlibOutputItems.push({
             type: 'matplotlib',
-            content: matplotlibContent, // base64 string directly
-            messageIndex: messageId,
+            content: matplotlibContent,
+            messageIndex: originalMessageIndex, // Use number, not string
             codeId: entryId
           });
         } catch (e) {
-          console.error("Error parsing Matplotlib data:", e);
+          console.error("Error processing matplotlib output:", e);
         }
       });
       
-      // Add any matplotlib outputs to the existing text output
       if (matplotlibOutputItems.length > 0) {
-        newOutputs[messageId] = [
-          ...(newOutputs[messageId] || []),
-          ...matplotlibOutputItems
-        ];
+        if (!newOutputs[uniqueStorageKey]) {
+          newOutputs[uniqueStorageKey] = [];
+        }
+        newOutputs[uniqueStorageKey] = [...newOutputs[uniqueStorageKey], ...matplotlibOutputItems];
       }
     }
     
     // Update state with all the outputs
     setCodeOutputs(newOutputs);
-    
-    // Log the current outputs after updating
-    setTimeout(() => {
-      console.log("Current code outputs after update:", codeOutputs);
-    }, 100);
   }, [codeEntries, codeOutputs]);
 
   // Handle fix start
@@ -1600,12 +1586,18 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
 
   // Update the renderCodeOutputs function to include fullscreen buttons
   const renderCodeOutputs = (messageIndex: number) => {
-    // Detect if we have an actual message ID or just an array index
-    const message = messages[messageIndex];
-    const actualMessageId = message?.message_id || messageIndex;
+    // Find the storage key that matches this messageIndex
+    const relevantOutputs: CodeOutput[] = [];
     
-    // Get outputs for this specific message
-    const relevantOutputs = codeOutputs[actualMessageId] || [];
+    // Look through all stored outputs to find ones that belong to this message
+    Object.entries(codeOutputs).forEach(([storageKey, outputs]) => {
+      // Check if any outputs in this storage key belong to our messageIndex
+      const matchingOutputs = outputs.filter(output => 
+        output.messageIndex === messageIndex || 
+        output.messageIndex === messages[messageIndex]?.message_id
+      );
+      relevantOutputs.push(...matchingOutputs);
+    });
     
     if (relevantOutputs.length === 0) return null;
     
