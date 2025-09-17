@@ -33,18 +33,18 @@ interface MessageWithOutputsProps {
   processTableMarkersInErrorOutput: (content: string) => React.ReactNode;
   processTableMarkersInOutput: (content: string) => React.ReactNode;
   isVisualizationPinned: (content: any, code: string, idx: number) => boolean;
-  togglePinVisualization: (content: any, code: string, type: string, idx: number) => void;
+  togglePinVisualization: (content: any, code: string, type: string, idx: number) => void; // Fixed type signature
   setFullscreenViz: (viz: { type: string; content: any }) => void;
   codeFixState: {
     isFixing: boolean;
     codeBeingFixed: string | null;
   };
-  codeFixes: Record<string, number>; // Changed from any[] to Record<string, number>
+  codeFixes: Record<string, number>;
   sessionId: string;
   storeSessionId: string;
   handleFixStart: (codeId: string) => void;
   handleFixComplete: (codeId: string, fixedCode: string) => void;
-  handleCreditCheck: () => Promise<boolean>;
+  handleCreditCheck: (codeId: string, hasEnough: boolean) => void; // Fixed signature
 }
 
 const MessageWithOutputs: React.FC<MessageWithOutputsProps> = ({

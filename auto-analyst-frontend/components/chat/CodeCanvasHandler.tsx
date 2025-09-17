@@ -84,7 +84,7 @@ export const useCodeCanvasHandler = ({
         type: 'error',
         content: result.error,
         messageIndex: arrayIndex,
-        codeId: entryId
+        codeId: entryId  // This should be set correctly
       });
     }
     

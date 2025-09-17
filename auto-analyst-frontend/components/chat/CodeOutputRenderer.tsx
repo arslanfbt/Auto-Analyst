@@ -34,18 +34,18 @@ interface CodeOutputRendererProps {
   processTableMarkersInErrorOutput: (content: string) => React.ReactNode;
   processTableMarkersInOutput: (content: string) => React.ReactNode;
   isVisualizationPinned: (content: any, code: string, idx: number) => boolean;
-  togglePinVisualization: (content: any, code: string, type: string, idx: number) => void;
+  togglePinVisualization: (content: any, code: string, type: string, idx: number) => void; // Fixed type signature
   setFullscreenViz: (viz: { type: string; content: any }) => void;
   codeFixState: {
     isFixing: boolean;
     codeBeingFixed: string | null;
   };
-  codeFixes: Record<string, number>; // Changed from any[] to Record<string, number>
+  codeFixes: Record<string, number>;
   sessionId: string;
   storeSessionId: string;
   handleFixStart: (codeId: string) => void;
   handleFixComplete: (codeId: string, fixedCode: string) => void;
-  handleCreditCheck: () => Promise<boolean>;
+  handleCreditCheck: (codeId: string, hasEnough: boolean) => void; // Fixed signature
 }
 
 const CodeOutputRenderer: React.FC<CodeOutputRendererProps> = ({
@@ -90,20 +90,27 @@ const CodeOutputRenderer: React.FC<CodeOutputRendererProps> = ({
             Error Output {errorOutputs.length > 1 ? `(${errorIdx + 1})` : ''}
           </div>
           
-          {errorOutput.codeId && (
-            <CodeFixButton
-              codeId={errorOutput.codeId}
-              errorOutput={errorOutput.content as string}
-              code={codeEntries.find(entry => entry.id === errorOutput.codeId)?.code || ''}
-              isFixing={codeFixState.isFixing && codeFixState.codeBeingFixed === errorOutput.codeId}
-              codeFixes={codeFixes}
-              sessionId={sessionId || storeSessionId || ''}
-              onFixStart={handleFixStart}
-              onFixComplete={handleFixComplete}
-              onCreditCheck={handleCreditCheck}
-              variant="inline"
-            />
-          )}
+          {/* DEBUG: Always show CodeFixButton for testing */}
+          <div className="mb-2 p-2 bg-yellow-100 border border-yellow-300 rounded">
+            <div className="text-xs text-yellow-800 mb-1">DEBUG INFO:</div>
+            <div className="text-xs text-yellow-800">codeId: {errorOutput.codeId || 'MISSING'}</div>
+            <div className="text-xs text-yellow-800">hasCode: {codeEntries.find(entry => entry.id === errorOutput.codeId)?.code ? 'YES' : 'NO'}</div>
+            <div className="text-xs text-yellow-800">errorContent: {errorOutput.content ? 'YES' : 'NO'}</div>
+          </div>
+          
+          {/* Always render CodeFixButton for debugging */}
+          <CodeFixButton
+            codeId={errorOutput.codeId || 'debug-code-id'}
+            errorOutput={errorOutput.content as string || 'Debug error message'}
+            code={codeEntries.find(entry => entry.id === errorOutput.codeId)?.code || 'print("debug code")'}
+            isFixing={codeFixState.isFixing && codeFixState.codeBeingFixed === errorOutput.codeId}
+            codeFixes={codeFixes}
+            sessionId={sessionId || storeSessionId || ''}
+            onFixStart={handleFixStart}
+            onFixComplete={handleFixComplete}
+            onCreditCheck={handleCreditCheck}
+            variant="inline"
+          />
           
           {processTableMarkersInErrorOutput(errorOutput.content as string)}
         </div>
