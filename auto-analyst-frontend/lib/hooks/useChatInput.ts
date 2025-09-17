@@ -78,6 +78,12 @@ export const useChatInput = (props: ChatInputProps) => {
     if (session?.user?.id) {
       const initializeSession = async () => {
         try {
+          // Add this check to be extra safe
+          if (!session.user.id) {
+            console.error('❌ No user ID available for session initialization')
+            return
+          }
+          
           // User is logged in - generate user-specific session ID
           const userSessionId = `user_${session.user.id}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
           console.log(`🔐 User logged in - generating new session ID: ${userSessionId}`)
@@ -90,7 +96,7 @@ export const useChatInput = (props: ChatInputProps) => {
           console.log('�� Sending session to backend...')
           const response = await axios.post(`${API_URL}/initialize-session`, {
             session_id: userSessionId,
-            user_id: parseInt(session.user.id), // Convert to number
+            user_id: session.user.id ? parseInt(session.user.id) : 0,
             user_email: session.user.email || '',
             user_name: session.user.name || ''
           }, {
@@ -105,7 +111,6 @@ export const useChatInput = (props: ChatInputProps) => {
           
         } catch (error) {
           console.error('❌ Failed to initialize session on backend:', error)
-          // Keep sessionId even if backend fails
           sessionInitialized.current = true
         }
       }
