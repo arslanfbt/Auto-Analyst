@@ -18,6 +18,7 @@ from dotenv import load_dotenv
 import duckdb
 import dspy
 from src.utils.dataset_description_generator import generate_dataset_description
+from fastapi import Request
 
 load_dotenv()
 
@@ -389,31 +390,27 @@ This dataset appears clean with consistent formatting and no missing values, mak
         # Return the updated session data
         return self._sessions[session_id]
 
-async def get_session_id(request, session_manager):
+async def get_session_id(request: Request, session_manager):
     """
-    Get the session ID from the request, create/associate a user if needed
-    
-    Args:
-        request: FastAPI Request object
-        session_manager: SessionManager instance
-        
-    Returns:
-        Session ID string
+    Get or create a session ID from the request
     """
     # Debug: Log all headers
-    logger.log_message(f"🔍 Request headers: {dict(request.headers)}", level=logging.DEBUG)
+    logger.log_message(f"🔍 ALL REQUEST HEADERS: {dict(request.headers)}", level=logging.DEBUG)
     
-    # First try to get from query params
-    session_id = request.query_params.get("session_id")
-    logger.log_message(f"🔍 Session ID from query params: {session_id}", level=logging.DEBUG)
+    # Try to get session ID from headers FIRST (primary method)
+    session_id = request.headers.get("X-Session-ID")
+    logger.log_message(f"🔍 Session ID from X-Session-ID header: {session_id}", level=logging.DEBUG)
     
-    # If not in query params, try to get from headers
+    # If not in headers, try query parameters (fallback for backward compatibility)
     if not session_id:
-        session_id = request.headers.get("X-Session-ID")
-        logger.log_message(f"🔍 Session ID from headers: {session_id}", level=logging.DEBUG)
+        session_id = request.query_params.get("session_id")
+        logger.log_message(f"🔍 Session ID from query params: {session_id}", level=logging.DEBUG)
+    
+    logger.log_message(f"🔍 Final session_id before validation: '{session_id}' (type: {type(session_id)})", level=logging.DEBUG)
     
     # STOP auto-generating sessions
     if not session_id:
+        logger.log_message(f"❌ No session ID found in request", level=logging.ERROR)
         raise HTTPException(status_code=400, detail="Session ID required")
     else:
         logger.log_message(f"✅ Using existing session ID: {session_id}", level=logging.INFO)

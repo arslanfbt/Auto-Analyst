@@ -17,6 +17,8 @@ import textwrap
 import os
 from src.schemas.code_schema import CodeExecuteRequest, CodeEditRequest, CodeFixRequest, CodeCleanRequest, GetLatestCodeRequest
 from src.utils.model_registry import MODEL_OBJECTS
+import asyncio
+import traceback
 
 def clean_print_statements(code_block):
     """
@@ -316,8 +318,11 @@ async def fix_code_with_dspy(code: str, error: str, dataset_context: str = "", d
                         error=str(error) or "",
                     )
             
-            # Use asyncio.to_thread for better async integration
-            result = await asyncio.to_thread(run_refine_fixer)
+            # Use asyncio.to_thread for better async integration with timeout
+            result = await asyncio.wait_for(
+                asyncio.to_thread(run_refine_fixer), 
+                timeout=60.0  # 60 second timeout
+            )
             
             if not hasattr(result, 'fixed_code'):
                 raise ValueError("DSPy Refine did not return a result with 'fixed_code' attribute")
@@ -325,8 +330,12 @@ async def fix_code_with_dspy(code: str, error: str, dataset_context: str = "", d
             return result.fixed_code
             
         except Exception as e:
-            logger.log_message(f"Error during refine code fixing: {str(e)}", level=logging.ERROR)
-            raise RuntimeError(f"Code fixing failed: {str(e)}") from e
+            logger.log_message(f"🔧 DETAILED ERROR in fix_code_with_dspy: {str(e)}", level=logging.ERROR)
+            logger.log_message(f"�� ERROR TYPE: {type(e).__name__}", level=logging.ERROR)
+            logger.log_message(f"�� ERROR TRACEBACK: {traceback.format_exc()}", level=logging.ERROR)
+            
+            # Instead of returning original code, raise the error so we can see what's wrong
+            raise HTTPException(status_code=500, detail=f"Fix failed: {str(e)}")
             
     except Exception as e:
         logger.log_message(f"Error in fix_code_with_dspy: {str(e)}", level=logging.ERROR)
