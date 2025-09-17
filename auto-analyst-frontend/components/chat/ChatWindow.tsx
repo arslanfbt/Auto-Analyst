@@ -1564,35 +1564,27 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
     return <div>{parts}</div>;
   }, []);
 
-  // Update the renderCodeOutputs function to show outputs from all previous messages
+  // Update the renderCodeOutputs function to show outputs ONLY for the specific message
   const renderCodeOutputs = (messageIndex: number) => {
-    // Collect outputs from ALL messages up to and including the current one
-    const allOutputs: CodeOutput[] = [];
-    
-    for (let i = 0; i <= messageIndex; i++) {
-      const outputsForThisMessage = codeOutputs[i] || [];
-      allOutputs.push(...outputsForThisMessage);
-    }
+    // Get outputs ONLY for this specific message index
+    const outputsForThisMessage = codeOutputs[messageIndex] || [];
     
     console.log('🔍 renderCodeOutputs DEBUG:', {
       messageIndex,
+      outputsCount: outputsForThisMessage.length,
       codeOutputsKeys: Object.keys(codeOutputs),
-      allOutputsCount: allOutputs.length,
-      outputsByMessage: Object.keys(codeOutputs).map(key => ({
-        messageIndex: key,
-        count: codeOutputs[key]?.length || 0
-      }))
+      outputs: outputsForThisMessage.map(o => ({ type: o.type, contentLength: typeof o.content === 'string' ? o.content.length : 'object' }))
     });
     
-    if (allOutputs.length === 0) return null;
+    if (outputsForThisMessage.length === 0) return null;
     
     // Group outputs by type for organized display
-    const errorOutputs = allOutputs.filter(output => output.type === 'error');
-    const textOutputs = allOutputs.filter(output => output.type === 'output');
-    const plotlyOutputs = allOutputs.filter(output => output.type === 'plotly');
-    const matplotlibOutputs = allOutputs.filter(output => output.type === 'matplotlib');
+    const errorOutputs = outputsForThisMessage.filter(output => output.type === 'error');
+    const textOutputs = outputsForThisMessage.filter(output => output.type === 'output');
+    const plotlyOutputs = outputsForThisMessage.filter(output => output.type === 'plotly');
+    const matplotlibOutputs = outputsForThisMessage.filter(output => output.type === 'matplotlib');
     
-    console.log('🔍 Output types:', {
+    console.log(' Output types for message', messageIndex, ':', {
       errors: errorOutputs.length,
       text: textOutputs.length,
       plotly: plotlyOutputs.length,
@@ -1601,20 +1593,20 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
     
     return (
       <div className="mt-2 space-y-4">
-        {/* Show error outputs first */}
-        {errorOutputs.length > 0 && (
-          <div className="bg-red-50 border border-red-200 rounded-md p-3 overflow-auto relative">
+        {/* Show ALL error outputs */}
+        {errorOutputs.map((errorOutput, errorIdx) => (
+          <div key={`error-${messageIndex}-${errorIdx}`} className="bg-red-50 border border-red-200 rounded-md p-3 overflow-auto relative">
             <div className="flex items-center text-red-600 font-medium mb-2">
               <AlertTriangle size={16} className="mr-2" />
-              Error Output
+              Error Output {errorOutputs.length > 1 ? `(${errorIdx + 1})` : ''}
             </div>
             
-            {errorOutputs[0].codeId && (
+            {errorOutput.codeId && (
               <CodeFixButton
-                codeId={errorOutputs[0].codeId}
-                errorOutput={errorOutputs[0].content as string}
-                code={codeEntries.find(entry => entry.id === errorOutputs[0].codeId)?.code || ''}
-                isFixing={codeFixState.isFixing && codeFixState.codeBeingFixed === errorOutputs[0].codeId}
+                codeId={errorOutput.codeId}
+                errorOutput={errorOutput.content as string}
+                code={codeEntries.find(entry => entry.id === errorOutput.codeId)?.code || ''}
+                isFixing={codeFixState.isFixing && codeFixState.codeBeingFixed === errorOutput.codeId}
                 codeFixes={codeFixes}
                 sessionId={sessionId || storeSessionId || ''}
                 onFixStart={handleFixStart}
@@ -1625,27 +1617,27 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
             )}
             
             {(() => {
-              const content = errorOutputs[0].content;
+              const content = errorOutput.content;
               return processTableMarkersInErrorOutput(content as string);
             })()}
           </div>
-        )}
+        ))}
         
-        {/* Show text outputs */}
-        {textOutputs.length > 0 && (
-          <div className="bg-gray-50 border border-gray-200 rounded-md p-3 relative">
+        {/* Show ALL text outputs */}
+        {textOutputs.map((textOutput, textIdx) => (
+          <div key={`text-${messageIndex}-${textIdx}`} className="bg-gray-50 border border-gray-200 rounded-md p-3 relative">
             <div className="flex items-center text-gray-700 font-medium mb-2">
-              Output
+              Output {textOutputs.length > 1 ? `(${textIdx + 1})` : ''}
             </div>
             
             {(() => {
-              const content = textOutputs[0].content;
+              const content = textOutput.content;
               return processTableMarkersInOutput(content as string);
             })()}
           </div>
-        )}
+        ))}
         
-        {/* Show plotly visualizations */}
+        {/* Show ALL plotly visualizations */}
         {plotlyOutputs.map((output, idx) => {
           const codeEntry = codeEntries.find(entry => entry.id === output.codeId);
           const currentCode = codeEntry?.code || '';
@@ -1654,7 +1646,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
           return (
             <div key={`plotly-${messageIndex}-${idx}`} className="bg-white border border-gray-200 rounded-md p-3 overflow-auto relative">
               <div className="flex items-center justify-between text-gray-700 font-medium mb-2">
-                <span>📊 Interactive Visualization</span>
+                <span>📊 Interactive Visualization {plotlyOutputs.length > 1 ? `(${idx + 1})` : ''}</span>
                 <div className="flex items-center gap-2">
                   <Button
                     variant="outline"
@@ -1698,7 +1690,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
           );
         })}
         
-        {/* Show matplotlib visualizations */}
+        {/* Show ALL matplotlib visualizations */}
         {matplotlibOutputs.map((output, idx) => {
           const codeEntry = codeEntries.find(entry => entry.id === output.codeId);
           const currentCode = codeEntry?.code || '';
@@ -1707,7 +1699,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
           return (
             <div key={`matplotlib-${messageIndex}-${idx}`} className="bg-white border border-gray-200 rounded-md p-3 overflow-auto relative">
               <div className="flex items-center justify-between text-gray-700 font-medium mb-2">
-                <span>📈 Chart Visualization</span>
+                <span>📈 Chart Visualization {matplotlibOutputs.length > 1 ? `(${idx + 1})` : ''}</span>
                 <div className="flex items-center gap-2">
                   <Button
                     variant="outline"
@@ -1757,9 +1749,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
   // Modified render message function to include code outputs
   const renderMessageWithOutputs = (message: ChatMessage, index: number) => {
     const renderedMessage = renderMessage(message, index);
-    
-    // ALWAYS show outputs from all previous messages, regardless of current message index
-    const codeOutputsComponent = renderCodeOutputs(messages.length - 1);
+    const codeOutputsComponent = renderCodeOutputs(index);
     
     if (!codeOutputsComponent) {
       return renderedMessage;
