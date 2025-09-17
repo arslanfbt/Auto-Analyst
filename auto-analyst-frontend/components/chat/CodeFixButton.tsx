@@ -178,8 +178,8 @@ const CodeFixButton: React.FC<CodeFixButtonProps> = ({
       } else if (response.data && response.data.error) {
         toast({
           title: "Error fixing code",
-          description: response.data.error,
-          variant: "destructive",
+          description: response.data.error,  // Now shows the actual error message
+          variant: "destructive", 
           duration: 5000,
         })
         return
