@@ -125,8 +125,8 @@ const calculateHash = (str: string): string => {
 export const useCodeStore = create<CodeStore>()(
   persist(
     (set, get) => ({
-      messageIndices: new Map(),
-      codeBlocks: new Map(),
+      messageIndices: new Map<number, MessageCodeIndex>(),
+      codeBlocks: new Map<string, CodeBlock>(),
       
       addCodeBlock: (messageIndex: number, codeId: string, language: string, code: string) => {
         const { imports, body } = extractImports(code, language);
@@ -288,8 +288,9 @@ export const useCodeStore = create<CodeStore>()(
         const messageIndex_data = get().messageIndices.get(messageIndex);
         if (!messageIndex_data) return;
         
-        const codeHashes = Array.from(messageIndex_data.codeBlocks.values())
-          .map(block => block.hash)
+        // Ensure TS knows the iterator yields CodeBlock
+        const codeHashes = [...(messageIndex_data.codeBlocks.values() as IterableIterator<CodeBlock>)]
+          .map((block: CodeBlock) => block.hash)
           .sort();
         
         const merkleRoot = calculateHash(codeHashes.join(''));
@@ -324,8 +325,13 @@ export const useCodeStore = create<CodeStore>()(
       onRehydrateStorage: () => (state) => {
         if (state) {
           // Convert arrays back to Maps
-          state.messageIndices = new Map(state.messageIndices as any);
-          state.codeBlocks = new Map(state.codeBlocks as any);
+          state.messageIndices = new Map<number, MessageCodeIndex>(
+            Object.entries(state.messageIndices as any).map(([k, v]) => [Number(k), {
+              ...v,
+              codeBlocks: new Map<string, CodeBlock>(Object.entries(v.codeBlocks || {})),
+            }])
+          );
+          state.codeBlocks = new Map<string, CodeBlock>(Object.entries(state.codeBlocks as any));
         }
       }
     }
