@@ -648,11 +648,8 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
       return;
     }
     
-    // Use timestamp as unique storage key (simple number)
-    const uniqueStorageKey = Date.now();
-    
-    // Keep original messageIndex for the CodeOutput objects
-    const originalMessageIndex = codeEntry.messageIndex;
+    // Use the messageIndex as the storage key (this matches what renderCodeOutputs expects)
+    const messageIndex = codeEntry.messageIndex;
     
     // If this is just a code update without execution (savedCode)
     if (result.savedCode) {
@@ -664,39 +661,36 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
             : entry
         )
       );
-      
-      // No need to set message_id for saved code - only needed for execution
       return;
     }
     
-    // Start with a clean slate for this unique storage key
+    // Start with a clean slate for this message's outputs
     const newOutputs: Record<string | number, CodeOutput[]> = { ...codeOutputs };
-    newOutputs[uniqueStorageKey] = []; // Use unique timestamp as key
+    newOutputs[messageIndex] = []; // Reset outputs for this message
     
     // Add output if available
     if (result.error) {
       // Add error output
-      // console.log("Adding error output:", result.error);
-      newOutputs[uniqueStorageKey] = [
+      newOutputs[messageIndex] = [
         {
           type: 'error',
           content: result.error,
-          messageIndex: originalMessageIndex, // Use number, not string
+          messageIndex: messageIndex,
           codeId: entryId
         }
       ];
     } else if (result.output) {
       // Add text output
-      newOutputs[uniqueStorageKey] = [
+      newOutputs[messageIndex] = [
         {
           type: 'output',
           content: result.output,
-          messageIndex: originalMessageIndex, // Use number, not string
+          messageIndex: messageIndex,
           codeId: entryId
         }
       ];
     }
-    
+
     // Handle plotly outputs
     if (result.plotly_outputs && result.plotly_outputs.length > 0) {
       const plotlyOutputItems: CodeOutput[] = [];
@@ -707,7 +701,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
           plotlyOutputItems.push({
             type: 'plotly',
             content: plotlyData,
-            messageIndex: originalMessageIndex, // Use number, not string
+            messageIndex: messageIndex,
             codeId: entryId,
             vizIndex: vizIndex
           });
@@ -717,10 +711,10 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
       });
       
       if (plotlyOutputItems.length > 0) {
-        if (!newOutputs[uniqueStorageKey]) {
-          newOutputs[uniqueStorageKey] = [];
-        }
-        newOutputs[uniqueStorageKey] = [...newOutputs[uniqueStorageKey], ...plotlyOutputItems];
+        newOutputs[messageIndex] = [
+          ...(newOutputs[messageIndex] || []),
+          ...plotlyOutputItems
+        ];
       }
     }
 
@@ -734,7 +728,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
           matplotlibOutputItems.push({
             type: 'matplotlib',
             content: matplotlibContent,
-            messageIndex: originalMessageIndex, // Use number, not string
+            messageIndex: messageIndex,
             codeId: entryId
           });
         } catch (e) {
@@ -743,10 +737,10 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
       });
       
       if (matplotlibOutputItems.length > 0) {
-        if (!newOutputs[uniqueStorageKey]) {
-          newOutputs[uniqueStorageKey] = [];
-        }
-        newOutputs[uniqueStorageKey] = [...newOutputs[uniqueStorageKey], ...matplotlibOutputItems];
+        newOutputs[messageIndex] = [
+          ...(newOutputs[messageIndex] || []),
+          ...matplotlibOutputItems
+        ];
       }
     }
     
