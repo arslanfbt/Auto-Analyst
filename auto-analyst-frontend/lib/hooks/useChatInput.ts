@@ -206,8 +206,7 @@ export const useChatInput = (props: ChatInputProps) => {
         })
         setErrorNotification({
           message: 'CSV Upload Failed',
-          details: getErrorMessage(error) || 'There was an error processing your CSV file. Please check the file format and try again.',
-          type: 'error'
+          details: getErrorMessage(error) || 'There was an error processing your CSV file.'
         })
       }
     } else if (isExcel) {
@@ -431,7 +430,6 @@ export const useChatInput = (props: ChatInputProps) => {
       setErrorNotification({ 
         message: 'Excel Upload Failed', 
         details: getErrorMessage(error) || 'Failed to process Excel file. Please check the file format and try again.',
-        type: 'error'
       })
       setFileUpload(prev => prev ? { 
         ...prev, 
@@ -488,7 +486,6 @@ export const useChatInput = (props: ChatInputProps) => {
       setErrorNotification({
         message: 'Dataset Upload Failed',
         details: getErrorMessage(error) || 'Failed to upload your dataset. Please try again.',
-        type: 'error'
       })
       
       if (fileUpload?.file) {
