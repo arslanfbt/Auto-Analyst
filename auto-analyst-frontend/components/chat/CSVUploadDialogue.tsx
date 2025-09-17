@@ -234,9 +234,9 @@ export default function CSVUploadDialog({
             </Tabs>
           </div>
 
-          {/* NEW: Preprocessing Options */}
-          <div className="flex-shrink-0 space-y-3 p-4 bg-gray-50 rounded-lg">
-            <label className="text-sm font-medium text-gray-700">Preprocessing Options</label>
+          {/* Preprocessing Options - Updated to match Excel dialog styling */}
+          <div className="flex-shrink-0 space-y-3">
+            <label className="text-sm font-medium">Preprocessing Options</label>
             
             <div className="flex items-center space-x-2">
               <Checkbox
@@ -246,7 +246,7 @@ export default function CSVUploadDialog({
               />
               <label
                 htmlFor="fillNulls"
-                className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
               >
                 Fill nulls
               </label>
@@ -260,7 +260,7 @@ export default function CSVUploadDialog({
               />
               <label
                 htmlFor="convertTypes"
-                className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
               >
                 Convert types for better analysis
               </label>
