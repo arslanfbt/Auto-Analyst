@@ -47,7 +47,7 @@ export const useCodeFixIntegration = ({
     isFixing: false,
     codeBeingFixed: null as string | null
   });
-  const [codeFixes, setCodeFixes] = useState<Record<string, number>>({}); // Changed from any[] to Record<string, number>
+  const [codeFixes, setCodeFixes] = useState<Record<string, number>>({});
 
   // Handle fix start
   const handleFixStart = useCallback((codeId: string) => {
@@ -115,16 +115,19 @@ export const useCodeFixIntegration = ({
     });
   }, [codeEntries, setCodeEntries, handleCodeCanvasExecute, messages, setCodeOutputs, toast]);
 
-  // Handle credit check
-  const handleCreditCheck = useCallback(async (): Promise<boolean> => {
-    try {
-      // Add credit check logic here if needed
-      return true;
-    } catch (error) {
-      console.error("Credit check failed:", error);
-      return false;
+  // Handle credit check - Fixed signature to match CodeFixButton expectations
+  const handleCreditCheck = useCallback((codeId: string, hasEnough: boolean) => {
+    // This function is called by CodeFixButton to notify about credit status
+    console.log(`Credit check for ${codeId}: ${hasEnough ? 'sufficient' : 'insufficient'}`);
+    
+    if (!hasEnough) {
+      toast({
+        title: "Insufficient Credits",
+        description: "You don't have enough credits to use the code fix feature.",
+        variant: "destructive",
+      });
     }
-  }, []);
+  }, [toast]);
 
   // Handle opening canvas for fix
   const handleOpenCanvasForFix = useCallback((errorMessage: string, codeId: string) => {

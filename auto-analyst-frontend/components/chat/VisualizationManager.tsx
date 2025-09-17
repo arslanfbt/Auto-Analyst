@@ -43,8 +43,8 @@ export const useVisualizationManager = ({ codeEntries }: VisualizationManagerPro
     }
   }, [visualizations, hashCode]);
 
-  // Helper function to toggle pin status
-  const togglePinVisualization = useCallback((content: any, code: string, type: 'plotly' | 'matplotlib', vizIndex?: number) => {
+  // Helper function to toggle pin status - Fixed to accept generic string type
+  const togglePinVisualization = useCallback((content: any, code: string, type: string, vizIndex?: number) => {
     try {
       // Include visualization index in hash to make multiple viz from same code unique
       const hashInput = code + (vizIndex !== undefined ? `_viz_${vizIndex}` : '');
