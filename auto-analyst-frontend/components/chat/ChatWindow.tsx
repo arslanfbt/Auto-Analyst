@@ -1757,7 +1757,9 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
   // Modified render message function to include code outputs
   const renderMessageWithOutputs = (message: ChatMessage, index: number) => {
     const renderedMessage = renderMessage(message, index);
-    const codeOutputsComponent = renderCodeOutputs(index);
+    
+    // ALWAYS show outputs from all previous messages, regardless of current message index
+    const codeOutputsComponent = renderCodeOutputs(messages.length - 1);
     
     if (!codeOutputsComponent) {
       return renderedMessage;
