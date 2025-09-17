@@ -652,7 +652,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
     // console.log("For code entry:", codeEntry);
     
     // Get the unique message identifier
-    const messageId = codeEntry.messageIndex;
+    const messageId = `${codeEntry.messageIndex}_${codeEntry.timestamp}`;
     
     // If this is just a code update without execution (savedCode)
     if (result.savedCode) {
