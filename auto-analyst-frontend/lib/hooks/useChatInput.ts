@@ -84,7 +84,7 @@ export const useChatInput = (props: ChatInputProps) => {
       SessionRecovery.storeSessionId(userSessionId)
       sessionInitialized.current = true
     }
-    // No session ID for anonymous users - they must log in first
+    // NO session ID for anonymous users - they must log in first
   }, [session, status, setSessionId])
 
   // Clear session when user logs out
@@ -107,6 +107,17 @@ export const useChatInput = (props: ChatInputProps) => {
       sessionStorage.setItem('auto-analyst-session-id', sessionId)
     }
   }, [sessionId])
+
+  // Clean up any old anonymous sessions on app start
+  useEffect(() => {
+    const currentSessionId = localStorage.getItem('auto-analyst-session-id');
+    if (currentSessionId && (currentSessionId.startsWith('anon_') || currentSessionId.startsWith('temp_'))) {
+      localStorage.removeItem('auto-analyst-session-id');
+      sessionStorage.removeItem('auto-analyst-session-id');
+      clearSessionId();
+      console.log('🧹 Cleaned up old anonymous session:', currentSessionId);
+    }
+  }, []); // Run once on mount
 
   // Helper function to safely update session ID (with persistence)
   const updateSessionIdSafely = (newSessionId: string) => {

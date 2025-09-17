@@ -23,6 +23,7 @@ from src.utils.dataset_description_generator import generate_dataset_description
 import dspy
 import re
 # from fastapi.responses import JSONResponse
+import time
 
 logger = Logger("session_routes", see_time=False, console_log=False)
 
@@ -56,6 +57,12 @@ class ResetSessionRequest(BaseModel):
 # Define a response model for Excel sheets
 class ExcelSheetsResponse(BaseModel):
     sheets: List[str]
+
+class InitializeSessionRequest(BaseModel):
+    session_id: str
+    user_id: int  # Changed to int to match your user_id type
+    user_email: str
+    user_name: str
 
 @router.post("/api/excel-sheets")
 async def get_excel_sheets(
@@ -850,3 +857,44 @@ async def generate_session():
     except Exception as e:
         logger.log_message(f"Error generating session: {str(e)}", level=logging.ERROR)
         raise HTTPException(status_code=500, detail=f"Failed to generate session: {str(e)}")
+
+@router.post("/initialize-session")
+async def initialize_session(
+    request: InitializeSessionRequest,
+    app_state = Depends(get_app_state)
+):
+    """Initialize session immediately after Google auth verification"""
+    try:
+        session_id = request.session_id
+        user_id = request.user_id
+        user_email = request.user_email
+        user_name = request.user_name
+        
+        logger.log_message(f"🔐 Initializing session for user {user_id}: {session_id}", level=logging.INFO)
+        
+        # Create or get session state
+        session_state = app_state.get_session_state(session_id)
+        
+        # Associate user with session
+        app_state.set_session_user(
+            session_id=session_id,
+            user_id=user_id
+        )
+        
+        # Store additional user info
+        session_state["user_email"] = user_email
+        session_state["user_name"] = user_name
+        session_state["initialized_at"] = time.time()
+        
+        logger.log_message(f"✅ Session initialized successfully for user {user_id}", level=logging.INFO)
+        
+        return {
+            "status": "success",
+            "session_id": session_id,
+            "message": "Session initialized successfully",
+            "user_id": user_id
+        }
+        
+    except Exception as e:
+        logger.log_message(f"❌ Error initializing session: {str(e)}", level=logging.ERROR)
+        raise HTTPException(status_code=500, detail=f"Failed to initialize session: {str(e)}")
