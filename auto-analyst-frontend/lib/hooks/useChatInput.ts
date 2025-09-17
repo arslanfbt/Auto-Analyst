@@ -60,7 +60,7 @@ export const useChatInput = (props: ChatInputProps) => {
   const sessionInitialized = useRef(false)
   const lastUserId = useRef<string | null>(null)
 
-  // Initialize session ID ONLY after user logs in
+  // Initialize session ID ONLY after user logs in and send to backend
   useEffect(() => {
     // Wait for authentication status to be determined
     if (status === 'loading') return
@@ -77,12 +77,41 @@ export const useChatInput = (props: ChatInputProps) => {
     if (sessionInitialized.current) return
 
     if (session?.user?.id) {
-      // User is logged in - generate user-specific session ID
-      const userSessionId = `user_${session.user.id}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
-      console.log(`🔐 User logged in - generating new session ID: ${userSessionId}`)
-      setSessionId(userSessionId)
-      SessionRecovery.storeSessionId(userSessionId)
-      sessionInitialized.current = true
+      const initializeSession = async () => {
+        try {
+          // User is logged in - generate user-specific session ID
+          const userSessionId = `user_${session.user.id}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+          console.log(`🔐 User logged in - generating new session ID: ${userSessionId}`)
+          
+          // Set sessionId in frontend first
+          setSessionId(userSessionId)
+          SessionRecovery.storeSessionId(userSessionId)
+          
+          // Send to backend to initialize session
+          console.log('�� Sending session to backend...')
+          const response = await axios.post(`${API_URL}/initialize-session`, {
+            session_id: userSessionId,
+            user_id: parseInt(session.user.id), // Convert to number
+            user_email: session.user.email || '',
+            user_name: session.user.name || ''
+          }, {
+            headers: {
+              'X-Session-ID': userSessionId,
+              'Content-Type': 'application/json'
+            }
+          })
+          
+          console.log('✅ Backend session initialized:', response.data)
+          sessionInitialized.current = true
+          
+        } catch (error) {
+          console.error('❌ Failed to initialize session on backend:', error)
+          // Keep sessionId even if backend fails
+          sessionInitialized.current = true
+        }
+      }
+      
+      initializeSession()
     }
     // NO session ID for anonymous users - they must log in first
   }, [session, status, setSessionId])
