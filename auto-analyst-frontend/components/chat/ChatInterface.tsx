@@ -7,7 +7,7 @@ import Image from "next/image"
 import ChatWindow from "./ChatWindow"
 import ChatInput from "./ChatInput"
 import Sidebar from "./Sidebar"
-import axios from "axios"
+import apiClient from '@/lib/api/axiosConfig'
 import { useSession } from "next-auth/react"
 import { useFreeTrialStore } from "@/lib/store/freeTrialStore"
 import FreeTrialOverlay from "./FreeTrialOverlay"
@@ -162,7 +162,7 @@ const ChatInterface: React.FC = () => {
     const fetchAgents = async () => {
       try {
         const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
-        const response = await axios.get(`${API_URL}/agents`)
+        const response = await apiClient.get(`${API_URL}/agents`)
         if (response.data && response.data.available_agents) {
           const agentList: AgentInfo[] = response.data.available_agents.map((name: string) => ({
             name,
@@ -194,7 +194,7 @@ const ChatInterface: React.FC = () => {
     if (session?.user && mounted) {
       const createOrGetUser = async () => {
         try {
-          const response = await axios.post(`${API_URL}/chats/users`, {
+          const response = await apiClient.post(`${API_URL}/chats/users`, {
             username: session.user.name || 'Anonymous User',
             email: session.user.email || `anonymous-${Date.now()}@example.com`
           });
@@ -250,7 +250,7 @@ const ChatInterface: React.FC = () => {
             setIsNewLoginSession(true);
             
             // Reset the session to use the default dataset but preserve model settings
-            await axios.post(`${API_URL}/reset-session`, 
+            await apiClient.post(`${API_URL}/reset-session`, 
               { preserveModelSettings: true }, // Add flag to preserve model settings
               {
                 headers: { 'X-Session-ID': sessionId }
@@ -271,7 +271,7 @@ const ChatInterface: React.FC = () => {
             
             // Force the use of default dataset with an explicit API call, but don't show preview
             try {
-              await axios.get(`${API_URL}/api/default-dataset`, {
+              await apiClient.get(`${API_URL}/api/default-dataset`, {
                 headers: { 'X-Session-ID': sessionId }
               });
               // logger.log("Default dataset loaded silently on login");
@@ -361,7 +361,7 @@ const ChatInterface: React.FC = () => {
           
           // Load chat directly
           setActiveChatId(chatId);
-          const response = await axios.get(`${API_URL}/chats/${chatId}`, {
+          const response = await apiClient.get(`${API_URL}/chats/${chatId}`, {
             params: { user_id: userId },
             headers: { 'X-Session-ID': sessionId }
           });
@@ -390,7 +390,7 @@ const ChatInterface: React.FC = () => {
           localStorage.removeItem('suppressDatasetPopup');
           logger.log("[ChatInterface] Session ID:", sessionId);
           // Check if we need to show dataset selection popup
-          const sessionResponse = await axios.get(`${API_URL}/api/session-info`, {
+          const sessionResponse = await apiClient.get(`${API_URL}/api/session-info`, {
             headers: { 'X-Session-ID': sessionId }
           });
           
@@ -409,7 +409,7 @@ const ChatInterface: React.FC = () => {
       
       // Load chat messages
       setActiveChatId(chatId);
-      const response = await axios.get(`${API_URL}/chats/${chatId}`, {
+      const response = await apiClient.get(`${API_URL}/chats/${chatId}`, {
         params: { user_id: userId },
         headers: { 'X-Session-ID': sessionId }
       });
@@ -453,7 +453,7 @@ const ChatInterface: React.FC = () => {
     setIsLoadingHistory(true);
     try {
       // Fetch chat histories for the user or admin
-      const response = await axios.get(`${API_URL}/chats/`, {
+      const response = await apiClient.get(`${API_URL}/chats/`, {
         params: { user_id: currentUserId, is_admin: isAdmin },
         headers: { 'X-Session-ID': sessionId }
       });
@@ -482,7 +482,7 @@ const ChatInterface: React.FC = () => {
     // Cleanup empty chats
     if (session || isAdmin) {
       try {
-        await axios.post(`${API_URL}/chats/cleanup-empty`, {
+        await apiClient.post(`${API_URL}/chats/cleanup-empty`, {
           user_id: userId,
           is_admin: isAdmin
         }, {
@@ -519,7 +519,7 @@ const ChatInterface: React.FC = () => {
     
     // Check for custom dataset
     try {
-      const response = await axios.get(`${API_URL}/api/session-info`, {
+      const response = await apiClient.get(`${API_URL}/api/session-info`, {
         headers: { 'X-Session-ID': sessionId }
       });
       
@@ -666,7 +666,7 @@ const ChatInterface: React.FC = () => {
         // More robust save process with retry for the critical first message
         const saveAIResponse = async (retryCount = 0) => {
           try {
-            const response = await axios.post(`${API_URL}/chats/${currentId}/messages`, {
+            const response = await apiClient.post(`${API_URL}/chats/${currentId}/messages`, {
               content: accumulatedResponse.trim(),
               sender: 'ai',
               agent: lastAgentName // Use the tracked agent name
@@ -788,7 +788,7 @@ const ChatInterface: React.FC = () => {
       if (currentId && (session || isAdmin)) {
         try {
           // logger.log("Saving agent response for chat ID:", currentId);
-          const saveResponse = await axios.post(`${API_URL}/chats/${currentId}/messages`, {
+          const saveResponse = await apiClient.post(`${API_URL}/chats/${currentId}/messages`, {
             content: accumulatedResponse.trim(),
             sender: 'ai',
             agent: agentName
@@ -811,7 +811,7 @@ const ChatInterface: React.FC = () => {
             
             // Update the backend's current message ID
             try {
-              await axios.post(`${API_URL}/set-message-info`, {
+              await apiClient.post(`${API_URL}/set-message-info`, {
                 message_id: aiMessageId,
                 chat_id: currentId
               }, {
@@ -856,7 +856,7 @@ const ChatInterface: React.FC = () => {
       // check the backend or forcibly set the session state to reflect the custom dataset
       try {
         // logger.log("Explicitly forcing recognition of custom dataset");
-        await axios.get(`${API_URL}/api/session-info`, {
+        await apiClient.get(`${API_URL}/api/session-info`, {
           headers: {
             'X-Session-ID': sessionId,
           }
@@ -890,7 +890,7 @@ const ChatInterface: React.FC = () => {
         isFirstMessage = true;
         try {
           // logger.log("Creating new chat on first message with user_id:", userId, "isAdmin:", isAdmin);
-          const response = await axios.post(`${API_URL}/chats/`, { 
+          const response = await apiClient.post(`${API_URL}/chats/`, { 
             user_id: userId,
             is_admin: isAdmin 
           }, { 
@@ -916,7 +916,7 @@ const ChatInterface: React.FC = () => {
       if (currentChatId !== null) {
         // Save user message to the database
         try {
-          await axios.post(`${API_URL}/chats/${currentChatId}/messages`, {
+          await apiClient.post(`${API_URL}/chats/${currentChatId}/messages`, {
             content: message,
             sender: 'user'
           }, {
@@ -1031,7 +1031,7 @@ const ChatInterface: React.FC = () => {
           // Get the model directly from the API instead of relying on React state
           let modelName;
           try {
-            const settingsResponse = await axios.get(`${API_URL}/api/model-settings`, {
+            const settingsResponse = await apiClient.get(`${API_URL}/api/model-settings`, {
               headers: { 'X-Session-ID': sessionId }
             });
             modelName = settingsResponse.data.model;
@@ -1068,7 +1068,7 @@ const ChatInterface: React.FC = () => {
           // logger.log(`[Credits] Deducting ${creditCost} credits for user ${userIdForCredits} for model ${modelName}`);
           
           // Deduct credits directly through an API call
-          const response = await axios.post('/api/user/deduct-credits', {
+          const response = await apiClient.post('/api/user/deduct-credits', {
             userId: userIdForCredits,
             credits: creditCost,
             description: `Used ${modelName} for chat`
@@ -1091,14 +1091,14 @@ const ChatInterface: React.FC = () => {
       if (isFirstMessage && currentChatId !== null) {
         try {
           // logger.log("Generating title for new chat using query:", message);
-          const titleResponse = await axios.post(`${API_URL}/chat_history_name`, {
+          const titleResponse = await apiClient.post(`${API_URL}/chat_history_name`, {
             query: message
           });
           
           // logger.log("Title response:", titleResponse.data);
           
           if (titleResponse.data && titleResponse.data.name) {
-            await axios.put(`${API_URL}/chats/${currentChatId}`, {
+            await apiClient.put(`${API_URL}/chats/${currentChatId}`, {
               title: titleResponse.data.name
             });
             
@@ -1223,7 +1223,7 @@ const ChatInterface: React.FC = () => {
       
       // Refresh session info to avoid race conditions
       try {
-        await axios.get(`${baseUrl}/api/session-info`, {
+        await apiClient.get(`${baseUrl}/api/session-info`, {
           headers: { 'X-Session-ID': sessionId }
         });
         await new Promise(resolve => setTimeout(resolve, 100));
@@ -1234,7 +1234,7 @@ const ChatInterface: React.FC = () => {
     } catch (error) {
       let errorMessage = "An error occurred while uploading the file.";
       
-      if (axios.isAxiosError(error)) {
+      if (apiClient.isAxiosError(error)) {
         if (error.code === 'ECONNABORTED') {
           errorMessage = "Upload timeout: The request took too long to complete. Please try again with a smaller file.";
         } else if (error.response) {
@@ -1324,7 +1324,7 @@ const ChatInterface: React.FC = () => {
           }
           
           // Check session info for custom dataset
-          const response = await axios.get(`${API_URL}/api/session-info`, {
+          const response = await apiClient.get(`${API_URL}/api/session-info`, {
             headers: { 'X-Session-ID': sessionId }
           });
           
@@ -1372,7 +1372,7 @@ const ChatInterface: React.FC = () => {
     try {
       if (shouldReset) {
         // Reset to default dataset
-        await axios.post(`${API_URL}/reset-session`, 
+        await apiClient.post(`${API_URL}/reset-session`, 
           { preserveModelSettings: true },
           { headers: { 'X-Session-ID': sessionId } }
         );
@@ -1391,7 +1391,7 @@ const ChatInterface: React.FC = () => {
       } else {
         // Keep custom dataset
         try {
-          const sessionResponse = await axios.get(`${API_URL}/api/session-info`, {
+          const sessionResponse = await apiClient.get(`${API_URL}/api/session-info`, {
             headers: { 'X-Session-ID': sessionId }
           });
           
@@ -1429,7 +1429,7 @@ const ChatInterface: React.FC = () => {
   };
 
   const handleChatDelete = useCallback((chatId: number) => {
-    axios.delete(`${API_URL}/chats/${chatId}`, {
+    apiClient.delete(`${API_URL}/chats/${chatId}`, {
       params: { user_id: userId },
       headers: { 'X-Session-ID': sessionId }
     }).then(() => {
