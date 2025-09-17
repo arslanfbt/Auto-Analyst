@@ -15,12 +15,14 @@ from src.managers.session_manager import get_session_id
 from src.schemas.model_settings_schema import ModelSettings
 from src.utils.logger import Logger
 from pydantic import BaseModel
+from fastapi.responses import JSONResponse
 # data context is for excelsheets with multiple sheets and dataset_descrp is for single sheet or csv
 from src.agents.agents import data_context_gen, dataset_description_agent
 from src.utils.model_registry import MODEL_OBJECTS, mid_lm
 from src.utils.dataset_description_generator import generate_dataset_description
 import dspy
 import re
+# from fastapi.responses import JSONResponse
 
 logger = Logger("session_routes", see_time=False, console_log=False)
 
@@ -445,115 +447,7 @@ async def get_model_settings(
         "maxTokens": model_config.get("max_tokens", 6000)
     }
 
-@router.post("/api/preview-csv")
-@router.get("/api/preview-csv")
-async def preview_csv(app_state = Depends(get_app_state), session_id: str = Depends(get_session_id_dependency)):
-    """Preview the dataset stored in the session."""
-    try:
-        # Get the session state to ensure we're using the current dataset
-        session_state = app_state.get_session_state(session_id)
-        datasets = session_state.get("datasets", {})
-        
-        logger.log_message(f"Preview request for session {session_id} - available datasets: {list(datasets.keys())}", level=logging.INFO)
-        
-        if not datasets:
-            logger.log_message(f"No datasets found in session {session_id}, using default", level=logging.WARNING)
-            # Create a new default session for this session ID
-            app_state.reset_session_to_default(session_id)
-            # Get the session state again
-            session_state = app_state.get_session_state(session_id)
-            datasets = session_state.get("datasets", {})
-        
-        # Get the most recently added dataset (last one in the dictionary)
-        # This should be the newly uploaded CSV
-        dataset_names = list(datasets.keys())
-        if not dataset_names:
-            raise HTTPException(status_code=404, detail="No datasets available")
-        
-        # Get the last dataset (most recently uploaded)
-        current_dataset_name = dataset_names[-1]
-        df = datasets[current_dataset_name]
-        
-        # Handle case where dataset might be missing
-        if df is None:
-            logger.log_message(f"Dataset '{current_dataset_name}' not found in session {session_id}, using default", level=logging.WARNING)
-            # Create a new default session for this session ID
-            app_state.reset_session_to_default(session_id)
-            # Get the session state again
-            session_state = app_state.get_session_state(session_id)
-            datasets = session_state.get("datasets", {})
-            dataset_names = list(datasets.keys())
-            current_dataset_name = dataset_names[-1]
-            df = datasets[current_dataset_name]
 
-        # Replace NaN values with None (which becomes null in JSON)
-        df = df.where(pd.notna(df), None)
-
-        # Convert columns to appropriate types if necessary
-        for column in df.columns:
-            if df[column].dtype == 'object':
-                # Attempt to convert to boolean if the column contains 'True'/'False' strings
-                if df[column].isin(['True', 'False']).all():
-                    df[column] = df[column].astype(bool)
-
-        # Extract name and description if available
-        name = session_state.get("name")
-        description = session_state.get("description", "No description available")
-        
-        
-        # Try to get the description from make_data if available
-        if "make_data" in session_state and session_state["make_data"]:
-            data_dict = session_state["make_data"]
-            if "Description" in data_dict:
-                full_desc = data_dict["Description"]
-                # Try to parse the description format "{name} Dataset: {description}"
-                if "Dataset:" in full_desc:
-                    parts = full_desc.split("Dataset:", 1)
-                    extracted_name = parts[0].strip()
-                    extracted_description = parts[1].strip()
-                    
-                    # Only use extracted values if they're meaningful
-                    if extracted_name:
-                        name = extracted_name
-                    if extracted_description and extracted_description != "No description available":
-                        description = extracted_description
-                    
-                    # logger.log_message(f"Extracted name: '{name}', description: '{description}'", level=logging.INFO)
-                else:
-                    # If we can't parse it, use the full description
-                    if full_desc and full_desc != "No description available":
-                        description = full_desc
-
-        # Make sure we're not returning "No description available" if there's a description in the session
-        if description == "No description available" and session_state.get("description"):
-            session_desc = session_state.get("description")
-            # Check if the description is in the format "{name} Dataset: {description}"
-            if "Dataset:" in session_desc:
-                parts = session_desc.split("Dataset:", 1)
-                description = parts[1].strip()
-            else:
-                description = session_desc
-                
-        # Get rows and convert to dict - FIXED: Handle NaN values during JSON serialization
-        # Create a copy of the dataframe for JSON conversion
-        df_for_json = df.head(5).copy()
-        
-        # Replace any remaining NaN/None values with "NaN" string for JSON compatibility
-        df_for_json = df_for_json.fillna("NaN")
-        
-        # Convert to JSON with proper NaN handling
-        preview_data = {
-            "headers": df.columns.tolist(),
-            "rows": json.loads(df_for_json.to_json(orient="values")),
-            "name": name,
-            "description": description
-        }
-        
-        logger.log_message(f"Preview returning dataset: '{current_dataset_name}' for session {session_id}", level=logging.INFO)
-        return preview_data
-    except Exception as e:
-        logger.log_message(f"Error in preview_csv: {str(e)}", level=logging.ERROR)
-        raise HTTPException(status_code=400, detail=str(e))
 
 @router.get("/api/default-dataset")
 async def get_default_dataset(
@@ -888,18 +782,30 @@ async def preview_csv_upload(
         desc = f" exact_python_name: `{name}` Dataset: {file.filename}"
         
         # Create datasets dictionary with the new dataset
-        datasets = {name: new_df}
+        
         
         # Update the session with the new dataset (this will replace any existing datasets)
         
         logger.log_message(f"Successfully previewed dataset '{name}'", level=logging.INFO)
         
+        # Inline this in your CSV preview endpoint right before returning JSONResponse
+
+        # df is your DataFrame built from the uploaded CSV
+
+        # JSON-safe cleanup (no separate helper)
+        new_df = new_df.replace([np.inf, -np.inf], None)         # Infs → null
+        new_df = new_df.where(pd.notna(new_df), None)            # NaN → null
+        new_df = new_df.dropna(how="all")                        # Drop fully-empty rows
+        new_df = new_df.applymap(lambda x: None if isinstance(x, str) and x.strip() == "" else x)
+
+        # Limit preview rows
         return {
             "headers": new_df.columns.tolist(),
             "rows": new_df.head(10).values.tolist(),
             "name": name,
             "description": desc
         }
+        
     except Exception as e:
         logger.log_message(f"Error in preview_csv_upload: {str(e)}", level=logging.ERROR)
         raise HTTPException(status_code=400, detail=str(e))

@@ -115,6 +115,10 @@ const ChatInterface: React.FC = () => {
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [showFeedbackPopup, setShowFeedbackPopup] = useState(false);
   const { subscription, fetchSubscription, setSubscription } = useUserSubscriptionStore();
+  const [datasetDescription, setDatasetDescription] = useState<string | null>(null);
+  const [selectedDataset, setSelectedDataset] = useState<{ id: string; name: string; isDefault: boolean; source: 'default'|'upload'|'existing' } | null>(null);
+  const [lastGeneratedForFile, setLastGeneratedForFile] = useState<string | null>(null);
+  const [isGeneratingDescription, setIsGeneratingDescription] = useState(false);
 
   useEffect(() => {
     setMounted(true)
