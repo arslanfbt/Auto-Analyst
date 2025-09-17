@@ -1588,26 +1588,33 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
     return <div>{parts}</div>;
   }, []);
 
-  // Update the renderCodeOutputs function to include fullscreen buttons
+  // Update the renderCodeOutputs function to show outputs from all previous messages
   const renderCodeOutputs = (messageIndex: number) => {
-    // Simply use the messageIndex directly - no complex logic
-    const relevantOutputs = codeOutputs[messageIndex] || [];
+    // Collect outputs from ALL messages up to and including the current one
+    const allOutputs: CodeOutput[] = [];
     
-    // DEBUG: Add logging to see what outputs we have
+    for (let i = 0; i <= messageIndex; i++) {
+      const outputsForThisMessage = codeOutputs[i] || [];
+      allOutputs.push(...outputsForThisMessage);
+    }
+    
     console.log('🔍 renderCodeOutputs DEBUG:', {
       messageIndex,
       codeOutputsKeys: Object.keys(codeOutputs),
-      relevantOutputsCount: relevantOutputs.length,
-      relevantOutputs: relevantOutputs.map(o => ({ type: o.type, contentLength: typeof o.content === 'string' ? o.content.length : 'object' }))
+      allOutputsCount: allOutputs.length,
+      outputsByMessage: Object.keys(codeOutputs).map(key => ({
+        messageIndex: key,
+        count: codeOutputs[key]?.length || 0
+      }))
     });
     
-    if (relevantOutputs.length === 0) return null;
+    if (allOutputs.length === 0) return null;
     
     // Group outputs by type for organized display
-    const errorOutputs = relevantOutputs.filter(output => output.type === 'error');
-    const textOutputs = relevantOutputs.filter(output => output.type === 'output');
-    const plotlyOutputs = relevantOutputs.filter(output => output.type === 'plotly');
-    const matplotlibOutputs = relevantOutputs.filter(output => output.type === 'matplotlib');
+    const errorOutputs = allOutputs.filter(output => output.type === 'error');
+    const textOutputs = allOutputs.filter(output => output.type === 'output');
+    const plotlyOutputs = allOutputs.filter(output => output.type === 'plotly');
+    const matplotlibOutputs = allOutputs.filter(output => output.type === 'matplotlib');
     
     console.log('🔍 Output types:', {
       errors: errorOutputs.length,
@@ -1643,8 +1650,6 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
             
             {(() => {
               const content = errorOutputs[0].content;
-              
-              // Process table markers in the content
               return processTableMarkersInErrorOutput(content as string);
             })()}
           </div>
@@ -1657,35 +1662,14 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
               Output
             </div>
             
-            {/* Add a fix button for outputs that look like errors */}
-            {textOutputs[0].codeId && 
-             (textOutputs[0].content.toString().toLowerCase().includes("error") || 
-              textOutputs[0].content.toString().toLowerCase().includes("traceback") || 
-              textOutputs[0].content.toString().toLowerCase().includes("exception")) && (
-              <CodeFixButton
-                codeId={textOutputs[0].codeId}
-                errorOutput={textOutputs[0].content as string}
-                code={codeEntries.find(entry => entry.id === textOutputs[0].codeId)?.code || ''}
-                isFixing={codeFixState.isFixing && codeFixState.codeBeingFixed === textOutputs[0].codeId}
-                codeFixes={codeFixes}
-                sessionId={sessionId || storeSessionId || ''}
-                onFixStart={handleFixStart}
-                onFixComplete={handleFixComplete}
-                onCreditCheck={handleCreditCheck}
-                variant="inline"
-              />
-            )}
-            
             {(() => {
               const content = textOutputs[0].content;
-              
-              // Process table markers in the content
               return processTableMarkersInOutput(content as string);
             })()}
           </div>
         )}
         
-        {/* Show plotly visualizations with pin and fullscreen buttons */}
+        {/* Show plotly visualizations */}
         {plotlyOutputs.map((output, idx) => {
           const codeEntry = codeEntries.find(entry => entry.id === output.codeId);
           const currentCode = codeEntry?.code || '';
@@ -1706,21 +1690,15 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
                     <span className="hidden sm:inline">Fullscreen</span>
                   </Button>
                   <Button
-                    key={`pin-plotly-${output.codeId}-${idx}-${visualizations.length}`}
                     variant={isPinned ? "default" : "outline"}
                     size="sm"
                     onClick={() => {
                       const currentCode = codeEntries.find(entry => entry.id === output.codeId)?.code || '';
-                      console.log('Pin click - Code found:', !!currentCode, 'CodeId:', output.codeId);
-                      
                       if (currentCode) {
                         togglePinVisualization(output.content, currentCode, 'plotly', idx);
                       } else {
-                        // FALLBACK: Always allow pinning without warning
                         const codeToUse = `plotly_${output.codeId}_${idx}`;
                         togglePinVisualization(output.content, codeToUse, 'plotly', idx);
-                        
-                        // No toast warning - just pin it silently
                       }
                     }}
                     className={`flex items-center gap-1 h-7 px-2 text-xs ${
@@ -1744,7 +1722,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
           );
         })}
         
-        {/* Render matplotlib charts with pin and fullscreen buttons */}
+        {/* Show matplotlib visualizations */}
         {matplotlibOutputs.map((output, idx) => {
           const codeEntry = codeEntries.find(entry => entry.id === output.codeId);
           const currentCode = codeEntry?.code || '';
@@ -1765,21 +1743,15 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
                     <span className="hidden sm:inline">Fullscreen</span>
                   </Button>
                   <Button
-                    key={`pin-${output.codeId}-${idx}-${visualizations.length}`}
                     variant={isPinned ? "default" : "outline"}
                     size="sm"
                     onClick={() => {
                       const currentCode = codeEntries.find(entry => entry.id === output.codeId)?.code || '';
-                      
                       if (currentCode) {
                         togglePinVisualization(output.content, currentCode, 'matplotlib', idx);
                       } else {
-                        // FALLBACK: Always allow pinning without warning
-                        console.warn('No code found for matplotlib codeId:', output.codeId);
                         const codeToUse = `matplotlib_${output.codeId}_${idx}`;
                         togglePinVisualization(output.content, codeToUse, 'matplotlib', idx);
-                        
-                        // No toast warning - just pin it silently
                       }
                     }}
                     className={`flex items-center gap-1 h-7 px-2 text-xs ${
