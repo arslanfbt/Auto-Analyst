@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react'
 import axios from 'axios'
 import API_URL from '@/config/api'
 import { useSessionStore } from '@/lib/store/sessionStore'
+import apiClient from '@/lib/api/axiosConfig'
 
 // Export the interface (was missing export)
 export interface AgentInfo {
@@ -23,20 +24,31 @@ export function useAgentMentions(sessionId?: string | null) {
   // Fixed fetch function with proper sessionId handling
   useEffect(() => {
     const fetchAgents = async () => {
-      const { sessionId: storeSessionId } = useSessionStore.getState()
-      const currentSessionId = sessionId || storeSessionId
-      
-      if (!currentSessionId) {
-        console.warn('No sessionId available for fetching agents')
+      try {
+        console.log('�� Fetching agents...')
+        
+        // Use apiClient instead of axios - it will auto-handle sessionId
+        const response = await apiClient.get('/agents')
+        
+        console.log('�� Agents response:', response.data)
+        
+        if (response.data && Array.isArray(response.data)) {
+          const agentList: AgentInfo[] = response.data.map((agent: any) => ({
+            name: agent.name || agent,
+            description: agent.description || `Specialized ${agent.name?.replace(/_/g, " ") || agent} agent`,
+          }))
+          setAvailableAgents(agentList)
+          console.log('✅ Agents set:', agentList)
+        } else {
+          console.log('❌ Invalid agents response format')
+          setAvailableAgents([])
+        }
+      } catch (error) {
+        console.error('❌ Error fetching agents:', error)
         setAvailableAgents([])
-        return
       }
-
-      const response = await axios.get(`${API_URL}/agents`, {
-        headers: { 'X-Session-ID': currentSessionId }
-      })
-      // ... handle response
     }
+
     fetchAgents()
   }, [sessionId])
 
