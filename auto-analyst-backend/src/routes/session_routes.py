@@ -90,12 +90,16 @@ async def upload_excel(
     name: str = Form(...),
     description: str = Form(...),
     selected_sheets: Optional[str] = Form(None),  # JSON array of strings
+    fill_nulls: bool = Form(True),  # NEW: Fill null values
+    convert_types: bool = Form(True),  # NEW: Convert data types
     app_state = Depends(get_app_state),
     session_id: str = Depends(get_session_id_dependency),
     request: Request = None
 ):
     """Upload and process an Excel file with a specific sheet"""
     try:
+        logger.log_message(f"Excel upload: fill_nulls={fill_nulls}, convert_types={convert_types}", level=logging.INFO)
+        
         # Log the incoming request details
         # logger.log_message(f"Excel upload request for session {session_id}: name='{name}', description='{description}', sheet='{sheet_name}'", level=logging.INFO)
         
@@ -243,11 +247,15 @@ async def upload_dataframe(
     file: UploadFile = File(...),
     name: str = Form(...),
     description: str = Form(...),
+    fill_nulls: bool = Form(True),  # NEW: Fill null values  
+    convert_types: bool = Form(True),  # NEW: Convert data types
     app_state = Depends(get_app_state),
     session_id: str = Depends(get_session_id_dependency),
     request: Request = None
 ):
     try:
+        logger.log_message(f"CSV upload: fill_nulls={fill_nulls}, convert_types={convert_types}", level=logging.INFO)
+        
         # Log the incoming request details
         logger.log_message(f"Upload request for session {session_id}: name='{name}', description='{description}'", level=logging.INFO)
         

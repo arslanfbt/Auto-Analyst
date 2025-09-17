@@ -3,6 +3,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { Input } from "@/components/ui/input"
+import { Checkbox } from "@/components/ui/checkbox"
 import { FileText, BarChart3, CheckSquare, Square, Loader2 } from "lucide-react"
 
 interface ExcelUploadDialogProps {
@@ -10,9 +11,9 @@ interface ExcelUploadDialogProps {
   onClose: () => void
   sheets: string[]
   fileName: string
-  onConfirm: (selectedSheets: string[], name: string, description: string) => void
+  onConfirm: (selectedSheets: string[], name: string, description: string, fillNulls: boolean, convertTypes: boolean) => void
   isSubmitting: boolean
-  sessionId: string // Add sessionId prop
+  sessionId: string
 }
 
 export default function ExcelUploadDialog({
@@ -22,11 +23,15 @@ export default function ExcelUploadDialog({
   fileName,
   onConfirm,
   isSubmitting,
-  sessionId // Add sessionId parameter
+  sessionId
 }: ExcelUploadDialogProps) {
   const [selectedSheets, setSelectedSheets] = useState<string[]>([])
   const [datasetName, setDatasetName] = useState<string>("")
   const [description, setDescription] = useState<string>("")
+  
+  // New preprocessing options (default to checked)
+  const [fillNulls, setFillNulls] = useState(true)
+  const [convertTypes, setConvertTypes] = useState(true)
 
   // Initialize dataset name from filename
   useEffect(() => {
@@ -54,9 +59,10 @@ export default function ExcelUploadDialog({
     setSelectedSheets(selectedSheets.length === sheets.length ? [] : [...sheets])
   }
 
-  const handleSubmit = () => {
-    if (selectedSheets.length === 0 || !datasetName.trim() || !description.trim()) return
-    onConfirm(selectedSheets, datasetName.trim(), description.trim())
+  const handleConfirm = () => {
+    if (selectedSheets.length > 0 && datasetName.trim() && description.trim()) {
+      onConfirm(selectedSheets, datasetName.trim(), description.trim(), fillNulls, convertTypes)
+    }
   }
 
   const handleClose = () => {
@@ -73,129 +79,112 @@ export default function ExcelUploadDialog({
       <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <FileText className="w-5 h-5 text-[#FF7F7F]" />
-            Excel File Upload
+            <BarChart3 className="h-5 w-5" />
+            Excel Upload Configuration
           </DialogTitle>
         </DialogHeader>
 
         <div className="space-y-6">
-          {/* File Info */}
-          <div className="bg-[#FF7F7F]/10 border border-[#FF7F7F]/20 rounded-lg p-4">
-            <div className="flex items-center gap-2 mb-2">
-              <FileText className="w-4 h-4 text-[#FF7F7F]" />
-              <span className="font-medium text-gray-900">File:</span>
-            </div>
-            <p className="text-gray-700 text-sm">{fileName}</p>
-          </div>
-
-          {/* Dataset Name */}
-          <div className="space-y-2">
-            <label htmlFor="datasetName" className="text-sm font-medium">
-              Dataset Name
-            </label>
-            <Input
-              id="datasetName"
-              placeholder="Enter dataset name..."
-              value={datasetName}
-              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setDatasetName(e.target.value)}
-              disabled={isSubmitting}
-              className="focus:ring-[#FF7F7F] focus:border-[#FF7F7F]"
-            />
-          </div>
-
-          {/* Sheet Selection */}
+          {/* Sheet selection */}
           <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <h3 className="font-medium flex items-center gap-2">
-                <BarChart3 className="w-4 h-4 text-[#FF7F7F]" />
-                Select Sheets ({selectedSheets.length}/{sheets.length})
-              </h3>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleSelectAll}
-                className="flex items-center gap-2 hover:bg-[#FF7F7F]/10 hover:border-[#FF7F7F]/30"
-                disabled={isSubmitting}
-              >
-                {allSelected ? (
-                  <>
-                    <Square className="w-4 h-4" />
-                    Deselect All
-                  </>
-                ) : (
-                  <>
-                    <CheckSquare className="w-4 h-4" />
-                    Select All
-                  </>
-                )}
-              </Button>
-            </div>
-
-            <div className="grid grid-cols-1 gap-2 max-h-40 overflow-y-auto border rounded-lg p-3">
-              {sheets.map((sheetName) => (
-                <div key={sheetName} className="flex items-center space-x-2">
-                  <input
-                    type="checkbox"
-                    id={sheetName}
-                    checked={selectedSheets.includes(sheetName)}
-                    onChange={() => handleSheetToggle(sheetName)}
-                    className="h-4 w-4 rounded border-gray-300 text-[#FF7F7F] focus:ring-[#FF7F7F] focus:ring-2"
-                    disabled={isSubmitting}
-                  />
-                  <label
-                    htmlFor={sheetName}
-                    className="text-sm font-medium leading-none cursor-pointer flex-1 select-none"
+            <label className="text-sm font-medium">Select Sheets to Import</label>
+            <div className="space-y-2 max-h-32 overflow-y-auto">
+              {sheets.map((sheet) => (
+                <div key={sheet} className="flex items-center space-x-2">
+                  <div
+                    className="flex items-center cursor-pointer"
+                    onClick={() => handleSheetToggle(sheet)}
                   >
-                    {sheetName}
+                    {selectedSheets.includes(sheet) ? (
+                      <CheckSquare className="h-4 w-4 text-[#FF7F7F]" />
+                    ) : (
+                      <Square className="h-4 w-4 text-gray-400" />
+                    )}
+                  </div>
+                  <label className="text-sm cursor-pointer" onClick={() => handleSheetToggle(sheet)}>
+                    {sheet}
                   </label>
                 </div>
               ))}
             </div>
           </div>
 
-          {/* Description - REMOVED AUTO-GENERATE BUTTON */}
+          {/* Dataset name */}
           <div className="space-y-2">
-            <label htmlFor="description" className="text-sm font-medium">
-              Description
-            </label>
-            <Textarea
-              id="description"
-              placeholder="Brief description of your dataset..."
-              value={description}
-              onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setDescription(e.target.value)}
+            <label className="text-sm font-medium">Dataset Name</label>
+            <Input
+              value={datasetName}
+              onChange={(e) => setDatasetName(e.target.value)}
+              placeholder="Enter dataset name"
               disabled={isSubmitting}
-              rows={3}
-              className="focus:ring-[#FF7F7F] focus:border-[#FF7F7F]"
             />
           </div>
 
-          {/* Actions */}
-          <div className="flex justify-end gap-3 pt-4 border-t">
-            <Button
-              variant="outline"
-              onClick={handleClose}
+          {/* Description */}
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Description</label>
+            <Textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="Describe your dataset..."
               disabled={isSubmitting}
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={handleSubmit}
-              disabled={isSubmitting || selectedSheets.length === 0 || !datasetName.trim() || !description.trim()}
-              className="bg-[#FF7F7F] hover:bg-[#FF6666] text-white flex items-center gap-2"
-            >
-              {isSubmitting ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  Processing...
-                </>
-              ) : (
-                <>
-                  <CheckSquare className="w-4 w-4" />
-                  Confirm Excel Sheets ({selectedSheets.length})
-                </>
-              )}
-            </Button>
+              className="min-h-[100px] resize-none"
+            />
           </div>
+
+          {/* NEW: Preprocessing Options */}
+          <div className="space-y-3 p-4 bg-gray-50 rounded-lg">
+            <label className="text-sm font-medium text-gray-700">Preprocessing Options</label>
+            
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="fillNulls"
+                checked={fillNulls}
+                onCheckedChange={(checked) => setFillNulls(checked as boolean)}
+              />
+              <label
+                htmlFor="fillNulls"
+                className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+              >
+                Fill nulls
+              </label>
+            </div>
+            
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="convertTypes"
+                checked={convertTypes}
+                onCheckedChange={(checked) => setConvertTypes(checked as boolean)}
+              />
+              <label
+                htmlFor="convertTypes"
+                className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+              >
+                Convert types for better analysis
+              </label>
+            </div>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="flex justify-end gap-3 pt-4">
+          <Button variant="outline" onClick={handleClose} disabled={isSubmitting}>
+            Cancel
+          </Button>
+          <Button 
+            onClick={handleConfirm}
+            disabled={isSubmitting || selectedSheets.length === 0 || !datasetName.trim() || !description.trim()}
+            className="bg-[#FF7F7F] hover:bg-[#FF6666] text-white"
+          >
+            {isSubmitting ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                Uploading...
+              </>
+            ) : (
+              'Upload'
+            )}
+          </Button>
         </div>
       </DialogContent>
     </Dialog>
