@@ -655,44 +655,20 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
       return;
     }
     
-    // SOLUTION: Always use the array index, not the messageIndex from codeEntry
-    let arrayIndex = codeEntry.messageIndex;
+    // BULLETPROOF SOLUTION: Always use the last message index for outputs
+    // This ensures outputs always appear at the bottom, regardless of messageIndex confusion
+    const arrayIndex = Math.max(0, messages.length - 1);
     
-    console.log('🔍 DEBUG: Original messageIndex:', codeEntry.messageIndex);
-    console.log('🔍 DEBUG: Messages array structure:', messages.map((msg, idx) => ({
-      idx,
-      message_id: msg.message_id,
-      sender: msg.sender,
-      hasMessageId: !!msg.message_id
-    })));
-    
-    // If messageIndex looks like a database ID (large number), find the actual array index
-    if (typeof codeEntry.messageIndex === 'number' && codeEntry.messageIndex > 100) {
-      // This is likely a database message_id, find the actual array index
-      const foundIndex = messages.findIndex(msg => msg.message_id === codeEntry.messageIndex);
-      console.log('🔍 DEBUG: foundIndex for message_id', codeEntry.messageIndex, ':', foundIndex);
-      
-      if (foundIndex !== -1) {
-        arrayIndex = foundIndex;
-        console.log('🔍 DEBUG: Using found arrayIndex:', arrayIndex);
-      } else {
-        // FALLBACK: Use the last AI message index
-        const aiMessageIndices = messages
-          .map((msg, idx) => msg.sender === "ai" ? idx : -1)
-          .filter(idx => idx !== -1);
-        
-        if (aiMessageIndices.length > 0) {
-          arrayIndex = aiMessageIndices[aiMessageIndices.length - 1];
-          console.log('🔍 DEBUG: Fallback to last AI message index:', arrayIndex);
-        } else {
-          // LAST RESORT: Use the last message
-          arrayIndex = Math.max(0, messages.length - 1);
-          console.log('🔍 DEBUG: Last resort - using last message index:', arrayIndex);
-        }
-      }
-    }
-    
-    console.log('🔍 FINAL: Using arrayIndex:', arrayIndex, 'for messageIndex:', codeEntry.messageIndex);
+    console.log('🔍 SIMPLE SOLUTION:', {
+      entryId,
+      originalMessageIndex: codeEntry.messageIndex,
+      usingArrayIndex: arrayIndex,
+      messagesCount: messages.length,
+      resultKeys: Object.keys(result),
+      hasOutput: !!result.output,
+      hasPlotly: !!(result.plotly_outputs && result.plotly_outputs.length > 0),
+      hasMatplotlib: !!(result.matplotlib_outputs && result.matplotlib_outputs.length > 0)
+    });
     
     // If this is just a code update without execution (savedCode)
     if (result.savedCode) {
