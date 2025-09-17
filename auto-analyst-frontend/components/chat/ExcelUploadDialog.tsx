@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { Input } from "@/components/ui/input"
 import { Checkbox } from "@/components/ui/checkbox"
-import { FileText, BarChart3, CheckSquare, Square, Loader2 } from "lucide-react"
+import { FileText, BarChart3, Loader2 } from "lucide-react"  // Remove CheckSquare, Square
 
 interface ExcelUploadDialogProps {
   isOpen: boolean
@@ -29,7 +29,7 @@ export default function ExcelUploadDialog({
   const [datasetName, setDatasetName] = useState<string>("")
   const [description, setDescription] = useState<string>("")
   
-  // New preprocessing options (default to checked)
+  // Preprocessing options (default to checked)
   const [fillNulls, setFillNulls] = useState(true)
   const [convertTypes, setConvertTypes] = useState(true)
 
@@ -44,9 +44,6 @@ export default function ExcelUploadDialog({
     }
   }, [sheets, fileName, selectedSheets.length, datasetName])
 
-  // Remove auto-generation when dialog opens - let user control when to generate
-  // (No auto-generation effect for Excel uploads)
-
   const handleSheetToggle = (sheetName: string) => {
     setSelectedSheets(prev => 
       prev.includes(sheetName) 
@@ -55,28 +52,15 @@ export default function ExcelUploadDialog({
     )
   }
 
-  const handleSelectAll = () => {
-    setSelectedSheets(selectedSheets.length === sheets.length ? [] : [...sheets])
-  }
-
   const handleConfirm = () => {
     if (selectedSheets.length > 0 && datasetName.trim() && description.trim()) {
       onConfirm(selectedSheets, datasetName.trim(), description.trim(), fillNulls, convertTypes)
     }
   }
 
-  const handleClose = () => {
-    if (!isSubmitting) {
-      onClose()
-    }
-  }
-
-  const allSelected = selectedSheets.length === sheets.length
-  const someSelected = selectedSheets.length > 0
-
   return (
-    <Dialog open={isOpen} onOpenChange={handleClose}>
-      <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent className="max-w-2xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <BarChart3 className="h-5 w-5" />
@@ -85,23 +69,27 @@ export default function ExcelUploadDialog({
         </DialogHeader>
 
         <div className="space-y-6">
-          {/* Sheet selection */}
+          {/* Sheet selection - Updated to use Checkbox component */}
           <div className="space-y-3">
             <label className="text-sm font-medium">Select Sheets to Import</label>
             <div className="space-y-2 max-h-32 overflow-y-auto">
               {sheets.map((sheet) => (
                 <div key={sheet} className="flex items-center space-x-2">
-                  <div
-                    className="flex items-center cursor-pointer"
-                    onClick={() => handleSheetToggle(sheet)}
+                  <Checkbox
+                    id={`sheet-${sheet}`}
+                    checked={selectedSheets.includes(sheet)}
+                    onCheckedChange={(checked) => {
+                      if (checked) {
+                        setSelectedSheets(prev => [...prev, sheet])
+                      } else {
+                        setSelectedSheets(prev => prev.filter(s => s !== sheet))
+                      }
+                    }}
+                  />
+                  <label
+                    htmlFor={`sheet-${sheet}`}
+                    className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
                   >
-                    {selectedSheets.includes(sheet) ? (
-                      <CheckSquare className="h-4 w-4 text-[#FF7F7F]" />
-                    ) : (
-                      <Square className="h-4 w-4 text-gray-400" />
-                    )}
-                  </div>
-                  <label className="text-sm cursor-pointer" onClick={() => handleSheetToggle(sheet)}>
                     {sheet}
                   </label>
                 </div>
@@ -132,9 +120,9 @@ export default function ExcelUploadDialog({
             />
           </div>
 
-          {/* NEW: Preprocessing Options */}
-          <div className="space-y-3 p-4 bg-gray-50 rounded-lg">
-            <label className="text-sm font-medium text-gray-700">Preprocessing Options</label>
+          {/* Preprocessing Options - Same styling as sheet selection */}
+          <div className="space-y-3">
+            <label className="text-sm font-medium">Preprocessing Options</label>
             
             <div className="flex items-center space-x-2">
               <Checkbox
@@ -144,7 +132,7 @@ export default function ExcelUploadDialog({
               />
               <label
                 htmlFor="fillNulls"
-                className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
               >
                 Fill nulls
               </label>
@@ -158,7 +146,7 @@ export default function ExcelUploadDialog({
               />
               <label
                 htmlFor="convertTypes"
-                className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
               >
                 Convert types for better analysis
               </label>
@@ -168,7 +156,7 @@ export default function ExcelUploadDialog({
 
         {/* Footer */}
         <div className="flex justify-end gap-3 pt-4">
-          <Button variant="outline" onClick={handleClose} disabled={isSubmitting}>
+          <Button variant="outline" onClick={onClose} disabled={isSubmitting}>
             Cancel
           </Button>
           <Button 
