@@ -40,7 +40,7 @@ interface CodeOutputRendererProps {
     isFixing: boolean;
     codeBeingFixed: string | null;
   };
-  codeFixes: any[];
+  codeFixes: Record<string, number>; // Changed from any[] to Record<string, number>
   sessionId: string;
   storeSessionId: string;
   handleFixStart: (codeId: string) => void;
