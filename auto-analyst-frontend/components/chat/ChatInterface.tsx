@@ -25,7 +25,6 @@ import { Avatar } from '@/components/ui/avatar'
 import UserProfilePopup from './UserProfilePopup'
 import SettingsPopup from './SettingsPopup'
 
-import DatasetResetPopup from './DatasetResetPopup'
 import { useModelSettings } from '@/lib/hooks/useModelSettings'
 import logger from '@/lib/utils/logger'
 import { OnboardingTooltip } from '../onboarding/OnboardingTooltips'
