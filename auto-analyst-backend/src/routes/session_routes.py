@@ -750,6 +750,16 @@ async def set_message_info(
         logger.log_message(f"Error setting message info: {str(e)}", level=logging.ERROR)
         raise HTTPException(status_code=500, detail=str(e))
 
+def to_serializable(val):
+    if pd.isna(val):
+        return None
+    if isinstance(val, (np.generic,)):
+        return val.item()
+    if hasattr(val, "isoformat"):  # Handle datetimes
+        return val.isoformat()
+    return val
+
+
 @router.post("/preview-csv-upload")
 async def preview_csv_upload(
     file: UploadFile = File(...),
@@ -806,10 +816,13 @@ async def preview_csv_upload(
         new_df = new_df.dropna(how="all")                        # Drop fully-empty rows
         new_df = new_df.applymap(lambda x: None if isinstance(x, str) and x.strip() == "" else x)
 
+        preview_rows = new_df.head(10).applymap(to_serializable).values.tolist()
+
+
         # Limit preview rows
         return {
             "headers": new_df.columns.tolist(),
-            "rows": new_df.head(10).values.tolist(),
+            "rows": preview_rows,
             "name": name,
             "description": desc
         }
