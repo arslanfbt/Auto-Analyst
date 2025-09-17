@@ -47,7 +47,7 @@ export const useCodeFixIntegration = ({
     isFixing: false,
     codeBeingFixed: null as string | null
   });
-  const [codeFixes, setCodeFixes] = useState<any[]>([]);
+  const [codeFixes, setCodeFixes] = useState<Record<string, number>>({}); // Changed from any[] to Record<string, number>
 
   // Handle fix start
   const handleFixStart = useCallback((codeId: string) => {
@@ -60,18 +60,10 @@ export const useCodeFixIntegration = ({
   // Handle fix complete
   const handleFixComplete = useCallback((codeId: string, fixedCode: string) => {
     // Increment the fix count
-    setCodeFixes(prev => {
-      const existingFix = prev.find(fix => fix.codeId === codeId);
-      if (existingFix) {
-        return prev.map(fix => 
-          fix.codeId === codeId 
-            ? { ...fix, count: fix.count + 1 }
-            : fix
-        );
-      } else {
-        return [...prev, { codeId, count: 1 }];
-      }
-    });
+    setCodeFixes(prev => ({
+      ...prev,
+      [codeId]: (prev[codeId] || 0) + 1
+    }));
 
     // Find the code entry
     const codeEntry = codeEntries.find(entry => entry.id === codeId);
