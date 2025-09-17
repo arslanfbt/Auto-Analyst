@@ -95,9 +95,7 @@ const ChatInterface: React.FC = () => {
   const [isUserProfileOpen, setIsUserProfileOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const { modelSettings, syncSettingsToBackend } = useModelSettings();
-  const [showDatasetResetConfirm, setShowDatasetResetConfirm] = useState(false);
   const [hasUploadedDataset, setHasUploadedDataset] = useState(false);
-  const [tempChatIdForReset, setTempChatIdForReset] = useState<number | null>(null);
   const [recentlyUploadedDataset, setRecentlyUploadedDataset] = useState(false);
   const datasetPopupShownRef = useRef(false);
   const popupShownForChatIdsRef = useRef<Set<number>>(new Set());
@@ -401,8 +399,7 @@ const ChatInterface: React.FC = () => {
             datasetPopupShownRef.current = true;
             popupShownForChatIdsRef.current.add(chatId);
             
-            setTempChatIdForReset(chatId);
-            setShowDatasetResetConfirm(true);
+            // setTempChatIdForReset(chatId); // This line is removed
             return; // Wait for user decision
           }
         }
@@ -532,8 +529,7 @@ const ChatInterface: React.FC = () => {
         datasetPopupShownRef.current = true;
         popupShownForChatIdsRef.current.add(tempId);
         
-        setTempChatIdForReset(tempId);
-        setShowDatasetResetConfirm(true);
+        // setTempChatIdForReset(tempId); // This line is removed
         return;
       }
     } catch (error) {
@@ -1198,7 +1194,6 @@ const ChatInterface: React.FC = () => {
 
     try {
       // Force close any open dataset popup and set short-term suppression
-      setShowDatasetResetConfirm(false);
       localStorage.setItem('suppressDatasetPopup', 'true');
       setTimeout(() => localStorage.removeItem('suppressDatasetPopup'), 5000);
       
@@ -1352,8 +1347,7 @@ const ChatInterface: React.FC = () => {
               localStorage.setItem('suppressDatasetPopup', 'true');
               setTimeout(() => localStorage.removeItem('suppressDatasetPopup'), 5000);
               
-              setTempChatIdForReset(currentChatId);
-              setShowDatasetResetConfirm(true);
+              // setTempChatIdForReset(currentChatId); // This line is removed
             }
           } else {
             // Using default dataset
@@ -1427,23 +1421,10 @@ const ChatInterface: React.FC = () => {
       }
       
       // Hide the popup and proceed with loading chat
-      setShowDatasetResetConfirm(false);
-      
-      if (tempChatIdForReset) {
-        popupShownForChatIdsRef.current.add(tempChatIdForReset);
-        datasetPopupShownRef.current = true;
-        
-        loadChat(tempChatIdForReset);
-        setTempChatIdForReset(null);
-      }
+      // setTempChatIdForReset(null); // This line is removed
     } catch (error) {
       console.error("Error handling dataset reset:", error);
-      setShowDatasetResetConfirm(false);
-      
-      datasetPopupShownRef.current = true;
-      if (tempChatIdForReset) {
-        popupShownForChatIdsRef.current.add(tempChatIdForReset);
-      }
+      // setTempChatIdForReset(null); // This line is removed
     }
   };
 
@@ -1670,19 +1651,7 @@ const ChatInterface: React.FC = () => {
         />
 
         {/* Dataset Reset Popup */}
-        {showDatasetResetConfirm && !recentlyUploadedDataset && (
-          <DatasetResetPopup 
-            isOpen={true}
-            onClose={() => {
-              setShowDatasetResetConfirm(false);
-              localStorage.setItem('suppressDatasetPopup', 'true');
-              setTimeout(() => localStorage.removeItem('suppressDatasetPopup'), 3000);
-            }}
-            onConfirm={() => handleDatasetResetConfirm(true)}
-            onCancel={() => handleDatasetResetConfirm(false)}
-            silentOnLogin={isNewLoginSession}
-          />
-        )}
+        {/* This block is removed as per the edit hint */}
       </motion.div>
       
       {/* Onboarding Tooltip */}
