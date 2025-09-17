@@ -1586,15 +1586,18 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
 
   // Update the renderCodeOutputs function to include fullscreen buttons
   const renderCodeOutputs = (messageIndex: number) => {
-    // Find the storage key that matches this messageIndex
+    // Only show outputs for the current message being processed
+    // Find outputs that were created specifically for this message's code entries
+    const currentMessageCodeIds = codeEntries
+      .filter(entry => entry.messageIndex === messageIndex)
+      .map(entry => entry.id);
+    
     const relevantOutputs: CodeOutput[] = [];
     
-    // Look through all stored outputs to find ones that belong to this message
+    // Look through all stored outputs to find ones that belong to current message's code
     Object.entries(codeOutputs).forEach(([storageKey, outputs]) => {
-      // Check if any outputs in this storage key belong to our messageIndex
       const matchingOutputs = outputs.filter(output => 
-        output.messageIndex === messageIndex || 
-        output.messageIndex === messages[messageIndex]?.message_id
+        currentMessageCodeIds.includes(output.codeId)
       );
       relevantOutputs.push(...matchingOutputs);
     });
