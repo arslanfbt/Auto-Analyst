@@ -32,6 +32,7 @@ const ChatInput = forwardRef<ChatInputRef, ChatInputProps>((props, ref) => {
     handleMentionSelect,
     handleKeyDown,
     getReplacementRange,
+    hideMentions,  // Add this function
   } = useAgentMentions(chatInput.sessionId || undefined)
 
   const insertMention = (agentName: string) => {
@@ -310,35 +311,7 @@ const ChatInput = forwardRef<ChatInputRef, ChatInputProps>((props, ref) => {
               style={{ fontSize: '16px', lineHeight: '24px' }}
             />
 
-            {/* Mentions dropdown — ALWAYS ABOVE */}
-            {showAgentMentions && filteredAgents.length > 0 && (
-              <div
-                ref={mentionRef}
-                style={{
-                  position: 'absolute',
-                  top: mentionPosition.top,
-                  left: mentionPosition.left,
-                  zIndex: 50,
-                  transform: 'translateY(-100%)',
-                }}
-                className="bg-white border border-gray-200 rounded-md shadow-lg w-64 max-h-64 overflow-auto"
-              >
-                {filteredAgents.map((agent, idx) => (
-                  <button
-                    key={agent.name}
-                    type="button"
-                    onClick={() => insertMention(agent.name)}
-                    className={`w-full text-left px-3 py-2 text-sm ${
-                      idx === selectedMentionIndex ? 'bg-[#FF7F7F]/10 text-[#FF7F7F]' : 'hover:bg-gray-50'
-                    }`}
-                  >
-                    <div className="font-medium">@{agent.name}</div>
-                    <div className="text-xs text-gray-500 truncate">{agent.description}</div>
-                  </button>
-                ))}
-              </div>
-            )}
-
+            
             
             {/* Send/Stop button - better positioned and Auto-Analyst colors */}
             <div className="absolute right-3 top-1/2 -translate-y-1/2">
@@ -380,16 +353,17 @@ const ChatInput = forwardRef<ChatInputRef, ChatInputProps>((props, ref) => {
         />
       </div>
       
+      {/* Agent Mentions Dropdown - Fixed positioning */}
       <AnimatePresence>
         {showAgentMentions && filteredAgents.length > 0 && (
           <motion.div
-            initial={{ opacity: 0, y: -10, scale: 0.95 }}
+            initial={{ opacity: 0, y: -20, scale: 0.95 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -10, scale: 0.95 }}
+            exit={{ opacity: 0, y: -20, scale: 0.95 }}
             ref={mentionRef}
             style={{
               position: 'fixed',
-              top: mentionPosition.top - 200,
+              top: mentionPosition.top - 300,
               left: mentionPosition.left,
               zIndex: 9999,
             }}
@@ -399,7 +373,11 @@ const ChatInput = forwardRef<ChatInputRef, ChatInputProps>((props, ref) => {
               <button
                 key={agent.name}
                 type="button"
-                onClick={() => insertMention(agent.name)}
+                onClick={() => {
+                  insertMention(agent.name)
+                  // Hide the dropdown after selection
+                  hideMentions()
+                }}
                 className={`w-full text-left px-3 py-2 text-sm ${
                   idx === selectedMentionIndex ? 'bg-[#FF7F7F]/10 text-[#FF7F7F]' : 'hover:bg-gray-50'
                 }`}
