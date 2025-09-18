@@ -159,7 +159,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
       // Reset chatCompleted after a delay to prepare for the next response
       const timer = setTimeout(() => {
         setChatCompleted(false);
-      }, 10000); // Increase to 10 seconds
+      }, 2000); // Reset to 2 seconds
       
       return () => clearTimeout(timer);
     }
@@ -448,7 +448,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
       // Reset chatCompleted after a delay
       const timer = setTimeout(() => {
         setChatCompleted(false);
-      }, 10000);
+      }, 2000);
       
       return () => clearTimeout(timer);
     }
