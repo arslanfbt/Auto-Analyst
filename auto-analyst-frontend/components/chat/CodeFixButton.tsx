@@ -13,107 +13,114 @@ import { motion } from "framer-motion"
 import { useUserSubscriptionStore, useUserTier } from '@/lib/store/userSubscriptionStore'
 
 interface CodeFixButtonProps {
-  codeId: string
+  code: string
   errorOutput: string
-  code: string 
-  isFixing: boolean
-  codeFixes: Record<string, number>
-  sessionId?: string
-  onFixStart: (codeId: string) => void
-  onFixComplete: (codeId: string, fixedCode: string) => void
-  onCreditCheck: (codeId: string, hasEnough: boolean) => void
+  sessionId: string
+  onCodeFixed?: (fixedCode: string) => void
+  onCreditCheck?: (codeId: string, hasEnough: boolean) => void
   className?: string
-  variant?: 'inline' | 'button' | 'icon-only' // Add new variant
+  variant?: 'default' | 'inline'
+  checkCredits?: () => Promise<void>
 }
 
-const CodeFixButton: React.FC<CodeFixButtonProps> = ({ 
-  codeId, 
-  errorOutput, 
+const CodeFixButton: React.FC<CodeFixButtonProps> = ({
   code,
-  isFixing,
-  codeFixes,
+  errorOutput,
   sessionId,
-  onFixStart,
-  onFixComplete,
+  onCodeFixed,
   onCreditCheck,
-  className = '',
-  variant = 'button'
+  className = "",
+  variant = 'default',
+  checkCredits
 }) => {
+  const [isFixing, setIsFixing] = useState(false)
+  const [hovered, setHovered] = useState(false)
+  const [retryCount, setRetryCount] = useState(0)
   const { toast } = useToast()
   const { data: session } = useSession()
-  const { hasEnoughCredits, checkCredits } = useCredits()
-  const [hovered, setHovered] = useState(false)
-  const { subscription } = useUserSubscriptionStore()
-  const userTier = useUserTier()
+  const { credits } = useCredits()
+  const { tier } = useUserTier()
+  const { fixCount, incrementFixCount } = useUserSubscriptionStore()
   
-  // Get the number of fixes for this code entry
-  const fixCount = codeFixes[codeId] || 0
-  
-  // Determine free fix limit based on user tier
-  const freeFixLimit = userTier === 'free' ? 1 : 3 // Free users: 1 fix, Paid users: 3 fixes
-  const isFreeFix = fixCount < freeFixLimit
+  const freeFixLimit = 3
+  const needsCredits = fixCount >= freeFixLimit && (!credits || credits <= 0)
 
-  const handleFixCode = async () => {
-    // Check if the error output exists
-    if (!errorOutput) return
-    
-    // Mark as fixing in parent component
-    onFixStart(codeId)
-    
-    // Track number of fixes and check credits if needed
-    const newFixCount = fixCount + 1
-    const needsCredits = newFixCount > freeFixLimit
-    
-    // Show notification after free limit is reached
-    if (newFixCount === freeFixLimit + 1) {
-      const tierMessage = userTier === 'free' 
-        ? "You've used your 1 free code fix. Additional fixes will use 1 credit each."
-        : "You've used your 3 free code fixes. Additional fixes will use 1 credit each."
-      
+  // Enhanced fix function with retry logic
+  const handleFixCode = async (isRetry = false, currentRetryCount = 0) => {
+    // Validation checks
+    if (!code || !errorOutput) {
       toast({
-        title: "Free fix limit reached",
-        description: tierMessage,
+        title: "Missing information",
+        description: "Both code and error message are required for fixing.",
+        variant: "destructive",
         duration: 5000,
       })
+      return
     }
-    
-    // Check if user has credits for AI fix (only if beyond free limit)
-    if (needsCredits && session) {
-      try {
-        const creditCost = 1
-        const hasEnough = await hasEnoughCredits(creditCost)
-        
-        if (!hasEnough) {
-          // Notify parent component that user doesn't have enough credits
-          onCreditCheck(codeId, false)
-          return
-        } else {
-          // User has enough credits, continue with fix
-          onCreditCheck(codeId, true)
-        }
-      } catch (error) {
-        console.error("Error checking credits:", error)
-        return
-      }
+
+    if (!sessionId) {
+      toast({
+        title: "Session error",
+        description: "No active session. Please refresh the page.",
+        variant: "destructive",
+        duration: 5000,
+      })
+      return
     }
+
+    // Credit check for non-free fixes
+    if (needsCredits && !session?.user) {
+      toast({
+        title: "Login required",
+        description: "Please log in to use AI code fixing.",
+        variant: "destructive",
+        duration: 5000,
+      })
+      return
+    }
+
+    setIsFixing(true)
     
     try {
-      toast({
-        title: "Fixing code",
-        description: "AI is attempting to fix the errors...",
-        duration: 3000,
+      // Show appropriate toast message
+      if (isRetry) {
+        toast({
+          title: `Retrying fix (${currentRetryCount + 1}/3)`,
+          description: "Attempting to fix the code again...",
+          duration: 3000,
+        })
+      } else {
+        toast({
+          title: "Fixing code",
+          description: "AI is attempting to fix the errors...",
+          duration: 3000,
+        })
+      }
+
+      console.log('🔧 Sending fix request:', {
+        codeLength: code.length,
+        errorLength: errorOutput.length,
+        sessionId: sessionId,
+        retryCount: currentRetryCount
       })
       
-      // Send fix request to backend
+      // Create request with timeout
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 30000) // 30 second timeout
+
       const response = await axios.post(`${API_URL}/code/fix`, {
-        code: code,
-        error: errorOutput,
-        // Remove session_id from body - it's sent in headers
+        code: code.trim(),
+        error: errorOutput.trim(),
       }, {
         headers: {
-          ...(sessionId && { 'X-Session-ID': sessionId }),
+          'X-Session-ID': sessionId,
+          'Content-Type': 'application/json'
         },
+        timeout: 30000,
+        signal: controller.signal
       })
+
+      clearTimeout(timeoutId)
 
       if (response.data && response.data.fixed_code) {
         const fixedCode = response.data.fixed_code
@@ -147,42 +154,41 @@ const CodeFixButton: React.FC<CodeFixButtonProps> = ({
               
               toast({
                 title: "Credit used",
-                description: "1 credit has been deducted for this code fix",
+                description: "1 credit deducted for AI code fix",
                 duration: 3000,
-              });
+              })
             }
           } catch (creditError) {
-            console.error("Failed to deduct credits for code fix:", creditError);
-            // Don't stop the process if credit deduction fails
+            console.warn("Failed to deduct credits:", creditError)
+            // Don't block the fix if credit deduction fails
           }
         }
+
+        // Increment fix count for free tier tracking
+        incrementFixCount()
         
-        // Notify parent component that fix is complete
-        try {
-          onFixComplete(codeId, fixedCode)
-        } catch (completionError) {
-          console.error("Error in onFixComplete callback:", completionError);
-          // Don't show an error toast for this, as the fix itself was successful
+        // Call the callback with fixed code
+        if (onCodeFixed) {
+          onCodeFixed(fixedCode)
         }
         
+        // Reset retry count on success
+        setRetryCount(0)
+        
         toast({
-          title: "Code fixed",
-          description: "AI has fixed your code. Auto-running to verify the fix...",
-          variant: "default",
-          duration: 3000,
+          title: "Code fixed successfully!",
+          description: "The AI has provided a potential fix for your code.",
+          duration: 5000,
         })
         
-        // Exit successfully
-        return
-        
       } else if (response.data && response.data.error) {
+        // Server returned an error
         toast({
           title: "Error fixing code",
-          description: response.data.error,  // Now shows the actual error message
+          description: response.data.error,
           variant: "destructive", 
           duration: 5000,
         })
-        return
       } else {
         // No fixed code or error in response
         toast({
@@ -191,16 +197,119 @@ const CodeFixButton: React.FC<CodeFixButtonProps> = ({
           variant: "destructive",
           duration: 5000,
         })
-        return
       }
     } catch (error) {
       console.error("Error fixing code with AI:", error)
-      toast({
-        title: "Network error",
-        description: "Failed to connect to the server. Please try again.",
-        variant: "destructive",
-        duration: 5000,
-      })
+      
+      // Handle different types of errors
+      if (axios.isAxiosError(error)) {
+        if (error.code === 'ECONNABORTED' || error.name === 'AbortError') {
+          // Timeout error
+          if (currentRetryCount < 2) {
+            toast({
+              title: "Request timeout",
+              description: `Request timed out. Retrying in 2 seconds... (${currentRetryCount + 1}/3)`,
+              duration: 3000,
+            })
+            
+            setTimeout(() => {
+              handleFixCode(true, currentRetryCount + 1)
+            }, 2000)
+            return
+          } else {
+            toast({
+              title: "Request timeout",
+              description: "Request timed out after 3 attempts. Please try again later.",
+              variant: "destructive",
+              duration: 5000,
+            })
+          }
+        } else if (error.response?.status === 400 && error.response?.data?.detail === "Session ID required") {
+          // Session ID error - retry once
+          if (currentRetryCount < 1) {
+            toast({
+              title: "Session expired",
+              description: "Retrying with fresh session...",
+              duration: 3000,
+            })
+            
+            setTimeout(() => {
+              handleFixCode(true, currentRetryCount + 1)
+            }, 1000)
+            return
+          } else {
+            toast({
+              title: "Session error",
+              description: "Session expired. Please refresh the page.",
+              variant: "destructive",
+              duration: 5000,
+            })
+          }
+        } else if (error.response?.status >= 500) {
+          // Server error - retry
+          if (currentRetryCount < 2) {
+            toast({
+              title: "Server error",
+              description: `Server error occurred. Retrying in 3 seconds... (${currentRetryCount + 1}/3)`,
+              duration: 3000,
+            })
+            
+            setTimeout(() => {
+              handleFixCode(true, currentRetryCount + 1)
+            }, 3000)
+            return
+          } else {
+            toast({
+              title: "Server error",
+              description: "Server error after 3 attempts. Please try again later.",
+              variant: "destructive",
+              duration: 5000,
+            })
+          }
+        } else if (error.response?.status === 400) {
+          // Bad request - don't retry, show specific error
+          const errorMessage = error.response?.data?.detail || "Invalid request. Please check your code and error message."
+          toast({
+            title: "Request error",
+            description: errorMessage,
+            variant: "destructive",
+            duration: 5000,
+          })
+        } else {
+          // Network error - retry
+          if (currentRetryCount < 2) {
+            toast({
+              title: "Network error",
+              description: `Connection failed. Retrying in 2 seconds... (${currentRetryCount + 1}/3)`,
+              duration: 3000,
+            })
+            
+            setTimeout(() => {
+              handleFixCode(true, currentRetryCount + 1)
+            }, 2000)
+            return
+          } else {
+            toast({
+              title: "Network error",
+              description: "Failed to connect after 3 attempts. Please check your connection.",
+              variant: "destructive",
+              duration: 5000,
+            })
+          }
+        }
+      } else {
+        // Unknown error
+        toast({
+          title: "Unexpected error",
+          description: "An unexpected error occurred. Please try again.",
+          variant: "destructive",
+          duration: 5000,
+        })
+      }
+      
+      setRetryCount(currentRetryCount)
+    } finally {
+      setIsFixing(false)
     }
   }
 
@@ -220,7 +329,7 @@ const CodeFixButton: React.FC<CodeFixButtonProps> = ({
           }}
           transition={{ duration: 0.2 }}
           className="rounded-md overflow-hidden flex items-center justify-end px-1 cursor-pointer"
-          onClick={handleFixCode}
+          onClick={() => handleFixCode()}
         >
           
           <div className="flex items-center">
@@ -254,7 +363,7 @@ const CodeFixButton: React.FC<CodeFixButtonProps> = ({
           }}
           transition={{ duration: 0.2 }}
           className="rounded-md overflow-hidden flex items-center justify-end px-1 cursor-pointer"
-          onClick={handleFixCode}
+          onClick={() => handleFixCode()}
         >
           <div className="flex items-center">
             <div className="h-6 w-6 p-0 flex items-center justify-center rounded-full bg-red-50 border border-red-200">
@@ -284,7 +393,7 @@ const CodeFixButton: React.FC<CodeFixButtonProps> = ({
             <Button
               variant="ghost"
               size="sm"
-              onClick={handleFixCode}
+              onClick={() => handleFixCode()}
               className="text-[#FF7F7F] hover:bg-[#FF7F7F]/20 relative"
             >
               {isFixing ? (
@@ -295,14 +404,14 @@ const CodeFixButton: React.FC<CodeFixButtonProps> = ({
               ) : (
                 <>
                   <WrenchIcon className="h-4 w-4" />
-                  {isFreeFix && (
+                  {remainingFixes > 0 && (
                     <div className="absolute -top-1 -right-1 flex items-center justify-center">
                       <div className="bg-gradient-to-r from-blue-500 to-cyan-400 text-white text-[9px] px-1.5 py-0.5 rounded-full font-semibold shadow-sm">
                         {remainingFixes}
                       </div>
                     </div>
                   )}
-                  {!isFreeFix && (
+                  {needsCredits && (
                     <div className="absolute -top-1 -right-1 flex items-center justify-center">
                       <div className="bg-amber-500 text-white text-[9px] px-1.5 py-0.5 rounded-full font-semibold shadow-sm flex items-center">
                         <CreditCard className="h-2 w-2 mr-0.5" />1
@@ -315,12 +424,12 @@ const CodeFixButton: React.FC<CodeFixButtonProps> = ({
           </div>
         </TooltipTrigger>
         <TooltipContent side="bottom" className="px-3 py-1.5">
-          {isFreeFix ? (
+          {remainingFixes > 0 ? (
             <div className="space-y-1">
               <p className="text-sm font-medium">Fix & auto-run code</p>
               <p className="text-xs text-gray-500">
                 {remainingFixes} free {remainingFixes === 1 ? 'fix' : 'fixes'} remaining
-                {userTier === 'free' && (
+                {tier === 'free' && (
                   <span className="block text-blue-500 mt-1">
                     Upgrade for 3 free fixes per code
                   </span>
