@@ -11,6 +11,7 @@ import ExcelUploadDialog from './ExcelUploadDialog'
 import CSVUploadDialog from './CSVUploadDialogue'
 import DeepAnalysisSidebar from '../deep-analysis/DeepAnalysisSidebar'
 import UploadSummaryDialog from './UploadSummaryDialog'
+import AttachButtonTooltip from './AttachButtonTooltip'
 import axios from 'axios'
 import API_URL from '@/config/api'
 import { useUserSubscriptionStore } from '@/lib/store/userSubscriptionStore'
@@ -268,17 +269,12 @@ const ChatInput = forwardRef<ChatInputRef, ChatInputProps>((props, ref) => {
         
         {/* Main Input Section - ChatGPT style but wider */}
         <div className="flex items-center gap-4 p-4"> {/* Reduced padding from p-5 to p-4 */}
-          {/* File attachment button - better centered */}
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
+          {/* File attachment button with tooltip */}
+          <AttachButtonTooltip
             onClick={() => chatInput.fileInputRef.current?.click()}
             disabled={chatInput.disabled || chatInput.isLoading}
-            className="text-gray-500 hover:text-[#FF7F7F] hover:bg-[#FF7F7F]/10 transition-colors duration-200 p-2.5 rounded-xl flex-shrink-0 self-center"
-          >
-            <Paperclip className="h-5 w-5" />
-          </Button>
+            sessionId={chatInput.sessionId}
+          />
 
           {/* Message input - wider */}
           <div className="flex-1 relative min-w-0">
@@ -289,13 +285,12 @@ const ChatInput = forwardRef<ChatInputRef, ChatInputProps>((props, ref) => {
               onKeyDown={handleKeyDownEvent}
               placeholder="Ask anything"
               disabled={chatInput.disabled}
-              className="min-h-[44px] max-h-[150px] resize-none border-0 shadow-none focus:ring-0 focus-visible:ring-0 bg-transparent text-gray-900 placeholder-gray-500 text-base leading-6 pr-16 py-2.5 w-full" // Reduced min-height from 52px to 44px, max-height from 200px to 150px, padding from py-3 to py-2.5
+              className="min-h-[44px] max-h-[150px] resize-none border-0 shadow-none focus:ring-0 focus-visible:ring-0 bg-transparent text-gray-900 placeholder-gray-500 text-base leading-6 pr-16 py-2.5 w-full"
               style={{ 
                 fontSize: '16px',
                 lineHeight: '24px',
               }}
             />
-            
             
             {/* Send/Stop button - better positioned and Auto-Analyst colors */}
             <div className="absolute right-3 top-1/2 -translate-y-1/2">
