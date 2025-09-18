@@ -6,20 +6,24 @@ import Stripe from 'stripe'
 // Initialize Stripe
 const stripe = process.env.STRIPE_SECRET_KEY 
   ? new Stripe(process.env.STRIPE_SECRET_KEY, {
-      apiVersion: '2025-05-28.basil',
+      apiVersion: '2024-06-20', // Use a stable API version
     })
   : null
 
 export async function POST(request: NextRequest) {
   try {
-    await redis.ping()
-    console.log('Redis connection successful')
-  } catch (redisError) {
-    console.error('Redis connection failed:', redisError)
-    return NextResponse.json({ error: 'Database connection failed' }, { status: 500 })
-  }
+    // Test Redis connection
+    try {
+      await redis.ping()
+      console.log('✅ Redis connection successful')
+    } catch (redisError) {
+      console.error('❌ Redis connection failed:', redisError)
+      return NextResponse.json({ 
+        error: 'Database connection failed',
+        details: redisError.message 
+      }, { status: 500 })
+    }
 
-  try {
     // Authenticate user
     const token = await getToken({ req: request })
     if (!token?.sub) {
@@ -31,8 +35,11 @@ export async function POST(request: NextRequest) {
 
     // Check if Stripe is initialized
     if (!stripe) {
-      console.error('Stripe is not initialized - missing API key')
-      return NextResponse.json({ error: 'Subscription service unavailable' }, { status: 500 })
+      console.error('❌ Stripe is not initialized - missing API key')
+      return NextResponse.json({ 
+        error: 'Subscription service unavailable',
+        details: 'Stripe API key not configured'
+      }, { status: 500 })
     }
     
     // Get current subscription data from Redis
@@ -42,7 +49,10 @@ export async function POST(request: NextRequest) {
     
     if (!subscriptionData || Object.keys(subscriptionData).length === 0) {
       console.log(`[Cancel Subscription] No subscription data found for user: ${userId}`)
-      return NextResponse.json({ error: 'No active subscription found' }, { status: 400 })
+      return NextResponse.json({ 
+        error: 'No active subscription found',
+        details: 'No subscription data in database'
+      }, { status: 400 })
     }
 
     // Use stripeSubscriptionId field
