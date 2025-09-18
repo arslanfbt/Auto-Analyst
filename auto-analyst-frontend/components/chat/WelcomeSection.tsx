@@ -19,6 +19,12 @@ const sampleQueries = [
     icon: <Bot className="w-5 h-5" />,
     description: "Use specialized agents for specific tasks",
   },
+  ,
+  {
+    text: "Build me a Dashboard",
+    icon: <Database className="w-5 h-5" />,
+    description: "See all of your data visualized",
+  },
   {
     text: "What are the key insights from this data? @statistical_analytics_agent?",
     icon: <Database className="w-5 h-5" />,
