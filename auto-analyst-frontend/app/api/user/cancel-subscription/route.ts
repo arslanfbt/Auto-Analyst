@@ -6,7 +6,7 @@ import Stripe from 'stripe'
 // Initialize Stripe
 const stripe = process.env.STRIPE_SECRET_KEY 
   ? new Stripe(process.env.STRIPE_SECRET_KEY, {
-      apiVersion: '2024-06-20', // Use a stable API version
+      apiVersion: '2025-05-28.basil', // Use a stable API version
     })
   : null
 
@@ -20,7 +20,7 @@ export async function POST(request: NextRequest) {
       console.error('❌ Redis connection failed:', redisError)
       return NextResponse.json({ 
         error: 'Database connection failed',
-        details: redisError.message 
+        details: redisError instanceof Error ? redisError.message : 'Unknown Redis error'
       }, { status: 500 })
     }
 
