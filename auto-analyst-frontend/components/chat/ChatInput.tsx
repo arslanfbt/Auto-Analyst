@@ -272,7 +272,7 @@ const ChatInput = forwardRef<ChatInputRef, ChatInputProps>((props, ref) => {
           {/* File attachment button with tooltip */}
           <AttachButtonTooltip
             onClick={() => chatInput.fileInputRef.current?.click()}
-            disabled={chatInput.disabled || chatInput.isLoading}
+            disabled={!!(chatInput.disabled || chatInput.isLoading)}
             sessionId={chatInput.sessionId}
           />
 

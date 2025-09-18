@@ -7,13 +7,13 @@ import { Paperclip } from "lucide-react"
 
 interface AttachButtonTooltipProps {
   onClick: () => void
-  disabled: boolean
+  disabled?: boolean  // Make it optional
   sessionId?: string | null
 }
 
 export default function AttachButtonTooltip({ 
   onClick, 
-  disabled, 
+  disabled = false,  // Default to false
   sessionId 
 }: AttachButtonTooltipProps) {
   const [showTooltip, setShowTooltip] = useState(false)
