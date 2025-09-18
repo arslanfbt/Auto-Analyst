@@ -12,6 +12,14 @@ const stripe = process.env.STRIPE_SECRET_KEY
 
 export async function POST(request: NextRequest) {
   try {
+    await redis.ping()
+    console.log('Redis connection successful')
+  } catch (redisError) {
+    console.error('Redis connection failed:', redisError)
+    return NextResponse.json({ error: 'Database connection failed' }, { status: 500 })
+  }
+
+  try {
     // Authenticate user
     const token = await getToken({ req: request })
     if (!token?.sub) {
@@ -19,6 +27,7 @@ export async function POST(request: NextRequest) {
     }
 
     const userId = token.sub
+    console.log(`[Cancel Subscription] Processing cancellation for user: ${userId}`)
 
     // Check if Stripe is initialized
     if (!stripe) {
@@ -27,26 +36,32 @@ export async function POST(request: NextRequest) {
     }
     
     // Get current subscription data from Redis
+    console.log(`[Cancel Subscription] Getting subscription data from Redis for user: ${userId}`)
     const subscriptionData = await redis.hgetall(KEYS.USER_SUBSCRIPTION(userId))
+    console.log(`[Cancel Subscription] Redis data:`, subscriptionData)
     
-    if (!subscriptionData) {
+    if (!subscriptionData || Object.keys(subscriptionData).length === 0) {
+      console.log(`[Cancel Subscription] No subscription data found for user: ${userId}`)
       return NextResponse.json({ error: 'No active subscription found' }, { status: 400 })
     }
 
-    // Use stripeSubscriptionId field (like the working code)
+    // Use stripeSubscriptionId field
     const stripeSubscriptionId = subscriptionData.stripeSubscriptionId as string
     const isLegacyUser = !stripeSubscriptionId || !stripeSubscriptionId.startsWith('sub_')
+    
+    console.log(`[Cancel Subscription] Stripe ID: ${stripeSubscriptionId}, Is Legacy: ${isLegacyUser}`)
     
     try {
       let canceledSubscription = null
       
       // Only make Stripe API calls for new users with proper subscription IDs
       if (!isLegacyUser) {
+        console.log(`[Cancel Subscription] Canceling Stripe subscription: ${stripeSubscriptionId}`)
         // Cancel the subscription in Stripe
-        // Using cancel_at_period_end: true to let the user keep access until the end of their current billing period
         canceledSubscription = await stripe.subscriptions.update(stripeSubscriptionId, {
           cancel_at_period_end: true,
         })
+        console.log(`[Cancel Subscription] Stripe cancellation successful`)
       } else {
         console.log(`Legacy user ${userId} - skipping Stripe API calls, updating Redis only`)
       }
