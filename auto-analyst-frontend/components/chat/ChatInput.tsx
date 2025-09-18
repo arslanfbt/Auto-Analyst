@@ -380,17 +380,16 @@ const ChatInput = forwardRef<ChatInputRef, ChatInputProps>((props, ref) => {
         />
       </div>
       
-      {/* Agent Mentions Dropdown - Fixed positioning */}
       <AnimatePresence>
         {showAgentMentions && filteredAgents.length > 0 && (
           <motion.div
-            initial={{ opacity: 0, y: 10, scale: 0.95 }}
+            initial={{ opacity: 0, y: -10, scale: 0.95 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 10, scale: 0.95 }}
+            exit={{ opacity: 0, y: -10, scale: 0.95 }}
             ref={mentionRef}
             style={{
               position: 'fixed',
-              top: mentionPosition.top - 10,
+              top: mentionPosition.top - 200,
               left: mentionPosition.left,
               zIndex: 9999,
             }}
