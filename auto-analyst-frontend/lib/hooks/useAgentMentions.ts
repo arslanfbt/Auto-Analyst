@@ -32,10 +32,10 @@ export function useAgentMentions(sessionId?: string | null) {
         
         console.log('�� Agents response:', response.data)
         
-        if (response.data && Array.isArray(response.data)) {
-          const agentList: AgentInfo[] = response.data.map((agent: any) => ({
-            name: agent.name || agent,
-            description: agent.description || `Specialized ${agent.name?.replace(/_/g, " ") || agent} agent`,
+        if (response.data && response.data.available_agents) {
+          const agentList = response.data.available_agents.map((name: string) => ({
+            name,
+            description: `Specialized ${name.replace(/_/g, " ")} agent`,
           }))
           setAvailableAgents(agentList)
           console.log('✅ Agents set:', agentList)
