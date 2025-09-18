@@ -1190,7 +1190,7 @@ const CodeCanvas: React.FC<CodeCanvasProps> = ({
                         onFixStart={handleFixStart}
                         onFixComplete={handleFixComplete}
                         onCreditCheck={handleCreditCheck}
-                        variant="button"
+                        variant="default"
                       />
                     )}
                     

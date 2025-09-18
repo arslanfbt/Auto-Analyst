@@ -10,43 +10,57 @@ import API_URL from '@/config/api'
 import { useSession } from "next-auth/react"
 import { useCredits } from '@/lib/contexts/credit-context'
 import { motion } from "framer-motion"
-import { useUserSubscriptionStore, useUserTier } from '@/lib/store/userSubscriptionStore'
+import { useUserTier } from '@/lib/store/userSubscriptionStore'
 
 interface CodeFixButtonProps {
-  code: string
-  errorOutput: string
-  sessionId: string
-  onCodeFixed?: (fixedCode: string) => void
-  onCreditCheck?: (codeId: string, hasEnough: boolean) => void
+  codeId: string                    // For tracking which code block
+  code: string                      // ✅ For the request  
+  errorOutput: string               // ✅ For the request
+  isFixing: boolean                 // UI state (is this button currently fixing)
+  codeFixes: Record<string, number> // Track fix attempts per code block
+  sessionId: string                 // ✅ Add this back - required for backend
+  onFixStart: (codeId: string) => void           // Callback when fix starts
+  onFixComplete: (codeId: string, fixedCode: string) => void  // Callback when fix completes
+  onCreditCheck: (codeId: string, hasEnough: boolean) => void // Credit check callback
   className?: string
-  variant?: 'default' | 'inline'
+  variant?: 'default' | 'inline' | 'icon-only'  // ✅ Add 'icon-only'
   checkCredits?: () => Promise<void>
 }
 
 const CodeFixButton: React.FC<CodeFixButtonProps> = ({
-  code,
-  errorOutput,
-  sessionId,
-  onCodeFixed,
+  codeId,
+  code,           // ✅ Used in request
+  errorOutput,    // ✅ Used in request  
+  isFixing,       // ✅ This comes from props now
+  codeFixes,
+  sessionId,           // ✅ Get from props (passed by ChatWindow)
+  onFixStart,
+  onFixComplete,
   onCreditCheck,
   className = "",
   variant = 'default',
   checkCredits
 }) => {
-  const [isFixing, setIsFixing] = useState(false)
+  // Remove this line - isFixing comes from props now
+  // const [isFixing, setIsFixing] = useState(false) ❌ DELETE THIS
+  
   const [hovered, setHovered] = useState(false)
   const [retryCount, setRetryCount] = useState(0)
   const { toast } = useToast()
   const { data: session } = useSession()
-  const { credits } = useCredits()
-  const { tier } = useUserTier()
-  const { fixCount, incrementFixCount } = useUserSubscriptionStore()
+  const { remainingCredits } = useCredits()  // ✅ Change from 'credits' to 'remainingCredits'
+  const tier = useUserTier()
   
+  // ✅ Fix: Get fix count from props instead of store
+  const fixCount = codeFixes[codeId] || 0
   const freeFixLimit = 3
-  const needsCredits = fixCount >= freeFixLimit && (!credits || credits <= 0)
+  const needsCredits = fixCount >= freeFixLimit && (!remainingCredits || remainingCredits <= 0)  // ✅ Use remainingCredits
 
   // Enhanced fix function with retry logic
   const handleFixCode = async (isRetry = false, currentRetryCount = 0) => {
+    // Start fixing
+    onFixStart?.(codeId)
+
     // Validation checks
     if (!code || !errorOutput) {
       toast({
@@ -79,7 +93,7 @@ const CodeFixButton: React.FC<CodeFixButtonProps> = ({
       return
     }
 
-    setIsFixing(true)
+    // setIsFixing(true) // This line is removed as isFixing is now a prop
     
     try {
       // Show appropriate toast message
@@ -108,16 +122,14 @@ const CodeFixButton: React.FC<CodeFixButtonProps> = ({
       const controller = new AbortController()
       const timeoutId = setTimeout(() => controller.abort(), 30000) // 30 second timeout
 
+      // ✅ Simple request with just code + error
       const response = await axios.post(`${API_URL}/code/fix`, {
         code: code.trim(),
         error: errorOutput.trim(),
       }, {
         headers: {
-          'X-Session-ID': sessionId,
-          'Content-Type': 'application/json'
-        },
-        timeout: 30000,
-        signal: controller.signal
+          'X-Session-ID': sessionId,  // ✅ Use prop value
+        }
       })
 
       clearTimeout(timeoutId)
@@ -164,13 +176,8 @@ const CodeFixButton: React.FC<CodeFixButtonProps> = ({
           }
         }
 
-        // Increment fix count for free tier tracking
-        incrementFixCount()
-        
-        // Call the callback with fixed code
-        if (onCodeFixed) {
-          onCodeFixed(fixedCode)
-        }
+        // Complete fixing
+        onFixComplete?.(codeId, fixedCode)
         
         // Reset retry count on success
         setRetryCount(0)
@@ -224,7 +231,7 @@ const CodeFixButton: React.FC<CodeFixButtonProps> = ({
               duration: 5000,
             })
           }
-        } else if (error.response?.status === 400 && error.response?.data?.detail === "Session ID required") {
+        } else if (error.response && error.response.status === 400 && error.response?.data?.detail === "Session ID required") {
           // Session ID error - retry once
           if (currentRetryCount < 1) {
             toast({
@@ -245,7 +252,7 @@ const CodeFixButton: React.FC<CodeFixButtonProps> = ({
               duration: 5000,
             })
           }
-        } else if (error.response?.status >= 500) {
+        } else if (error.response && error.response.status >= 500) {
           // Server error - retry
           if (currentRetryCount < 2) {
             toast({
@@ -266,7 +273,7 @@ const CodeFixButton: React.FC<CodeFixButtonProps> = ({
               duration: 5000,
             })
           }
-        } else if (error.response?.status === 400) {
+        } else if (error.response && error.response.status === 400) {
           // Bad request - don't retry, show specific error
           const errorMessage = error.response?.data?.detail || "Invalid request. Please check your code and error message."
           toast({
@@ -309,7 +316,7 @@ const CodeFixButton: React.FC<CodeFixButtonProps> = ({
       
       setRetryCount(currentRetryCount)
     } finally {
-      setIsFixing(false)
+      // setIsFixing(false) // This line is removed as isFixing is now a prop
     }
   }
 
