@@ -863,7 +863,7 @@ async def initialize_session(
     request: InitializeSessionRequest,
     app_state = Depends(get_app_state)
 ):
-    """Initialize session immediately after Google auth verification"""
+    """Initialize session immediately after auth or auto-generation"""
     try:
         session_id = request.session_id
         user_id = request.user_id
@@ -875,11 +875,12 @@ async def initialize_session(
         # Create or get session state
         session_state = app_state.get_session_state(session_id)
         
-        # Associate user with session
-        app_state.set_session_user(
-            session_id=session_id,
-            user_id=user_id
-        )
+        # Associate user with session (only if user_id > 0)
+        if user_id > 0:
+            app_state.set_session_user(
+                session_id=session_id,
+                user_id=user_id
+            )
         
         # Store additional user info
         session_state["user_email"] = user_email
