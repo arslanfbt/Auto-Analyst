@@ -34,6 +34,7 @@ import { hasFeatureAccess } from '@/lib/features/feature-access'
 import { toast } from "@/components/ui/use-toast"
 import FeedbackPopup from './FeedbackPopup'
 import { SessionRecovery } from '@/lib/utils/sessionRecovery';
+import axios from 'axios'
 
 interface PlotlyMessage {
   type: "plotly"
@@ -1068,7 +1069,7 @@ const ChatInterface: React.FC = () => {
           // logger.log(`[Credits] Deducting ${creditCost} credits for user ${userIdForCredits} for model ${modelName}`);
           
           // Deduct credits directly through an API call
-          const response = await apiClient.post('/api/user/deduct-credits', {
+          const response = await axios.post('/api/user/deduct-credits', {
             userId: userIdForCredits,
             credits: creditCost,
             description: `Used ${modelName} for chat`
