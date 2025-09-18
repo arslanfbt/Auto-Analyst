@@ -1,3 +1,4 @@
+
 import axios from 'axios'
 import { useSessionStore } from '@/lib/store/sessionStore'
 import API_URL from '@/config/api'
@@ -6,6 +7,36 @@ import API_URL from '@/config/api'
 const apiClient = axios.create({
   baseURL: API_URL
 })
+
+// Helper function to get current user data from localStorage
+const getCurrentUserData = () => {
+  try {
+    // Try to get from stored session data
+    const storedUserData = localStorage.getItem('current-user-data')
+    if (storedUserData) {
+      const userData = JSON.parse(storedUserData)
+      return {
+        user_id: userData.user_id || 0,
+        user_email: userData.user_email || '',
+        user_name: userData.user_name || 'Anonymous'
+      }
+    }
+    
+    // Fallback to anonymous if no user data found
+    return {
+      user_id: 0,
+      user_email: '',
+      user_name: 'Anonymous'
+    }
+  } catch (error) {
+    console.warn('Failed to get current user data:', error)
+    return {
+      user_id: 0,
+      user_email: '',
+      user_name: 'Anonymous'
+    }
+  }
+}
 
 // Response interceptor to handle "Session ID required" errors
 apiClient.interceptors.response.use(
@@ -35,17 +66,18 @@ apiClient.interceptors.response.use(
         localStorage.setItem('auto-analyst-session-id', newSessionId)
         sessionStorage.setItem('auto-analyst-session-id', newSessionId)
         
-        // Initialize session on backend
+        // Get current user data from localStorage
+        const userData = getCurrentUserData()
+        
+        // Initialize session on backend with actual user data
         await apiClient.post('/initialize-session', {
           session_id: newSessionId,
-          user_id: 0, // Anonymous user
-          user_email: '',
-          user_name: 'Anonymous'
+          ...userData
         }, {
           headers: { 'X-Session-ID': newSessionId }
         })
         
-        console.log('✅ Auto-generated session:', newSessionId)
+        console.log('✅ Auto-generated session for user:', userData.user_email || 'Anonymous', newSessionId)
         
         // Retry original request with new sessionId
         originalRequest.headers['X-Session-ID'] = newSessionId
@@ -77,5 +109,8 @@ apiClient.interceptors.request.use(
   },
   (error) => Promise.reject(error)
 )
+
+// Add isAxiosError utility to apiClient
+apiClient.isAxiosError = axios.isAxiosError
 
 export default apiClient

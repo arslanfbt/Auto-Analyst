@@ -7,7 +7,6 @@ import axios from 'axios'
 import API_URL from '@/config/api'
 import logger from '@/lib/utils/logger'
 import { SessionRecovery } from '@/lib/utils/sessionRecovery';
-import apiClient from '@/lib/api/axiosConfig'
 
 const PREVIEW_API_URL = API_URL;
 
@@ -76,7 +75,7 @@ export const useChatInput = (props: ChatInputProps) => {
     // Skip if already initialized for this user
     if (sessionInitialized.current) return
 
-    if (status === 'authenticated' && session?.user?.id) {
+    if (session?.user?.id) {
       const initializeSession = async () => {
         try {
           // Add this check to be extra safe
@@ -87,17 +86,24 @@ export const useChatInput = (props: ChatInputProps) => {
           
           // User is logged in - generate user-specific session ID
           const userSessionId = `user_${session.user.id}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
-          console.log(`🔐 Google auth verified - generating session ID: ${userSessionId}`)
+          console.log(`🔐 User logged in - generating new session ID: ${userSessionId}`)
           
           // Set sessionId in frontend first
           setSessionId(userSessionId)
           SessionRecovery.storeSessionId(userSessionId)
-          
+
+          // Store current user data in localStorage for the interceptor
+          localStorage.setItem('current-user-data', JSON.stringify({
+            user_id: parseInt(session.user.id),
+            user_email: session.user.email || '',
+            user_name: session.user.name || ''
+          }))
+
           // Send to backend to initialize session
           console.log('�� Sending session to backend...')
           const response = await axios.post(`${API_URL}/initialize-session`, {
             session_id: userSessionId,
-            user_id: parseInt(session.user.id),
+            user_id: session.user.id ? parseInt(session.user.id) : 0,
             user_email: session.user.email || '',
             user_name: session.user.name || ''
           }, {
@@ -211,7 +217,7 @@ export const useChatInput = (props: ChatInputProps) => {
         previewFormData.append('name', file.name.replace(/\.csv$/i, ''))
 
         console.log('Starting CSV preview upload...')
-        const previewResponse = await apiClient.post(`${PREVIEW_API_URL}/preview-csv-upload`, previewFormData, {
+        const previewResponse = await axios.post(`${PREVIEW_API_URL}/preview-csv-upload`, previewFormData, {
           headers: getHeaders(),
         })
         console.log('CSV preview upload completed')
@@ -294,7 +300,7 @@ export const useChatInput = (props: ChatInputProps) => {
       const formData = new FormData()
       formData.append('file', file)
 
-      const response = await apiClient.post(`${PREVIEW_API_URL}/api/excel-sheets`, formData, {
+      const response = await axios.post(`${PREVIEW_API_URL}/api/excel-sheets`, formData, {
         headers: getHeaders(),
       })
 
@@ -338,7 +344,7 @@ export const useChatInput = (props: ChatInputProps) => {
       popupShownForChatIdsRef.current = new Set();
       
       // DON'T reset session for default dataset preview - just get the data
-      const response = await apiClient.get(`${PREVIEW_API_URL}/api/default-dataset`, {
+      const response = await axios.get(`${PREVIEW_API_URL}/api/default-dataset`, {
         headers: getHeaders(),
       });
       
@@ -380,7 +386,7 @@ export const useChatInput = (props: ChatInputProps) => {
       popupShownForChatIdsRef.current = new Set();
       
       // DON'T reset session for silent default dataset - just get the data
-      const response = await apiClient.get(`${PREVIEW_API_URL}/api/default-dataset`, {
+      const response = await axios.get(`${PREVIEW_API_URL}/api/default-dataset`, {
         headers: getHeaders(),
       });
       
@@ -418,7 +424,7 @@ export const useChatInput = (props: ChatInputProps) => {
       // Only reset session if we're uploading a new custom dataset
       if (sessionId) {
         try {
-          const response = await apiClient.post(`${PREVIEW_API_URL}/reset-session`, null, {
+          const response = await axios.post(`${PREVIEW_API_URL}/reset-session`, null, {
             headers: getHeaders(),
           })
           
@@ -437,7 +443,7 @@ export const useChatInput = (props: ChatInputProps) => {
       formData.append('description', description)
       formData.append('selected_sheets', JSON.stringify(selectedSheets))
 
-      const response = await apiClient.post(`${PREVIEW_API_URL}/upload_excel`, formData, {
+      const response = await axios.post(`${PREVIEW_API_URL}/upload_excel`, formData, {
         headers: getHeaders(), // Remove { 'X-Force-Refresh': 'true' }
       })
 
@@ -503,7 +509,7 @@ export const useChatInput = (props: ChatInputProps) => {
       uploadFormData.append('description', description)
 
       console.log('Starting final CSV upload...')
-      const uploadResponse = await apiClient.post(`${PREVIEW_API_URL}/upload_dataframe`, uploadFormData, {
+      const uploadResponse = await axios.post(`${PREVIEW_API_URL}/upload_dataframe`, uploadFormData, {
         headers: getHeaders(),
       })
       console.log('Final CSV upload completed')
@@ -553,7 +559,7 @@ export const useChatInput = (props: ChatInputProps) => {
       const formData = new FormData()
       formData.append('file', file)
       
-      const response = await apiClient.post(`${PREVIEW_API_URL}/upload_csv_preview`, formData, {
+      const response = await axios.post(`${PREVIEW_API_URL}/upload_csv_preview`, formData, {
         headers: getHeaders(),
       })
       
@@ -588,7 +594,7 @@ export const useChatInput = (props: ChatInputProps) => {
   // Add restore default dataset function
   const handleRestoreDefaultDataset = async () => {
     try {
-      const response = await apiClient.post(`${PREVIEW_API_URL}/reset-session`, {}, {
+      const response = await axios.post(`${PREVIEW_API_URL}/reset-session`, {}, {
         headers: getHeaders(),
       })
       
