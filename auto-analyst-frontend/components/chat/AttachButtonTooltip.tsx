@@ -30,10 +30,10 @@ export default function AttachButtonTooltip({
           setShowTooltip(true)
           // Mark as shown for this session
           localStorage.setItem(tooltipKey, 'true')
-          // Hide tooltip after 4 seconds
+          // Hide tooltip after 5 seconds
           setTimeout(() => {
             setShowTooltip(false)
-          }, 4000)
+          }, 5000)
         }, 1000) // 1 second delay after component mounts
         
         return () => clearTimeout(timer)
