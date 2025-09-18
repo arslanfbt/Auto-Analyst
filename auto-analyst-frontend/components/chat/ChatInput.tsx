@@ -22,7 +22,6 @@ import { useSessionStore } from '@/lib/store/sessionStore';
 const ChatInput = forwardRef<ChatInputRef, ChatInputProps>((props, ref) => {
   const chatInput = useChatInput(props)
   
-  // Agent mention functionality - FIXED: Handle null session ID
   const {
     showAgentMentions,
     mentionPosition,
@@ -31,9 +30,28 @@ const ChatInput = forwardRef<ChatInputRef, ChatInputProps>((props, ref) => {
     mentionRef,
     handleInputChange,
     handleMentionSelect,
-    handleKeyDown
-  } = useAgentMentions(chatInput.sessionId || undefined) // Convert null to undefined
-  
+    handleKeyDown,
+    getReplacementRange,
+  } = useAgentMentions(chatInput.sessionId || undefined)
+
+  const insertMention = (agentName: string) => {
+    const textarea = chatInput.inputRef.current
+    if (!textarea) return
+    const value = chatInput.message
+    const cursor = textarea.selectionStart || value.length
+    const range = getReplacementRange(value, cursor)
+    const mentionText = `@${agentName}`
+    if (range) {
+      const newValue = value.slice(0, range.start) + mentionText + value.slice(range.end)
+      chatInput.setMessage(newValue)
+      requestAnimationFrame(() => {
+        textarea.focus()
+        const pos = range.start + mentionText.length
+        textarea.setSelectionRange(pos, pos)
+      })
+    }
+  }
+
   // File upload status display
   const [showUploadStatus, setShowUploadStatus] = useState(false)
   const [uploadStatusMessage, setUploadStatusMessage] = useState('')
@@ -109,10 +127,13 @@ const ChatInput = forwardRef<ChatInputRef, ChatInputProps>((props, ref) => {
       e,
       chatInput.message,
       chatInput.inputRef.current?.selectionStart || 0,
-      chatInput.inputRef.current || e.target as HTMLTextAreaElement
+      chatInput.inputRef.current || (e.target as HTMLTextAreaElement)
     )
-    
-    // Handle Enter key for sending message
+    const selected = (window as any).__aa_selected_agent__
+    if (selected) {
+      insertMention(selected.name)
+      ;(window as any).__aa_selected_agent__ = undefined
+    }
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
       if (!chatInput.disabled && !chatInput.isLoading && chatInput.message.trim()) {
@@ -286,11 +307,37 @@ const ChatInput = forwardRef<ChatInputRef, ChatInputProps>((props, ref) => {
               placeholder="Ask anything"
               disabled={chatInput.disabled}
               className="min-h-[44px] max-h-[150px] resize-none border-0 shadow-none focus:ring-0 focus-visible:ring-0 bg-transparent text-gray-900 placeholder-gray-500 text-base leading-6 pr-16 py-2.5 w-full"
-              style={{ 
-                fontSize: '16px',
-                lineHeight: '24px',
-              }}
+              style={{ fontSize: '16px', lineHeight: '24px' }}
             />
+
+            {/* Mentions dropdown — ALWAYS ABOVE */}
+            {showAgentMentions && filteredAgents.length > 0 && (
+              <div
+                ref={mentionRef}
+                style={{
+                  position: 'absolute',
+                  top: mentionPosition.top,
+                  left: mentionPosition.left,
+                  zIndex: 50,
+                  transform: 'translateY(-100%)',
+                }}
+                className="bg-white border border-gray-200 rounded-md shadow-lg w-64 max-h-64 overflow-auto"
+              >
+                {filteredAgents.map((agent, idx) => (
+                  <button
+                    key={agent.name}
+                    type="button"
+                    onClick={() => insertMention(agent.name)}
+                    className={`w-full text-left px-3 py-2 text-sm ${
+                      idx === selectedMentionIndex ? 'bg-[#FF7F7F]/10 text-[#FF7F7F]' : 'hover:bg-gray-50'
+                    }`}
+                  >
+                    <div className="font-medium">@{agent.name}</div>
+                    <div className="text-xs text-gray-500 truncate">{agent.description}</div>
+                  </button>
+                ))}
+              </div>
+            )}
             
             {/* Send/Stop button - better positioned and Auto-Analyst colors */}
             <div className="absolute right-3 top-1/2 -translate-y-1/2">

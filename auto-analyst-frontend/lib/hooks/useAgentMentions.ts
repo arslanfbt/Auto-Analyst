@@ -84,8 +84,35 @@ export function useAgentMentions(sessionId?: string | null) {
   }
 
   // Separate functions for document listener vs component
+  const parseMention = (value: string, cursorPosition: number) => {
+    let i = cursorPosition - 1
+    while (i >= 0 && value[i] !== '@' && value[i] !== ' ' && value[i] !== '\n') i--
+    if (i >= 0 && value[i] === '@') {
+      const start = i
+      const end = cursorPosition
+      const query = value.slice(start + 1, end)
+      return { start, end, query }
+    }
+    return null
+  }
+
   const handleDocumentKeyDown = (event: KeyboardEvent) => {
-    // Handle arrow keys, enter, escape for mentions
+    if (!showAgentMentions || filteredAgents.length === 0) return
+    if (event.key === 'ArrowDown') {
+      event.preventDefault()
+      setSelectedMentionIndex((i) => (i + 1) % filteredAgents.length)
+    } else if (event.key === 'ArrowUp') {
+      event.preventDefault()
+      setSelectedMentionIndex((i) => (i - 1 + filteredAgents.length) % filteredAgents.length)
+    } else if (event.key === 'Enter') {
+      event.preventDefault()
+      const agent = filteredAgents[selectedMentionIndex]
+      if (agent) {
+        ;(window as any).__aa_selected_agent__ = agent
+      }
+    } else if (event.key === 'Escape') {
+      hideMentions()
+    }
   }
 
   const handleKeyDown = (
@@ -94,7 +121,7 @@ export function useAgentMentions(sessionId?: string | null) {
     cursorPosition: number, 
     target: HTMLTextAreaElement
   ) => {
-    handleDocumentKeyDown(event.nativeEvent)
+    handleDocumentKeyDown(event.nativeEvent as KeyboardEvent)
   }
 
   // Fixed event listener
@@ -103,20 +130,26 @@ export function useAgentMentions(sessionId?: string | null) {
     return () => document.removeEventListener('keydown', handleDocumentKeyDown)
   }, [showAgentMentions, filteredAgents, selectedMentionIndex])
 
-  // Fixed function signatures to match ChatInput calls
+  // DEFAULT ABOVE: anchor to textarea top
   const handleInputChange = (value: string, cursorPosition: number, target: HTMLTextAreaElement) => {
-    if (value[cursorPosition - 1] === '@') {
-      const rect = target.getBoundingClientRect();
-      const position = { top: rect.bottom, left: rect.left };
-      showMentions(position, '');
+    const mention = parseMention(value, cursorPosition)
+    if (mention) {
+      const rect = target.getBoundingClientRect()
+      setMentionPosition({ top: rect.top + window.scrollY, left: rect.left + window.scrollX })
+      setMentionQuery(mention.query)
+      setShowAgentMentions(true)
     } else {
-      hideMentions();
+      hideMentions()
     }
-  };
+  }
 
-  const handleMentionSelect = (agent: AgentInfo) => {
-    return selectAgent(agent);
-  };
+  const handleMentionSelect = (agent: AgentInfo) => selectAgent(agent)
+
+  const getReplacementRange = (value: string, cursorPosition: number) => {
+    const m = parseMention(value, cursorPosition)
+    if (!m) return null
+    return { start: m.start, end: m.end }
+  }
 
   return {
     availableAgents,
@@ -132,5 +165,6 @@ export function useAgentMentions(sessionId?: string | null) {
     handleInputChange,     // Fixed signature
     handleMentionSelect,
     handleKeyDown,         // Fixed signature
+    getReplacementRange,
   }
 }
