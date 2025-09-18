@@ -305,7 +305,7 @@ const ChatInput = forwardRef<ChatInputRef, ChatInputProps>((props, ref) => {
               value={chatInput.message}
               onChange={handleInput}
               onKeyDown={handleKeyDownEvent}
-              placeholder="Ask anything"
+              placeholder="Ask data related questions, use @agent_name to call agents for specific tasks"
               disabled={chatInput.disabled}
               className="min-h-[44px] max-h-[150px] resize-none border-0 shadow-none focus:ring-0 focus-visible:ring-0 bg-transparent text-gray-900 placeholder-gray-500 text-base leading-6 pr-16 py-2.5 w-full"
               style={{ fontSize: '16px', lineHeight: '24px' }}
