@@ -25,12 +25,12 @@ export function useAgentMentions(sessionId?: string | null) {
   useEffect(() => {
     const fetchAgents = async () => {
       try {
-        console.log('�� Fetching agents...')
+        console.log('🔄 Fetching agents...')
         
         // Use apiClient instead of axios - it will auto-handle sessionId
         const response = await apiClient.get('/agents')
         
-        console.log('�� Agents response:', response.data)
+        console.log('📋 Agents response:', response.data)
         
         if (response.data && response.data.available_agents) {
           const agentList = response.data.available_agents.map((name: string) => ({
@@ -66,6 +66,7 @@ export function useAgentMentions(sessionId?: string | null) {
   }, [mentionQuery, availableAgents])
 
   const showMentions = (position: { top: number; left: number }, query: string) => {
+    console.log('🔍 Showing mentions at position:', position, 'query:', query)
     setMentionPosition(position)
     setMentionQuery(query)
     setShowAgentMentions(true)
@@ -73,6 +74,7 @@ export function useAgentMentions(sessionId?: string | null) {
   }
 
   const hideMentions = () => {
+    console.log('❌ Hiding mentions')
     setShowAgentMentions(false)
     setMentionQuery('')
     setSelectedMentionIndex(0)
@@ -85,14 +87,20 @@ export function useAgentMentions(sessionId?: string | null) {
 
   // Separate functions for document listener vs component
   const parseMention = (value: string, cursorPosition: number) => {
+    console.log('🔍 Parsing mention - value:', value, 'cursor:', cursorPosition)
+    
     let i = cursorPosition - 1
     while (i >= 0 && value[i] !== '@' && value[i] !== ' ' && value[i] !== '\n') i--
+    
     if (i >= 0 && value[i] === '@') {
       const start = i
       const end = cursorPosition
       const query = value.slice(start + 1, end)
+      console.log('✅ Found mention - start:', start, 'end:', end, 'query:', query)
       return { start, end, query }
     }
+    
+    console.log('❌ No mention found')
     return null
   }
 
@@ -132,12 +140,17 @@ export function useAgentMentions(sessionId?: string | null) {
 
   // DEFAULT ABOVE: anchor to textarea top
   const handleInputChange = (value: string, cursorPosition: number, target: HTMLTextAreaElement) => {
+    console.log('📝 Input change - value:', value, 'cursor:', cursorPosition)
+    
     const mention = parseMention(value, cursorPosition)
     if (mention) {
       const rect = target.getBoundingClientRect()
-      setMentionPosition({ top: rect.top + window.scrollY, left: rect.left + window.scrollX })
+      const position = { top: rect.top + window.scrollY, left: rect.left + window.scrollX }
+      console.log('📍 Setting mention position:', position)
+      setMentionPosition(position)
       setMentionQuery(mention.query)
       setShowAgentMentions(true)
+      console.log('✅ Mentions should be visible now')
     } else {
       hideMentions()
     }

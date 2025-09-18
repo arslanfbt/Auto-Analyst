@@ -1,5 +1,3 @@
-"use client"
-
 import React, { useState, useEffect } from "react"
 import { Button } from "../ui/button"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../ui/tooltip"
@@ -7,18 +5,19 @@ import { Paperclip } from "lucide-react"
 
 interface AttachButtonTooltipProps {
   onClick: () => void
-  disabled?: boolean  // Make it optional
+  disabled?: boolean
   sessionId?: string | null
 }
 
 export default function AttachButtonTooltip({ 
   onClick, 
-  disabled = false,  // Default to false
+  disabled = false,
   sessionId 
 }: AttachButtonTooltipProps) {
   const [showTooltip, setShowTooltip] = useState(false)
+  const [isHovered, setIsHovered] = useState(false)
 
-  // Check if tooltip should be shown (once per login session)
+  // Show tooltip on mount (for testing) and on hover
   useEffect(() => {
     if (sessionId) {
       const tooltipKey = `attach_tooltip_shown_${sessionId}`
@@ -41,6 +40,22 @@ export default function AttachButtonTooltip({
     }
   }, [sessionId])
 
+  // Show tooltip on hover
+  const handleMouseEnter = () => {
+    setIsHovered(true)
+    setShowTooltip(true)
+  }
+
+  const handleMouseLeave = () => {
+    setIsHovered(false)
+    // Only hide if it wasn't already showing from the initial display
+    const tooltipKey = `attach_tooltip_shown_${sessionId}`
+    const hasShownTooltip = localStorage.getItem(tooltipKey)
+    if (hasShownTooltip) {
+      setShowTooltip(false)
+    }
+  }
+
   return (
     <TooltipProvider>
       <Tooltip open={showTooltip}>
@@ -51,6 +66,8 @@ export default function AttachButtonTooltip({
             size="sm"
             onClick={onClick}
             disabled={disabled}
+            onMouseEnter={handleMouseEnter}
+            onMouseLeave={handleMouseLeave}
             className="text-gray-500 hover:text-[#FF7F7F] hover:bg-[#FF7F7F]/10 transition-colors duration-200 p-2.5 rounded-xl flex-shrink-0 self-center"
           >
             <Paperclip className="h-5 w-5" />
