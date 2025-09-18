@@ -1614,7 +1614,7 @@ const ChatInterface: React.FC = () => {
             onSendMessage={handleSendMessage}
             showWelcome={showWelcome}
             chatNameGenerated={chatNameGenerated}
-            sessionId={sessionId}  // ADD THIS LINE
+            sessionId={sessionId || undefined}  // Convert null to undefined
             setSidebarOpen={setSidebarOpen}
           />
         </div>
