@@ -56,8 +56,14 @@ export default function AttachButtonTooltip({
             <Paperclip className="h-5 w-5" />
           </Button>
         </TooltipTrigger>
-        <TooltipContent side="top" className="bg-gray-800 text-white text-sm px-3 py-2">
-          <p>Click to upload CSV or Excel files for analysis</p>
+        <TooltipContent 
+          side="top" 
+          className="bg-[#FF7F7F] text-white text-sm px-4 py-3 border-2 border-[#FF6666] shadow-lg max-w-xs"
+        >
+          <div className="text-center text-white">
+            <p className="font-medium text-white">Upload Your Data</p>
+            <p className="text-xs opacity-90 mt-1 text-white">CSV or Excel files for analysis</p>
+          </div>
         </TooltipContent>
       </Tooltip>
     </TooltipProvider>
