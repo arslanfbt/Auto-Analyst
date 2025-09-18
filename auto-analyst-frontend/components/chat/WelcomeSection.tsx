@@ -19,7 +19,6 @@ const sampleQueries = [
     icon: <Bot className="w-5 h-5" />,
     description: "Use specialized agents for specific tasks",
   },
-  ,
   {
     text: "Build me a Dashboard",
     icon: <Database className="w-5 h-5" />,
