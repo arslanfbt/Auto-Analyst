@@ -21,7 +21,7 @@ const sampleQueries = [
   },
   {
     text: "Build me a Dashboard",
-    icon: <Database className="w-5 h-5" />,
+    icon: <LineChart className="w-5 h-5" />,
     description: "See all of your data visualized",
   },
   {
