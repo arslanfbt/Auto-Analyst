@@ -1,12 +1,17 @@
 
-import axios from 'axios'
+import axios, { AxiosInstance } from 'axios'
 import { useSessionStore } from '@/lib/store/sessionStore'
 import API_URL from '@/config/api'
+
+// Extend the AxiosInstance type to include isAxiosError
+interface ExtendedAxiosInstance extends AxiosInstance {
+  isAxiosError: typeof axios.isAxiosError
+}
 
 // Create axios instance
 const apiClient = axios.create({
   baseURL: API_URL
-})
+}) as ExtendedAxiosInstance
 
 // Helper function to get current user data from localStorage
 const getCurrentUserData = () => {
