@@ -477,7 +477,92 @@ async def get_default_dataset(
 
     # Load Housing.csv from the data directory (relative to backend root)
  
-    desc = "Housing data"
+    # Detailed description for the default housing dataset
+    desc = """ exact_python_name: `Housing_Dataset` Dataset: {
+  "exact": "Housing_Dataset",
+  "description": "A dataset containing information about residential properties, including their prices, area, number of bedrooms and bathrooms, number of stories, and various amenities. This dataset is useful for analyzing housing market trends and property valuations.",
+  "columns": {
+    "price": {
+      "type": "integer",
+      "description": "The selling price of the property in local currency",
+      "preprocessing": "Direct integer conversion",
+      "missing_values_handling": "Consider imputing with median price or removing rows with missing values"
+    },
+    "area": {
+      "type": "integer",
+      "description": "The total area of the property in square feet",
+      "preprocessing": "Direct integer conversion",
+      "missing_values_handling": "Impute with median area or remove rows with missing values"
+    },
+    "bedrooms": {
+      "type": "integer",
+      "description": "Number of bedrooms in the property",
+      "preprocessing": "Direct integer conversion",
+      "missing_values_handling": "Impute with mode or remove rows with missing values"
+    },
+    "bathrooms": {
+      "type": "integer",
+      "description": "Number of bathrooms in the property",
+      "preprocessing": "Direct integer conversion",
+      "missing_values_handling": "Impute with mode or remove rows with missing values"
+    },
+    "stories": {
+      "type": "integer",
+      "description": "Number of stories in the property",
+      "preprocessing": "Direct integer conversion",
+      "missing_values_handling": "Impute with mode or remove rows with missing values"
+    },
+    "mainroad": {
+      "type": "object",
+      "description": "Indicates if the property is located on a main road (Yes/No)",
+      "preprocessing": "Convert to categorical type",
+      "missing_values_handling": "Impute with mode or create a separate category for missing values"
+    },
+    "guestroom": {
+      "type": "object",
+      "description": "Indicates if the property has a guest room (Yes/No)",
+      "preprocessing": "Convert to categorical type",
+      "missing_values_handling": "Impute with mode or create a separate category for missing values"
+    },
+    "basement": {
+      "type": "object",
+      "description": "Indicates if the property has a basement (Yes/No)",
+      "preprocessing": "Convert to categorical type",
+      "missing_values_handling": "Impute with mode or create a separate category for missing values"
+    },
+    "hotwaterheating": {
+      "type": "object",
+      "description": "Indicates if the property has hot water heating (Yes/No)",
+      "preprocessing": "Convert to categorical type",
+      "missing_values_handling": "Impute with mode or create a separate category for missing values"
+    },
+    "airconditioning": {
+      "type": "object",
+      "description": "Indicates if the property has air conditioning (Yes/No)",
+      "preprocessing": "Convert to categorical type",
+      "missing_values_handling": "Impute with mode or create a separate category for missing values"
+    },
+    "parking": {
+      "type": "integer",
+      "description": "Number of parking spaces available",
+      "preprocessing": "Direct integer conversion",
+      "missing_values_handling": "Impute with mode or remove rows with missing values"
+    },
+    "prefarea": {
+      "type": "object",
+      "description": "Indicates if the property is located in a preferred area (Yes/No)",
+      "preprocessing": "Convert to categorical type",
+      "missing_values_handling": "Impute with mode or create a separate category for missing values"
+    },
+    "furnishingstatus": {
+      "type": "object",
+      "description": "Status of furnishing (e.g., furnished, semi-furnished, unfurnished)",
+      "preprocessing": "Convert to categorical type",
+      "missing_values_handling": "Impute with mode or create a separate category for missing values"
+    }
+  },
+  "usage_notes": "When analyzing this dataset, consider the impact of missing values on your analysis. Use appropriate imputation methods to maintain data integrity. Additionally, explore correlations between property features and prices to identify trends in the housing market."
+}"""
     
     # Full JSON-safe cleanup (same as CSV preview)
     df = df.replace([np.inf, -np.inf], None)         # Infs → null
