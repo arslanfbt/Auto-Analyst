@@ -367,7 +367,7 @@ const ChatInput = forwardRef<ChatInputRef, ChatInputProps>((props, ref) => {
               left: mentionPosition.left,
               zIndex: 9999,
             }}
-            className="bg-white border border-gray-200 rounded-md shadow-lg w-64 max-h-64 overflow-auto"
+            className="bg-white border border-gray-200 rounded-md shadow-lg w-64 max-h-64 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300"
           >
             {filteredAgents.map((agent, idx) => (
               <button

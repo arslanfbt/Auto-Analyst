@@ -152,6 +152,8 @@ async def upload_excel(
                 try:
                     # Read each sheet
                     sheet_df = pd.read_excel(io.BytesIO(contents), sheet_name=sheet_name)
+                    sheet_df.replace({np.nan: None, np.inf: None, -np.inf: None}, inplace=True)
+
                     
                     # Preprocessing steps
                     # 1. Drop empty rows and columns
@@ -308,6 +310,8 @@ async def upload_dataframe(
             try:
                 csv_content = content.decode(encoding)
                 new_df = pd.read_csv(io.StringIO(csv_content))
+                new_df.replace({np.nan: None, np.inf: None, -np.inf: None}, inplace=True)
+
                 logger.log_message(f"Successfully read CSV with encoding: {encoding}", level=logging.INFO)
                 break
             except Exception as e:
