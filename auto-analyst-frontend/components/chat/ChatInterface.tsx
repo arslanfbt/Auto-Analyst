@@ -1561,7 +1561,7 @@ const ChatInterface: React.FC = () => {
                 <span className="hidden sm:inline">Feedback</span>
               </button>
               {/* Small pink strip with 20% off */}
-              <div className="absolute -top-1 -right-1 bg-[#FF7F7F] text-white text-xs px-1.5 py-0.5 rounded-full font-medium">
+              <div className="absolute -top-3 -right-1 bg-[#FF7F7F] text-white text-xs px-1.5 py-0.5 rounded-full font-medium">
                 get 20% off
               </div>
             </div>
