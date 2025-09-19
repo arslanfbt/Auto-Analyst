@@ -7,7 +7,7 @@ import { Button } from '../ui/button'
 import { Textarea } from '../ui/textarea'
 import { Label } from '../ui/label'
 import { RadioGroup, RadioGroupItem } from '../ui/radio-group'
-import { Upload, X, Check, AlertCircle } from 'lucide-react'
+import { Upload, X, Check, AlertCircle, Loader2 } from 'lucide-react'
 import axios from 'axios'
 import API_URL from '@/config/api'
 
