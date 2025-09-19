@@ -1550,15 +1550,21 @@ const ChatInterface: React.FC = () => {
 
           {/* Show credit balance and user profile */}
           <div className="flex items-center gap-3">
-            {/* Feedback button */}
-            <button
-              onClick={() => setShowFeedbackPopup(true)}
-              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-sm text-gray-600 hover:text-[#FF7F7F] hover:bg-[#FF7F7F]/5 rounded-lg transition-all duration-200"
-              title="Send Feedback"
-            >
-              <MessageSquare className="w-4 h-4" />
-              <span className="hidden sm:inline">Feedback</span>
-            </button>
+          {/* Feedback button */}
+            <div className="relative">
+              <button
+                onClick={() => setShowFeedbackPopup(true)}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-sm text-gray-600 hover:text-[#FF7F7F] hover:bg-[#FF7F7F]/5 rounded-lg transition-all duration-200"
+                title="Send Feedback"
+              >
+                <MessageSquare className="w-4 h-4" />
+                <span className="hidden sm:inline">Feedback</span>
+              </button>
+              {/* Small pink strip with 20% off */}
+              <div className="absolute -top-1 -right-1 bg-[#FF7F7F] text-white text-xs px-1.5 py-0.5 rounded-full font-medium">
+                get 20% off
+              </div>
+            </div>
             
             {/* Display current model */}
             {(session || isAdmin) && (
