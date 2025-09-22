@@ -82,7 +82,7 @@ const pricingTiers = [
       'Custom integrations',
       'Tailored solutions',
       'Marketing Analytics APIs',
-      'Specialized Agents'
+      'Specialized Agents'  
     ],
     highlight: false,
   }

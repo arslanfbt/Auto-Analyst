@@ -1,16 +1,17 @@
 "use client"
 
-import React, { useCallback, useState } from "react"
+import React, { useCallback, useState, useEffect } from "react"
 import ReactMarkdown from "react-markdown"
 import rehypeRaw from "rehype-raw"
 import remarkGfm from "remark-gfm"
-import { AlertTriangle, WrenchIcon, Copy, Download, Check } from "lucide-react"
+import { AlertTriangle, WrenchIcon, Copy, Download, Check, X } from "lucide-react"
 import CodeFixButton from "./CodeFixButton"
 import MessageFeedback from "./MessageFeedback"
 import { useSessionStore } from '@/lib/store/sessionStore'
 import { useToast } from "@/components/ui/use-toast"
 import { Button } from "@/components/ui/button"
-import { motion } from "framer-motion"
+import { motion, AnimatePresence } from "framer-motion"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -41,6 +42,7 @@ interface MessageContentProps {
   chatId?: number
   isLastPart?: boolean
   outputs?: CodeOutput[]  // Add outputs prop to include code execution results and plots
+  isFirstMessage?: boolean // Add this prop, optional
 }
 
 const MessageContent: React.FC<MessageContentProps> = ({ 
@@ -56,7 +58,8 @@ const MessageContent: React.FC<MessageContentProps> = ({
   messageId,
   chatId,
   isLastPart = true,
-  outputs = []
+  outputs = [],
+  isFirstMessage = false // Add this prop, default false
 }) => {
   const { sessionId } = useSessionStore()
   const { toast } = useToast()
@@ -64,8 +67,41 @@ const MessageContent: React.FC<MessageContentProps> = ({
   const [hovered, setHovered] = useState<Record<string, boolean>>({})
   const [isCopied, setIsCopied] = useState(false)
   
+  // Add state for first error tooltip
+  const [showFirstErrorTooltip, setShowFirstErrorTooltip] = useState(false)
+  const [hasShownFirstErrorTooltip, setHasShownFirstErrorTooltip] = useState(false)
+  
   // Use fullMessage for copying/downloading if provided, otherwise fall back to message
   const contentToCopy = fullMessage || message
+  
+  // Check if message contains errors
+  const hasError = message.includes('Error:') || message.includes('error') || 
+                   message.includes('Exception:') || message.includes('Traceback')
+  
+  // Handle first error tooltip logic
+  useEffect(() => {
+    if (hasError && isFirstMessage && isAIMessage && isLastPart && !hasShownFirstErrorTooltip) {
+      // Check if tooltip was already shown in this session
+      const wasShown = localStorage.getItem('fix-tooltip-shown')
+      if (!wasShown) {
+        // Show tooltip after a short delay
+        const timer = setTimeout(() => {
+          setShowFirstErrorTooltip(true)
+          setHasShownFirstErrorTooltip(true)
+          localStorage.setItem('fix-tooltip-shown', 'true')
+          
+          // Auto-hide after 10 seconds
+          setTimeout(() => {
+            setShowFirstErrorTooltip(false)
+          }, 10000)
+        }, 2000)
+        
+        return () => clearTimeout(timer)
+      } else {
+        setHasShownFirstErrorTooltip(true)
+      }
+    }
+  }, [hasError, isFirstMessage, isAIMessage, isLastPart, hasShownFirstErrorTooltip])
   
   // Generate a unique code ID for each error block
   const generateCodeId = (content: string, index: number) => {
@@ -266,7 +302,7 @@ const MessageContent: React.FC<MessageContentProps> = ({
                       } else if (Math.abs(numValue) < 10) {
                         // 2 decimal places for medium numbers
                         formattedValue = numValue.toFixed(2);
-        } else {
+                      } else {
                         // No decimal places for large numbers
                         formattedValue = Math.round(numValue).toLocaleString();
                       }
@@ -317,76 +353,76 @@ const MessageContent: React.FC<MessageContentProps> = ({
   // Create stable markdownComponents reference with useCallback
   const markdownComponents = useCallback(() => ({
     code({ node, className, children, ...props }: any) {
-                  const match = /language-(\w+)/.exec(className || "")
-                  const isInline = (props as { inline?: boolean })?.inline ?? false
-                  
-                  // Convert children to string to check content
-                  const codeContent = String(children).replace(/\n$/, "")
-                  
-                  // Check if this is an explicit error block
-                  const isErrorBlock = match && match[1] === 'error'
-                  
-                  // Check if this looks like an error but isn't explicitly marked as one
-                  const containsError = codeContent.toLowerCase().includes("error") || 
-                                      codeContent.toLowerCase().includes("traceback") ||
-                                      codeContent.toLowerCase().includes("exception")
-                  
+      const match = /language-(\w+)/.exec(className || "")
+      const isInline = (props as { inline?: boolean })?.inline ?? false
+      
+      // Convert children to string to check content
+      const codeContent = String(children).replace(/\n$/, "")
+      
+      // Check if this is an explicit error block
+      const isErrorBlock = match && match[1] === 'error'
+      
+      // Check if this looks like an error but isn't explicitly marked as one
+      const containsError = codeContent.toLowerCase().includes("error") || 
+                            codeContent.toLowerCase().includes("traceback") ||
+                            codeContent.toLowerCase().includes("exception")
+      
       // Check if this is likely tabular data (fallback for non-enhanced tables)
-                  const matches = codeContent.match(/\|\s*\w+\s*\|/g);
+      const matches = codeContent.match(/\|\s*\w+\s*\|/g);
       const isTabularData = !isInline && (
         // Original table detection
         (codeContent.includes('|') && 
-                                       (codeContent.includes('DataFrame') || 
-                                        codeContent.includes('Column Types') ||
-          (matches !== null && matches.length > 1))) ||
+          (codeContent.includes('DataFrame') || 
+            codeContent.includes('Column Types') ||
+            (matches !== null && matches.length > 1))) ||
         // Enhanced detection for statistical outputs (fallback)
         (codeContent.includes('count') && codeContent.includes('mean') && codeContent.includes('std')) ||
         // Detection for correlation matrices (fallback)
         (codeContent.includes('price') && codeContent.includes('area') && (codeContent.match(/\d+\.\d+/g)?.length || 0) > 5) ||
         // Detection for general tabular structure
         (codeContent.split('\n').length > 3 && 
-         codeContent.split('\n').some(line => 
-           line.match(/^\s*\w+\s+[\d\.\-\+e]+(\s+[\d\.\-\+e]+)*\s*$/)))
+          codeContent.split('\n').some(line => 
+            line.match(/^\s*\w+\s+[\d\.\-\+e]+(\s+[\d\.\-\+e]+)*\s*$/)))
       );
 
-                  if (!isInline && match) {
-                    // Special handling for explicit error blocks
-                    if (isErrorBlock) {
+      if (!isInline && match) {
+        // Special handling for explicit error blocks
+        if (isErrorBlock) {
           const codeId = generateCodeId(codeContent, Math.random())
-                      return (
-                        <div className="bg-red-50 border border-red-200 rounded-md p-3 my-3 overflow-auto relative">
-                          <div className="flex items-center text-red-600 font-medium mb-2">
-                            <AlertTriangle size={16} className="mr-2" />
-                            Error Output
-                          </div>
-                          {onOpenCanvas && (
-                            <InlineFixButton codeId={codeId} errorContent={codeContent} />
-                          )}
-                          <pre className="text-xs text-red-700 font-mono whitespace-pre-wrap">
-                            {codeContent}
-                          </pre>
-                        </div>
-                      )
-                    }
-                    
-                    // Handle code blocks that contain errors but aren't explicitly marked as errors
-                    if (containsError && onOpenCanvas) {
+          return (
+            <div className="bg-red-50 border border-red-200 rounded-md p-3 my-3 overflow-auto relative">
+              <div className="flex items-center text-red-600 font-medium mb-2">
+                <AlertTriangle size={16} className="mr-2" />
+                Error Output
+              </div>
+              {onOpenCanvas && (
+                <InlineFixButton codeId={codeId} errorContent={codeContent} />
+              )}
+              <pre className="text-xs text-red-700 font-mono whitespace-pre-wrap">
+                {codeContent}
+              </pre>
+            </div>
+          )
+        }
+        
+        // Handle code blocks that contain errors but aren't explicitly marked as errors
+        if (containsError && onOpenCanvas) {
           const codeId = generateCodeId(codeContent, Math.random())
-                      return (
-                        <div className="bg-gray-50 border border-gray-200 rounded-md p-3 my-2 overflow-auto relative">
-                          <div className="flex items-center text-gray-700 font-medium mb-2">
-                            <span>Output</span>
-                          </div>
-                          <InlineFixButton codeId={codeId} errorContent={codeContent} />
-                          <pre className="text-sm p-2 bg-gray-100 rounded font-mono whitespace-pre">
-                            {codeContent}
-                          </pre>
-                        </div>
-                      )
-                    }
-                    
+          return (
+            <div className="bg-gray-50 border border-gray-200 rounded-md p-3 my-2 overflow-auto relative">
+              <div className="flex items-center text-gray-700 font-medium mb-2">
+                <span>Output</span>
+              </div>
+              <InlineFixButton codeId={codeId} errorContent={codeContent} />
+              <pre className="text-sm p-2 bg-gray-100 rounded font-mono whitespace-pre">
+                {codeContent}
+              </pre>
+            </div>
+          )
+        }
+        
         // Special handling for tabular data (fallback for non-enhanced tables)
-                    if (isTabularData) {
+        if (isTabularData) {
           // Detect the type of table for better styling
           let tableType = "Data Table"
           let bgColor = "bg-gray-50"
@@ -416,7 +452,7 @@ const MessageContent: React.FC<MessageContentProps> = ({
             icon = "🗂️"
           }
           
-                      return (
+          return (
             <div className={`${bgColor} border ${borderColor} rounded-md p-4 my-4`}>
               <div className={`flex items-center ${titleColor} font-semibold mb-3`}>
                 <span className="mr-2">{icon}</span>
@@ -425,33 +461,33 @@ const MessageContent: React.FC<MessageContentProps> = ({
               <div className="overflow-x-auto max-w-full bg-white p-3 rounded border">
                 {renderTableContent(codeContent)}
               </div>
-                        </div>
-                      )
-                    }
-                    
-                    // For regular code blocks
-                    return (
-                      <div className="overflow-x-auto my-2">
-                        <code className={`text-sm p-1 bg-gray-100 rounded font-mono block ${className}`} {...props}>
-                          {children}
-                        </code>
-                      </div>
-                    )
-                  }
+            </div>
+          )
+        }
+        
+        // For regular code blocks
+        return (
+          <div className="overflow-x-auto my-2">
+            <code className={`text-sm p-1 bg-gray-100 rounded font-mono block ${className}`} {...props}>
+              {children}
+            </code>
+          </div>
+        )
+      }
 
-                  return (
-                    <code className={className} {...props}>
-                      {children}
-                    </code>
-                  )
-                },
+      return (
+        <code className={className} {...props}>
+          {children}
+        </code>
+      )
+    },
     pre({ children }: any) {
-                  return (
-                    <div className="overflow-x-auto max-w-full">
-                      {children}
-                    </div>
-                  )
-                },
+      return (
+        <div className="overflow-x-auto max-w-full">
+          {children}
+        </div>
+      )
+    },
     h1: ({ node, ...props }: any) => <h1 className="text-2xl font-bold mt-6 mb-4" {...props} />,
     h2: ({ node, ...props }: any) => <h2 className="text-xl font-semibold mt-5 mb-3" {...props} />,
     h3: ({ node, ...props }: any) => <h3 className="text-lg font-medium mt-4 mb-2" {...props} />,
@@ -463,16 +499,16 @@ const MessageContent: React.FC<MessageContentProps> = ({
     ol: ({ node, ...props }: any) => <ol className="list-decimal pl-6 mb-4" {...props} />,
     li: ({ node, ...props }: any) => <li className="mb-1" {...props} />,
     a: ({ node, ...props }: any) => (
-                  <a className="text-blue-600 hover:underline" target="_blank" rel="noopener noreferrer" {...props} />
-                ),
+      <a className="text-blue-600 hover:underline" target="_blank" rel="noopener noreferrer" {...props} />
+    ),
     blockquote: ({ node, ...props }: any) => (
-                  <blockquote className="border-l-4 border-gray-300 pl-4 italic my-4" {...props} />
-                ),
+      <blockquote className="border-l-4 border-gray-300 pl-4 italic my-4" {...props} />
+    ),
     table: ({ node, ...props }: any) => (
-                  <div className="overflow-x-auto max-w-full my-4">
-                    <table className="min-w-max border-collapse" {...props} />
-                  </div>
-                ),
+      <div className="overflow-x-auto max-w-full my-4">
+        <table className="min-w-max border-collapse" {...props} />
+      </div>
+    ),
   }), [onOpenCanvas, renderTableContent, InlineFixButton]);
 
   const renderContent = useCallback(
@@ -603,14 +639,14 @@ const MessageContent: React.FC<MessageContentProps> = ({
                 remarkPlugins={[remarkGfm]}
                 rehypePlugins={[rehypeRaw]}
                 components={components}
-            >
-              {part}
-            </ReactMarkdown>
+              >
+                {part}
+              </ReactMarkdown>
             );
           }
           return null;
         });
-        }
+      }
       
       return parts;
     },
@@ -625,8 +661,69 @@ const MessageContent: React.FC<MessageContentProps> = ({
   const showFeedback = isAIMessage && isLastPart;
 
   return (
-    <div>
+    <div className="relative">
       {renderContent(message)}
+
+      {/* First error fix tooltip - inline implementation */}
+      {showFirstErrorTooltip && (
+        <AnimatePresence>
+          <motion.div
+            initial={{ opacity: 0, y: 10, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 10, scale: 0.95 }}
+            className="absolute top-4 right-4 z-50"
+          >
+            <TooltipProvider>
+              <Tooltip open={showFirstErrorTooltip}>
+                <TooltipTrigger asChild>
+                  <div className="relative">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        // Find the first error and trigger fix
+                        const errorMatch = message.match(/Error:.*?(?=\n|$)/)
+                        if (errorMatch && onOpenCanvas) {
+                          const errorContent = errorMatch[0]
+                          const codeId = generateCodeId(errorContent, Math.random())
+                          handleOpenCanvasForFixing(errorContent, codeId)
+                        }
+                        setShowFirstErrorTooltip(false)
+                      }}
+                      className="bg-[#FF7F7F]/10 border-[#FF7F7F]/30 text-[#FF7F7F] hover:bg-[#FF7F7F]/20 hover:border-[#FF7F7F]/50 transition-all duration-200 shadow-lg"
+                    >
+                      <WrenchIcon className="h-4 w-4 mr-2" />
+                      Fix Error
+                    </Button>
+                    
+                    {/* Close button */}
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setShowFirstErrorTooltip(false)}
+                      className="absolute -top-2 -right-2 h-6 w-6 p-0 bg-white border border-gray-200 rounded-full hover:bg-gray-50"
+                    >
+                      <X className="h-3 w-3" />
+                    </Button>
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent 
+                  side="left" 
+                  className="bg-[#FF7F7F] text-white text-sm px-4 py-3 border-2 border-[#FF6666] shadow-lg max-w-xs"
+                >
+                  <div className="text-center text-white">
+                    <p className="font-medium text-white mb-1">🔧 Fix Error with AI</p>
+                    <p className="text-xs opacity-90 text-white">
+                      Click the fix button to automatically resolve this error using AI. 
+                      This feature helps you debug and fix code issues quickly!
+                    </p>
+                  </div>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </motion.div>
+        </AnimatePresence>
+      )}
       
       {showFeedback && (
         <div className="mt-4 pt-2 border-t border-gray-100">
@@ -715,5 +812,3 @@ const MessageContent: React.FC<MessageContentProps> = ({
 }
 
 export default React.memo(MessageContent)
-
-

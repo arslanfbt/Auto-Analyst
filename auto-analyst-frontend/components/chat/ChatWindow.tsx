@@ -1123,6 +1123,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
                           chatId={message.chat_id}
                           isLastPart={partIndex === messageContent.length - 1 && plotlyIndex === plotlyParts.length - 1}
                           outputs={codeOutputs[message.message_id || index] || []}
+                          isFirstMessage={index === 0}
                         />;
                       }
                       return null;
@@ -1143,6 +1144,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
                     chatId={message.chat_id}
                     isLastPart={partIndex === messageContent.length - 1}
                     outputs={codeOutputs[message.message_id || index] || []}
+                    isFirstMessage={index === 0}
                   />;
                 } else if (part.type === 'code') {
                   // Code indicator
@@ -1165,6 +1167,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
                 chatId={message.chat_id}
                 isLastPart={true}
                 outputs={codeOutputs[message.message_id || index] || []}
+                isFirstMessage={index === 0}
               />
             )}
           </div>
