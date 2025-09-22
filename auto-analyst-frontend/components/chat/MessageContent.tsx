@@ -227,6 +227,7 @@ const MessageContent: React.FC<MessageContentProps> = ({
                 <WrenchIcon className="h-3 w-3 text-red-500" />
               )}
             </div>
+            <span className="ml-2 text-xs font-semibold text-red-600">Fix Code</span>
           </div>
         </motion.div>
       </div>
