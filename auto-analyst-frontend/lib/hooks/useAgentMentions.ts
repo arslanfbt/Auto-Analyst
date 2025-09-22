@@ -118,6 +118,12 @@ export function useAgentMentions(sessionId?: string | null) {
       if (agent) {
         ;(window as any).__aa_selected_agent__ = agent
       }
+    } else if (event.key === 'Tab') {
+      event.preventDefault()
+      const agent = filteredAgents[selectedMentionIndex]
+      if (agent) {
+        ;(window as any).__aa_selected_agent__ = agent
+      }
     } else if (event.key === 'Escape') {
       hideMentions()
     }
