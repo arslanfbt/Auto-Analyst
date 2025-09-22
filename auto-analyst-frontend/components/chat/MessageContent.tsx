@@ -693,7 +693,7 @@ const MessageContent: React.FC<MessageContentProps> = ({
                       className="bg-[#FF7F7F]/10 border-[#FF7F7F]/30 text-[#FF7F7F] hover:bg-[#FF7F7F]/20 hover:border-[#FF7F7F]/50 transition-all duration-200 shadow-lg"
                     >
                       <WrenchIcon className="h-4 w-4 mr-2" />
-                      Fix Error
+                      <span className="font-semibold">Fix Code</span>
                     </Button>
                     
                     {/* Close button */}
