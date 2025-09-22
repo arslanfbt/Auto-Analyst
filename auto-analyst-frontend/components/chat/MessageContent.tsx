@@ -186,50 +186,48 @@ const MessageContent: React.FC<MessageContentProps> = ({
   const handleDownload = useCallback(createDownloadHandler(contentToCopy, outputs), [contentToCopy, outputs])
 
   // Custom fix button component for inline use
+  // Custom fix button component for inline use
   const InlineFixButton = useCallback(({ codeId, errorContent }: { codeId: string, errorContent: string }) => {
     return (
       <div className="inline-flex items-center absolute top-3 right-3"
           onMouseEnter={() => setHovered(prev => ({ ...prev, [codeId]: true }))}
           onMouseLeave={() => setHovered(prev => ({ ...prev, [codeId]: false }))}>
-        <motion.div
-          initial={{ width: "auto" }}
-          animate={{ 
-            width: hovered[codeId] ? "auto" : "auto",
-            backgroundColor: hovered[codeId] ? "rgba(254, 226, 226, 0.5)" : "transparent"
-          }}
-          transition={{ duration: 0.2 }}
-          className="rounded-md overflow-hidden flex items-center justify-end px-1 cursor-pointer"
-          onClick={() => handleOpenCanvasForFixing(errorContent, codeId)}
-        >
-          <motion.span 
-            initial={{ opacity: 0, width: 0 }}
-            animate={{ 
-              opacity: hovered[codeId] ? 1 : 0,
-              width: hovered[codeId] ? "auto" : 0,
-              marginRight: hovered[codeId] ? "4px" : 0
-            }}
-            transition={{ duration: 0.2 }}
-            className="text-xs font-medium whitespace-nowrap text-red-500 overflow-hidden"
-          >
-            {codeFixes[codeId] && codeFixes[codeId] >= 3 
-              ? "Fix error with AI (1 credit)" 
-              : `Fix error with AI (${3 - (codeFixes[codeId] || 0)} free left)`}
-          </motion.span>
-          
-          <div className="flex items-center">
-            <div className="h-6 w-6 p-0 flex items-center justify-center rounded-full bg-red-50 border border-red-200">
-              {isFixingCode[codeId] ? (
-                <svg className="animate-spin h-3 w-3 text-red-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                </svg>
-              ) : (
-                <WrenchIcon className="h-3 w-3 text-red-500" />
-              )}
-            </div>
-            <span className="ml-2 text-xs font-semibold text-red-600">Fix Code</span>
-          </div>
-        </motion.div>
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <motion.div
+                initial={{ width: "auto" }}
+                animate={{
+                  width: "auto",
+                  backgroundColor: hovered[codeId] ? "rgba(254, 226, 226, 0.5)" : "transparent"
+                }}
+                transition={{ duration: 0.2 }}
+                className="rounded-md overflow-hidden flex items-center justify-end px-1 cursor-pointer"
+                onClick={() => handleOpenCanvasForFixing(errorContent, codeId)}
+              >
+                <div className="flex items-center">
+                  <div className="h-6 w-6 p-0 flex items-center justify-center rounded-full bg-red-50 border border-red-200">
+                    {isFixingCode[codeId] ? (
+                      <svg className="animate-spin h-3 w-3 text-red-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                    ) : (
+                      <WrenchIcon className="h-3 w-3 text-red-500" />
+                    )}
+                  </div>
+                  <span className="ml-2 text-xs font-semibold text-red-600">Fix Code</span>
+                </div>
+              </motion.div>
+            </TooltipTrigger>
+            <TooltipContent side="left" className="bg-[#FF7F7F] text-white text-xs px-3 py-2 border-2 border-[#FF6666] shadow-lg">
+              <div className="text-center">
+                <p className="font-medium">Fix Error with AI</p>
+                <p className="opacity-90">Click to open the code canvas and auto-fix the error.</p>
+              </div>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
       </div>
     );
   }, [codeFixes, hovered, isFixingCode, handleOpenCanvasForFixing]);
