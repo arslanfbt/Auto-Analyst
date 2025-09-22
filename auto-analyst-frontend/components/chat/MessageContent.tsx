@@ -80,7 +80,7 @@ const MessageContent: React.FC<MessageContentProps> = ({
   
   // Handle first error tooltip logic
   useEffect(() => {
-    if (hasError && isFirstMessage && isAIMessage && isLastPart && !hasShownFirstErrorTooltip) {
+    if (hasError && isAIMessage && isLastPart && !hasShownFirstErrorTooltip) {
       // Check if tooltip was already shown in this session
       const wasShown = localStorage.getItem('fix-tooltip-shown')
       if (!wasShown) {
@@ -101,7 +101,7 @@ const MessageContent: React.FC<MessageContentProps> = ({
         setHasShownFirstErrorTooltip(true)
       }
     }
-  }, [hasError, isFirstMessage, isAIMessage, isLastPart, hasShownFirstErrorTooltip])
+  }, [hasError, isAIMessage, isLastPart, hasShownFirstErrorTooltip])
   
   // Generate a unique code ID for each error block
   const generateCodeId = (content: string, index: number) => {
