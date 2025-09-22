@@ -973,6 +973,12 @@ const CodeCanvas: React.FC<CodeCanvasProps> = ({
   // This ensures auto-run still works even when canvas is closed
   const activeEntry = getActiveEntry();
   const hasError = activeEntry ? execOutputMap[activeEntry.id]?.hasError : false;
+  
+  // Enhanced error detection - check both hasError flag and output content
+  const outputText = activeEntry ? (execOutputMap[activeEntry.id]?.output || '') : '';
+  const looksLikeError = /error|traceback|exception|failed|invalid/i.test(outputText);
+  const hasValidErrorContent = outputText.trim().length > 0 && looksLikeError;
+  const shouldShowFixButton = (hasError && outputText.trim().length > 0) || hasValidErrorContent;
 
   // Check for pending error fix data
   useEffect(() => {
@@ -1179,10 +1185,10 @@ const CodeCanvas: React.FC<CodeCanvasProps> = ({
                       </TooltipProvider>
                     )}
                     
-                    {hasError && activeEntry.language === "python" && !editingMap[activeEntry.id] && (
+                    {shouldShowFixButton && activeEntry.language === "python" && !editingMap[activeEntry.id] && (
                       <CodeFixButton
                         codeId={activeEntry.id}
-                        errorOutput={execOutputMap[activeEntry.id]?.output || ''}
+                        errorOutput={execOutputMap[activeEntry.id]?.output || outputText || 'Error occurred during execution'}
                         code={activeEntry.code}
                         isFixing={isFixingCode}
                         codeFixes={codeFixes}

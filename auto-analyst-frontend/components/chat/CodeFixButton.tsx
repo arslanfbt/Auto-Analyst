@@ -61,11 +61,21 @@ const CodeFixButton: React.FC<CodeFixButtonProps> = ({
     // Start fixing
     onFixStart?.(codeId)
 
-    // Validation checks
-    if (!code || !errorOutput) {
+    // Validation checks - be more lenient with empty strings but ensure we have meaningful content
+    if (!code || code.trim().length === 0) {
       toast({
-        title: "Missing information",
-        description: "Both code and error message are required for fixing.",
+        title: "Missing code",
+        description: "No code available to fix. Please ensure code is loaded in the canvas.",
+        variant: "destructive",
+        duration: 5000,
+      })
+      return
+    }
+
+    if (!errorOutput || errorOutput.trim().length === 0) {
+      toast({
+        title: "Missing error information",
+        description: "No error message available. Please run the code first to see any errors.",
         variant: "destructive",
         duration: 5000,
       })
@@ -423,6 +433,7 @@ const CodeFixButton: React.FC<CodeFixButtonProps> = ({
               ) : (
                 <>
                   <WrenchIcon className="h-4 w-4" />
+                  <span className="ml-2 text-sm font-semibold">Fix Code</span>
                   {remainingFixes > 0 && (
                     <div className="absolute -top-1 -right-1 flex items-center justify-center">
                       <div className="bg-gradient-to-r from-blue-500 to-cyan-400 text-white text-[9px] px-1.5 py-0.5 rounded-full font-semibold shadow-sm">
