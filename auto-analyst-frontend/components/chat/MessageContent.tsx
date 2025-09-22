@@ -677,7 +677,7 @@ const MessageContent: React.FC<MessageContentProps> = ({
               <Tooltip open={showFirstErrorTooltip}>
                 <TooltipTrigger asChild>
                   <div className="relative">
-                    <Button
+                  <Button
                       variant="outline"
                       size="sm"
                       onClick={() => {
