@@ -328,30 +328,42 @@ const CodeFixButton: React.FC<CodeFixButtonProps> = ({
       <div className={`inline-flex items-center absolute top-3 right-3 ${className}`}
            onMouseEnter={() => setHovered(true)}
            onMouseLeave={() => setHovered(false)}>
-        <motion.div
-          initial={{ width: "auto" }}
-          animate={{ 
-            width: hovered ? "auto" : "auto",
-            backgroundColor: hovered ? "rgba(254, 226, 226, 0.5)" : "transparent"
-          }}
-          transition={{ duration: 0.2 }}
-          className="rounded-md overflow-hidden flex items-center justify-end px-1 cursor-pointer"
-          onClick={() => handleFixCode()}
-        >
-          
-          <div className="flex items-center">
-            <div className="h-6 w-6 p-0 flex items-center justify-center rounded-full bg-red-50 border border-red-200">
-              {isFixing ? (
-                <svg className="animate-spin h-3 w-3 text-red-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                </svg>
-              ) : (
-                <WrenchIcon className="h-3 w-3 text-red-500" />
-              )}
-            </div>
-          </div>
-        </motion.div>
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <motion.div
+                initial={{ width: "auto" }}
+                animate={{ 
+                  width: hovered ? "auto" : "auto",
+                  backgroundColor: hovered ? "rgba(254, 226, 226, 0.5)" : "transparent"
+                }}
+                transition={{ duration: 0.2 }}
+                className="rounded-md overflow-hidden flex items-center justify-end px-1 cursor-pointer"
+                onClick={() => handleFixCode()}
+              >
+                <div className="flex items-center">
+                  <div className="h-6 w-6 p-0 flex items-center justify-center rounded-full bg-red-50 border border-red-200">
+                    {isFixing ? (
+                      <svg className="animate-spin h-3 w-3 text-red-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                    ) : (
+                      <WrenchIcon className="h-3 w-3 text-red-500" />
+                    )}
+                  </div>
+                  <span className="ml-2 text-xs font-semibold text-red-600">Fix Code</span>
+                </div>
+              </motion.div>
+            </TooltipTrigger>
+            <TooltipContent side="left" className="bg-[#FF7F7F] text-white text-xs px-3 py-2 border-2 border-[#FF6666] shadow-lg">
+              <div className="text-center">
+                <p className="font-medium">Fix Error with AI</p>
+                <p className="opacity-90">Click to open code canvas and auto-fix the error.</p>
+              </div>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
       </div>
     )
   }
