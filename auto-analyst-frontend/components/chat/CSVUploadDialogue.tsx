@@ -348,11 +348,7 @@ export default function CSVUploadDialog({
                       <tr>
                         {filePreview.headers.map((header: string, index: number) => (
                           <th key={index} className="px-2 py-1 text-left font-medium text-gray-700 border-r whitespace-nowrap">
-                            <label
-                              className="inline-flex items-center gap-2 cursor-pointer"
-                              onClick={(e) => e.stopPropagation()}
-                              onMouseDown={(e) => e.preventDefault()}
-                            >
+                            <label className="inline-flex items-center gap-2 cursor-pointer">
                               <Checkbox
                                 checked={selectedColumns.includes(header)}
                                 onCheckedChange={(checked) => {
@@ -361,6 +357,7 @@ export default function CSVUploadDialog({
                                     isChecked ? [...prev, header] : prev.filter(c => c !== header)
                                   )
                                 }}
+                                onClick={(e) => e.stopPropagation()}
                                 disabled={isSubmitting}
                               />
                               <span className="truncate" title={header}>{header}</span>
