@@ -56,13 +56,20 @@ const CodeFixButton: React.FC<CodeFixButtonProps> = ({
   const freeFixLimit = 3
   const needsCredits = fixCount >= freeFixLimit && (!remainingCredits || remainingCredits <= 0)  // ✅ Use remainingCredits
 
-  // Enhanced fix function with retry logic
+  // Enhanced fix function with retry logic and silent retries
   const handleFixCode = async (isRetry = false, currentRetryCount = 0) => {
     // Start fixing
     onFixStart?.(codeId)
 
     // Validation checks - be more lenient with empty strings but ensure we have meaningful content
     if (!code || code.trim().length === 0) {
+      // Silent retry for missing code - maybe it's still loading
+      if (currentRetryCount < 2) {
+        setTimeout(() => {
+          handleFixCode(true, currentRetryCount + 1)
+        }, 1000)
+        return
+      }
       toast({
         title: "Missing code",
         description: "No code available to fix. Please ensure code is loaded in the canvas.",
@@ -73,6 +80,13 @@ const CodeFixButton: React.FC<CodeFixButtonProps> = ({
     }
 
     if (!errorOutput || errorOutput.trim().length === 0) {
+      // Silent retry for missing error output - maybe it's still loading
+      if (currentRetryCount < 2) {
+        setTimeout(() => {
+          handleFixCode(true, currentRetryCount + 1)
+        }, 1000)
+        return
+      }
       toast({
         title: "Missing error information",
         description: "No error message available. Please run the code first to see any errors.",
@@ -221,14 +235,8 @@ const CodeFixButton: React.FC<CodeFixButtonProps> = ({
       // Handle different types of errors
       if (axios.isAxiosError(error)) {
         if (error.code === 'ECONNABORTED' || error.name === 'AbortError') {
-          // Timeout error
+          // Timeout error - silent retry
           if (currentRetryCount < 2) {
-            toast({
-              title: "Request timeout",
-              description: `Request timed out. Retrying in 2 seconds... (${currentRetryCount + 1}/3)`,
-              duration: 3000,
-            })
-            
             setTimeout(() => {
               handleFixCode(true, currentRetryCount + 1)
             }, 2000)
@@ -236,20 +244,14 @@ const CodeFixButton: React.FC<CodeFixButtonProps> = ({
           } else {
             toast({
               title: "Request timeout",
-              description: "Request timed out after 3 attempts. Please try again later.",
+              description: "Request timed out after retries. Please try again later.",
               variant: "destructive",
               duration: 5000,
             })
           }
         } else if (error.response && error.response.status === 400 && error.response?.data?.detail === "Session ID required") {
-          // Session ID error - retry once
+          // Session ID error - silent retry once
           if (currentRetryCount < 1) {
-            toast({
-              title: "Session expired",
-              description: "Retrying with fresh session...",
-              duration: 3000,
-            })
-            
             setTimeout(() => {
               handleFixCode(true, currentRetryCount + 1)
             }, 1000)
@@ -263,14 +265,8 @@ const CodeFixButton: React.FC<CodeFixButtonProps> = ({
             })
           }
         } else if (error.response && error.response.status >= 500) {
-          // Server error - retry
+          // Server error - silent retry
           if (currentRetryCount < 2) {
-            toast({
-              title: "Server error",
-              description: `Server error occurred. Retrying in 3 seconds... (${currentRetryCount + 1}/3)`,
-              duration: 3000,
-            })
-            
             setTimeout(() => {
               handleFixCode(true, currentRetryCount + 1)
             }, 3000)
@@ -278,7 +274,7 @@ const CodeFixButton: React.FC<CodeFixButtonProps> = ({
           } else {
             toast({
               title: "Server error",
-              description: "Server error after 3 attempts. Please try again later.",
+              description: "Server error after retries. Please try again later.",
               variant: "destructive",
               duration: 5000,
             })
@@ -293,14 +289,8 @@ const CodeFixButton: React.FC<CodeFixButtonProps> = ({
             duration: 5000,
           })
         } else {
-          // Network error - retry
+          // Network error - silent retry
           if (currentRetryCount < 2) {
-            toast({
-              title: "Network error",
-              description: `Connection failed. Retrying in 2 seconds... (${currentRetryCount + 1}/3)`,
-              duration: 3000,
-            })
-            
             setTimeout(() => {
               handleFixCode(true, currentRetryCount + 1)
             }, 2000)
@@ -308,7 +298,7 @@ const CodeFixButton: React.FC<CodeFixButtonProps> = ({
           } else {
             toast({
               title: "Network error",
-              description: "Failed to connect after 3 attempts. Please check your connection.",
+              description: "Failed to connect after retries. Please check your connection.",
               variant: "destructive",
               duration: 5000,
             })
@@ -345,24 +335,27 @@ const CodeFixButton: React.FC<CodeFixButtonProps> = ({
                 initial={{ width: "auto" }}
                 animate={{ 
                   width: hovered ? "auto" : "auto",
-                  backgroundColor: hovered ? "rgba(254, 226, 226, 0.5)" : "transparent"
+                  backgroundColor: hovered ? "#FF6666" : "#FF7F7F"
                 }}
                 transition={{ duration: 0.2 }}
-                className="rounded-md overflow-hidden flex items-center justify-end px-1 cursor-pointer"
+                className="rounded-md overflow-hidden flex items-center justify-end px-3 py-2 cursor-pointer shadow-sm"
                 onClick={() => handleFixCode()}
               >
                 <div className="flex items-center">
-                  <div className="h-6 w-6 p-0 flex items-center justify-center rounded-full bg-red-50 border border-red-200">
-                    {isFixing ? (
-                      <svg className="animate-spin h-3 w-3 text-red-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  {isFixing ? (
+                    <>
+                      <svg className="animate-spin h-3 w-3 text-white mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                       </svg>
-                    ) : (
-                      <WrenchIcon className="h-3 w-3 text-red-500" />
-                    )}
-                  </div>
-                  <span className="ml-2 text-xs font-semibold text-red-600">Fix Code</span>
+                      <span className="text-xs font-semibold text-white">Fixing...</span>
+                    </>
+                  ) : (
+                    <>
+                      <WrenchIcon className="h-3 w-3 text-white mr-2" />
+                      <span className="text-xs font-semibold text-white">Fix Code</span>
+                    </>
+                  )}
                 </div>
               </motion.div>
             </TooltipTrigger>
@@ -388,24 +381,20 @@ const CodeFixButton: React.FC<CodeFixButtonProps> = ({
         <motion.div
           initial={{ width: "auto" }}
           animate={{ 
-            backgroundColor: hovered ? "rgba(254, 226, 226, 0.5)" : "transparent"
+            backgroundColor: hovered ? "#FF6666" : "#FF7F7F"
           }}
           transition={{ duration: 0.2 }}
-          className="rounded-md overflow-hidden flex items-center justify-end px-1 cursor-pointer"
+          className="rounded-full overflow-hidden flex items-center justify-center p-2 cursor-pointer shadow-sm"
           onClick={() => handleFixCode()}
         >
-          <div className="flex items-center">
-            <div className="h-6 w-6 p-0 flex items-center justify-center rounded-full bg-red-50 border border-red-200">
-              {isFixing ? (
-                <svg className="animate-spin h-3 w-3 text-red-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                </svg>
-              ) : (
-                <WrenchIcon className="h-3 w-3 text-red-500" />
-              )}
-            </div>
-          </div>
+          {isFixing ? (
+            <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+          ) : (
+            <WrenchIcon className="h-4 w-4 text-white" />
+          )}
         </motion.div>
       </div>
     )
@@ -420,20 +409,22 @@ const CodeFixButton: React.FC<CodeFixButtonProps> = ({
         <TooltipTrigger asChild>
           <div className={`flex items-center ${className}`}>
             <Button
-              variant="ghost"
               size="sm"
               onClick={() => handleFixCode()}
-              className="text-[#FF7F7F] hover:bg-[#FF7F7F]/20 relative"
+              className="bg-[#FF7F7F] hover:bg-[#FF6666] text-white font-semibold px-4 py-2 rounded-md shadow-sm transition-all duration-200 relative border-0"
             >
               {isFixing ? (
-                <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                </svg>
+                <>
+                  <svg className="animate-spin h-4 w-4 text-white mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  <span className="text-sm">Fixing...</span>
+                </>
               ) : (
                 <>
-                  <WrenchIcon className="h-4 w-4" />
-                  <span className="ml-2 text-sm font-semibold">Fix Code</span>
+                  <WrenchIcon className="h-4 w-4 text-white mr-2" />
+                  <span className="text-sm">Fix Code</span>
                   {remainingFixes > 0 && (
                     <div className="absolute -top-1 -right-1 flex items-center justify-center">
                       <div className="bg-gradient-to-r from-blue-500 to-cyan-400 text-white text-[9px] px-1.5 py-0.5 rounded-full font-semibold shadow-sm">
