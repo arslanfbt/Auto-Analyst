@@ -22,6 +22,7 @@ interface CodeFixButtonProps {
   onFixStart: (codeId: string) => void           // Callback when fix starts
   onFixComplete: (codeId: string, fixedCode: string) => void  // Callback when fix completes
   onCreditCheck: (codeId: string, hasEnough: boolean) => void // Credit check callback
+  onRefreshCode?: (codeId: string) => Promise<void>  // Callback to refresh code from parent
   className?: string
   variant?: 'default' | 'inline' | 'icon-only'  // ✅ Add 'icon-only'
   checkCredits?: () => Promise<void>
@@ -37,6 +38,7 @@ const CodeFixButton: React.FC<CodeFixButtonProps> = ({
   onFixStart,
   onFixComplete,
   onCreditCheck,
+  onRefreshCode,
   className = "",
   variant = 'default',
   checkCredits
@@ -63,36 +65,38 @@ const CodeFixButton: React.FC<CodeFixButtonProps> = ({
 
     // Validation checks - be more lenient with empty strings but ensure we have meaningful content
     if (!code || code.trim().length === 0) {
-      // Silent retry for missing code - maybe it's still loading
-      if (currentRetryCount < 2) {
+      // Silent retry for missing code - maybe it's still loading or needs to be fetched
+      if (currentRetryCount < 3) {
+        // Try to refresh code from parent if callback is available
+        if (onRefreshCode && currentRetryCount === 0) {
+          console.log("CodeFixButton: Attempting to refresh code from parent...")
+          try {
+            await onRefreshCode(codeId)
+          } catch (error) {
+            console.log("CodeFixButton: Failed to refresh code from parent:", error)
+          }
+        }
+        
         setTimeout(() => {
           handleFixCode(true, currentRetryCount + 1)
-        }, 1000)
+        }, 1500)
         return
       }
-      toast({
-        title: "Missing code",
-        description: "No code available to fix. Please ensure code is loaded in the canvas.",
-        variant: "destructive",
-        duration: 5000,
-      })
+      // After 3 retries, still don't show error to user - just silently fail
+      console.log("CodeFixButton: No code available after retries, silently failing")
       return
     }
 
     if (!errorOutput || errorOutput.trim().length === 0) {
       // Silent retry for missing error output - maybe it's still loading
-      if (currentRetryCount < 2) {
+      if (currentRetryCount < 3) {
         setTimeout(() => {
           handleFixCode(true, currentRetryCount + 1)
-        }, 1000)
+        }, 1500)
         return
       }
-      toast({
-        title: "Missing error information",
-        description: "No error message available. Please run the code first to see any errors.",
-        variant: "destructive",
-        duration: 5000,
-      })
+      // After retries, silently fail without showing error to user
+      console.log("CodeFixButton: No error output available after retries, silently failing")
       return
     }
 

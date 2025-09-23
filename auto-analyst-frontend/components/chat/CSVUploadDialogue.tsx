@@ -30,6 +30,7 @@ interface CSVUploadDialogProps {
   isSubmitting: boolean
   existingData?: any
   sessionId: string // Add sessionId prop
+  onDescriptionUpdate?: (description: string) => void // Callback for background description updates
 }
 
 export default function CSVUploadDialog({
@@ -40,7 +41,8 @@ export default function CSVUploadDialog({
   onConfirm,
   isSubmitting,
   existingData,
-  sessionId
+  sessionId,
+  onDescriptionUpdate
 }: CSVUploadDialogProps) {
   const [datasetName, setDatasetName] = useState('')
   const [description, setDescription] = useState('')
@@ -292,6 +294,9 @@ export default function CSVUploadDialog({
         if (cacheKey) {
           saveCachedDescription(cacheKey, generatedDesc, columnsToSave)
         }
+        
+        // Notify parent component of description update
+        onDescriptionUpdate?.(generatedDesc)
         
         console.log('✅ Description generated and cached')
       } else {

@@ -424,6 +424,7 @@ const ChatInput = forwardRef<ChatInputRef, ChatInputProps>((props, ref) => {
         }
         isSubmitting={chatInput.isCSVSubmitting}
         sessionId={chatInput.sessionId || ''}
+        onDescriptionUpdate={(description) => chatInput.updateDatasetDescription(description)}
       />
 
       {/* Upload Summary Dialog - shows after successful upload */}
