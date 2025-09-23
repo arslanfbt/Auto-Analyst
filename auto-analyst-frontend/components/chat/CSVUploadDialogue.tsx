@@ -20,7 +20,13 @@ interface CSVUploadDialogProps {
     name: string
     description: string
   }
-  onConfirm: (name: string, description: string, fillNulls: boolean, convertTypes: boolean) => void
+  onConfirm: (
+    name: string,
+    description: string,
+    fillNulls: boolean,
+    convertTypes: boolean,
+    columns: string[]
+  ) => void
   isSubmitting: boolean
   existingData?: any
   sessionId: string // Add sessionId prop
@@ -46,6 +52,22 @@ export default function CSVUploadDialog({
   // ADD THESE NEW STATE VARIABLES
   const [fillNulls, setFillNulls] = useState(true)
   const [convertTypes, setConvertTypes] = useState(true)
+
+  // Column checklist (UI-only)
+  const [selectedColumns, setSelectedColumns] = useState<string[]>([])
+
+  useEffect(() => {
+    if (isOpen && filePreview?.headers) {
+      // Default: all columns selected
+      setSelectedColumns(filePreview.headers)
+    }
+  }, [isOpen, filePreview?.headers])
+
+  const toggleColumn = (col: string) => {
+    setSelectedColumns(prev =>
+      prev.includes(col) ? prev.filter(c => c !== col) : [...prev, col]
+    )
+  }
 
   // Helper functions for localStorage caching
   const getCachedDescriptions = (): Map<string, string> => {
@@ -137,7 +159,13 @@ export default function CSVUploadDialog({
 
   const handleSubmit = () => {
     if (!datasetName.trim() || !description.trim()) return
-    onConfirm(datasetName.trim(), description.trim(), fillNulls, convertTypes)
+    onConfirm(
+      datasetName.trim(),
+      description.trim(),
+      fillNulls,
+      convertTypes,
+      selectedColumns
+    )
   }
 
   const handleAutoGenerate = async (explicitDatasetName?: string, cacheKey?: string) => {
@@ -317,7 +345,13 @@ export default function CSVUploadDialog({
                       <tr>
                         {filePreview.headers.map((header: string, index: number) => (
                           <th key={index} className="px-2 py-1 text-left font-medium text-gray-700 border-r whitespace-nowrap">
-                            {header}
+                            <label className="inline-flex items-center gap-2">
+                              <Checkbox
+                                checked={selectedColumns.includes(header)}
+                                onCheckedChange={() => toggleColumn(header)}
+                              />
+                              <span className="truncate" title={header}>{header}</span>
+                            </label>
                           </th>
                         ))}
                       </tr>

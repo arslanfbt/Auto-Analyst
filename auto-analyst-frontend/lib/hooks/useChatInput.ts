@@ -496,7 +496,13 @@ export const useChatInput = (props: ChatInputProps) => {
   }
 
   // CSV confirm upload handler
-  const handleCSVConfirmUpload = async (name: string, description: string) => {
+  const handleCSVConfirmUpload = async (
+    name: string,
+    description: string,
+    fillNulls: boolean,
+    convertTypes: boolean,
+    columns: string[]
+  ) => {
     try {
       setIsCSVSubmitting(true)
       
@@ -507,6 +513,16 @@ export const useChatInput = (props: ChatInputProps) => {
       uploadFormData.append('file', fileUpload.file)
       uploadFormData.append('name', name)
       uploadFormData.append('description', description)
+
+      // Append preprocessing options
+      uploadFormData.append('fill_nulls', String(fillNulls))
+      uploadFormData.append('convert_types', String(convertTypes))
+
+      // Append selected columns (repeat field for list semantics)
+      const colsToSend = (columns && columns.length > 0)
+        ? columns
+        : (csvPreview?.headers || [])
+      colsToSend.forEach(col => uploadFormData.append('columns', col))
 
       console.log('Starting final CSV upload...')
       const uploadResponse = await axios.post(`${PREVIEW_API_URL}/upload_dataframe`, uploadFormData, {
