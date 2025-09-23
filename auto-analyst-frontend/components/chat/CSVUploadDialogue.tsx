@@ -404,23 +404,6 @@ export default function CSVUploadDialog({
             </div>
           )}
 
-          {/* Column Selection Summary */}
-          <div className="mb-4 p-3 bg-gray-50 rounded-lg">
-            <div className="text-sm font-medium text-gray-700 mb-2">
-              Selected Columns ({selectedColumns.length} of {filePreview?.headers?.length || 0}):
-            </div>
-            <div className="flex flex-wrap gap-1">
-              {selectedColumns.map((col, index) => (
-                <span key={index} className="px-2 py-1 bg-[#FF7F7F] text-white text-xs rounded">
-                  {col}
-                </span>
-              ))}
-              {selectedColumns.length === 0 && (
-                <span className="text-gray-500 text-xs">No columns selected</span>
-              )}
-            </div>
-          </div>
-
           {/* Action Buttons - Fixed at bottom */}
           <div className="flex-shrink-0 flex justify-end gap-3 pt-4 border-t">
             <Button
