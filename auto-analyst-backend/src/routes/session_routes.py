@@ -258,6 +258,7 @@ async def upload_dataframe(
     file: UploadFile = File(...),
     name: str = Form(...),
     description: str = Form(...),
+    columns:List[str] = Form(...),
     fill_nulls: bool = Form(True),  # NEW: Fill null values  
     convert_types: bool = Form(True),  # NEW: Convert data types
     app_state = Depends(get_app_state),
@@ -309,7 +310,7 @@ async def upload_dataframe(
         for encoding in encodings_to_try:
             try:
                 csv_content = content.decode(encoding)
-                new_df = pd.read_csv(io.StringIO(csv_content))
+                new_df = pd.read_csv(io.StringIO(csv_content))[columns]
                 new_df.replace({np.nan: None, np.inf: None, -np.inf: None}, inplace=True)
 
                 logger.log_message(f"Successfully read CSV with encoding: {encoding}", level=logging.INFO)

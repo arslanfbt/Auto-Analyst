@@ -419,7 +419,9 @@ const ChatInput = forwardRef<ChatInputRef, ChatInputProps>((props, ref) => {
         onClose={() => chatInput.setShowCSVDialog(false)}
         fileName={chatInput.csvFileName}
         filePreview={chatInput.csvPreview || undefined}
-        onConfirm={chatInput.handleCSVConfirmUpload}
+        onConfirm={(name, description, fillNulls, convertTypes, columns) =>
+          chatInput.handleCSVConfirmUpload(name, description, fillNulls, convertTypes, columns)
+        }
         isSubmitting={chatInput.isCSVSubmitting}
         sessionId={chatInput.sessionId || ''}
       />
@@ -444,7 +446,9 @@ const ChatInput = forwardRef<ChatInputRef, ChatInputProps>((props, ref) => {
         onClose={() => chatInput.setShowPreview(false)}
         fileName="Default Dataset"
         filePreview={chatInput.filePreview || undefined}
-        onConfirm={(name, description) => {
+        onConfirm={(name, description, fillNulls, convertTypes, columns) => {
+          // Optionally forward to handler if you want to upload default preview as dataset too
+          // chatInput.handleCSVConfirmUpload(name, description, fillNulls, convertTypes, columns)
           chatInput.setDatasetDescription({ name, description })
           chatInput.setShowPreview(false)
           chatInput.setUploadSuccess(true)
