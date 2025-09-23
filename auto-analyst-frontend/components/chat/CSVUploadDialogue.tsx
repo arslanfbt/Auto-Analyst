@@ -243,7 +243,7 @@ export default function CSVUploadDialog({
       
       // Generate new description based on selected columns only (in background)
       setTimeout(() => {
-        const datasetKey = `${fileName}_${filePreview.headers.join('_')}_${filePreview.rows.length}`
+        const datasetKey = `${fileName}_${filePreview?.headers?.join('_') || 'unknown'}_${filePreview?.rows?.length || 0}`
         handleAutoGenerate(datasetName.trim(), datasetKey, modifiedPreview, selectedColumns)
           .catch(error => console.error('Background description generation failed:', error))
       }, 1000) // Small delay to let upload start first

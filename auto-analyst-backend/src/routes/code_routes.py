@@ -542,6 +542,7 @@ async def execute_code(
                 db.commit()
             else:
                 # Create new record
+                logger.log_message(f"Creating new CodeExecution record for message_id: {message_id}", level=logging.INFO)
                 new_execution = CodeExecution(
                     message_id=message_id,
                     chat_id=chat_id,
@@ -559,6 +560,7 @@ async def execute_code(
                 )
                 db.add(new_execution)
                 db.commit()
+                logger.log_message(f"Successfully created CodeExecution record with ID: {new_execution.execution_id} for message_id: {message_id}", level=logging.INFO)
         except Exception as db_error:
             db.rollback()
             logger.log_message(f"Error saving code execution: {str(db_error)}", level=logging.ERROR)
@@ -785,14 +787,21 @@ async def get_latest_code(
         db = get_session()
         
         try:
-            # Query the database for the latest code execution record
+            # Query the database for the latest code execution record (ordered by created_at desc)
+            logger.log_message(f"Searching for execution records with message_id: {message_id}", level=logging.INFO)
+            
             execution_record = db.query(CodeExecution).filter(
                 CodeExecution.message_id == message_id
-            ).first()
+            ).order_by(CodeExecution.created_at.desc()).first()
             
+            # Also log total count of records for this message_id
+            total_records = db.query(CodeExecution).filter(
+                CodeExecution.message_id == message_id
+            ).count()
+            logger.log_message(f"Found {total_records} execution records for message_id: {message_id}", level=logging.INFO)
             
             if execution_record:
-                logger.log_message(f"Execution record: {execution_record.is_successful} for {message_id}", level=logging.INFO)
+                logger.log_message(f"Latest execution record found - success: {execution_record.is_successful}, latest_code length: {len(execution_record.latest_code or '') if execution_record.latest_code else 0}", level=logging.INFO)
 
                 # Return the latest code and execution status
                 return {

@@ -173,10 +173,12 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
   // Add the fetchLatestCode function before extractCodeFromMessages
   const fetchLatestCode = useCallback(async (messageId: number) => {
     if (!messageId) {
+      console.log("❌ fetchLatestCode: No messageId provided");
       return null;
     }
     
     try {
+      console.log(`🔍 fetchLatestCode: Requesting latest code for message_id: ${messageId}`);
       
       const response = await axios.post(`${API_URL}/code/get-latest-code`, {
         message_id: messageId
@@ -186,14 +188,22 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
         },
       });
       
+      console.log(`📋 fetchLatestCode response:`, response.data);
       
       if (response.data.found) {
+        console.log(`✅ fetchLatestCode: Found latest code for message_id: ${messageId}`);
         return response.data;
+      } else {
+        console.log(`❌ fetchLatestCode: No execution record found for message_id: ${messageId}`);
       }
       
       return null;
     } catch (error) {
-      console.error("Error fetching latest code:", error);
+      console.error("❌ fetchLatestCode: Error fetching latest code:", error);
+      if (axios.isAxiosError(error)) {
+        console.error("❌ fetchLatestCode: Response status:", error.response?.status);
+        console.error("❌ fetchLatestCode: Response data:", error.response?.data);
+      }
       return null;
     }
   }, [sessionId]);
@@ -204,9 +214,10 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
     
     // First, try to fetch the latest code if we have a message_id
     const message = messagesToExtract[0];
-    const actualMessageId = message?.message_id || messageIndex;
+    const actualMessageId = message?.message_id;
     
     if (actualMessageId && typeof actualMessageId === 'number') {
+      console.log(`🔍 Fetching latest code for message_id: ${actualMessageId}`);
       const latestCodeData = await fetchLatestCode(actualMessageId);
       
       // If we have latest code from a previous execution, use it
