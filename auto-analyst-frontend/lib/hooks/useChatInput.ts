@@ -555,6 +555,7 @@ export const useChatInput = (props: ChatInputProps) => {
         setShowCSVDialog(false)
         
         // Show upload summary after successful upload
+        // The description will be automatically updated by the background generation callback
         setTimeout(() => {
           setShowUploadSummary(true)
           setUploadSuccess(false)
@@ -580,6 +581,15 @@ export const useChatInput = (props: ChatInputProps) => {
     } finally {
       setIsCSVSubmitting(false)
     }
+  }
+
+  // Update dataset description (for background generation)
+  const updateDatasetDescription = (newDescription: string) => {
+    setDatasetDescription(prev => ({
+      ...prev,
+      description: newDescription
+    }))
+    console.log('📋 Dataset description updated from background generation')
   }
 
   // File preview handler for CSV
@@ -726,6 +736,7 @@ export const useChatInput = (props: ChatInputProps) => {
     handleExcelConfirmUpload,
     handleCSVConfirmUpload,
     handleFilePreview,
+    updateDatasetDescription,
     clearSessionId, // Add this new function
     handleRestoreDefaultDataset,
     
