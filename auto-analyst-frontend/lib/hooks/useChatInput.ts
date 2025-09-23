@@ -506,6 +506,17 @@ export const useChatInput = (props: ChatInputProps) => {
     try {
       setIsCSVSubmitting(true)
       
+      console.log('🚀 CSV Upload Started:', {
+        name,
+        description,
+        fillNulls,
+        convertTypes,
+        selectedColumns: columns,
+        selectedCount: columns?.length || 0,
+        totalHeaders: csvPreview?.headers?.length || 0,
+        allHeaders: csvPreview?.headers || []
+      })
+      
       if (!fileUpload?.file) return
       
       // Step 3: Final upload with user's name and description
@@ -522,6 +533,8 @@ export const useChatInput = (props: ChatInputProps) => {
       const colsToSend = (columns && columns.length > 0)
         ? columns
         : (csvPreview?.headers || [])
+      
+      console.log('📋 Columns being sent to backend:', colsToSend)
       colsToSend.forEach(col => uploadFormData.append('columns', col))
 
       console.log('Starting final CSV upload...')
