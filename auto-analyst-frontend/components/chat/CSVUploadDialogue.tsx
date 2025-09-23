@@ -60,8 +60,14 @@ export default function CSVUploadDialog({
   useEffect(() => {
     if (isOpen && filePreview?.headers && !columnsInitialized) {
       // Default: all columns selected (only once per open cycle)
+      console.log('🔧 Initializing columns:', filePreview.headers)
       setSelectedColumns(filePreview.headers)
       setColumnsInitialized(true)
+    }
+    
+    if (!isOpen) {
+      console.log('🔧 Dialog closed, resetting column initialization')
+      setColumnsInitialized(false)
     }
   }, [isOpen, filePreview?.headers, columnsInitialized])
 
@@ -162,6 +168,16 @@ export default function CSVUploadDialog({
 
   const handleSubmit = () => {
     if (!datasetName.trim() || !description.trim()) return
+    
+    console.log('📤 CSV Upload Submit:', {
+      name: datasetName.trim(),
+      description: description.trim(),
+      fillNulls,
+      convertTypes,
+      selectedColumns,
+      totalColumns: filePreview?.headers?.length || 0
+    })
+    
     onConfirm(
       datasetName.trim(),
       description.trim(),
@@ -352,10 +368,13 @@ export default function CSVUploadDialog({
                               <Checkbox
                                 checked={selectedColumns.includes(header)}
                                 onCheckedChange={(checked) => {
+                                  console.log(`📋 Checkbox change: ${header} -> ${checked}`)
                                   const isChecked = checked === true
-                                  setSelectedColumns(prev =>
-                                    isChecked ? [...prev, header] : prev.filter(c => c !== header)
-                                  )
+                                  setSelectedColumns(prev => {
+                                    const newSelection = isChecked ? [...prev, header] : prev.filter(c => c !== header)
+                                    console.log(`📋 Updated selection for ${header}:`, newSelection)
+                                    return newSelection
+                                  })
                                 }}
                                 onClick={(e) => e.stopPropagation()}
                                 disabled={isSubmitting}
@@ -383,6 +402,23 @@ export default function CSVUploadDialog({
             </div>
           )}
 
+          {/* Column Selection Summary */}
+          <div className="mb-4 p-3 bg-gray-50 rounded-lg">
+            <div className="text-sm font-medium text-gray-700 mb-2">
+              Selected Columns ({selectedColumns.length} of {filePreview?.headers?.length || 0}):
+            </div>
+            <div className="flex flex-wrap gap-1">
+              {selectedColumns.map((col, index) => (
+                <span key={index} className="px-2 py-1 bg-[#FF7F7F] text-white text-xs rounded">
+                  {col}
+                </span>
+              ))}
+              {selectedColumns.length === 0 && (
+                <span className="text-gray-500 text-xs">No columns selected</span>
+              )}
+            </div>
+          </div>
+
           {/* Action Buttons - Fixed at bottom */}
           <div className="flex-shrink-0 flex justify-end gap-3 pt-4 border-t">
             <Button
@@ -394,7 +430,7 @@ export default function CSVUploadDialog({
             </Button>
             <Button
               onClick={handleSubmit}
-              disabled={isSubmitting || !datasetName.trim() || !description.trim()}
+              disabled={isSubmitting || !datasetName.trim() || !description.trim() || selectedColumns.length === 0}
               className="bg-[#FF7F7F] hover:bg-[#FF6666] text-white"
             >
               {isSubmitting ? (
