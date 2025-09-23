@@ -166,7 +166,7 @@ export default function CSVUploadDialog({
     }
   }
 
-  const handleSubmit = async () => {
+  const handleSubmit = () => {
     if (!datasetName.trim() || !description.trim()) return
     
     console.log('📤 CSV Upload Submit:', {
@@ -182,8 +182,18 @@ export default function CSVUploadDialog({
     const hasModifiedColumns = selectedColumns.length !== filePreview?.headers?.length ||
       !selectedColumns.every(col => filePreview?.headers?.includes(col))
     
+    // Start upload immediately
+    onConfirm(
+      datasetName.trim(),
+      description.trim(),
+      fillNulls,
+      convertTypes,
+      selectedColumns
+    )
+    
+    // Regenerate description in background if columns were modified
     if (hasModifiedColumns) {
-      console.log('🔄 Column selection modified, regenerating description for selected columns only...')
+      console.log('🔄 Column selection modified, regenerating description in background for selected columns only...')
       
       // Create a modified preview with only selected columns
       const modifiedPreview = {
@@ -197,17 +207,12 @@ export default function CSVUploadDialog({
         ) || []
       }
       
-      // Generate new description based on selected columns only
-      await handleAutoGenerate(datasetName.trim(), `modified_${selectedColumns.join('_')}`, modifiedPreview)
+      // Generate new description based on selected columns only (in background)
+      setTimeout(() => {
+        handleAutoGenerate(datasetName.trim(), `modified_${selectedColumns.join('_')}`, modifiedPreview)
+          .catch(error => console.error('Background description generation failed:', error))
+      }, 1000) // Small delay to let upload start first
     }
-    
-    onConfirm(
-      datasetName.trim(),
-      description.trim(),
-      fillNulls,
-      convertTypes,
-      selectedColumns
-    )
   }
 
   const handleAutoGenerate = async (explicitDatasetName?: string, cacheKey?: string, customPreview?: any) => {
