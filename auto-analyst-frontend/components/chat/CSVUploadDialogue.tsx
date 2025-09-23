@@ -166,7 +166,7 @@ export default function CSVUploadDialog({
     }
   }
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!datasetName.trim() || !description.trim()) return
     
     console.log('📤 CSV Upload Submit:', {
@@ -178,6 +178,29 @@ export default function CSVUploadDialog({
       totalColumns: filePreview?.headers?.length || 0
     })
     
+    // Check if user has modified the column selection
+    const hasModifiedColumns = selectedColumns.length !== filePreview?.headers?.length ||
+      !selectedColumns.every(col => filePreview?.headers?.includes(col))
+    
+    if (hasModifiedColumns) {
+      console.log('🔄 Column selection modified, regenerating description for selected columns only...')
+      
+      // Create a modified preview with only selected columns
+      const modifiedPreview = {
+        ...filePreview,
+        headers: selectedColumns,
+        rows: filePreview?.rows?.map(row => 
+          selectedColumns.map(header => {
+            const originalIndex = filePreview.headers.indexOf(header)
+            return row[originalIndex]
+          })
+        ) || []
+      }
+      
+      // Generate new description based on selected columns only
+      await handleAutoGenerate(datasetName.trim(), `modified_${selectedColumns.join('_')}`, modifiedPreview)
+    }
+    
     onConfirm(
       datasetName.trim(),
       description.trim(),
@@ -187,11 +210,14 @@ export default function CSVUploadDialog({
     )
   }
 
-  const handleAutoGenerate = async (explicitDatasetName?: string, cacheKey?: string) => {
+  const handleAutoGenerate = async (explicitDatasetName?: string, cacheKey?: string, customPreview?: any) => {
     if (!sessionId || !filePreview) {
       console.error('No session ID or file preview available for description generation')
       return
     }
+    
+    // Use custom preview if provided (for modified column selection), otherwise use original
+    const previewToUse = customPreview || filePreview
     
     // Don't auto-generate for default dataset
     if (filePreview.name === "Housing Dataset") {
@@ -207,8 +233,8 @@ export default function CSVUploadDialog({
       console.log('🔍 Auto-generating description for dataset:', currentDatasetName)
       
       const response = await axios.post(`${API_URL}/generate-description-from-preview`, {
-        headers: filePreview.headers,
-        rows: filePreview.rows,
+        headers: previewToUse.headers,
+        rows: previewToUse.rows,
         name: currentDatasetName,
         existingDescription: description
       }, {
