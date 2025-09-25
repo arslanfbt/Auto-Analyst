@@ -357,7 +357,7 @@ async def upload_dataframe(
         
         logger.log_message(f"Successfully uploaded dataset '{name}' for session {session_id}", level=logging.INFO)
         
-        return {"message": "Dataframe uploaded successfully", "session_id": session_id}
+        return JSONResponse(content=sanitize_json({"message": "Dataframe uploaded successfully", "session_id": session_id}))
         
     except Exception as e:
         logger.log_message(f"Error in upload_dataframe: {str(e)}", level=logging.ERROR)
@@ -964,12 +964,13 @@ async def preview_csv_upload(
 
 
         # Limit preview rows
-        return {
+        payload = {
             "headers": new_df.columns.tolist(),
             "rows": preview_rows,
             "name": name,
             "description": desc
         }
+        return JSONResponse(content=sanitize_json(payload))
         
     except Exception as e:
         logger.log_message(f"Error in preview_csv_upload: {str(e)}", level=logging.ERROR)
