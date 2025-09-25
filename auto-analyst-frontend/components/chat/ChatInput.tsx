@@ -405,7 +405,12 @@ const ChatInput = forwardRef<ChatInputRef, ChatInputProps>((props, ref) => {
       {/* Excel Upload Dialog */}
       <ExcelUploadDialog
         isOpen={chatInput.showExcelDialog}
-        onClose={() => chatInput.setShowExcelDialog(false)}
+        onClose={async () => {
+          chatInput.setShowExcelDialog(false)
+          try {
+            await chatInput.handleRestoreDefaultDataset()
+          } catch (_) {}
+        }}
         sheets={chatInput.excelSheets}
         fileName={chatInput.excelFileName}
         onConfirm={chatInput.handleExcelConfirmUpload}
@@ -416,7 +421,12 @@ const ChatInput = forwardRef<ChatInputRef, ChatInputProps>((props, ref) => {
       {/* CSV Upload Dialog */}
       <CSVUploadDialog
         isOpen={chatInput.showCSVDialog}
-        onClose={() => chatInput.setShowCSVDialog(false)}
+        onClose={async () => {
+          chatInput.setShowCSVDialog(false)
+          try {
+            await chatInput.handleRestoreDefaultDataset()
+          } catch (_) {}
+        }}
         fileName={chatInput.csvFileName}
         filePreview={chatInput.csvPreview || undefined}
         onConfirm={(name, description, fillNulls, convertTypes, columns) =>
