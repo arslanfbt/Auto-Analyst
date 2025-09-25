@@ -7,6 +7,7 @@ import axios from 'axios'
 import API_URL from '@/config/api'
 import logger from '@/lib/utils/logger'
 import { SessionRecovery } from '@/lib/utils/sessionRecovery';
+import { toast } from '@/components/ui/use-toast'
 
 const PREVIEW_API_URL = API_URL;
 
@@ -159,6 +160,17 @@ export const useChatInput = (props: ChatInputProps) => {
     }
   }, []); // Run once on mount
 
+  useEffect(() => {
+    if (errorNotification) {
+      toast({
+        title: errorNotification.message || 'Upload Failed',
+        description: errorNotification.details || 'An error occurred while uploading your file.',
+        variant: 'destructive',
+        duration: 7000,
+      })
+    }
+  }, [errorNotification])
+
   // Helper function to safely update session ID (with persistence)
   const updateSessionIdSafely = (newSessionId: string) => {
     if (newSessionId && newSessionId !== sessionId) {
@@ -259,6 +271,12 @@ export const useChatInput = (props: ChatInputProps) => {
           message: 'CSV Upload Failed',
           details: getErrorMessage(error) || 'There was an error processing your CSV file.'
         })
+        toast({
+          title: 'CSV Upload Failed',
+          description: getErrorMessage(error) || 'There was an error processing your CSV file.',
+          variant: 'destructive',
+          duration: 7000,
+        })
       }
     } else if (isExcel) {
       // Handle Excel files - existing logic
@@ -329,6 +347,12 @@ export const useChatInput = (props: ChatInputProps) => {
         message: 'Excel processing failed',
         details: error?.message || 'Failed to read Excel file'
       });
+      toast({
+        title: 'Excel processing failed',
+        description: error?.message || 'Failed to read Excel file',
+        variant: 'destructive',
+        duration: 7000,
+      })
     }
   }
 
@@ -487,6 +511,12 @@ export const useChatInput = (props: ChatInputProps) => {
         status: 'error', 
         errorMessage: getErrorMessage(error) || 'Excel upload failed. Please try again.'
       } : null)
+      toast({
+        title: 'Excel Upload Failed',
+        description: getErrorMessage(error) || 'Failed to process Excel file. Please check the file format and try again.',
+        variant: 'destructive',
+        duration: 7000,
+      })
       
       // Automatically restore default dataset on failure
       await handleRestoreDefaultDataset()
@@ -578,6 +608,12 @@ export const useChatInput = (props: ChatInputProps) => {
           errorMessage: getErrorMessage(error) || 'Upload failed. Please try again.'
         })
       }
+      toast({
+        title: 'Dataset Upload Failed',
+        description: getErrorMessage(error) || 'Failed to upload your dataset. Please try again.',
+        variant: 'destructive',
+        duration: 7000,
+      })
     } finally {
       setIsCSVSubmitting(false)
     }
