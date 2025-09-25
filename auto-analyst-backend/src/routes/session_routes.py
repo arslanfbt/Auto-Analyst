@@ -304,17 +304,35 @@ async def upload_dataframe(
         new_df = None
         last_exception = None
         
-        # Try different encodings
+        # Try encodings with delimiter auto-detection
         encodings_to_try = ['utf-8', 'latin-1', 'cp1252', 'iso-8859-1']
-        
+        delimiters_to_try = [',', ';', '\t', '|', ':', ' ']
+
         for encoding in encodings_to_try:
             try:
                 csv_content = content.decode(encoding)
-                new_df = pd.read_csv(io.StringIO(csv_content))[columns]
-                new_df.replace({np.nan: None, np.inf: None, -np.inf: None}, inplace=True)
-
-                logger.log_message(f"Successfully read CSV with encoding: {encoding}", level=logging.INFO)
-                break
+                sample = csv_content[:1024]
+                try:
+                    import csv as _csv
+                    dialect = _csv.Sniffer().sniff(sample, delimiters=delimiters_to_try)
+                    delimiter = dialect.delimiter
+                    new_df = pd.read_csv(io.StringIO(csv_content), sep=delimiter, engine='python')[columns]
+                except Exception:
+                    # Fallback to pandas automatic detection
+                    try:
+                        new_df = pd.read_csv(io.StringIO(csv_content), sep=None, engine='python')[columns]
+                    except Exception:
+                        # Final fallback: brute-force common delimiters
+                        for d in delimiters_to_try:
+                            try:
+                                new_df = pd.read_csv(io.StringIO(csv_content), sep=d, engine='python')[columns]
+                                break
+                            except Exception:
+                                new_df = None
+                if new_df is not None:
+                    new_df.replace({np.nan: None, np.inf: None, -np.inf: None}, inplace=True)
+                    logger.log_message(f"Successfully read CSV with encoding: {encoding}", level=logging.INFO)
+                    break
             except Exception as e:
                 last_exception = e
                 logger.log_message(f"Failed to read CSV with encoding {encoding}: {str(e)}", level=logging.WARNING)
@@ -865,17 +883,36 @@ async def preview_csv_upload(
     try:
         # Process file and return preview data only
         content = await file.read()
-        # Try different encodings
+        # Try encodings with delimiter auto-detection
         encodings_to_try = ['utf-8', 'latin-1', 'cp1252', 'iso-8859-1']
+        delimiters_to_try = [',', ';', '\t', '|', ':', ' ']
         new_df = None
         last_exception = None
-        
+
         for encoding in encodings_to_try:
             try:
                 csv_content = content.decode(encoding)
-                new_df = pd.read_csv(io.StringIO(csv_content))
-                logger.log_message(f"Successfully read CSV with encoding: {encoding}", level=logging.INFO)
-                break
+                sample = csv_content[:4096]
+                try:
+                    import csv as _csv
+                    dialect = _csv.Sniffer().sniff(sample, delimiters=delimiters_to_try)
+                    delimiter = dialect.delimiter
+                    new_df = pd.read_csv(io.StringIO(csv_content), sep=delimiter, engine='python')
+                except Exception:
+                    # Fallback to pandas automatic detection
+                    try:
+                        new_df = pd.read_csv(io.StringIO(csv_content), sep=None, engine='python')
+                    except Exception:
+                        # Final fallback: brute-force common delimiters
+                        for d in delimiters_to_try:
+                            try:
+                                new_df = pd.read_csv(io.StringIO(csv_content), sep=d, engine='python')
+                                break
+                            except Exception:
+                                new_df = None
+                if new_df is not None:
+                    logger.log_message(f"Successfully read CSV with encoding: {encoding}", level=logging.INFO)
+                    break
             except Exception as e:
                 last_exception = e
                 logger.log_message(f"Failed to read CSV with encoding {encoding}: {str(e)}", level=logging.WARNING)

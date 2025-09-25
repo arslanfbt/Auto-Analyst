@@ -10,6 +10,7 @@ import { SessionRecovery } from '@/lib/utils/sessionRecovery';
 import { toast } from '@/components/ui/use-toast'
 
 const PREVIEW_API_URL = API_URL;
+const MAX_UPLOAD_SIZE_BYTES = 5 * 1024 * 1024; // 5MB
 
 export const useChatInput = (props: ChatInputProps) => {
   // State management
@@ -211,6 +212,39 @@ export const useChatInput = (props: ChatInputProps) => {
     const isCSV = file.name.toLowerCase().endsWith('.csv')
     const isExcel = file.name.endsWith('.xlsx') || file.name.endsWith('.xls')
     
+    // Enforce 5MB client-side size limit
+    if (file.size > MAX_UPLOAD_SIZE_BYTES) {
+      const humanLimit = '5MB'
+      const actualSizeMb = (file.size / (1024 * 1024)).toFixed(2)
+      toast({
+        title: 'File too large',
+        description: `The selected file is ${actualSizeMb}MB. Maximum allowed size is ${humanLimit}.`,
+        variant: 'destructive',
+        duration: 7000,
+      })
+      setFileUpload({
+        file,
+        status: 'error',
+        isExcel: isExcel,
+        selectedSheets: [],
+        errorMessage: `File size exceeds ${humanLimit} limit.`
+      })
+      if (fileInputRef.current) {
+        fileInputRef.current.value = ''
+      }
+      return
+    }
+    // If there is an existing custom dataset, reset session before new upload to erase previous
+    try {
+      await axios.post(`${PREVIEW_API_URL}/reset-session`, {}, { headers: getHeaders() })
+      // Clear local upload state and any cached preview
+      setFileUpload(null)
+      setCSVPreview(null)
+      if (fileInputRef.current) fileInputRef.current.value = ''
+    } catch (e) {
+      // Non-blocking: continue even if reset fails
+    }
+
     if (isCSV) {
       // Handle CSV files - preview first, then show dialog
       try {
@@ -277,6 +311,9 @@ export const useChatInput = (props: ChatInputProps) => {
           variant: 'destructive',
           duration: 7000,
         })
+        try {
+          await handleRestoreDefaultDataset()
+        } catch (_) {}
       }
     } else if (isExcel) {
       // Handle Excel files - existing logic
@@ -614,6 +651,9 @@ export const useChatInput = (props: ChatInputProps) => {
         variant: 'destructive',
         duration: 7000,
       })
+      try {
+        await handleRestoreDefaultDataset()
+      } catch (_) {}
     } finally {
       setIsCSVSubmitting(false)
     }
