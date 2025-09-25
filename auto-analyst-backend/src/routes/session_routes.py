@@ -595,11 +595,11 @@ async def get_default_dataset(
 
     preview_data = {
         "headers": df.columns.tolist(),
-        "rows": df.head(10).values.tolist(),
+        "rows": df.head(10).applymap(to_serializable).values.tolist(),
         "name": "Housing Dataset",
         "description": desc
     }
-    return preview_data
+    return JSONResponse(content=sanitize_json(preview_data))
     # except Exception as e:
     #     raise HTTPException(status_code=400, detail=str(e))
 
@@ -873,6 +873,16 @@ def to_serializable(val):
     if hasattr(val, "isoformat"):  # Handle datetimes
         return val.isoformat()
     return val
+
+def sanitize_json(obj):
+    import math
+    if isinstance(obj, float):
+        return None if (math.isnan(obj) or math.isinf(obj)) else obj
+    if isinstance(obj, dict):
+        return {k: sanitize_json(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [sanitize_json(i) for i in obj]
+    return obj
 
 
 @router.post("/preview-csv-upload")
