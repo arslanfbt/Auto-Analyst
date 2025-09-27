@@ -39,17 +39,27 @@ export async function POST(request: Request) {
     const userIdentifier = userId || session?.user?.email
     
     if (action === 'reset') {
-      // Reset credits - but only for free users, not canceled users
-      const isCanceled = await creditUtils.isCanceledUser(userIdentifier)
+      // Reset credits - check if user should get free credits
+      const shouldGetFree = await creditUtils.shouldGetFreeCredits(userIdentifier)
       
-      if (isCanceled) {
+      if (!shouldGetFree) {
         return NextResponse.json({
-          error: 'Cannot reset credits for canceled users',
-          message: 'Please start a new subscription to get credits'
+          error: 'Cannot reset credits for users with active subscriptions',
+          message: 'Please cancel your subscription first or wait for it to end'
         }, { status: 400 })
       }
       
-      // Allow reset for free users (they get 20 credits)
+      // Check if they already got free credits this month
+      const alreadyReceived = await creditUtils.hasReceivedFreeCreditsThisMonth(userIdentifier)
+      
+      if (alreadyReceived) {
+        return NextResponse.json({
+          error: 'Free credits already received this month',
+          message: 'You can only get 20 free credits once per month'
+        }, { status: 400 })
+      }
+      
+      // Allow reset for eligible users (they get 20 credits)
       await creditUtils.initializeCredits(userIdentifier, 20)
       return NextResponse.json({ success: true, credits: 20 })
     } else if (action === 'add') {
