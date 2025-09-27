@@ -33,14 +33,14 @@ export async function GET(request: NextRequest) {
       if (isCanceledButPaid) {
         // User is canceled but still in paid period - keep their subscription credits
         const subscriptionHash = await redis.hgetall(KEYS.USER_SUBSCRIPTION(userId))
-        const planName = (subscriptionHash && subscriptionHash.plan) ? subscriptionHash.plan as string : 'Standard Plan'
-        const planCredits = CreditConfig.getCreditsForPlan(planName)
+        const currentPlanName = (subscriptionHash && subscriptionHash.plan) ? subscriptionHash.plan as string : 'Standard Plan'
+        const planCredits = CreditConfig.getCreditsForPlan(currentPlanName)
         
         creditsTotal = planCredits.total
         creditsUsed = 0
         resetDate = subscriptionHash?.renewalDate || CreditConfig.getNextResetDate()
         lastUpdate = new Date().toISOString()
-        planName = subscriptionHash?.plan || 'Standard Plan'
+        planName = currentPlanName
         
         // Create hash entry with subscription credits
         await redis.hset(KEYS.USER_CREDITS(userId), {
