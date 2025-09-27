@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getToken } from 'next-auth/jwt'
-import redis, { KEYS } from '@/lib/redis'
+import redis, { KEYS, creditUtils } from '@/lib/redis'
 import { CreditConfig } from '@/lib/credits-config'
 
 export async function GET(request: NextRequest) {
@@ -25,22 +25,44 @@ export async function GET(request: NextRequest) {
       creditsUsed = parseInt(creditsHash.used as string || '0')
       resetDate = creditsHash.resetDate || CreditConfig.getNextResetDate()
       lastUpdate = creditsHash.lastUpdate || new Date().toISOString()
-      planName = subscriptionHash?.plan || 'Free Plan'
+      planName = subscriptionHash?.plan || 'No Active Plan'
     } else {
-      // Initialize default values for new users using centralized config
-      creditsTotal = 20 // No free credits anymore
-      creditsUsed = 0
-      resetDate = CreditConfig.getNextResetDate()
-      lastUpdate = new Date().toISOString()
-      planName = 'Free Plan'
+      // Check if user is canceled before giving any credits
+      const isCanceled = await creditUtils.isCanceledUser(userId)
       
-      // Create hash entry for new users
-      await redis.hset(KEYS.USER_CREDITS(userId), {
-        total: creditsTotal.toString(),
-        used: creditsUsed.toString(),
-        resetDate,
-        lastUpdate
-      })
+      if (isCanceled) {
+        // User is canceled - they get 0 credits permanently
+        creditsTotal = 0
+        creditsUsed = 0
+        resetDate = ''
+        lastUpdate = new Date().toISOString()
+        planName = 'No Active Plan'
+        
+        // Create hash entry with 0 credits for canceled users
+        await redis.hset(KEYS.USER_CREDITS(userId), {
+          total: '0',
+          used: '0',
+          resetDate: '',
+          lastUpdate,
+          canceledUser: 'true'
+        })
+      } else {
+        // Free user - they get 20 credits for the month
+        creditsTotal = 20
+        creditsUsed = 0
+        resetDate = CreditConfig.getNextResetDate()
+        lastUpdate = new Date().toISOString()
+        planName = 'Free Plan'
+        
+        // Create hash entry for free users with 20 credits
+        await redis.hset(KEYS.USER_CREDITS(userId), {
+          total: '20',
+          used: '0',
+          resetDate,
+          lastUpdate,
+          freeUser: 'true'
+        })
+      }
     }
     
     // Update the last update timestamp

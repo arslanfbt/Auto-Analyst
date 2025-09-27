@@ -39,13 +39,38 @@ export const KEYS = {
 
 // Credits management utilities with consolidated hash-based storage
 export const creditUtils = {
+  // Check if user is a canceled user (had subscription but canceled)
+  async isCanceledUser(userId: string): Promise<boolean> {
+    try {
+      const subscriptionHash = await redis.hgetall(KEYS.USER_SUBSCRIPTION(userId))
+      const creditsHash = await redis.hgetall(KEYS.USER_CREDITS(userId))
+      
+      // Check if user has subscription data indicating they canceled
+      if (subscriptionHash && subscriptionHash.status) {
+        const status = subscriptionHash.status as string
+        return status === 'canceled' || status === 'canceling' || subscriptionHash.canceledAt
+      }
+      
+      // Check if user has credit data marked as canceled
+      if (creditsHash && creditsHash.canceledUser === 'true') {
+        return true
+      }
+      
+      return false
+    } catch (error) {
+      console.error('Error checking if user is canceled:', error)
+      return false
+    }
+  },
+
   // Get remaining credits for a user
   async getRemainingCredits(userId: string): Promise<number> {
     try {
       const creditsHash = await redis.hgetall(KEYS.USER_CREDITS(userId))
       if (!creditsHash || !creditsHash.total || !creditsHash.used) {
-        // No more free credits - users must have 0 credits if no subscription
-        return 20
+        // Check if user is canceled - canceled users get 0 credits
+        const isCanceled = await this.isCanceledUser(userId)
+        return isCanceled ? 0 : 20 // Free users get 20, canceled users get 0
       }
       
       const total = parseInt(creditsHash.total as string)
