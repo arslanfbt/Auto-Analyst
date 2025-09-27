@@ -27,41 +27,84 @@ export async function GET(request: NextRequest) {
       lastUpdate = creditsHash.lastUpdate || new Date().toISOString()
       planName = subscriptionHash?.plan || 'No Active Plan'
     } else {
-      // Check if user is canceled before giving any credits
-      const isCanceled = await creditUtils.isCanceledUser(userId)
+      // Check if user is canceled but still in paid period
+      const isCanceledButPaid = await creditUtils.isCanceledButStillPaid(userId)
       
-      if (isCanceled) {
-        // User is canceled - they get 0 credits permanently
-        creditsTotal = 0
-        creditsUsed = 0
-        resetDate = ''
-        lastUpdate = new Date().toISOString()
-        planName = 'No Active Plan'
+      if (isCanceledButPaid) {
+        // User is canceled but still in paid period - keep their subscription credits
+        const subscriptionHash = await redis.hgetall(KEYS.USER_SUBSCRIPTION(userId))
+        const planCredits = CreditConfig.getCreditsForPlan(subscriptionHash?.plan || 'Standard Plan')
         
-        // Create hash entry with 0 credits for canceled users
-        await redis.hset(KEYS.USER_CREDITS(userId), {
-          total: '0',
-          used: '0',
-          resetDate: '',
-          lastUpdate,
-          canceledUser: 'true'
-        })
-      } else {
-        // Free user - they get 20 credits for the month
-        creditsTotal = 20
+        creditsTotal = planCredits.total
         creditsUsed = 0
-        resetDate = CreditConfig.getNextResetDate()
+        resetDate = subscriptionHash?.renewalDate || CreditConfig.getNextResetDate()
         lastUpdate = new Date().toISOString()
-        planName = 'Free Plan'
+        planName = subscriptionHash?.plan || 'Standard Plan'
         
-        // Create hash entry for free users with 20 credits
+        // Create hash entry with subscription credits
         await redis.hset(KEYS.USER_CREDITS(userId), {
-          total: '20',
+          total: creditsTotal.toString(),
           used: '0',
           resetDate,
           lastUpdate,
-          freeUser: 'true'
+          canceledButPaid: 'true'
         })
+      } else {
+        // Check if user should get free credits
+        const shouldGetFree = await creditUtils.shouldGetFreeCredits(userId)
+        
+        if (shouldGetFree) {
+          // Check if they already received free credits this month
+          const alreadyReceived = await creditUtils.hasReceivedFreeCreditsThisMonth(userId)
+          
+          if (alreadyReceived) {
+            // Already got free credits this month - they get 0
+            creditsTotal = 0
+            creditsUsed = 0
+            resetDate = ''
+            lastUpdate = new Date().toISOString()
+            planName = 'Free Plan'
+            
+            await redis.hset(KEYS.USER_CREDITS(userId), {
+              total: '0',
+              used: '0',
+              resetDate: '',
+              lastUpdate,
+              freeUser: 'true',
+              monthlyCreditsUsed: 'true'
+            })
+          } else {
+            // Give them 20 free credits for this month
+            creditsTotal = 20
+            creditsUsed = 0
+            resetDate = CreditConfig.getNextResetDate()
+            lastUpdate = new Date().toISOString()
+            planName = 'Free Plan'
+            
+            await redis.hset(KEYS.USER_CREDITS(userId), {
+              total: '20',
+              used: '0',
+              resetDate,
+              lastUpdate,
+              freeUser: 'true',
+              lastFreeCreditsDate: new Date().toISOString()
+            })
+          }
+        } else {
+          // Active subscriber or other case - they get 0 free credits
+          creditsTotal = 0
+          creditsUsed = 0
+          resetDate = ''
+          lastUpdate = new Date().toISOString()
+          planName = 'No Active Plan'
+          
+          await redis.hset(KEYS.USER_CREDITS(userId), {
+            total: '0',
+            used: '0',
+            resetDate: '',
+            lastUpdate
+          })
+        }
       }
     }
     
