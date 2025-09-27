@@ -39,26 +39,93 @@ export const KEYS = {
 
 // Credits management utilities with consolidated hash-based storage
 export const creditUtils = {
-  // Check if user is a canceled user (had subscription but canceled)
-  async isCanceledUser(userId: string): Promise<boolean> {
+  // Check if user's subscription period has ended (for canceled users)
+  async hasSubscriptionPeriodEnded(userId: string): Promise<boolean> {
     try {
       const subscriptionHash = await redis.hgetall(KEYS.USER_SUBSCRIPTION(userId))
-      const creditsHash = await redis.hgetall(KEYS.USER_CREDITS(userId))
       
-      // Check if user has subscription data indicating they canceled
-      if (subscriptionHash && subscriptionHash.status) {
-        const status = subscriptionHash.status as string
-        return status === 'canceled' || status === 'canceling' || subscriptionHash.canceledAt
+      if (!subscriptionHash || !subscriptionHash.renewalDate) {
+        return true // No subscription data means period has ended
       }
       
-      // Check if user has credit data marked as canceled
-      if (creditsHash && creditsHash.canceledUser === 'true') {
+      const renewalDate = new Date(subscriptionHash.renewalDate as string)
+      const now = new Date()
+      
+      return now > renewalDate
+    } catch (error) {
+      console.error('Error checking subscription period:', error)
+      return true // Default to period ended on error
+    }
+  },
+
+  // Check if user is canceled but still in their paid period
+  async isCanceledButStillPaid(userId: string): Promise<boolean> {
+    try {
+      const subscriptionHash = await redis.hgetall(KEYS.USER_SUBSCRIPTION(userId))
+      
+      if (!subscriptionHash || !subscriptionHash.status) {
+        return false
+      }
+      
+      const status = subscriptionHash.status as string
+      const isCanceled = status === 'canceled' || status === 'canceling' || subscriptionHash.canceledAt
+      
+      if (!isCanceled) {
+        return false
+      }
+      
+      // Check if subscription period has ended
+      const periodEnded = await this.hasSubscriptionPeriodEnded(userId)
+      return !periodEnded // Canceled but period hasn't ended yet
+    } catch (error) {
+      console.error('Error checking canceled but paid status:', error)
+      return false
+    }
+  },
+
+  // Check if user should get free credits (canceled and period ended, or truly new user)
+  async shouldGetFreeCredits(userId: string): Promise<boolean> {
+    try {
+      const subscriptionHash = await redis.hgetall(KEYS.USER_SUBSCRIPTION(userId))
+      
+      // If no subscription data, they're a new user
+      if (!subscriptionHash || Object.keys(subscriptionHash).length === 0) {
         return true
       }
       
-      return false
+      const status = subscriptionHash.status as string
+      const isCanceled = status === 'canceled' || status === 'canceling' || subscriptionHash.canceledAt
+      
+      if (isCanceled) {
+        // Check if their paid period has ended
+        const periodEnded = await this.hasSubscriptionPeriodEnded(userId)
+        return periodEnded // Only get free credits after paid period ends
+      }
+      
+      return false // Active subscribers don't get free credits
     } catch (error) {
-      console.error('Error checking if user is canceled:', error)
+      console.error('Error checking if should get free credits:', error)
+      return false
+    }
+  },
+
+  // Check if user has already received free credits this month
+  async hasReceivedFreeCreditsThisMonth(userId: string): Promise<boolean> {
+    try {
+      const creditsHash = await redis.hgetall(KEYS.USER_CREDITS(userId))
+      
+      if (!creditsHash || !creditsHash.lastFreeCreditsDate) {
+        return false
+      }
+      
+      const lastFreeCreditsDate = new Date(creditsHash.lastFreeCreditsDate as string)
+      const now = new Date()
+      
+      // Check if it's the same month and year
+      return lastFreeCreditsDate.getMonth() === now.getMonth() && 
+             lastFreeCreditsDate.getFullYear() === now.getFullYear()
+    } catch (error) {
+      console.error('Error checking free credits this month:', error)
       return false
     }
   },
@@ -68,9 +135,14 @@ export const creditUtils = {
     try {
       const creditsHash = await redis.hgetall(KEYS.USER_CREDITS(userId))
       if (!creditsHash || !creditsHash.total || !creditsHash.used) {
-        // Check if user is canceled - canceled users get 0 credits
-        const isCanceled = await this.isCanceledUser(userId)
-        return isCanceled ? 0 : 20 // Free users get 20, canceled users get 0
+        // Check if user should get free credits
+        const shouldGetFree = await this.shouldGetFreeCredits(userId)
+        if (shouldGetFree) {
+          // Check if they already got free credits this month
+          const alreadyReceived = await this.hasReceivedFreeCreditsThisMonth(userId)
+          return alreadyReceived ? 0 : 20 // 20 credits once per month
+        }
+        return 0 // Active subscribers or canceled users still in paid period get 0
       }
       
       const total = parseInt(creditsHash.total as string)
