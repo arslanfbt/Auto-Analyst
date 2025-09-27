@@ -25,7 +25,8 @@ export async function POST(request: NextRequest) {
       if (isCanceledButPaid) {
         // User is canceled but still in paid period - give them subscription credits
         const subscriptionHash = await redis.hgetall(KEYS.USER_SUBSCRIPTION(userId))
-        const planCredits = CreditConfig.getCreditsForPlan(subscriptionHash?.plan || 'Standard Plan')
+        const planName = (subscriptionHash && subscriptionHash.plan) ? subscriptionHash.plan as string : 'Standard Plan'
+        const planCredits = CreditConfig.getCreditsForPlan(planName)
         
         await redis.hset(KEYS.USER_CREDITS(userId), {
           total: planCredits.total.toString(),
