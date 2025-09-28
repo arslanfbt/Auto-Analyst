@@ -23,8 +23,8 @@ gpt_5_mini = dspy.LM(
     model="openai/gpt-5-mini",
     api_key=os.getenv("OPENAI_API_KEY"),
     temperature=float(os.getenv("TEMPERATURE", 1.0)),
-    max_tokens= None,
-    max_completion_tokens=max_tokens,
+    max_tokens= 16_000,
+    # max_completion_tokens=max_tokens,
     cache=False
 )
 
@@ -32,8 +32,8 @@ gpt_5 = dspy.LM(
     model="openai/gpt-5",
     api_key=os.getenv("OPENAI_API_KEY"),
     temperature=float(os.getenv("TEMPERATURE", 1.0)),
-        max_tokens= None,
-    max_completion_tokens=max_tokens,  # Use max_completion_tokens for gpt-5
+        max_tokens= 16_000,
+    # max_completion_tokens=max_tokens,  # Use max_completion_tokens for gpt-5
     cache=False
 )
 
@@ -41,8 +41,8 @@ gpt_5_nano = dspy.LM(
     model="openai/gpt-5-nano",
     api_key=os.getenv("OPENAI_API_KEY"),
     temperature=float(os.getenv("TEMPERATURE", 1.0)),
-        max_tokens= None,
-    max_completion_tokens=max_tokens,
+    max_tokens= 16_000,
+    # max_completion_tokens=max_tokens,
     cache=False
 )
 

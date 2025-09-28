@@ -353,7 +353,11 @@ def get_session_lm(session_state):
 
             elif 'gpt-5' or 'o1' in model_name and provider =='openai':
 
-                MODEL_OBJECTS[model_name].__dict__['kwargs']['max_completion_tokens'] = model_config.get("max_tokens", DEFAULT_MODEL_CONFIG["max_tokens"])
+                # MODEL_OBJECTS[model_name].__dict__['kwargs']['max_completion_tokens'] = model_config.get("max_tokens", DEFAULT_MODEL_CONFIG["max_tokens"])
+                if 'gpt-5' in model_name:
+                    MODEL_OBJECTS[model_name].__dict__['kwargs']['max_tokens'] = 16_000
+                if 'o1' in model_name:
+                    MODEL_OBJECTS[model_name].__dict__['kwargs']['max_tokens'] = 20_000
 
                 MODEL_OBJECTS[model_name].__dict__['kwargs']['temperature'] = 1.0
 
