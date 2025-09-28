@@ -1,6 +1,6 @@
 aiofiles==24.1.0
 beautifulsoup4==4.13.4
-dspy==2.6.27
+dspy==3.0.3
 litellm==1.75.2
 email_validator==2.2.0
 fastapi==0.115.5

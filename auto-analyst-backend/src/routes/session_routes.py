@@ -391,8 +391,8 @@ async def update_model_settings(
                 "model": settings.model,
                 "api_key": settings.api_key,
                 "temperature": settings.temperature,
-                "max_tokens":None,
-                "max_completion_tokens": 2500
+                "max_tokens":16_000
+                # "max_completion_tokens": 2500
             }
         elif 'o1-' in str(settings.model):
             model_config = {

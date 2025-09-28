@@ -8,7 +8,7 @@ import logging
 from src.utils.logger import Logger
 import textwrap
 
-logger = Logger(__name__, level="INFO", see_time=False, console_log=False)
+logger = Logger(__name__, level=logging.INFO, see_time=False, console_log=False)
 
 @contextlib.contextmanager
 def stdoutIO(stdout=None):
@@ -942,9 +942,13 @@ def format_plan_instructions(plan_instructions):
 
     return "\n".join(markdown_lines).strip()
     
+    # Return empty string if no complexity found
+    return ""
 
 def format_complexity(instructions):
     markdown_lines = []
+    complexity = None  # Initialize complexity to avoid UnboundLocalError
+    
     # Extract complexity from various possible locations in the structure
     if isinstance(instructions, dict):
         # Case 1: Direct complexity field
@@ -956,8 +960,12 @@ def format_complexity(instructions):
                 complexity = instructions['plan']['complexity']
         else:
             complexity = "unrelated"
-    
-    if 'plan' in instructions and isinstance(instructions['plan'], str) and "basic_qa_agent" in instructions['plan']:
+            
+        # Override for basic_qa_agent cases
+        if 'plan' in instructions and isinstance(instructions['plan'], str) and "basic_qa_agent" in instructions['plan']:
+            complexity = "unrelated"
+    else:
+        # If instructions is not a dict, default to unrelated
         complexity = "unrelated"
     
     if complexity:
@@ -982,8 +990,10 @@ def format_complexity(instructions):
         # Slightly larger display with pink styling
         markdown_lines.append(f"<div style='color: {color}; border: 2px solid {color}; padding: 2px 8px; border-radius: 12px; display: inline-block; font-size: 14.4px;'>{indicator} {complexity}</div>\n")
 
-        return "\n".join(markdown_lines).strip()    
-
+        return "\n".join(markdown_lines).strip()
+    
+    # Return empty string if no complexity found
+    return ""
 
 def format_response_to_markdown(api_response, agent_name = None, datasets=None):
     try:
@@ -1011,28 +1021,34 @@ def format_response_to_markdown(api_response, agent_name = None, datasets=None):
                 continue
                 
             if "complexity" in content:
-                markdown.append(f"{format_complexity(content)}\n")
+                complexity_result = format_complexity(content)
+                if complexity_result:  # Only append if not empty
+                    markdown.append(f"{complexity_result}")
                 
             markdown.append(f"\n## {agent.replace('_', ' ').title()}\n")
             
             if agent == "analytical_planner":
                 logger.log_message(f"Analytical planner content: {content}", level=logging.INFO)
-                if 'plan_desc' in content:
-                    markdown.append(f"### Reasoning\n{content['plan_desc']}\n")
+                if 'plan_desc' in content and content['plan_desc']:
+                    markdown.append(f"### Reasoning {content['plan_desc']}")
                 if 'plan_instructions' in content:
-                    markdown.append(f"{format_plan_instructions(content['plan_instructions'])}\n")
+                    plan_result = format_plan_instructions(content['plan_instructions'])
+                    if plan_result:  # Only append if not empty/None
+                        markdown.append(f"{plan_result}")
                 else:
-                    markdown.append(f"### Reasoning\n{content['rationale']}\n")
+                    if content.get('rationale'):
+                        markdown.append(f"### Reasoning {content['rationale']}")
             else:  
                 if "rationale" in content:
-                    markdown.append(f"### Reasoning\n{content['rationale']}\n")
+                    if content.get('rationale'):
+                        markdown.append(f"### Reasoning{content['rationale']}")
 
             if 'code' in content and content['code'] is not None:
                 formatted_code = format_code_backticked_block(content['code'])
                 if formatted_code:  # Check if formatted_code is not None
                     markdown.append(f"### Code Implementation\n{formatted_code}\n")
-            if 'answer' in content:
-                markdown.append(f"### Answer\n{content['answer']}\n Please ask a query about the data")
+            if 'answer' in content and content['answer']:
+                markdown.append(f"### Answer{content['answer']} Please ask a query about the data")
             if 'summary' in content:
                 import re
                 summary_text = content['summary']

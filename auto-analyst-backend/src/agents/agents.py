@@ -625,12 +625,14 @@ class basic_query_planner(dspy.Signature):
     plan_instructions:{
                     "data_viz_agent": {
                         "create": ["correlation"],
-                        "use": ["original_data"],
+                        "use": "use": ["original_data"],
                         "instruction": "use the original_data to measure correlation of X & Y, using pandas"
                     }
     
     
     Respond in the user's language for all explanations and instructions, but keep all code, variable names, function names, model names, agent names, and library names in English.
+    original_data is placeholder, use exact_python_name: name_of_df for actual dataset name
+
     """
     dataset = dspy.InputField(desc="Available datasets loaded in the system, use this df, columns set df as copy of df")
     Agent_desc = dspy.InputField(desc="The agents available in the system")
@@ -659,7 +661,7 @@ class intermediate_query_planner(dspy.Signature):
     plan_instructions = {
     "Agent1": {
                         "create": ["aggregated_variable"],
-                        "use": ["original_data"],
+                        "use": ["original_data"]
                         "instruction": "use the original_data to create aggregated_variable"
                     },
     "Agent2": {
@@ -670,6 +672,8 @@ class intermediate_query_planner(dspy.Signature):
             }
     Keep the instructions minimal without many variables, and minimize the number of unknowns, keep it obvious!
     Try to use no more than 2 agents, unless completely necessary!
+    original_data is placeholder, use exact_python_name: name_of_df for actual dataset name
+
     
     
     Respond in the user's language for all explanations and instructions, but keep all code, variable names, function names, model names, agent names, and library names in English.
