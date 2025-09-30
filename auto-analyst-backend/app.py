@@ -321,7 +321,7 @@ default_lm = MODEL_OBJECTS[DEFAULT_MODEL_CONFIG['model']]
 
 # lm = dspy.LM('openai/gpt-4o-mini', api_key=os.getenv("OPENAI_API_KEY"))
 
-dspy.configure(lm=default_lm, async_max_workers=100)
+dspy.configure(lm=default_lm, async_max_workers=1000)
 
 
 
@@ -345,27 +345,22 @@ def get_session_lm(session_state):
 
             model_name = model_config.get("model", DEFAULT_MODEL_CONFIG["model"])
 
-            if 'gpt-5' or 'o1' not in model_name:
+            # Get temperature and clamp to valid range for Anthropic (0..1)
+            temp = model_config.get("temperature", DEFAULT_MODEL_CONFIG["temperature"])
+            if provider == "anthropic":
+                temp = min(1.0, max(0.0, float(temp)))
 
-                MODEL_OBJECTS[model_name].__dict__['kwargs']['max_tokens'] = model_config.get("max_tokens", DEFAULT_MODEL_CONFIG["max_tokens"])
-
-                MODEL_OBJECTS[model_name].__dict__['kwargs']['temperature'] = model_config.get("temperature", DEFAULT_MODEL_CONFIG["temperature"])
-
-            elif 'gpt-5' or 'o1' in model_name and provider =='openai':
-
-                # MODEL_OBJECTS[model_name].__dict__['kwargs']['max_completion_tokens'] = model_config.get("max_tokens", DEFAULT_MODEL_CONFIG["max_tokens"])
+            # Handle special OpenAI models (gpt-5 and o1 series)
+            if ('gpt-5' in model_name or 'o1' in model_name) and provider == 'openai':
                 if 'gpt-5' in model_name:
                     MODEL_OBJECTS[model_name].__dict__['kwargs']['max_tokens'] = 16_000
                 if 'o1' in model_name:
                     MODEL_OBJECTS[model_name].__dict__['kwargs']['max_tokens'] = 20_000
-
                 MODEL_OBJECTS[model_name].__dict__['kwargs']['temperature'] = 1.0
-
             else:
-
+                # All other models
                 MODEL_OBJECTS[model_name].__dict__['kwargs']['max_tokens'] = model_config.get("max_tokens", DEFAULT_MODEL_CONFIG["max_tokens"])
-
-                MODEL_OBJECTS[model_name].__dict__['kwargs']['temperature'] = model_config.get("temperature", DEFAULT_MODEL_CONFIG["temperature"])
+                MODEL_OBJECTS[model_name].__dict__['kwargs']['temperature'] = temp
 
 
 
@@ -715,7 +710,7 @@ async def chat_with_agent(
 
                         response = await asyncio.wait_for(
 
-                            agent.forward(enhanced_query, ",".join(agent_list)),
+                            agent(enhanced_query, ",".join(agent_list)),
 
                             timeout=REQUEST_TIMEOUT_SECONDS
 
@@ -765,7 +760,7 @@ async def chat_with_agent(
 
                         response = await asyncio.wait_for(
 
-                            agent.forward(enhanced_query, agent_name),
+                            agent(enhanced_query, agent_name),
 
                             timeout=REQUEST_TIMEOUT_SECONDS
 

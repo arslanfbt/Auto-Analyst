@@ -110,7 +110,7 @@ export function useModelSettings() {
         provider: localSettings.provider || 'anthropic',
         model: localSettings.model || 'claude-3-5-sonnet-latest',
         api_key: '', // Never send API key from localStorage
-        temperature: localSettings.temperature || 0.7,
+        temperature: localSettings.temperature || 1,
         max_tokens: localSettings.maxTokens || 6000
       }
       const response = await axios.post(`${API_URL}/settings/model`, completeSettings, {
