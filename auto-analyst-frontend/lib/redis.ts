@@ -68,13 +68,14 @@ export const creditUtils = {
       }
       
       const status = subscriptionHash.status as string
-      const isCanceled = status === 'canceled' || status === 'canceling' || subscriptionHash.canceledAt
+      // Simplified: only 'cancel_at_period_end' means canceled but still paid
+      const isCanceledButPaid = status === 'cancel_at_period_end'
       
-      if (!isCanceled) {
+      if (!isCanceledButPaid) {
         return false
       }
       
-      // Check if subscription period has ended
+      // Double-check if subscription period has ended
       const periodEnded = await this.hasSubscriptionPeriodEnded(userId)
       return !periodEnded // Canceled but period hasn't ended yet
     } catch (error) {
@@ -94,15 +95,13 @@ export const creditUtils = {
       }
       
       const status = subscriptionHash.status as string
-      const isCanceled = status === 'canceled' || status === 'canceling' || subscriptionHash.canceledAt
       
-      if (isCanceled) {
-        // Check if their paid period has ended
-        const periodEnded = await this.hasSubscriptionPeriodEnded(userId)
-        return periodEnded // Only get free credits after paid period ends
+      // Simplified logic: only 'canceled' users (after period ended) get free credits
+      if (status === 'canceled') {
+        return true
       }
       
-      return false // Active subscribers don't get free credits
+      return false // Active, canceling, or other statuses don't get free credits
     } catch (error) {
       console.error('Error checking if should get free credits:', error)
       return false
@@ -467,22 +466,15 @@ export const subscriptionUtils = {
         isPendingDowngrade
       );
       
-      // Special handling for canceled/canceling subscriptions
-      // BUT: Only zero credits if this is a genuine cancellation, not a successful trial conversion
+      // Simplified handling for canceled subscriptions
       if (isCanceled) {
-        // Check if this is a trial that was explicitly canceled vs. a successful conversion
-        const wasCanceledDuringTrial = creditsData && creditsData.trialCanceled === 'true';
-        const wasSubscriptionDeleted = creditsData && creditsData.subscriptionDeleted === 'true';
-        const hasExplicitCancelation = subscriptionData.canceledAt || subscriptionData.subscriptionCanceled === 'true';
-        const isGenuineCancellation = wasCanceledDuringTrial || wasSubscriptionDeleted || hasExplicitCancelation;
-        
-        if (isGenuineCancellation) {
+        // Only users with 'canceled' status (final cancellation) get zero credits
+        if (subscriptionData.status === 'canceled') {
           await creditUtils.setZeroCredits(userId);
-          // console.log(`[Credits] Set zero credits for genuinely canceled user ${userId} (status: ${subscriptionData.status})`);
+          console.log(`[Credits] Set zero credits for canceled user ${userId}`);
           return true;
-        } else {
-          console.log(`[Credits] Skipping credit reset for user ${userId} - appears to be successful trial conversion, not cancellation`);
         }
+        // Users with 'cancel_at_period_end' keep their credits until period ends
       }
       
       // Treat all plans (including Free) similarly for credit refreshes

@@ -86,6 +86,14 @@ o3_mini = dspy.LM(
     cache=False
 )
 
+claude_4_5_sonnet_latest = dspy.LM(
+    model="anthropic/claude-sonnet-4-5-20250929",
+    api_key=os.getenv("ANTHROPIC_API_KEY"),
+    temperature=float(os.getenv("TEMPERATURE", 1.0)),
+    max_tokens=max_tokens,
+    cache=False
+)
+
 # Anthropic models
 claude_3_5_haiku_latest = dspy.LM(
     model="anthropic/claude-3-5-haiku-latest",
@@ -193,6 +201,7 @@ MODEL_OBJECTS = {
     "claude-3-7-sonnet-latest": claude_3_7_sonnet_latest,
     "claude-3-5-sonnet-latest": claude_3_5_sonnet_latest,
     "claude-sonnet-4-20250514": claude_sonnet_4_20250514,
+    "claude-sonnet-4-5-20250929": claude_4_5_sonnet_latest,
     "claude-3-opus-latest": claude_3_opus_latest,
     "claude-opus-4-20250514": claude_opus_4_20250514,
     "claude-opus-4-1": claude_opus_4_1,
@@ -258,13 +267,8 @@ MODEL_TIERS = {
             "o1",
             "o1-pro",
             "claude-3-opus-latest",
-            "claude-opus-4-20250514"
-        ]
-    },
-    "tier5": {  # New highest tier
-        "name": "Ultimate",
-        "credits": 50,
-        "models": [
+            "claude-opus-4-20250514",
+            "claude-sonnet-4-5-20250929",
             "gpt-5",
             "claude-opus-4-1"
         ]
@@ -289,6 +293,7 @@ MODEL_METADATA = {
     "claude-3-5-sonnet-latest": {"display_name": "Claude 3.5 Sonnet", "context_window": 200000},
     "claude-3-5-haiku-latest": {"display_name": "Claude 3.5 Haiku", "context_window": 200000},
     "claude-opus-4-1": {"display_name": "Claude Opus 4.1", "context_window": 200000},
+    "claude-sonnet-4-5-20250929": {"display_name": "Claude Sonnet 4.5", "context_window": 200000},
 
     # GROQ
     "deepseek-r1-distill-llama-70b": {"display_name": "DeepSeek R1 Distill Llama 70b", "context_window": 32768},
@@ -317,7 +322,8 @@ MODEL_COSTS = {
         "claude-sonnet-4-20250514": {"input": 0.003, "output": 0.015},
         "claude-3-opus-latest": {"input": 0.015, "output": 0.075},  
         "claude-opus-4-20250514": {"input": 0.015, "output": 0.075},
-        "claude-opus-4-1": {"input": 0.015, "output": 0.075},  # approximate placeholder
+        "claude-opus-4-1": {"input": 0.015, "output": 0.075},
+        "claude-sonnet-4-5-20250929": {"input": 0.015, "output": 0.075},   # approximate placeholder
     },
     "groq": {
         "deepseek-r1-distill-llama-70b": {"input": 0.00075, "output": 0.00099},

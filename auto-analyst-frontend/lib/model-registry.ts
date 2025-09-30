@@ -29,6 +29,7 @@ export const MODEL_COSTS = {
     "claude-3-5-sonnet-latest": { input: 0.003, output: 0.015 }, 
     "claude-3-5-haiku-latest": { input: 0.0008, output: 0.0004 },
     "claude-sonnet-4-20250514": { input: 0.003, output: 0.015 },
+    "claude-sonnet-4-5-20250929": { input: 0.003, output: 0.015 },
     "claude-opus-4-20250514": { input: 0.015, output: 0.075 },
     "claude-opus-4-1": { input: 0.015, output: 0.075 }  // approximate real cost
   },
@@ -84,8 +85,9 @@ export const MODEL_TIERS = {
       "o1-pro",
       "claude-3-opus-latest",
       "claude-opus-4-20250514",
-      "gpt-5",           // moved here
-      "claude-opus-4-1"  // moved here
+      "claude-sonnet-4-5-20250929",  // Add Claude Sonnet 4.5 to Premium Plus
+      "gpt-5",
+      "claude-opus-4-1"
     ]
   }
 };
@@ -116,6 +118,7 @@ export const MODEL_METADATA: Record<string, { displayName: string; contextWindow
   "claude-3-5-sonnet-latest": { displayName: "Claude 3.5 Sonnet", contextWindow: 200000 },
   "claude-3-5-haiku-latest": { displayName: "Claude 3.5 Haiku", contextWindow: 200000 },
   "claude-sonnet-4-20250514": { displayName: "Claude Sonnet 4", contextWindow: 200000 },
+  "claude-sonnet-4-5-20250929": { displayName: "Claude Sonnet 4.5", contextWindow: 200000 },
   "claude-opus-4-20250514": { displayName: "Claude Opus 4", contextWindow: 200000 },
   "claude-opus-4-1": { displayName: "Claude Opus 4.1", contextWindow: 200000 },
 
