@@ -384,23 +384,26 @@ async def update_model_settings(
         # Get session state to update model config
         session_state = app_state.get_session_state(session_id)
         
+        # Clamp temperature to valid range (0..1 for all providers)
+        clamped_temp = min(1.0, max(0.0, float(settings.temperature)))
+        
         # Create the model config
         if 'gpt-5' in str(settings.model):
             model_config = {
                 "provider": settings.provider,
                 "model": settings.model,
                 "api_key": settings.api_key,
-                "temperature": settings.temperature,
+                "temperature": 1,
                 "max_tokens":16_000
                 # "max_completion_tokens": 2500
             }
-        elif 'o1-' in str(settings.model):
+        elif 'o1' or 'o3' in str(settings.model):
             model_config = {
                 "provider": settings.provider,
                 "model": settings.model,
                 "api_key": settings.api_key,
-                "temperature": 1,
-                "max_tokens":5001
+                "temperature": 1.0,  # O-series only supports 1
+                "max_tokens":20_000
             }
             
         
@@ -409,7 +412,7 @@ async def update_model_settings(
                 "provider": settings.provider,
                 "model": settings.model,
                 "api_key": settings.api_key,
-                "temperature": settings.temperature,
+                "temperature": clamped_temp,
                 "max_tokens": settings.max_tokens
             }
             

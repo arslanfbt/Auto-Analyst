@@ -44,7 +44,7 @@ API_KEY_PATTERNS = [
 ]
 
 # Network request patterns
-NETWORK_REQUEST_PATTERNS = re.compile(r"(requests\.|urllib\.|http\.|\.post\(|\.get\(|\.connect\()")
+NETWORK_REQUEST_PATTERNS = re.compile(r"(requests\.|urllib\.|http\.client|httpx\.|socket\.connect\()")
 
 # DataFrame creation with hardcoded data - block only this specific pattern
 
