@@ -25,6 +25,10 @@ load_dotenv()
 # Initialize logger
 logger = Logger("session_manager", see_time=False, console_log=False)
 
+# Helper to clamp temperature to valid range
+def _get_clamped_temperature():
+    return min(1.0, max(0.0, float(os.getenv("TEMPERATURE", "1.0"))))
+
 class SessionManager:
     """
     Manages session-specific state, including datasets, retrievers, and AI systems.
@@ -135,7 +139,7 @@ This dataset appears clean with consistent formatting and no missing values, mak
                 "provider": os.getenv("MODEL_PROVIDER", "anthropic"),
                 "model": os.getenv("MODEL_NAME", "claude-3-5-sonnet-latest"),
                 "api_key": os.getenv("ANTHROPIC_API_KEY"),
-                "temperature": float(os.getenv("TEMPERATURE", 1.0)),
+                "temperature": _get_clamped_temperature(),
                 "max_tokens": int(os.getenv("MAX_TOKENS", 6000))
             }
         
@@ -199,7 +203,7 @@ This dataset appears clean with consistent formatting and no missing values, mak
                 "provider": os.getenv("MODEL_PROVIDER", "anthropic"),
                 "model": os.getenv("MODEL_NAME", "claude-3-5-sonnet-latest"),
                 "api_key": os.getenv("ANTHROPIC_API_KEY"),
-                "temperature": float(os.getenv("TEMPERATURE", 1.0)),
+                "temperature": _get_clamped_temperature(),
                 "max_tokens": int(os.getenv("MAX_TOKENS", 6000))
             }
             
@@ -273,7 +277,7 @@ This dataset appears clean with consistent formatting and no missing values, mak
                 "provider": os.getenv("MODEL_PROVIDER", "anthropic"),
                 "model": os.getenv("MODEL_NAME", "claude-3-5-sonnet-latest"),
                 "api_key": os.getenv("ANTHROPIC_API_KEY"),
-                "temperature": float(os.getenv("TEMPERATURE", 1.0)),
+                "temperature": _get_clamped_temperature(),
                 "max_tokens": int(os.getenv("MAX_TOKENS", 6000))
             }
             

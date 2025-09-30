@@ -299,7 +299,7 @@ DEFAULT_MODEL_CONFIG = {
 
     "api_key": os.getenv("OPENAI_API_KEY"),
 
-    "temperature": float(os.getenv("TEMPERATURE", 1.0)),
+    "temperature": min(1.0, max(0.0, float(os.getenv("TEMPERATURE", "1.0")))),  # Clamp to 0..1
 
     "max_tokens": int(os.getenv("MAX_TOKENS", 6000)), "cache": False
 
