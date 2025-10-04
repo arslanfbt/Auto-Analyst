@@ -15,7 +15,7 @@ default_temperature = min(1.0, max(0.0, float(os.getenv("TEMPERATURE", "1.0"))))
 
 small_lm = dspy.LM('openai/gpt-4o-mini',max_tokens=300,api_key=os.getenv("OPENAI_API_KEY"), cache=False)
 
-mid_lm = dspy.LM('openai/gpt-4o-mini',max_tokens=1300,api_key=os.getenv("OPENAI_API_KEY"), cache=False)
+mid_lm = dspy.LM('openai/gpt-4o-mini',max_tokens=1800,api_key=os.getenv("OPENAI_API_KEY"), cache=False)
 
 gpt_4o_mini = dspy.LM('openai/gpt-4o-mini',max_tokens=4000,api_key=os.getenv("OPENAI_API_KEY"), cache=False)
 
@@ -95,7 +95,7 @@ claude_4_5_sonnet_latest = dspy.LM(
     temperature=default_temperature,
     max_tokens=max_tokens,
     cache=False
-) don
+) 
 
 # Anthropic models
 claude_3_5_haiku_latest = dspy.LM(

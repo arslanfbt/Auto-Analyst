@@ -105,38 +105,30 @@ def configure_plotly_no_display():
 # Call the configuration function immediately
 configure_plotly_no_display()
 
-logger = Logger("deep_agents", see_time=True, console_log=False)
+logger = Logger("deep_agents", see_time=True, console_log=True, level=logging.DEBUG)
 load_dotenv()
 
 class deep_questions(dspy.Signature):
     """
 You are a data analysis assistant.
-
 Your role is to take a user's high-level analytical goal and generate a set of deep, targeted follow-up questions. These questions should guide an analyst toward a more thorough understanding of the goal by encouraging exploration, segmentation, and causal reasoning.
-
 Instructions:
 - Generate up to 5 insightful, data-relevant questions.
 - Use the dataset structure to tailor your questions (e.g., look at the available columns, data types, and what kind of information they can reveal).
 - The questions should help the user decompose their analytic goal and explore it from multiple angles (e.g., time trends, customer segments, usage behavior, external factors, feedback).
 - Each question should be specific enough to guide actionable analysis or investigation.
 - Use a clear and concise style, but maintain depth.
-
 Inputs:
 - goal: The user's analytical goal or main question they want to explore
 - dataset_info: A description of the dataset the user is querying, including:
     - What the dataset represents
     - Key columns and their data types
-
 Output:
 - deep_questions: A list of up to 5 specific, data-driven questions that support the analytic goal
-
 ---
-
 Example:
-
 Analytical Goal:
 Understand why churn has been rising
-
 Dataset Info:
 Customer Retention Dataset tracking subscription activity over time.  
 Columns:
@@ -150,46 +142,38 @@ Columns:
 - avg_weekly_logins (float)
 - support_tickets_last_30d (int)
 - satisfaction_score (float, 0–10 scale)
-
 Decomposed Questions:
 1. How has the churn rate changed month-over-month, and during which periods was the increase most pronounced?
 2. Are specific plan types or regions showing a higher churn rate relative to others?
 3. What is the average satisfaction score and support ticket count among churned users compared to retained users?
 4. Do churned users exhibit different login behavior (e.g., avg_weekly_logins) in the weeks leading up to their churn date?
 5. What is the tenure distribution (time from join_date to churn_date) among churned customers, and are short-tenure users more likely to churn?
-
     """
     goal = dspy.InputField(desc="User analytical goal — what main insight or question they want to answer")
     dataset_info = dspy.InputField(desc="A description of the dataset: what it represents, and the main columns with data types")
-    deep_questions = dspy.OutputField(desc="A list of up to five questions that help deeply explore the analytical goal using the dataset")
+    deep_questions:str = dspy.OutputField(desc="A list of up to five questions that help deeply explore the analytical goal using the dataset")
 
 class deep_synthesizer(dspy.Signature):
     """
 You are a data analysis synthesis expert.
-
 Your job is to take the outputs from a multi-agent data analytics system - including the original user query, the code summaries from each agent, and the actual printed results from running those code blocks - and synthesize them into a comprehensive, well-structured final report.
-
 This report should:
 - Explain what steps were taken and why (based on the query)
 - Summarize the code logic used by each agent, without including raw code
 - Highlight key findings and results from the code outputs
 - Offer clear, actionable insights tied back to the user's original question
 - Be structured, readable, and suitable for decision-makers or analysts
-
 Instructions:
 - Begin with a brief restatement of the original query and what it aimed to solve
 - Organize your report step-by-step or by analytical theme (e.g., segmentation, trend analysis, etc.)
 - For each part, summarize what was analyzed, how (based on code summaries), and what the result was (based on printed output)
 - End with a final set of synthesized conclusions and potential next steps or recommendations
-
 Inputs:
 - query: The user's original analytical question or goal
 - summaries: A list of natural language descriptions of what each agent's code did
 - print_outputs: A list of printed outputs (results) from running each agent's code
-
 Output:
 - synthesized_report: A structured and readable report that ties all parts together, grounded in the code logic and results
-
 Example use:
 You are not just summarizing outputs - you're telling a story that answers the user's query using real data.
     """
@@ -471,7 +455,6 @@ class deep_planner(dspy.Signature):
     """
     You are an advanced multi-question planning agent. Your task is to generate the most optimized and minimal plan
     to answer up to 5 analytical questions using available agents.
-
     Your responsibilities:
     1. Feasibility: Verify that the goal is achievable using the provided datasets and agent descriptions.
     2. Optimization: 
@@ -483,12 +466,10 @@ class deep_planner(dspy.Signature):
        - Define clear variable usage (create/use).
        - Specify concise step-by-step instructions per agent.
        - Use dependency arrows (->) to indicate required agent outputs used by others.
-
     Inputs:
     - deep_questions: A list of up to 5 deep analytical questions (e.g., ["q1", "q2", ..., "q5"])
     - dataset: The available dataset(s) in memory or context
     - agents_desc: Dictionary containing each agent's name and its capabilities or descriptions
-
     Outputs:
     - plan_instructions: Detailed per-agent variable flow and functionality in the format:
         {
@@ -503,7 +484,6 @@ class deep_planner(dspy.Signature):
                 "instruction": "Perform correlation analysis to identify strong predictors."
             }
         }
-
     Output Goal:
     Generate a small, clean, optimized execution plan using minimal agent calls, reusable outputs, and well-structured dependencies.
     USE THE EXACT NAME OF THE AGENTS IN THE INSTRUCTIONS
@@ -518,7 +498,6 @@ class deep_plan_fixer(dspy.Signature):
     """
     You are a plan instruction fixer agent. Your task is to take potentially malformed plan instructions
     and convert them into a properly structured dictionary format that can be safely evaluated.
-
     Your responsibilities:
     1. Parse and validate the input plan instructions
     2. Convert the instructions into a proper dictionary format
@@ -532,10 +511,8 @@ class deep_plan_fixer(dspy.Signature):
        }
     4. Handle any malformed or missing components
     5. Return a properly formatted dictionary string that can be safely evaluated
-
     Inputs:
     - plan_instructions: The potentially malformed plan instructions to fix
-
     Outputs:
     - fixed_plan: A properly formatted dictionary string that can be safely evaluated
     """
@@ -546,43 +523,32 @@ class deep_plan_fixer(dspy.Signature):
 class final_conclusion(dspy.Signature):
     """
 You are a high-level analytics reasoning engine.
-
 Your task is to take multiple synthesized analytical results (each answering part of the original query) and produce a cohesive final conclusion that directly addresses the user's original question.
-
 This is not just a summary — it's a judgment. Use evidence from the synthesized findings to:
 - Answer the original question with clarity
 - Highlight the most important insights
 - Offer any causal reasoning or patterns discovered
 - Suggest next steps or strategic recommendations where appropriate
-
 Instructions:
 - Focus on relevance to the original query
 - Do not just repeat what the synthesized sections say — instead, infer, interpret, and connect dots
 - Prioritize clarity and insight over detail
 - End with a brief "Next Steps" section if applicable
-
 Inputs:
 - query: The original user question or goal
 - synthesized_sections: A list of synthesized result sections from the deep_synthesizer step (each covering part of the analysis)
-
 Output:
 - final_summary: A cohesive final conclusion that addresses the query, draws insight, and offers high-level guidance
-
 ---
-
 Example Output Structure:
-
 **Conclusion**  
 Summarize the overall answer to the user's question, using the most compelling evidence across the synthesized sections.
-
 **Key Takeaways**  
 - Bullet 1  
 - Bullet 2  
 - Bullet 3  
-
 **Recommended Next Steps**  
 (Optional based on context)
-
     """
 
     query = dspy.InputField(desc="The user's original query or analytical goal")
@@ -595,7 +561,6 @@ Summarize the overall answer to the user's question, using the most compelling e
 class deep_code_synthesizer(dspy.Signature):
     """
 You are a code synthesis and optimization engine that combines and fixes code from multiple analytical agents.
-
 Your task is to take code outputs from preprocessing, statistical analysis, machine learning, and visualization agents, then:
 - Combine them into a single, coherent analysis pipeline
 - Fix any errors or inconsistencies between agent outputs
@@ -610,7 +575,6 @@ Your task is to take code outputs from preprocessing, statistical analysis, mach
 - Ensure all visualizations use Plotly exclusively
 - Create comprehensive visualizations that show all important variables and relationships
 - Store all Plotly figures in a list for later use in the report
-
 Instructions:
 - Review each agent's code for correctness and completeness
 - Ensure variables are properly passed between steps with consistent types
@@ -629,17 +593,13 @@ Instructions:
 - Use consistent styling across all Plotly visualizations
 - DONOT COMMENT OUT ANYTHING AS THE CODE SHOULD RUN & SHOW OUTPUTS
 - THE DATASET IS ALREADY LOADED, DON'T CREATE FAKE DATA. 'df' is always loaded
-
 Inputs:
 - deep_questions- The five deep questions this system is answering
 - dataset_info - Information about the dataset structure and types
 - planner_instructions - the plan according to the planner, ensure that the final code makes everything coherent
 - code - List of all agent code
-
-
 Output:
 - combined_code: - A single, optimized Python script that combines all analysis steps with proper type handling and Plotly visualizations
-
 """
     deep_questions = dspy.InputField(desc="The five deep questions this system is answering")
     dataset_info = dspy.InputField(desc="Information about the dataset")
@@ -684,7 +644,6 @@ class deep_code_fix(dspy.Signature):
 
 chart_instructions = """
 Chart Styling Guidelines:
-
 1. General Styling:
    - Use a clean, professional color palette (e.g., Tableau, ColorBrewer)
    - Include clear titles and axis labels
@@ -692,7 +651,6 @@ Chart Styling Guidelines:
    - Use consistent font sizes and styles
    - Include grid lines where helpful
    - Add hover information for interactive plots
-
 2. Specific Chart Types:
    - Bar Charts:
      * Use horizontal bars for many categories
@@ -717,7 +675,6 @@ Chart Styling Guidelines:
      * Include value annotations
      * Sort rows/columns by similarity
      * Add clear color scale legend
-
 3. Data Visualization Best Practices:
    - Start axes at zero when appropriate
    - Use log scales for wide-ranging data
@@ -727,14 +684,12 @@ Chart Styling Guidelines:
    - Use consistent color encoding
    - Include data source and timestamp
    - Add clear figure captions
-
 4. Interactive Features:
    - Enable zooming and panning
    - Add tooltips with detailed information
    - Include download options
    - Allow toggling of data series
    - Enable cross-filtering between charts
-
 5. Accessibility:
    - Use colorblind-friendly palettes
    - Include alt text for all visualizations
@@ -750,7 +705,12 @@ class deep_analysis_module(dspy.Module):
     def __init__(self,agents, agents_desc):
         # logger.log_message(f"Initializing deep_analysis_module with {agents} agents: {list(agents.keys())}", level=logging.INFO)
         
-        self.agents = agents
+        # self.agent = agents
+        self.agents = {}
+        for key in agents.keys():
+            self.agents[key] = dspy.asyncify(dspy.Predict(agents[key]))
+
+        # for sig in self.agen
         # Make all dspy operations async using asyncify
         self.deep_questions = dspy.asyncify(dspy.Predict(deep_questions))
         self.deep_planner = dspy.asyncify(dspy.Predict(deep_planner))
@@ -858,33 +818,41 @@ class deep_analysis_module(dspy.Module):
             }
             
             logger.log_message(f"🔍 CREATING DSPY EXAMPLES - dataset_info type: {type(dataset_info)}, length: {len(dataset_info) if isinstance(dataset_info, str) else 'N/A'}", level=logging.DEBUG)
-            queries = [
-                dspy.Example(
-                    goal=questions.deep_questions,
-                    dataset=dataset_info,
-                    plan_instructions=str(plan_instructions[key]),
-                    **({"styling_index": "Sample styling guidelines"} if "data_viz" in key or "viz" in key.lower() or "visual" in key.lower() or "plot" in key.lower() or "chart" in key.lower() else {})
-                ).with_inputs(
-                    "goal",
-                    "dataset", 
-                    "plan_instructions",
-                    *(["styling_index"] if "data_viz" in key or "viz" in key.lower() or "visual" in key.lower() or "plot" in key.lower() or "chart" in key.lower() else [])
-                )
-                for key in keys
-            ]
-            
-            # DEBUG: Log what's in each dspy.Example
-            for i, q in enumerate(queries):
-                logger.log_message(f"🔍 DSPY EXAMPLE {i} - goal: {q.goal[:100] if hasattr(q, 'goal') else 'No goal'}...", level=logging.DEBUG)
-                logger.log_message(f" DSPY EXAMPLE {i} - dataset: {q.dataset[:100] if hasattr(q, 'dataset') else 'No dataset'}...", level=logging.DEBUG)
-                logger.log_message(f"🔍 DSPY EXAMPLE {i} - plan_instructions: {q.plan_instructions[:100] if hasattr(q, 'plan_instructions') else 'No plan_instructions'}...", level=logging.DEBUG)
-            logger.log_message(f"🔍 CALLING AGENTS - about to call {len(keys)} agents: {keys}", level=logging.DEBUG)
-            tasks = [self.agents[key](**q) for q, key in zip(queries, keys)]
-            
+
+
+            # tasks = [self.agents[key](**q) for q, key in zip(queries, keys)]
+            tasks = []
+            for key in  keys:
+                logger.log_message(f"Preparing agent task for key: {key}", level=logging.DEBUG)
+                logger.log_message(f"Plan instructions for {key}: {plan_instructions[key]}", level=logging.DEBUG)
+                if "data_viz" in key or "viz" in key.lower() or "visual" in key.lower() or "plot" in key.lower() or "chart" in key.lower():
+                    logger.log_message(f"Agent {key} identified as visualization agent. Adding styling_index.", level=logging.DEBUG)
+                    task = self.agents[key](
+                        goal=questions.deep_questions,
+                        dataset=dataset_info,
+                        plan_instructions=str(plan_instructions[key]),
+                        styling_index=self.styling_instructions
+                    )
+                    logger.log_message(f"Visualization agent task for {key} created.", level=logging.DEBUG)
+                    tasks.append(task)
+                else:
+                    logger.log_message(f"Agent {key} identified as non-visualization agent.", level=logging.DEBUG)
+                    task = self.agents[key](
+                        goal=questions.deep_questions,
+                        dataset=dataset_info,
+                        plan_instructions=str(plan_instructions[key])
+                    )
+                    logger.log_message(f"Non-visualization agent task for {key} created.", level=logging.DEBUG)
+                    tasks.append(task)
+
+
+
+
+
+
+            logger.log_message("Passed that stage")
             # DEBUG: Log what parameters each agent will receive
-            for q, key in zip(queries, keys):
-                logger.log_message(f"🔍 AGENT {key} - will receive: goal={q.goal[:50] if hasattr(q, 'goal') else 'None'}..., dataset={q.dataset[:50] if hasattr(q, 'dataset') else 'None'}..., plan_instructions={q.plan_instructions[:50] if hasattr(q, 'plan_instructions') else 'None'}...", level=logging.DEBUG)
-                        
+                  
             # Await all tasks to complete
             summaries = []
             codes = []

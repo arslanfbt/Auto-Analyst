@@ -27,6 +27,46 @@ import time
 
 logger = Logger("session_routes", see_time=False, console_log=False)
 
+
+def apply_model_safeguards(model_name: str, provider: str, temperature: float, max_tokens: int) -> dict:
+    """Apply model-specific safeguards for temperature and max_tokens based on official API limits"""
+    model_str = str(model_name).lower()
+    provider_str = str(provider).lower()
+    
+    safe_temp = min(1.0, max(0.0, float(temperature)))
+    safe_max_tokens = max_tokens
+    
+    # O-series: temp MUST be 1.0
+    if ('o1' in model_str or 'o3' in model_str) and provider_str == 'openai':
+        safe_temp = 1.0
+        safe_max_tokens = min(max_tokens, 100_000)
+    # GPT-5 series
+    elif 'gpt-5' in model_str and provider_str == 'openai':
+        safe_temp = 1.0
+        safe_max_tokens = min(max_tokens, 16_000)
+    # GPT-4 series
+    elif 'gpt-4' in model_str and provider_str == 'openai':
+        safe_max_tokens = min(max_tokens, 4_096)
+    # Anthropic: Sonnet 4/3.7/Opus 4 = 64K, others = 8K
+    elif provider_str == 'anthropic':
+        if any(x in model_str for x in ['sonnet-4', 'sonnet-3-7', 'opus-4']):
+            safe_max_tokens = min(max_tokens, 64_000)
+        else:
+            safe_max_tokens = min(max_tokens, 8_192)
+    # Groq: 32K
+    elif provider_str == 'groq':
+        safe_max_tokens = min(max_tokens, 32_768)
+    # Gemini: 2.5 series = 65K, others = 8K
+    elif provider_str == 'gemini':
+        if '2.5' in model_str or '2-5' in model_str:
+            safe_max_tokens = min(max_tokens, 65_535)
+        else:
+            safe_max_tokens = min(max_tokens, 8_192)
+    else:
+        safe_max_tokens = min(max_tokens, 4_096)
+    
+    return {"temperature": safe_temp, "max_tokens": safe_max_tokens}
+
 # Add session header for dependency
 X_SESSION_ID = APIKeyHeader(name="X-Session-ID", auto_error=False)
 
@@ -383,38 +423,27 @@ async def update_model_settings(
         
         # Get session state to update model config
         session_state = app_state.get_session_state(session_id)
-        
-        # Clamp temperature to valid range (0..1 for all providers)
-        clamped_temp = min(1.0, max(0.0, float(settings.temperature)))
+
+        # Apply model-specific safeguards (temperature + max_tokens)
+        safe_params = apply_model_safeguards(
+            model_name=settings.model,
+            provider=settings.provider,
+            temperature=settings.temperature,
+            max_tokens=settings.max_tokens
+        )
+
+        # Create the model config with safe parameters
+        model_config = {
+            "provider": settings.provider,
+            "model": settings.model,
+            "api_key": settings.api_key,
+            "temperature": safe_params["temperature"],
+            "max_tokens": safe_params["max_tokens"]
+        }
+
         
         # Create the model config
-        if 'gpt-5' in str(settings.model):
-            model_config = {
-                "provider": settings.provider,
-                "model": settings.model,
-                "api_key": settings.api_key,
-                "temperature": 1,
-                "max_tokens":16_000
-                # "max_completion_tokens": 2500
-            }
-        elif 'o1' or 'o3' in str(settings.model):
-            model_config = {
-                "provider": settings.provider,
-                "model": settings.model,
-                "api_key": settings.api_key,
-                "temperature": 1.0,  # O-series only supports 1
-                "max_tokens":20_000
-            }
-            
-        
-        else:
-            model_config = {
-                "provider": settings.provider,
-                "model": settings.model,
-                "api_key": settings.api_key,
-                "temperature": clamped_temp,
-                "max_tokens": settings.max_tokens
-            }
+
             
         # Update only the session's model config
         session_state["model_config"] = model_config
