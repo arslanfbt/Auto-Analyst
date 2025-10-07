@@ -358,6 +358,12 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
     setHiddenCanvas(true)
   }, [])
   
+  // Function to open canvas (for fix button)
+  const handleOpenCanvas = useCallback(() => {
+    setCodeCanvasOpen(true)
+    setHiddenCanvas(false) // Make sure it's not hidden
+  }, [])
+
   // Update the handleCanvasToggle function to fetch latest code
   const handleCanvasToggle = useCallback(() => {
     // Toggle canvas visibility instead of existence
@@ -1271,6 +1277,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
                 onFixStart={handleFixStart}
                 onFixComplete={handleFixComplete}
                 onCreditCheck={handleCreditCheck}
+                onCanvasOpen={handleOpenCanvas}
                 variant="inline"
               />
             )}
@@ -1306,6 +1313,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
                 onFixStart={handleFixStart}
                 onFixComplete={handleFixComplete}
                 onCreditCheck={handleCreditCheck}
+                onCanvasOpen={handleOpenCanvas}
                 variant="inline"
               />
             )}

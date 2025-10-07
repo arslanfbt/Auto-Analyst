@@ -23,6 +23,7 @@ interface CodeFixButtonProps {
   onFixComplete: (codeId: string, fixedCode: string) => void  // Callback when fix completes
   onCreditCheck: (codeId: string, hasEnough: boolean) => void // Credit check callback
   onRefreshCode?: (codeId: string) => Promise<void>  // Callback to refresh code from parent
+  onCanvasOpen?: () => void         // Callback to open the code canvas
   className?: string
   variant?: 'default' | 'inline' | 'icon-only'  // ✅ Add 'icon-only'
   checkCredits?: () => Promise<void>
@@ -39,6 +40,7 @@ const CodeFixButton: React.FC<CodeFixButtonProps> = ({
   onFixComplete,
   onCreditCheck,
   onRefreshCode,
+  onCanvasOpen,   // ✅ Canvas open callback
   className = "",
   variant = 'default',
   checkCredits
@@ -103,6 +105,9 @@ const CodeFixButton: React.FC<CodeFixButtonProps> = ({
       return
     }
 
+    // Open canvas to show fixing process
+    onCanvasOpen?.()
+    
     // Start fixing
     onFixStart?.(codeId)
 
