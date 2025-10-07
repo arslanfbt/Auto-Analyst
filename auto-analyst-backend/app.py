@@ -538,7 +538,7 @@ RESPONSE_ERROR_NO_DATASET = "No dataset is currently loaded. Please link a datas
 
 DEFAULT_TOKEN_RATIO = 1.5
 
-REQUEST_TIMEOUT_SECONDS = 30  # Timeout for LLM requests
+REQUEST_TIMEOUT_SECONDS = 60 # Timeout for LLM requests
 
 MAX_RECENT_MESSAGES = 5
 
