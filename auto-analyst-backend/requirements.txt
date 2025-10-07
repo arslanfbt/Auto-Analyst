@@ -1,5 +1,6 @@
 aiofiles==24.1.0
 beautifulsoup4==4.13.4
+chardet==5.2.0
 dspy==3.0.3
 litellm==1.75.2
 email_validator==2.2.0

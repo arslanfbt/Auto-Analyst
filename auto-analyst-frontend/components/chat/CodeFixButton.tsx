@@ -1,8 +1,8 @@
 "use client"
 
-import React, { useState } from 'react'
+import React, { useState, useRef, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
-import { WrenchIcon, CreditCard, Lock } from 'lucide-react'
+import { WrenchIcon, CreditCard, Lock, X } from 'lucide-react'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { useToast } from "@/components/ui/use-toast"
 import axios from "axios"
@@ -31,10 +31,10 @@ interface CodeFixButtonProps {
 const CodeFixButton: React.FC<CodeFixButtonProps> = ({
   codeId,
   code,           // ✅ Used in request
-  errorOutput,    // ✅ Used in request  
-  isFixing,       // ✅ This comes from props now
+  errorOutput,
+  isFixing,
   codeFixes,
-  sessionId,           // ✅ Get from props (passed by ChatWindow)
+  sessionId,      // ✅ Used in request
   onFixStart,
   onFixComplete,
   onCreditCheck,
@@ -43,67 +43,76 @@ const CodeFixButton: React.FC<CodeFixButtonProps> = ({
   variant = 'default',
   checkCredits
 }) => {
-  // Remove this line - isFixing comes from props now
-  // const [isFixing, setIsFixing] = useState(false) ❌ DELETE THIS
-  
-  const [hovered, setHovered] = useState(false)
-  const [retryCount, setRetryCount] = useState(0)
   const { toast } = useToast()
   const { data: session } = useSession()
-  const { remainingCredits } = useCredits()  // ✅ Change from 'credits' to 'remainingCredits'
-  const tier = useUserTier()
+  const { remainingCredits } = useCredits()
+  const userTier = useUserTier()
   
-  // ✅ Fix: Get fix count from props instead of store
-  const fixCount = codeFixes[codeId] || 0
-  const freeFixLimit = 3
-  const needsCredits = fixCount >= freeFixLimit && (!remainingCredits || remainingCredits <= 0)  // ✅ Use remainingCredits
+  // Local state for retry management
+  const [retryCount, setRetryCount] = useState(0)
+  const [isCancellable, setIsCancellable] = useState(false)
+  const abortControllerRef = useRef<AbortController | null>(null)
+  const timeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const longTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
-  // Enhanced fix function with retry logic and silent retries
+  // Cleanup function to clear all timeouts and abort requests
+  const cleanup = () => {
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current)
+      timeoutRef.current = null
+    }
+    if (longTimeoutRef.current) {
+      clearTimeout(longTimeoutRef.current)
+      longTimeoutRef.current = null
+    }
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort()
+      abortControllerRef.current = null
+    }
+    setIsCancellable(false)
+  }
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      cleanup()
+    }
+  }, [])
+
+  // Enhanced fix function with better timeout handling and error management
   const handleFixCode = async (isRetry = false, currentRetryCount = 0) => {
+    // Validate inputs before starting
+    if (!code || !errorOutput || !sessionId) {
+      toast({
+        title: "Invalid request",
+        description: "Missing required data for code fixing.",
+        variant: "destructive",
+        duration: 5000,
+      })
+      return
+    }
+
+    // Validate session ID format
+    if (sessionId.length < 10) {
+      toast({
+        title: "Session Error",
+        description: "Invalid session. Please refresh the page.",
+        variant: "destructive",
+        duration: 5000,
+      })
+      return
+    }
+
     // Start fixing
     onFixStart?.(codeId)
 
-    // Validation checks - be more lenient with empty strings but ensure we have meaningful content
-    if (!code || code.trim().length === 0) {
-      // Silent retry for missing code - maybe it's still loading or needs to be fetched
-      if (currentRetryCount < 3) {
-        // Try to refresh code from parent if callback is available
-        if (onRefreshCode && currentRetryCount === 0) {
-          console.log("CodeFixButton: Attempting to refresh code from parent...")
-          try {
-            await onRefreshCode(codeId)
-          } catch (error) {
-            console.log("CodeFixButton: Failed to refresh code from parent:", error)
-          }
-        }
-        
-        setTimeout(() => {
-          handleFixCode(true, currentRetryCount + 1)
-        }, 1500)
-        return
-      }
-      // After 3 retries, still don't show error to user - just silently fail
-      console.log("CodeFixButton: No code available after retries, silently failing")
-      return
-    }
-
-    if (!errorOutput || errorOutput.trim().length === 0) {
-      // Silent retry for missing error output - maybe it's still loading
-      if (currentRetryCount < 3) {
-        setTimeout(() => {
-          handleFixCode(true, currentRetryCount + 1)
-        }, 1500)
-        return
-      }
-      // After retries, silently fail without showing error to user
-      console.log("CodeFixButton: No error output available after retries, silently failing")
-      return
-    }
-
-    if (!sessionId) {
+    // Check if user has enough credits for non-free fixes
+    const needsCredits = userTier === 'free' && (codeFixes[codeId] || 0) >= 2
+    if (needsCredits && remainingCredits < 1) {
+      onCreditCheck?.(codeId, false)
       toast({
-        title: "Session error",
-        description: "No active session. Please refresh the page.",
+        title: "Insufficient credits",
+        description: "You need at least 1 credit to fix code errors.",
         variant: "destructive",
         duration: 5000,
       })
@@ -120,8 +129,6 @@ const CodeFixButton: React.FC<CodeFixButtonProps> = ({
       })
       return
     }
-
-    // setIsFixing(true) // This line is removed as isFixing is now a prop
     
     try {
       // Show appropriate toast message
@@ -146,9 +153,26 @@ const CodeFixButton: React.FC<CodeFixButtonProps> = ({
         retryCount: currentRetryCount
       })
       
-      // Create request with timeout
-      const controller = new AbortController()
-      const timeoutId = setTimeout(() => controller.abort(), 30000) // 30 second timeout
+      // Create new abort controller for this request
+      abortControllerRef.current = new AbortController()
+      
+      // Set up timeouts
+      // Short timeout for immediate feedback (15 seconds)
+      timeoutRef.current = setTimeout(() => {
+        setIsCancellable(true)
+        toast({
+          title: "Taking longer than expected",
+          description: "The fix is still processing. You can cancel if needed.",
+          duration: 5000,
+        })
+      }, 15000)
+
+      // Long timeout to abort request (75 seconds - longer than backend timeout)
+      longTimeoutRef.current = setTimeout(() => {
+        if (abortControllerRef.current) {
+          abortControllerRef.current.abort()
+        }
+      }, 75000)
 
       // ✅ Simple request with just code + error
       const response = await axios.post(`${API_URL}/code/fix`, {
@@ -156,11 +180,14 @@ const CodeFixButton: React.FC<CodeFixButtonProps> = ({
         error: errorOutput.trim(),
       }, {
         headers: {
-          'X-Session-ID': sessionId,  // ✅ Use prop value
-        }
+          'X-Session-ID': sessionId,
+        },
+        signal: abortControllerRef.current.signal,
+        timeout: 80000 // 80 second axios timeout
       })
 
-      clearTimeout(timeoutId)
+      // Clear timeouts on successful response
+      cleanup()
 
       if (response.data && response.data.fixed_code) {
         const fixedCode = response.data.fixed_code
@@ -236,6 +263,9 @@ const CodeFixButton: React.FC<CodeFixButtonProps> = ({
     } catch (error) {
       console.error("Error fixing code with AI:", error)
       
+      // Always cleanup on error
+      cleanup()
+      
       // Handle different types of errors
       if (axios.isAxiosError(error)) {
         if (error.code === 'ECONNABORTED' || error.name === 'AbortError') {
@@ -262,212 +292,159 @@ const CodeFixButton: React.FC<CodeFixButtonProps> = ({
             return
           } else {
             toast({
-              title: "Session error",
-              description: "Session expired. Please refresh the page.",
+              title: "Session Error",
+              description: "Session expired. Please refresh the page and try again.",
               variant: "destructive",
               duration: 5000,
             })
           }
-        } else if (error.response && error.response.status >= 500) {
-          // Server error - silent retry
-          if (currentRetryCount < 2) {
+        } else if (error.response && error.response.status === 500) {
+          // Server error - retry once
+          if (currentRetryCount < 1) {
             setTimeout(() => {
               handleFixCode(true, currentRetryCount + 1)
             }, 3000)
             return
           } else {
             toast({
-              title: "Server error",
-              description: "Server error after retries. Please try again later.",
+              title: "Server Error",
+              description: "Server error occurred. Please try again later.",
               variant: "destructive",
               duration: 5000,
             })
           }
-        } else if (error.response && error.response.status === 400) {
-          // Bad request - don't retry, show specific error
-          const errorMessage = error.response?.data?.detail || "Invalid request. Please check your code and error message."
+        } else if (error.response && error.response.status === 429) {
+          // Rate limit error
           toast({
-            title: "Request error",
-            description: errorMessage,
+            title: "Rate limit exceeded",
+            description: "Too many requests. Please wait a moment and try again.",
             variant: "destructive",
             duration: 5000,
           })
         } else {
-          // Network error - silent retry
-          if (currentRetryCount < 2) {
-            setTimeout(() => {
-              handleFixCode(true, currentRetryCount + 1)
-            }, 2000)
-            return
-          } else {
-            toast({
-              title: "Network error",
-              description: "Failed to connect after retries. Please check your connection.",
-              variant: "destructive",
-              duration: 5000,
-            })
-          }
+          // Other axios errors
+          toast({
+            title: "Network Error",
+            description: error.message || "Failed to connect to server. Please check your connection.",
+            variant: "destructive",
+            duration: 5000,
+          })
         }
       } else {
-        // Unknown error
+        // Non-axios errors
         toast({
-          title: "Unexpected error",
+          title: "Unexpected Error",
           description: "An unexpected error occurred. Please try again.",
           variant: "destructive",
           duration: 5000,
         })
       }
-      
-      setRetryCount(currentRetryCount)
-    } finally {
-      // setIsFixing(false) // This line is removed as isFixing is now a prop
     }
   }
 
-  // Render different button styles based on variant
-  if (variant === 'inline') {
-    const remainingFixes = Math.max(0, freeFixLimit - fixCount)
-    
+  // Cancel function
+  const handleCancel = () => {
+    cleanup()
+    toast({
+      title: "Fix cancelled",
+      description: "Code fixing has been cancelled.",
+      duration: 3000,
+    })
+  }
+
+  // Determine if fix button should be shown
+  const shouldShowFixButton = errorOutput && errorOutput.trim().length > 0
+  const hasAttemptedFixes = (codeFixes[codeId] || 0) > 0
+  const maxAttemptsReached = (codeFixes[codeId] || 0) >= 3
+
+  if (!shouldShowFixButton) {
+    return null
+  }
+
+  // Determine button content based on state
+  const getButtonContent = () => {
+    if (isFixing) {
+      if (isCancellable) {
+        return (
+          <div className="flex items-center gap-2">
+            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+            <span>Fixing...</span>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={handleCancel}
+              className="h-6 w-6 p-0 hover:bg-red-500 hover:text-white"
+            >
+              <X className="h-3 w-3" />
+            </Button>
+          </div>
+        )
+      }
+      return (
+        <div className="flex items-center gap-2">
+          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+          <span>Fixing...</span>
+        </div>
+      )
+    }
+
+    if (maxAttemptsReached) {
+      return (
+        <div className="flex items-center gap-2">
+          <Lock className="h-4 w-4" />
+          <span>Max attempts reached</span>
+        </div>
+      )
+    }
+
+    if (hasAttemptedFixes && userTier === 'free') {
+      return (
+        <div className="flex items-center gap-2">
+          <CreditCard className="h-4 w-4" />
+          <span>Fix ({codeFixes[codeId]}/3)</span>
+        </div>
+      )
+    }
+
     return (
-      <div className={`inline-flex items-center absolute top-3 right-3 ${className}`}
-           onMouseEnter={() => setHovered(true)}
-           onMouseLeave={() => setHovered(false)}>
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <motion.div
-                initial={{ width: "auto" }}
-                animate={{ 
-                  width: hovered ? "auto" : "auto",
-                  backgroundColor: hovered ? "#FF6666" : "#FF7F7F"
-                }}
-                transition={{ duration: 0.2 }}
-                className="rounded-md overflow-hidden flex items-center justify-end px-3 py-2 cursor-pointer shadow-sm"
-                onClick={() => handleFixCode()}
-              >
-                <div className="flex items-center">
-                  {isFixing ? (
-                    <>
-                      <svg className="animate-spin h-3 w-3 text-white mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                      </svg>
-                      <span className="text-xs font-semibold text-white">Fixing...</span>
-                    </>
-                  ) : (
-                    <>
-                      <WrenchIcon className="h-3 w-3 text-white mr-2" />
-                      <span className="text-xs font-semibold text-white">Fix Code</span>
-                    </>
-                  )}
-                </div>
-              </motion.div>
-            </TooltipTrigger>
-            <TooltipContent side="left" className="bg-[#FF7F7F] text-white text-xs px-3 py-2 border-2 border-[#FF6666] shadow-lg">
-              <div className="text-center">
-                <p className="font-medium">Fix Error with AI</p>
-                <p className="opacity-90">Click to open code canvas and auto-fix the error.</p>
-              </div>
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
+      <div className="flex items-center gap-2">
+        <WrenchIcon className="h-4 w-4" />
+        <span>Fix Code</span>
       </div>
     )
   }
 
-  if (variant === 'icon-only') {
-    const remainingFixes = Math.max(0, freeFixLimit - fixCount)
-    
-    return (
-      <div className={`inline-flex items-center absolute top-3 right-3 ${className}`}
-           onMouseEnter={() => setHovered(true)}
-           onMouseLeave={() => setHovered(false)}>
-        <motion.div
-          initial={{ width: "auto" }}
-          animate={{ 
-            backgroundColor: hovered ? "#FF6666" : "#FF7F7F"
-          }}
-          transition={{ duration: 0.2 }}
-          className="rounded-full overflow-hidden flex items-center justify-center p-2 cursor-pointer shadow-sm"
-          onClick={() => handleFixCode()}
-        >
-          {isFixing ? (
-            <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-            </svg>
-          ) : (
-            <WrenchIcon className="h-4 w-4 text-white" />
-          )}
-        </motion.div>
-      </div>
-    )
-  }
+  // Determine button variant and disabled state
+  const isDisabled = isFixing || maxAttemptsReached || !sessionId
+  const buttonVariant = maxAttemptsReached ? "destructive" : "default"
 
-  // Default 'button' variant
-  const remainingFixes = Math.max(0, freeFixLimit - fixCount)
-  
   return (
     <TooltipProvider>
       <Tooltip>
         <TooltipTrigger asChild>
-          <div className={`flex items-center ${className}`}>
-            <Button
-              size="sm"
-              onClick={() => handleFixCode()}
-              className="bg-[#FF7F7F] hover:bg-[#FF6666] text-white font-semibold px-4 py-2 rounded-md shadow-sm transition-all duration-200 relative border-0"
-            >
-              {isFixing ? (
-                <>
-                  <svg className="animate-spin h-4 w-4 text-white mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                  </svg>
-                  <span className="text-sm">Fixing...</span>
-                </>
-              ) : (
-                <>
-                  <WrenchIcon className="h-4 w-4 text-white mr-2" />
-                  <span className="text-sm">Fix Code</span>
-                  {remainingFixes > 0 && (
-                    <div className="absolute -top-1 -right-1 flex items-center justify-center">
-                      <div className="bg-gradient-to-r from-blue-500 to-cyan-400 text-white text-[9px] px-1.5 py-0.5 rounded-full font-semibold shadow-sm">
-                        {remainingFixes}
-                      </div>
-                    </div>
-                  )}
-                  {needsCredits && (
-                    <div className="absolute -top-1 -right-1 flex items-center justify-center">
-                      <div className="bg-amber-500 text-white text-[9px] px-1.5 py-0.5 rounded-full font-semibold shadow-sm flex items-center">
-                        <CreditCard className="h-2 w-2 mr-0.5" />1
-                      </div>
-                    </div>
-                  )}
-                </>
-              )}
-            </Button>
-          </div>
+          <Button
+            onClick={() => handleFixCode()}
+            disabled={isDisabled}
+            variant={buttonVariant}
+            size="sm"
+            className={`${className} ${isFixing ? 'cursor-not-allowed' : ''}`}
+          >
+            {getButtonContent()}
+          </Button>
         </TooltipTrigger>
-        <TooltipContent side="bottom" className="px-3 py-1.5">
-          {remainingFixes > 0 ? (
-            <div className="space-y-1">
-              <p className="text-sm font-medium">Fix & auto-run code</p>
-              <p className="text-xs text-gray-500">
-                {remainingFixes} free {remainingFixes === 1 ? 'fix' : 'fixes'} remaining
-                {tier === 'free' && (
-                  <span className="block text-blue-500 mt-1">
-                    Upgrade for 3 free fixes per code
-                  </span>
-                )}
-              </p>
-            </div>
+        <TooltipContent>
+          {isFixing ? (
+            isCancellable ? (
+              <p>Click X to cancel the fix</p>
+            ) : (
+              <p>AI is fixing your code...</p>
+            )
+          ) : maxAttemptsReached ? (
+            <p>Maximum fix attempts reached. Upgrade to fix more.</p>
+          ) : hasAttemptedFixes && userTier === 'free' ? (
+            <p>Free fixes: {codeFixes[codeId]}/3 used</p>
           ) : (
-            <div className="space-y-1">
-              <p className="text-sm font-medium">Fix & auto-run code</p>
-              <p className="text-xs text-amber-500 flex items-center">
-                <CreditCard className="h-3 w-3 mr-1" /> Uses 1 credit per fix
-              </p>
-            </div>
+            <p>Click to fix code errors with AI</p>
           )}
         </TooltipContent>
       </Tooltip>
@@ -475,4 +452,4 @@ const CodeFixButton: React.FC<CodeFixButtonProps> = ({
   )
 }
 
-export default CodeFixButton; 
+export default CodeFixButton
