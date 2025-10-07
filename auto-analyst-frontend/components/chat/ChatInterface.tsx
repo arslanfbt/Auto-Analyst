@@ -558,7 +558,8 @@ const ChatInterface: React.FC = () => {
     message: string, 
     controller: AbortController, 
     currentId: number | null
-  ) => {
+  ): Promise<{ hadError: boolean }> => {
+    let hadError = false
     let accumulatedResponse = ""
     const baseUrl = API_URL
     const endpoint = `${baseUrl}/chat`
@@ -624,7 +625,8 @@ const ChatInterface: React.FC = () => {
           }
           
           if (error) {
-            accumulatedResponse += `\nError: ${error}`
+            hadError = true
+            accumulatedResponse += `\n\n**Sorry, the request could not be completed.**\n\n${error}\n\nPlease try again.`
           } else {
             // Add agent info to content with code blocks
             const codeBlockRegex = /```([a-zA-Z0-9_]+)?\n([\s\S]*?)```/g;
@@ -708,6 +710,8 @@ const ChatInterface: React.FC = () => {
         console.error('Failed to save AI response after retries:', error);
       }
     }
+    
+    return { hadError }
   }
 
   const processAgentMessage = async (
@@ -715,7 +719,8 @@ const ChatInterface: React.FC = () => {
     message: string, 
     controller: AbortController, 
     currentId: number | null
-  ) => {
+  ): Promise<{ hadError: boolean }> => {
+    let hadError = false
     let accumulatedResponse = ""
     const baseUrl = API_URL
     const endpoint = `${baseUrl}/chat/${agentName}`
@@ -830,13 +835,17 @@ const ChatInterface: React.FC = () => {
         }
       }
     } catch (error) {
+      hadError = true
       console.error(`Error processing agent message (${agentName}):`, error);
       // Add error message
       addMessage({
-        text: `Error with ${agentName} agent: ${error instanceof Error ? error.message : String(error)}`,
-        sender: "ai"
+        text: `**Sorry, the ${agentName} request could not be completed.**\n\n${error instanceof Error ? error.message : String(error)}\n\nPlease try again.`,
+        sender: "ai",
+        agent: agentName
       });
     }
+    
+    return { hadError }
   }
 
   // Then keep the handleSendMessage function as is
@@ -1000,9 +1009,12 @@ const ChatInterface: React.FC = () => {
       const agentRegex = /@(\w+)/g
       const matches = [...message.matchAll(agentRegex)]
       
+      // Process the message and track errors
+      let messageResult = { hadError: false }
+      
       // If no agent calls are found, process as a regular message
       if (matches.length === 0) {
-        await processRegularMessage(message, controller, currentChatId)
+        messageResult = await processRegularMessage(message, controller, currentChatId)
       } else {
         // Extract all unique agent names
         const agentNames = [...new Set(matches.map(match => match[1]))]
@@ -1014,7 +1026,7 @@ const ChatInterface: React.FC = () => {
           // Remove the empty agent indicator message
           // Extract the query text by removing the @mentions
           const cleanQuery = message.replace(agentRegex, '').trim()
-          await processAgentMessage(agentName, cleanQuery, controller, currentChatId)
+          messageResult = await processAgentMessage(agentName, cleanQuery, controller, currentChatId)
         } else {
           // Multiple agents case - send a single request with comma-separated agent names
           const combinedAgentName = agentNames.join(",")
@@ -1022,12 +1034,13 @@ const ChatInterface: React.FC = () => {
           // Remove the empty agent indicator message
           // Extract the query text by removing the @mentions
           const cleanQuery = message.replace(agentRegex, '').trim()
-          await processAgentMessage(combinedAgentName, cleanQuery, controller, currentChatId)
+          messageResult = await processAgentMessage(combinedAgentName, cleanQuery, controller, currentChatId)
         }
       }
 
-      // AFTER successful message processing - deduct credits using the correct user ID
-      if (session?.user) {
+      // ONLY deduct credits if there was NO error
+      if (!messageResult.hadError && session?.user) {
+        console.log('[Credits] Processing credit deduction for successful request');
         try {
           // Get the model directly from the API instead of relying on React state
           let modelName;
@@ -1085,6 +1098,13 @@ const ChatInterface: React.FC = () => {
           console.error('[Credits] Failed to deduct credits:', creditError);
           // Don't block the user experience if credit deduction fails
         }
+      } else if (messageResult.hadError) {
+        console.log('[Credits] Skipping credit deduction due to error');
+        toast({
+          title: "No credits used",
+          description: "Credits were not deducted due to the error.",
+          duration: 3000,
+        })
       }
 
       // After the AI response is generated and saved, update the chat title for new chats
