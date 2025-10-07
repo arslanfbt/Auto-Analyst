@@ -1199,6 +1199,7 @@ const CodeCanvas: React.FC<CodeCanvasProps> = ({
                         onFixStart={handleFixStart}
                         onFixComplete={handleFixComplete}
                         onCreditCheck={handleCreditCheck}
+                        onCanvasOpen={() => {}} // Canvas already open, no action needed
                         variant="default"
                       />
                     )}
