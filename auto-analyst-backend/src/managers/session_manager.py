@@ -344,6 +344,77 @@ This dataset appears clean with consistent formatting and no missing values, mak
             # Fallback to standard AI system
             return auto_analyst(agents=[], retrievers=retrievers)
 
+    def set_default_lm_for_user(self, session_id: str, user_id: int = None):
+        """
+        Set the default language model for a user upon signin using MODEL_OBJECTS.
+        
+        Args:
+            session_id: The session identifier
+            user_id: The authenticated user ID (optional)
+            
+        Returns:
+            Dictionary containing the default model configuration
+        """
+        try:
+            # Import MODEL_OBJECTS directly
+            from src.utils.model_registry import MODEL_OBJECTS
+            
+            # Set Claude Sonnet 3.7 as default model
+            default_model_name = "claude-3-7-sonnet-latest"
+            
+            # Ensure the model exists in MODEL_OBJECTS
+            if default_model_name not in MODEL_OBJECTS:
+                logger.log_message(f"Default model '{default_model_name}' not found in MODEL_OBJECTS, using gpt-5-mini", level=logging.WARNING)
+                default_model_name = "gpt-5-mini"
+            
+            # Get the model object directly from MODEL_OBJECTS
+            model_object = MODEL_OBJECTS[default_model_name]
+            
+            # Determine provider from model name
+            provider = "anthropic"  # Claude models use Anthropic
+            
+            # Create default model configuration
+            default_model_config = {
+                "provider": provider,
+                "model": default_model_name,
+                "api_key": os.getenv(f"{provider.upper()}_API_KEY"),
+                "temperature": getattr(model_object, 'kwargs', {}).get('temperature', 0.7),
+                "max_tokens": getattr(model_object, 'kwargs', {}).get('max_tokens', 4000)
+            }
+            
+            # Ensure we have a session state for this session ID
+            if session_id not in self._sessions:
+                self.get_session_state(session_id)
+            
+            # Set the default model configuration in session state
+            self._sessions[session_id]["model_config"] = default_model_config
+            
+            # Also update the app-level model config if available
+            if hasattr(self, '_app_model_config'):
+                self._app_model_config.update(default_model_config)
+            
+            logger.log_message(f"Set default LM '{default_model_name}' for session {session_id} (user: {user_id})", level=logging.INFO)
+            
+            return {
+                "status": "success",
+                "model_config": default_model_config,
+                "message": f"Default model '{default_model_name}' set successfully"
+            }
+            
+        except Exception as e:
+            logger.log_message(f"Error setting default LM for user {user_id}: {str(e)}", level=logging.ERROR)
+            # Return fallback configuration
+            return {
+                "status": "error",
+                "model_config": {
+                    "provider": "anthropic",
+                    "model": "claude-3-7-sonnet-latest",
+                    "temperature": 0.7,
+                    "max_tokens": 4000
+                },
+                "message": f"Failed to set default model, using fallback: {str(e)}"
+            }
+
     def set_session_user(self, session_id: str, user_id: int, chat_id: int = None):
         """
         Associate a user with a session
@@ -362,6 +433,9 @@ This dataset appears clean with consistent formatting and no missing values, mak
         
         # Store user ID
         self._sessions[session_id]["user_id"] = user_id
+        
+        # Set default LM for user upon signin
+        self.set_default_lm_for_user(session_id, user_id)
         
         # Generate or use chat ID
         if chat_id:
@@ -389,7 +463,7 @@ This dataset appears clean with consistent formatting and no missing values, mak
             # Continue with existing AI system if update fails
         
         # Make sure this data gets saved
-        logger.log_message(f"Associated session {session_id} with user_id={user_id}, chat_id={chat_id_to_use}", level=logging.INFO)
+        logger.log_message(f"Associated session {session_id} with user {user_id}, chat_id: {chat_id_to_use}", level=logging.INFO)
         
         # Return the updated session data
         return self._sessions[session_id]

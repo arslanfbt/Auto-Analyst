@@ -782,16 +782,33 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
   // Handle fix start
   const handleFixStart = useCallback((codeId: string) => {
     setCodeFixState({ isFixing: true, codeBeingFixed: codeId })
+    
+    // Set a timeout to reset fixing state if it gets stuck
+    setTimeout(() => {
+      setCodeFixState(prev => {
+        if (prev.isFixing && prev.codeBeingFixed === codeId) {
+          console.warn(`Fix state reset for ${codeId} due to timeout`)
+          return { isFixing: false, codeBeingFixed: null }
+        }
+        return prev
+      })
+    }, 90000) // 90 seconds timeout
   }, [])
 
   // Handle insufficient credits
   const handleCreditCheck = useCallback((codeId: string, hasEnough: boolean) => {
     if (!hasEnough) {
-      // You would typically show a credits modal here
-      // For now, just reset the fixing state
+      // Reset the fixing state
       setCodeFixState({ isFixing: false, codeBeingFixed: null })
+      
+      toast({
+        title: "Insufficient credits",
+        description: "You need at least 1 credit to fix code errors.",
+        variant: "destructive",
+        duration: 5000,
+      })
     }
-  }, [])
+  }, [toast])
 
   // Execute code function for auto-run after fixes
   const executeCodeFromChatWindow = useCallback(async (entryId: string, code: string, language: string) => {
@@ -887,6 +904,9 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
 
   // Handle fix complete
   const handleFixComplete = useCallback((codeId: string, fixedCode: string) => {
+    // Always reset fixing state first
+    setCodeFixState({ isFixing: false, codeBeingFixed: null })
+    
     // Increment the fix count
     setCodeFixes(prev => {
       const updatedFixes = { ...prev };

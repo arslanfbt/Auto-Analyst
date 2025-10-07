@@ -24,8 +24,160 @@ import dspy
 import re
 # from fastapi.responses import JSONResponse
 import time
+import chardet
 
 logger = Logger("session_routes", see_time=False, console_log=False)
+
+
+def read_csv_robust(content: bytes, columns: Optional[List[str]] = None) -> tuple:
+    """
+    Robust CSV reader with multiple fallback strategies.
+    Returns: (DataFrame, success_message)
+    """
+    new_df = None
+    encodings_to_try = ['utf-8', 'latin-1', 'cp1252', 'iso-8859-1', 'utf-16']
+    delimiters_to_try = [',', ';', '\t', '|']
+    
+    # Try auto-detect encoding first using chardet
+    try:
+        detected = chardet.detect(content[:100000])  # Sample first 100KB
+        if detected and detected.get('encoding') and detected.get('confidence', 0) > 0.7:
+            detected_encoding = detected['encoding']
+            if detected_encoding not in encodings_to_try:
+                encodings_to_try.insert(0, detected_encoding)
+            logger.log_message(f"Detected encoding: {detected_encoding} (confidence: {detected['confidence']:.2f})", level=logging.INFO)
+    except Exception as e:
+        logger.log_message(f"Encoding detection failed: {str(e)}", level=logging.WARNING)
+    
+    # Try different encoding and delimiter combinations
+    for encoding in encodings_to_try:
+        try:
+            csv_content = content.decode(encoding)
+            sample = csv_content[:4096]
+            
+            # Strategy 1: Try csv.Sniffer for delimiter detection
+            try:
+                import csv as _csv
+                dialect = _csv.Sniffer().sniff(sample, delimiters=''.join(delimiters_to_try))
+                delimiter = dialect.delimiter
+                
+                new_df = pd.read_csv(
+                    io.StringIO(csv_content),
+                    sep=delimiter,
+                    engine='python',
+                    on_bad_lines='skip',
+                    encoding_errors='replace',
+                    low_memory=False
+                )
+                
+                # Validate: Check if we got meaningful data (more than 1 column)
+                if new_df.shape[1] > 1:
+                    if columns:
+                        new_df = new_df[columns]
+                    logger.log_message(f"✓ CSV read with encoding={encoding}, delimiter='{delimiter}' ({new_df.shape[0]} rows, {new_df.shape[1]} cols)", level=logging.INFO)
+                    return new_df, f"Successfully parsed with {encoding} encoding and '{delimiter}' delimiter"
+            except Exception:
+                pass
+            
+            # Strategy 2: Pandas automatic delimiter detection
+            try:
+                new_df = pd.read_csv(
+                    io.StringIO(csv_content),
+                    sep=None,
+                    engine='python',
+                    on_bad_lines='skip',
+                    encoding_errors='replace',
+                    low_memory=False
+                )
+                
+                if new_df.shape[1] > 1:
+                    if columns:
+                        new_df = new_df[columns]
+                    logger.log_message(f"✓ CSV read with encoding={encoding}, auto-detected delimiter ({new_df.shape[0]} rows, {new_df.shape[1]} cols)", level=logging.INFO)
+                    return new_df, f"Successfully parsed with {encoding} encoding and auto-detected delimiter"
+            except Exception:
+                pass
+            
+            # Strategy 3: Brute-force common delimiters
+            for delimiter in delimiters_to_try:
+                try:
+                    new_df = pd.read_csv(
+                        io.StringIO(csv_content),
+                        sep=delimiter,
+                        engine='python',
+                        on_bad_lines='skip',
+                        encoding_errors='replace',
+                        low_memory=False
+                    )
+                    
+                    if new_df.shape[1] > 1:
+                        if columns:
+                            new_df = new_df[columns]
+                        logger.log_message(f"✓ CSV read with encoding={encoding}, delimiter='{delimiter}' ({new_df.shape[0]} rows, {new_df.shape[1]} cols)", level=logging.INFO)
+                        return new_df, f"Successfully parsed with {encoding} encoding and '{delimiter}' delimiter"
+                except Exception:
+                    continue
+                    
+        except Exception as e:
+            logger.log_message(f"Failed encoding {encoding}: {str(e)}", level=logging.WARNING)
+            continue
+    
+    raise ValueError(f"Could not parse CSV with any encoding/delimiter combination. Tried encodings: {encodings_to_try}")
+
+
+def read_excel_robust(contents: bytes, sheet_name=None) -> pd.DataFrame:
+    """
+    Robust Excel reader with multiple engine fallbacks.
+    """
+    engines = ['openpyxl', 'xlrd', None]  # None will use default
+    
+    for engine in engines:
+        try:
+            if engine:
+                df = pd.read_excel(
+                    io.BytesIO(contents),
+                    sheet_name=sheet_name if sheet_name else 0,
+                    engine=engine
+                )
+            else:
+                df = pd.read_excel(
+                    io.BytesIO(contents),
+                    sheet_name=sheet_name if sheet_name else 0
+                )
+            
+            logger.log_message(f"✓ Excel read with engine={engine or 'default'}", level=logging.INFO)
+            return df
+            
+        except Exception as e:
+            logger.log_message(f"Failed Excel engine {engine}: {str(e)}", level=logging.WARNING)
+            continue
+    
+    # Last resort: Try reading as CSV (sometimes .xlsx are actually CSV)
+    logger.log_message("All Excel engines failed, attempting to read as CSV...", level=logging.WARNING)
+    try:
+        df, msg = read_csv_robust(contents)
+        logger.log_message(f"✓ File read as CSV (may have been misnamed): {msg}", level=logging.INFO)
+        return df
+    except Exception as e:
+        raise ValueError(f"Could not read file as Excel or CSV. Last error: {str(e)}")
+
+
+def clean_dataframe(df: pd.DataFrame) -> pd.DataFrame:
+    """Clean dataframe after reading"""
+    # Strip whitespace from column names
+    df.columns = df.columns.str.strip()
+    
+    # Remove completely empty rows and columns
+    df.dropna(how='all', inplace=True)
+    df.dropna(axis=1, how='all', inplace=True)
+    
+    # Replace problematic values
+    df.replace({np.nan: None, np.inf: None, -np.inf: None}, inplace=True)
+    
+    # Reset index
+    df.reset_index(drop=True, inplace=True)
+    
+    return df
 
 
 def apply_model_safeguards(model_name: str, provider: str, temperature: float, max_tokens: int) -> dict:
@@ -112,23 +264,34 @@ async def get_excel_sheets(
 ):
     """Get the list of sheet names from an Excel file"""
     try:
-        # Read the uploaded Excel file
         contents = await file.read()
         
-        # Load Excel file using pandas
-        excel_file = pd.ExcelFile(io.BytesIO(contents))
+        # Try multiple engines to read Excel
+        engines = ['openpyxl', 'xlrd', None]
         
-        # Get sheet names
-        sheet_names = excel_file.sheet_names
+        for engine in engines:
+            try:
+                if engine:
+                    excel_file = pd.ExcelFile(io.BytesIO(contents), engine=engine)
+                else:
+                    excel_file = pd.ExcelFile(io.BytesIO(contents))
+                
+                sheet_names = excel_file.sheet_names
+                logger.log_message(f"✓ Found {len(sheet_names)} sheets using engine={engine or 'default'}", level=logging.INFO)
+                
+                return {"sheets": sheet_names}
+            except Exception as e:
+                logger.log_message(f"Failed to read with engine {engine}: {str(e)}", level=logging.WARNING)
+                continue
         
-        # Log the sheets found
-        # logger.log_message(f"Found {len(sheet_names)} sheets in Excel file: {', '.join(sheet_names)}", level=logging.INFO)
+        raise ValueError("Could not read Excel file with any available engine")
         
-        # Return the sheet names
-        return {"sheets": sheet_names}
     except Exception as e:
         logger.log_message(f"Error getting Excel sheets: {str(e)}", level=logging.ERROR)
-        raise HTTPException(status_code=400, detail=f"Error reading Excel file: {str(e)}")
+        raise HTTPException(
+            status_code=400,
+            detail=f"Could not read Excel file. Please ensure it's a valid .xlsx or .xls file. Error: {str(e)}"
+        )
 
 
 
@@ -164,8 +327,24 @@ async def upload_excel(
         contents = await file.read()
         
         try:
-            # Load Excel file to get all sheet names
-            excel_file = pd.ExcelFile(io.BytesIO(contents))
+            # Use robust Excel reader to get sheet names
+            excel_file = None
+            engines = ['openpyxl', 'xlrd', None]
+            
+            for engine in engines:
+                try:
+                    if engine:
+                        excel_file = pd.ExcelFile(io.BytesIO(contents), engine=engine)
+                    else:
+                        excel_file = pd.ExcelFile(io.BytesIO(contents))
+                    logger.log_message(f"✓ Excel file loaded with engine={engine or 'default'}", level=logging.INFO)
+                    break
+                except Exception:
+                    continue
+            
+            if not excel_file:
+                raise ValueError("Could not load Excel file with any available engine")
+            
             sheet_names = excel_file.sheet_names
             
             # Parse selected sheets if provided; else use all sheets
@@ -178,47 +357,31 @@ async def upload_excel(
                 except Exception:
                     pass
 
-            # Get session state and DuckDB connection
-            session_state = app_state.get_session_state(session_id)
-
             datasets = {}
-            
-
-            
-            # Process all sheets and register them in DuckDB
             processed_sheets = []
             
             for sheet_name in target_sheets:
                 try:
-                    # Read each sheet
-                    sheet_df = pd.read_excel(io.BytesIO(contents), sheet_name=sheet_name)
-                    sheet_df.replace({np.nan: None, np.inf: None, -np.inf: None}, inplace=True)
-
+                    # Use robust Excel reader for each sheet
+                    sheet_df = read_excel_robust(contents, sheet_name=sheet_name)
                     
-                    # Preprocessing steps
-                    # 1. Drop empty rows and columns
-                    sheet_df.dropna(how='all', inplace=True)
-                    sheet_df.dropna(how='all', axis=1, inplace=True)
+                    # Clean the dataframe
+                    sheet_df = clean_dataframe(sheet_df)
                     
-                    # 2. Clean column names
-                    sheet_df.columns = sheet_df.columns.str.strip()
-                    
-                    # 3. Skip empty sheets
-                    if sheet_df.empty:
+                    # Skip empty sheets
+                    if sheet_df.empty or sheet_df.shape[1] == 0:
+                        logger.log_message(f"Skipping empty sheet: {sheet_name}", level=logging.WARNING)
                         continue
                     
-                    # Register each sheet in DuckDB with a clean table name
+                    # Register sheet with clean name
                     clean_sheet_name = clean_dataset_name(sheet_name)
-                    # Check if the clean_sheet_name is a safe Python variable name; if not, append a random int
-
-                    # First drop the table if it exists
-
-
-                    # Then register the new table
-                    datasets[clean_sheet_name] = sheet_df  # Store the DataFrame, not the name
-
-                    
+                    datasets[clean_sheet_name] = sheet_df
                     processed_sheets.append(clean_sheet_name)
+                    
+                    logger.log_message(
+                        f"✓ Processed sheet '{sheet_name}' → '{clean_sheet_name}': {sheet_df.shape[0]} rows × {sheet_df.shape[1]} cols",
+                        level=logging.INFO
+                    )
                         
                 except Exception as e:
                     logger.log_message(f"Error processing sheet '{sheet_name}': {str(e)}", level=logging.WARNING)
@@ -229,22 +392,23 @@ async def upload_excel(
             
             # Update the session description (no primary dataset needed)
             desc = description
-            app_state.update_session_dataset(session_id,datasets,processed_sheets,desc)
-
-
+            app_state.update_session_dataset(session_id, datasets, processed_sheets, desc)
             
-            logger.log_message(f"Processed Excel file with {len(processed_sheets)} sheets: {', '.join(processed_sheets)}", level=logging.INFO)
+            logger.log_message(f"✓ Excel upload complete: {len(processed_sheets)} sheets processed", level=logging.INFO)
             
             return {
-                "message": "Excel file processed successfully", 
-                "session_id": session_id, 
+                "message": "Excel file processed successfully",
+                "session_id": session_id,
                 "sheets_processed": processed_sheets,
                 "total_sheets": len(processed_sheets)
             }
             
         except Exception as e:
             logger.log_message(f"Error processing Excel file: {str(e)}", level=logging.ERROR)
-            raise HTTPException(status_code=400, detail=f"Error processing Excel file: {str(e)}")
+            raise HTTPException(
+                status_code=400,
+                detail=f"Could not process Excel file. Please ensure it's a valid .xlsx or .xls file. Error: {str(e)}"
+            )
             
     except Exception as e:
         logger.log_message(f"Error in upload_excel: {str(e)}", level=logging.ERROR)
@@ -339,47 +503,32 @@ async def upload_dataframe(
         # Ensure it's a safe Python identifier
 
         
-        # Read and process the CSV file
+        # Read and process the CSV file using robust reader
         content = await file.read()
-        new_df = None
-        last_exception = None
         
-        # Try encodings with delimiter auto-detection
-        encodings_to_try = ['utf-8', 'latin-1', 'cp1252', 'iso-8859-1']
-        delimiters_to_try = [',', ';', '\t', '|', ':', ' ']
-
-        for encoding in encodings_to_try:
-            try:
-                csv_content = content.decode(encoding)
-                sample = csv_content[:1024]
-                try:
-                    import csv as _csv
-                    dialect = _csv.Sniffer().sniff(sample, delimiters=delimiters_to_try)
-                    delimiter = dialect.delimiter
-                    new_df = pd.read_csv(io.StringIO(csv_content), sep=delimiter, engine='python')[columns]
-                except Exception:
-                    # Fallback to pandas automatic detection
-                    try:
-                        new_df = pd.read_csv(io.StringIO(csv_content), sep=None, engine='python')[columns]
-                    except Exception:
-                        # Final fallback: brute-force common delimiters
-                        for d in delimiters_to_try:
-                            try:
-                                new_df = pd.read_csv(io.StringIO(csv_content), sep=d, engine='python')[columns]
-                                break
-                            except Exception:
-                                new_df = None
-                if new_df is not None:
-                    new_df.replace({np.nan: None, np.inf: None, -np.inf: None}, inplace=True)
-                    logger.log_message(f"Successfully read CSV with encoding: {encoding}", level=logging.INFO)
-                    break
-            except Exception as e:
-                last_exception = e
-                logger.log_message(f"Failed to read CSV with encoding {encoding}: {str(e)}", level=logging.WARNING)
-                continue
-        
-        if new_df is None:
-            raise HTTPException(status_code=400, detail=f"Error reading file with tried encodings: {encodings_to_try}. Last error: {str(last_exception)}")
+        try:
+            # Use the robust CSV reader
+            new_df, success_msg = read_csv_robust(content, columns=columns)
+            
+            # Clean the dataframe
+            new_df = clean_dataframe(new_df)
+            
+            # Validate we have data
+            if new_df.empty:
+                raise ValueError("CSV file contains no valid data after cleaning")
+            
+            if new_df.shape[1] == 0:
+                raise ValueError("CSV file has no valid columns")
+            
+            logger.log_message(f"CSV parsed successfully: {success_msg}", level=logging.INFO)
+            logger.log_message(f"Final dataset shape: {new_df.shape[0]} rows × {new_df.shape[1]} columns", level=logging.INFO)
+            
+        except Exception as e:
+            logger.log_message(f"Failed to read CSV: {str(e)}", level=logging.ERROR)
+            raise HTTPException(
+                status_code=400,
+                detail=f"Could not read CSV file: {str(e)}. Please ensure the file is properly formatted."
+            )
         
         # Format the description
         desc = f" exact_python_name: `{name}` Dataset: {description}"
@@ -397,7 +546,12 @@ async def upload_dataframe(
         
         logger.log_message(f"Successfully uploaded dataset '{name}' for session {session_id}", level=logging.INFO)
         
-        return JSONResponse(content=sanitize_json({"message": "Dataframe uploaded successfully", "session_id": session_id}))
+        return JSONResponse(content=sanitize_json({
+            "message": "Dataframe uploaded successfully",
+            "session_id": session_id,
+            "rows": int(new_df.shape[0]),
+            "columns": int(new_df.shape[1])
+        }))
         
     except Exception as e:
         logger.log_message(f"Error in upload_dataframe: {str(e)}", level=logging.ERROR)
@@ -923,45 +1077,30 @@ async def preview_csv_upload(
 ):
     """Preview CSV file without modifying session"""
     try:
-        # Process file and return preview data only
         content = await file.read()
-        # Try encodings with delimiter auto-detection
-        encodings_to_try = ['utf-8', 'latin-1', 'cp1252', 'iso-8859-1']
-        delimiters_to_try = [',', ';', '\t', '|', ':', ' ']
-        new_df = None
-        last_exception = None
-
-        for encoding in encodings_to_try:
-            try:
-                csv_content = content.decode(encoding)
-                sample = csv_content[:4096]
-                try:
-                    import csv as _csv
-                    dialect = _csv.Sniffer().sniff(sample, delimiters=delimiters_to_try)
-                    delimiter = dialect.delimiter
-                    new_df = pd.read_csv(io.StringIO(csv_content), sep=delimiter, engine='python')
-                except Exception:
-                    # Fallback to pandas automatic detection
-                    try:
-                        new_df = pd.read_csv(io.StringIO(csv_content), sep=None, engine='python')
-                    except Exception:
-                        # Final fallback: brute-force common delimiters
-                        for d in delimiters_to_try:
-                            try:
-                                new_df = pd.read_csv(io.StringIO(csv_content), sep=d, engine='python')
-                                break
-                            except Exception:
-                                new_df = None
-                if new_df is not None:
-                    logger.log_message(f"Successfully read CSV with encoding: {encoding}", level=logging.INFO)
-                    break
-            except Exception as e:
-                last_exception = e
-                logger.log_message(f"Failed to read CSV with encoding {encoding}: {str(e)}", level=logging.WARNING)
-                continue
         
-        if new_df is None:
-            raise HTTPException(status_code=400, detail=f"Error reading file with tried encodings: {encodings_to_try}. Last error: {str(last_exception)}")
+        # Use robust CSV reader
+        try:
+            new_df, success_msg = read_csv_robust(content)
+            
+            # Clean the dataframe
+            new_df = clean_dataframe(new_df)
+            
+            # Validate
+            if new_df.empty:
+                raise ValueError("CSV file contains no valid data")
+            
+            if new_df.shape[1] == 0:
+                raise ValueError("CSV file has no valid columns")
+            
+            logger.log_message(f"CSV preview: {success_msg}", level=logging.INFO)
+            
+        except Exception as e:
+            logger.log_message(f"Failed to read CSV for preview: {str(e)}", level=logging.ERROR)
+            raise HTTPException(
+                status_code=400,
+                detail=f"Could not read CSV file: {str(e)}. Please ensure the file is properly formatted."
+            )
         
         # Clean and validate the name
         name = file.filename.replace('.csv', '').replace(' ', '_').lower().strip()

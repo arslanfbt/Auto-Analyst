@@ -774,6 +774,9 @@ const CodeCanvas: React.FC<CodeCanvasProps> = ({
 
   // Handle fix complete from CodeFixButton
   const handleFixComplete = (codeId: string, fixedCode: string) => {
+    // Always reset fixing state first
+    setIsFixingCode(false);
+    
     // Increment the fix count
     setCodeFixes(prev => {
       const newCodeFixes = { ...prev };
