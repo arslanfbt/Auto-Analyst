@@ -35,7 +35,7 @@ gpt_5 = dspy.LM(
     model="openai/gpt-5",
     api_key=os.getenv("OPENAI_API_KEY"),
     temperature=default_temperature,
-        max_tokens= 16_000,
+    max_tokens= 16_000,
     # max_completion_tokens=max_tokens,  # Use max_completion_tokens for gpt-5
     cache=False
 )

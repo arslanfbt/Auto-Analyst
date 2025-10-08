@@ -1294,29 +1294,29 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages, isLoading, onSendMess
         {/* Show text outputs */}
         {textOutputs.length > 0 && (
           <div className="bg-gray-50 border border-gray-200 rounded-md p-3 relative">
-            <div className="flex items-center text-gray-700 font-medium mb-2">
-              Output
+            <div className="flex items-center justify-between text-gray-700 font-medium mb-2">
+              <span>Output</span>
+              
+              {/* Position fix button at the far right */}
+              {textOutputs[0].codeId && 
+               (textOutputs[0].content.toString().toLowerCase().includes("error") || 
+                textOutputs[0].content.toString().toLowerCase().includes("traceback") || 
+                textOutputs[0].content.toString().toLowerCase().includes("exception")) && (
+                <CodeFixButton
+                  codeId={textOutputs[0].codeId}
+                  errorOutput={textOutputs[0].content as string}
+                  code={codeEntries.find(entry => entry.id === textOutputs[0].codeId)?.code || ''}
+                  isFixing={codeFixState.isFixing && codeFixState.codeBeingFixed === textOutputs[0].codeId}
+                  codeFixes={codeFixes}
+                  sessionId={sessionId || storeSessionId || ''}
+                  onFixStart={handleFixStart}
+                  onFixComplete={handleFixComplete}
+                  onCreditCheck={handleCreditCheck}
+                  onCanvasOpen={handleOpenCanvas}
+                  variant="inline"
+                />
+              )}
             </div>
-            
-            {/* Add a fix button for outputs that look like errors */}
-            {textOutputs[0].codeId && 
-             (textOutputs[0].content.toString().toLowerCase().includes("error") || 
-              textOutputs[0].content.toString().toLowerCase().includes("traceback") || 
-              textOutputs[0].content.toString().toLowerCase().includes("exception")) && (
-              <CodeFixButton
-                codeId={textOutputs[0].codeId}
-                errorOutput={textOutputs[0].content as string}
-                code={codeEntries.find(entry => entry.id === textOutputs[0].codeId)?.code || ''}
-                isFixing={codeFixState.isFixing && codeFixState.codeBeingFixed === textOutputs[0].codeId}
-                codeFixes={codeFixes}
-                sessionId={sessionId || storeSessionId || ''}
-                onFixStart={handleFixStart}
-                onFixComplete={handleFixComplete}
-                onCreditCheck={handleCreditCheck}
-                onCanvasOpen={handleOpenCanvas}
-                variant="inline"
-              />
-            )}
             
             {(() => {
               const content = textOutputs[0].content;

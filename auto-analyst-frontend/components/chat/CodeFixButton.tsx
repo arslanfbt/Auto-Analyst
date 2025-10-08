@@ -421,7 +421,6 @@ const CodeFixButton: React.FC<CodeFixButtonProps> = ({
 
   // Determine button variant and disabled state
   const isDisabled = isFixing || maxAttemptsReached || !sessionId
-  const buttonVariant = maxAttemptsReached ? "destructive" : "default"
 
   return (
     <TooltipProvider>
@@ -430,9 +429,15 @@ const CodeFixButton: React.FC<CodeFixButtonProps> = ({
           <Button
             onClick={() => handleFixCode()}
             disabled={isDisabled}
-            variant={buttonVariant}
             size="sm"
-            className={`${className} ${isFixing ? 'cursor-not-allowed' : ''}`}
+            className={`
+              ${className} 
+              ${isFixing ? 'cursor-not-allowed' : ''} 
+              ${maxAttemptsReached 
+                ? 'bg-red-500 hover:bg-red-600 text-white' 
+                : 'bg-[#FF7F7F] hover:bg-[#FF6666] text-white border-none'
+              }
+            `}
           >
             {getButtonContent()}
           </Button>
