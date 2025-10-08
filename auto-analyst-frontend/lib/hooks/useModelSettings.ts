@@ -111,7 +111,7 @@ export function useModelSettings() {
         model: localSettings.model || 'claude-3-5-sonnet-latest',
         api_key: '', // Never send API key from localStorage
         temperature: localSettings.temperature || 1,
-        max_tokens: 3000 // Always use 3000 for consistency
+        max_tokens: 5000 // Always use 3000 for consistency
       }
       const response = await axios.post(`${API_URL}/settings/model`, completeSettings, {
         headers: {
@@ -155,7 +155,7 @@ export function useModelSettings() {
         model: updatedSettings.model,
         api_key: updatedSettings.apiKey,
         temperature: updatedSettings.temperature || 1,
-        max_tokens: updatedSettings.maxTokens || 3000  // Default to 3000 if not specified
+        max_tokens: updatedSettings.maxTokens || 5000  // Default to 5000 if not specified
       }, {
         headers: {
           'Content-Type': 'application/json',
