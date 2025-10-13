@@ -334,7 +334,16 @@ async def upload_dataframe(
         last_exception = None
         
         # Try encodings with delimiter auto-detection (with chardet first)
-        encodings_to_try = ['utf-8', 'latin-1', 'cp1252', 'iso-8859-1']
+        encodings_to_try =  [
+            'utf-8', 'utf-8-sig', 'latin-1', 'cp1252', 'ascii',
+            'iso-8859-1', 'iso-8859-2', 'iso-8859-3', 'iso-8859-4', 'iso-8859-5',
+            'iso-8859-6', 'iso-8859-7', 'iso-8859-8', 'iso-8859-9', 'iso-8859-15',
+            'cp1250', 'cp1251', 'cp1254', 'cp1255', 'cp1256', 'cp1257',
+            'cp932', 'shift_jis', 'euc-jp', 'euc-kr',
+            'gb2312', 'gbk', 'gb18030', 'big5', 'mac-roman',
+            'koi8-r', 'koi8-u'
+        ]
+        
         
         # Try to detect encoding using chardet if available
         if HAS_CHARDET:
@@ -348,7 +357,7 @@ async def upload_dataframe(
             except Exception:
                 pass
         
-        delimiters_to_try = [',', ';', '\t', '|']
+        delimiters_to_try = [',', ';', '\t', '|', ':', ' ']
 
         for encoding in encodings_to_try:
             try:
@@ -933,7 +942,16 @@ async def preview_csv_upload(
         content = await file.read()
         
         # Try encodings with delimiter auto-detection (with chardet first)
-        encodings_to_try = ['utf-8', 'latin-1', 'cp1252', 'iso-8859-1']
+        encodings_to_try = [
+            'utf-8', 'utf-8-sig', 'latin-1', 'cp1252', 'ascii',
+            'iso-8859-1', 'iso-8859-2', 'iso-8859-3', 'iso-8859-4', 'iso-8859-5',
+            'iso-8859-6', 'iso-8859-7', 'iso-8859-8', 'iso-8859-9', 'iso-8859-15',
+            'cp1250', 'cp1251', 'cp1254', 'cp1255', 'cp1256', 'cp1257',
+            'cp932', 'shift_jis', 'euc-jp', 'euc-kr',
+            'gb2312', 'gbk', 'gb18030', 'big5', 'mac-roman',
+            'koi8-r', 'koi8-u'
+        ]
+        
         
         # Try to detect encoding using chardet if available
         if HAS_CHARDET:
@@ -947,7 +965,7 @@ async def preview_csv_upload(
             except Exception:
                 pass
         
-        delimiters_to_try = [',', ';', '\t', '|']
+        delimiters_to_try = [',', ';', '\t', '|', ':', ' ']
         new_df = None
         last_exception = None
 
