@@ -33,7 +33,7 @@ export default function LandingPage() {
           onClick={() => router.push('/chat')}
           className="bg-[#FF7F7F] text-white hover:bg-[#FF6666] shadow-md"
         >
-          Go to Chat
+          Try Auto-Analyst
         </Button>
       )
     }
@@ -55,7 +55,7 @@ export default function LandingPage() {
           onClick={() => router.push('/chat')}
           className="bg-[#FF7F7F] text-white hover:bg-[#FF6666] shadow-md"
         >
-          Go to Chat
+         Try Auto-Analyst
         </Button>
       )
     }
