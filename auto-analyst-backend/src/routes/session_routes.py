@@ -519,7 +519,7 @@ async def get_model_settings(
     # Use values from model_config with fallbacks to defaults
     return {
         "provider": model_config.get("provider", "anthropic"),
-        "model": model_config.get("model", "claude-sonnet-4-5-20250929"),
+        "model": model_config.get("model", "claude-sonnet-4-6"),
         "hasCustomKey": bool(model_config.get("api_key")) or bool(os.getenv("CUSTOM_API_KEY")),
         "temperature": model_config.get("temperature", 0.7),
         "maxTokens": model_config.get("max_tokens", 6000)

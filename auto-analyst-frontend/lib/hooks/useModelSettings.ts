@@ -52,7 +52,7 @@ export function useModelSettings() {
     const localSettings = getSettingsFromLocalStorage()
     return {
       provider: localSettings?.provider || process.env.DEFAULT_MODEL_PROVIDER || 'anthropic',
-      model: localSettings?.model || process.env.DEFAULT_PUBLIC_MODEL || 'claude-sonnet-4-5-20250929',
+      model: localSettings?.model || process.env.DEFAULT_PUBLIC_MODEL || 'claude-sonnet-4-6',
       hasCustomKey: localSettings?.hasCustomKey || false,
       apiKey: process.env.NEXT_PUBLIC_ANTHROPIC_API_KEY || '', // Never load API key from localStorage
       temperature: localSettings?.temperature || process.env.DEFAULT_TEMPERATURE || 1,
@@ -108,7 +108,7 @@ export function useModelSettings() {
       // Ensure we have complete settings with defaults for any missing values
       const completeSettings = {
         provider: localSettings.provider || 'anthropic',
-        model: localSettings.model || 'claude-sonnet-4-5-20250929',
+        model: localSettings.model || 'claude-sonnet-4-6',
         api_key: '', // Never send API key from localStorage
         temperature: localSettings.temperature || 1,
         max_tokens: 5000 // Always use 3000 for consistency

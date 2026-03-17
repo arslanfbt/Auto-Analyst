@@ -78,7 +78,7 @@ async def create_report(report: DeepAnalysisReportCreate):
                 credits_consumed=report.credits_consumed or 0,
                 error_message=report.error_message,
                 model_provider=report.model_provider or "anthropic",
-                model_name=report.model_name or "claude-sonnet-4-20250514",
+                model_name=report.model_name or "claude-sonnet-4-6",
                 total_tokens_used=report.total_tokens_used or 0,
                 estimated_cost=report.estimated_cost or 0.0,
                 steps_completed=report.steps_completed,

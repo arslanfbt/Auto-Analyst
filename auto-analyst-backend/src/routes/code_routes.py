@@ -298,7 +298,7 @@ async def fix_code_with_dspy(code: str, error: str, dataset_context: str = "", d
         # Fix the entire code using refine
         try:
             # Create the LM instance that will be used
-            thread_lm = MODEL_OBJECTS['claude-sonnet-4-5-20250929']
+            thread_lm = MODEL_OBJECTS['claude-sonnet-4-6']
             
             # Define the blocking function to run in thread
             def run_refine_fixer():
@@ -374,7 +374,7 @@ def get_dataset_context(df):
         return "Could not generate dataset context information."
 
 def edit_code_with_dspy(original_code: str, user_prompt: str, dataset_context: str = ""):
-    thread_lm = MODEL_OBJECTS['claude-sonnet-4-5-20250929']
+    thread_lm = MODEL_OBJECTS['claude-sonnet-4-6']
     with dspy.context(lm=thread_lm):
         code_editor = dspy.Predict(code_edit)
         

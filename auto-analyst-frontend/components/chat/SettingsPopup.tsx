@@ -38,7 +38,7 @@ const SettingsPopup: React.FC<SettingsPopupProps> = ({ isOpen, onClose, initialS
   }, [sessionId]);
   
   const [selectedProvider, setSelectedProvider] = useState(initialSettings?.provider || 'anthropic');
-  const [selectedModel, setSelectedModel] = useState(initialSettings?.model || 'claude-sonnet-4-5-20250929');
+  const [selectedModel, setSelectedModel] = useState(initialSettings?.model || 'claude-sonnet-4-6');
   const [useCustomAPI, setUseCustomAPI] = useState(initialSettings?.hasCustomKey || false);
   const [apiKey, setApiKey] = useState(initialSettings?.apiKey || '');
   const [notification, setNotification] = useState<{type: 'success' | 'error', message: string} | null>(null);

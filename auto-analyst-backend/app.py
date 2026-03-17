@@ -315,8 +315,6 @@ default_lm = MODEL_OBJECTS[DEFAULT_MODEL_CONFIG['model']]
 
     
 
-# lm = dspy.LM('openai/gpt-4o-mini', api_key=os.getenv("OPENAI_API_KEY"))
-
 dspy.configure(lm=default_lm, async_max_workers=1000)
 
 
@@ -1850,11 +1848,11 @@ def _get_model_name_for_provider(provider: str) -> str:
 
     provider_model_map = {
 
-        "openai": "o3-mini",
-        "anthropic": "claude-sonnet-4-5-20250929",
+        "openai": "gpt-5.4",
+        "anthropic": "claude-sonnet-4-6",
         "gemini": "gemini-2.5-pro-preview-03-25"
     }
-    return provider_model_map.get(provider, "o3-mini")
+    return provider_model_map.get(provider, "gpt-5.4")
 
 
 
@@ -2026,7 +2024,7 @@ async def chat_history_name(request: dict, session_id: str = Depends(get_session
 
     
 
-    lm = dspy.LM(model="gpt-4o-mini", max_tokens=300, temperature=0.5)
+    lm = dspy.LM(model="openai/gpt-5-nano", max_tokens=300, temperature=0.5, api_key=os.getenv("OPENAI_API_KEY"))
 
     
 
@@ -2163,7 +2161,7 @@ async def deep_analysis_streaming(
 
         # session_lm = get_session_lm(session_state)
 
-        session_lm = dspy.LM(model="anthropic/claude-sonnet-4-20250514", max_tokens=7000, temperature=0.5)
+        session_lm = dspy.LM(model="anthropic/claude-sonnet-4-6", max_tokens=7000, temperature=0.5)
 
         
 

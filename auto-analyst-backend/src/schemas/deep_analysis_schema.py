@@ -23,7 +23,7 @@ class DeepAnalysisReportCreate(BaseModel):
     credits_consumed: Optional[int] = 0
     error_message: Optional[str] = None
     model_provider: Optional[str] = "anthropic"
-    model_name: Optional[str] = "claude-sonnet-4-20250514"
+    model_name: Optional[str] = "claude-sonnet-4-6"
     total_tokens_used: Optional[int] = 0
     estimated_cost: Optional[float] = 0.0
     steps_completed: Optional[List[str]] = None  # Array of completed step names
@@ -55,7 +55,7 @@ class DeepAnalysisReportDetailResponse(DeepAnalysisReportResponse):
     credits_consumed: Optional[int]
     error_message: Optional[str]
     model_provider: Optional[str] = "anthropic"
-    model_name: Optional[str] = "claude-sonnet-4-20250514"
+    model_name: Optional[str] = "claude-sonnet-4-6"
     total_tokens_used: Optional[int]
     estimated_cost: Optional[float]
     steps_completed: Optional[List[str]] = None

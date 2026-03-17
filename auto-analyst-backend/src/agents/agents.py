@@ -4,7 +4,7 @@ import asyncio
 from dotenv import load_dotenv
 import logging
 from src.utils.logger import Logger
-from src.utils.model_registry import small_lm, gpt_4o_mini
+from src.utils.model_registry import small_lm, mid_lm
 import json
 
 load_dotenv()
@@ -756,7 +756,7 @@ class planner_module(dspy.Module):
                 # Try to get plan with determined complexity
         # try:
         logger.log_message(f"Attempting to plan with complexity: {complexity.exact_word_complexity.strip().lower()}", level=logging.DEBUG)
-        with dspy.context(lm = gpt_4o_mini):
+        with dspy.context(lm = mid_lm):
             plan = await self.planners[complexity.exact_word_complexity.strip()](goal=goal, dataset=dataset, Agent_desc=Agent_desc)
 
         # if len(str(plan)) == 0:
@@ -1999,8 +1999,6 @@ class auto_analyst(dspy.Module):
         dict_['Agent_desc'] = str(self.agent_desc)
         
         
-        # try:
-        # with dspy.context(lm=gpt_4o_mini):
         module_return = await self.planner(
             goal=dict_['goal'], 
             dataset=dict_['dataset'], 

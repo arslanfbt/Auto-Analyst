@@ -137,7 +137,7 @@ This dataset appears clean with consistent formatting and no missing values, mak
         else:
             default_model_config = {
                 "provider": os.getenv("MODEL_PROVIDER", "anthropic"),
-                "model": os.getenv("MODEL_NAME", "claude-sonnet-4-5-20250929"),
+                "model": os.getenv("MODEL_NAME", "claude-sonnet-4-6"),
                 "api_key": os.getenv("ANTHROPIC_API_KEY"),
                 "temperature": _get_clamped_temperature(),
                 "max_tokens": int(os.getenv("MAX_TOKENS", 6000))
@@ -201,7 +201,7 @@ This dataset appears clean with consistent formatting and no missing values, mak
             # Get default model config for new sessions
             default_model_config = {
                 "provider": os.getenv("MODEL_PROVIDER", "anthropic"),
-                "model": os.getenv("MODEL_NAME", "claude-sonnet-4-5-20250929"),
+                "model": os.getenv("MODEL_NAME", "claude-sonnet-4-6"),
                 "api_key": os.getenv("ANTHROPIC_API_KEY"),
                 "temperature": _get_clamped_temperature(),
                 "max_tokens": int(os.getenv("MAX_TOKENS", 6000))
@@ -275,7 +275,7 @@ This dataset appears clean with consistent formatting and no missing values, mak
             # Get default model config from environment
             default_model_config = {
                 "provider": os.getenv("MODEL_PROVIDER", "anthropic"),
-                "model": os.getenv("MODEL_NAME", "claude-sonnet-4-5-20250929"),
+                "model": os.getenv("MODEL_NAME", "claude-sonnet-4-6"),
                 "api_key": os.getenv("ANTHROPIC_API_KEY"),
                 "temperature": _get_clamped_temperature(),
                 "max_tokens": int(os.getenv("MAX_TOKENS", 6000))
@@ -359,8 +359,8 @@ This dataset appears clean with consistent formatting and no missing values, mak
             # Import MODEL_OBJECTS directly
             from src.utils.model_registry import MODEL_OBJECTS
             
-            # Set Claude Sonnet 4.5 as default model
-            default_model_name = "claude-sonnet-4-5-20250929"
+            # Set Claude Sonnet 4.6 as default model
+            default_model_name = "claude-sonnet-4-6"
             
             # Ensure the model exists in MODEL_OBJECTS
             if default_model_name not in MODEL_OBJECTS:
@@ -408,7 +408,7 @@ This dataset appears clean with consistent formatting and no missing values, mak
                 "status": "error",
                 "model_config": {
                     "provider": "anthropic",
-                    "model": "claude-sonnet-4-5-20250929",
+                    "model": "claude-sonnet-4-6",
                     "temperature": 0.7,
                     "max_tokens": 4000
                 },

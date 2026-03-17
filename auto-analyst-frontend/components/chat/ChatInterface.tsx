@@ -974,7 +974,7 @@ const ChatInterface: React.FC = () => {
     if (session && !isAdmin) {
       try {
         // Get the model that will be used for this query
-        let modelName = modelSettings.model || "gpt-4o-mini";
+        let modelName = modelSettings.model || "claude-sonnet-4-6";
         
         // Calculate required credits based on model tier
         const creditCost = getModelCreditCost(modelName);

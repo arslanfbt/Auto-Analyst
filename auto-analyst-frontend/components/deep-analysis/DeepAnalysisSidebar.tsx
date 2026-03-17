@@ -730,7 +730,7 @@ export default function DeepAnalysisSidebar({
                       credits_consumed: isSuccessful ? CreditConfig.getDeepAnalysisCost() : 0,
                       error_message: isSuccessful ? null : 'Analysis completed with errors',
                       model_provider: 'anthropic', 
-                      model_name: 'claude-sonnet-4-20250514',
+                      model_name: 'claude-sonnet-4-6',
                       total_tokens_used: 0, 
                       estimated_cost: 0.0
                     };
