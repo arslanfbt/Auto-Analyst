@@ -56,8 +56,6 @@ from fastapi.responses import JSONResponse, StreamingResponse
 
 from fastapi.security import APIKeyHeader
 
-from llama_index.core import Document, VectorStoreIndex
-
 from pydantic import BaseModel
 
 

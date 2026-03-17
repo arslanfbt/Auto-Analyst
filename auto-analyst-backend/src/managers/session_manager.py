@@ -7,7 +7,7 @@ import pandas as pd
 from typing import Dict, Any, List
 
 from fastapi import HTTPException
-from llama_index.core import Document, VectorStoreIndex
+from src.utils.simple_retriever import Document, SimpleRetriever
 from src.utils.logger import Logger
 from src.managers.user_manager import get_current_user
 from src.agents.agents import auto_analyst, dataset_description_agent, data_context_gen
@@ -113,7 +113,7 @@ This dataset appears clean with consistent formatting and no missing values, mak
     
     def initialize_retrievers(self,styling_instructions: List[str], doc: List[str]):
         try:
-            style_index = VectorStoreIndex.from_documents([Document(text=x) for x in styling_instructions])
+            style_index = SimpleRetriever.from_documents([Document(text=x) for x in styling_instructions])
             
             return {"style_index": style_index, "dataframe_index": doc}
         except Exception as e:
