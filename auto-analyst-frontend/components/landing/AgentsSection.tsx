@@ -149,6 +149,20 @@ export default function AgentsSection() {
                       + {category.capabilities.length - 3} more capabilities
                   </p>
                   )}
+                  {category.name === "Data Visualization" && (
+                    <p className="text-sm text-gray-600 text-center mt-4">
+                      Want to turn data visualization outputs into motion graphics?{" "}
+                      <a
+                        href="https://blog2video.app"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-[#FF7F7F] hover:text-[#FF6666] underline underline-offset-2"
+                      >
+                        blog2video.app
+                      </a>{" "}
+                      can help transform those visuals into video-ready animated content.
+                    </p>
+                  )}
                 </div>
               </div>
               
