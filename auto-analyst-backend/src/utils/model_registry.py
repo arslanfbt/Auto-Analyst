@@ -14,9 +14,9 @@ max_tokens = int(os.getenv("MAX_TOKENS", 6000))
 default_temperature = min(1.0, max(0.0, float(os.getenv("TEMPERATURE", "1.0"))))
 
 # Lightweight LMs used for small internal tasks (planning, classification, etc.)
-small_lm = dspy.LM('openai/gpt-5-nano', max_tokens=300, api_key=os.getenv("OPENAI_API_KEY"), cache=False)
+small_lm = dspy.LM('openai/gpt-5-nano', temperature=1.0, max_tokens=None, max_completion_tokens=300, api_key=os.getenv("OPENAI_API_KEY"), cache=False)
 
-mid_lm = dspy.LM('openai/gpt-5-nano', max_tokens=1800, api_key=os.getenv("OPENAI_API_KEY"), cache=False)
+mid_lm = dspy.LM('openai/gpt-5-nano', temperature=1.0, max_tokens=None, max_completion_tokens=1800, api_key=os.getenv("OPENAI_API_KEY"), cache=False)
 
 # OpenAI models
 gpt_5_nano = dspy.LM(
