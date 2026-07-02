@@ -13,6 +13,11 @@ max_tokens = int(os.getenv("MAX_TOKENS", 6000))
 # Clamp temperature to valid range (0..1) for all models
 default_temperature = min(1.0, max(0.0, float(os.getenv("TEMPERATURE", "1.0"))))
 
+# OpenAI reasoning models (gpt-5 family, o3, etc.) only accept temperature=1.0 (or None).
+# dspy>=3.2 validates this at dspy.LM(...) construction, so never pass the env-derived
+# temperature to these models or the app will fail to import when TEMPERATURE != 1.0.
+reasoning_temperature = 1.0
+
 # Lightweight LMs used for small internal tasks (planning, classification, etc.)
 small_lm = dspy.LM('anthropic/claude-haiku-4-6', temperature=default_temperature, max_tokens=300, api_key=os.getenv("ANTHROPIC_API_KEY"), cache=False)
 
@@ -22,7 +27,7 @@ mid_lm = dspy.LM('anthropic/claude-haiku-4-6', temperature=default_temperature, 
 gpt_5_nano = dspy.LM(
     model="openai/gpt-5-nano",
     api_key=os.getenv("OPENAI_API_KEY"),
-    temperature=default_temperature,
+    temperature=reasoning_temperature,
     max_tokens=16_000,
     cache=False
 )
@@ -30,7 +35,7 @@ gpt_5_nano = dspy.LM(
 gpt_5_mini = dspy.LM(
     model="openai/gpt-5-mini",
     api_key=os.getenv("OPENAI_API_KEY"),
-    temperature=default_temperature,
+    temperature=reasoning_temperature,
     max_tokens=16_000,
     cache=False
 )
@@ -38,7 +43,7 @@ gpt_5_mini = dspy.LM(
 gpt_5 = dspy.LM(
     model="openai/gpt-5",
     api_key=os.getenv("OPENAI_API_KEY"),
-    temperature=default_temperature,
+    temperature=reasoning_temperature,
     max_tokens=16_000,
     cache=False
 )
@@ -46,7 +51,7 @@ gpt_5 = dspy.LM(
 gpt_5_2 = dspy.LM(
     model="openai/gpt-5.2",
     api_key=os.getenv("OPENAI_API_KEY"),
-    temperature=float(os.getenv("TEMPERATURE", 1.0)),
+    temperature=reasoning_temperature,
     max_tokens=max(max_tokens, 16000),
     cache=False
 )
@@ -54,7 +59,7 @@ gpt_5_2 = dspy.LM(
 gpt_5_2_pro = dspy.LM(
     model="openai/gpt-5.2-pro",
     api_key=os.getenv("OPENAI_API_KEY"),
-    temperature=float(os.getenv("TEMPERATURE", 1.0)),
+    temperature=reasoning_temperature,
     max_tokens=max(max_tokens, 16000),
     cache=False
 )
@@ -62,7 +67,7 @@ gpt_5_2_pro = dspy.LM(
 gpt_5_2_chat_latest = dspy.LM(
     model="openai/gpt-5.2-chat-latest",
     api_key=os.getenv("OPENAI_API_KEY"),
-    temperature=float(os.getenv("TEMPERATURE", 1.0)),
+    temperature=default_temperature,
     max_tokens=max(max_tokens, 16000),
     cache=False
 )
@@ -70,7 +75,7 @@ gpt_5_2_chat_latest = dspy.LM(
 gpt_5_4 = dspy.LM(
     model="openai/gpt-5.4",
     api_key=os.getenv("OPENAI_API_KEY"),
-    temperature=default_temperature,
+    temperature=reasoning_temperature,
     max_tokens=16_000,
     cache=False
 )
@@ -78,7 +83,7 @@ gpt_5_4 = dspy.LM(
 gpt_5_4_pro = dspy.LM(
     model="openai/gpt-5.4-pro",
     api_key=os.getenv("OPENAI_API_KEY"),
-    temperature=default_temperature,
+    temperature=reasoning_temperature,
     max_tokens=16_000,
     cache=False
 )
@@ -86,7 +91,7 @@ gpt_5_4_pro = dspy.LM(
 o3 = dspy.LM(
     model="openai/o3-2025-04-16",
     api_key=os.getenv("OPENAI_API_KEY"),
-    temperature=default_temperature,
+    temperature=reasoning_temperature,
     max_tokens=20_000,
     cache=False
 )
