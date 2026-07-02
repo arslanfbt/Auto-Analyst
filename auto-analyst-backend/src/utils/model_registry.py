@@ -14,9 +14,9 @@ max_tokens = int(os.getenv("MAX_TOKENS", 6000))
 default_temperature = min(1.0, max(0.0, float(os.getenv("TEMPERATURE", "1.0"))))
 
 # Lightweight LMs used for small internal tasks (planning, classification, etc.)
-small_lm = dspy.LM('openai/gpt-5-nano', temperature=1.0, max_tokens=None, max_completion_tokens=300, api_key=os.getenv("OPENAI_API_KEY"), cache=False)
+small_lm = dspy.LM('anthropic/claude-haiku-4-6', temperature=default_temperature, max_tokens=300, api_key=os.getenv("ANTHROPIC_API_KEY"), cache=False)
 
-mid_lm = dspy.LM('openai/gpt-5-nano', temperature=1.0, max_tokens=None, max_completion_tokens=1800, api_key=os.getenv("OPENAI_API_KEY"), cache=False)
+mid_lm = dspy.LM('anthropic/claude-haiku-4-6', temperature=default_temperature, max_tokens=1800, api_key=os.getenv("ANTHROPIC_API_KEY"), cache=False)
 
 # OpenAI models
 gpt_5_nano = dspy.LM(
@@ -47,8 +47,7 @@ gpt_5_2 = dspy.LM(
     model="openai/gpt-5.2",
     api_key=os.getenv("OPENAI_API_KEY"),
     temperature=float(os.getenv("TEMPERATURE", 1.0)),
-    max_tokens=None,
-    max_completion_tokens=max_tokens,
+    max_tokens=max(max_tokens, 16000),
     cache=False
 )
 
@@ -56,8 +55,7 @@ gpt_5_2_pro = dspy.LM(
     model="openai/gpt-5.2-pro",
     api_key=os.getenv("OPENAI_API_KEY"),
     temperature=float(os.getenv("TEMPERATURE", 1.0)),
-    max_tokens=None,
-    max_completion_tokens=max_tokens,
+    max_tokens=max(max_tokens, 16000),
     cache=False
 )
 
@@ -65,8 +63,7 @@ gpt_5_2_chat_latest = dspy.LM(
     model="openai/gpt-5.2-chat-latest",
     api_key=os.getenv("OPENAI_API_KEY"),
     temperature=float(os.getenv("TEMPERATURE", 1.0)),
-    max_tokens=None,
-    max_completion_tokens=max_tokens,
+    max_tokens=max(max_tokens, 16000),
     cache=False
 )
 
