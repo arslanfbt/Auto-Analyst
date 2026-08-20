@@ -955,6 +955,12 @@ async def chat_with_all(
 
     except Exception as e:
 
+        logger.log_message(f"[ERROR] Unexpected error in chat_with_all: {type(e).__name__}: {e}", level=logging.ERROR)
+
+        import traceback
+
+        logger.log_message(f"[ERROR] Full traceback: {traceback.format_exc()}", level=logging.ERROR)
+
         raise HTTPException(status_code=500, detail="An unexpected error occurred. Please try again later.")
 
 
