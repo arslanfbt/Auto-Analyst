@@ -10,10 +10,24 @@ class Logger:
     def __init__(self, name: str, see_time: bool = False, console_log: bool = False, level: int = logging.INFO):
         self.is_dev = os.getenv("ENVIRONMENT", "development") == "development"
         self.logger = logging.getLogger(name)
-        self.logger.setLevel(level)
+        self.logger.setLevel(level if self.is_dev else logging.WARNING)
+
+        # Logger(name) is constructed in many modules; logging.getLogger returns the
+        # same underlying logger each time, so adding handlers unconditionally would
+        # duplicate every line once per construction.
+        if self.logger.handlers:
+            return
 
         if not self.is_dev:
-            self.logger.addHandler(logging.NullHandler())
+            # Production: no log files (container filesystems are ephemeral), but
+            # warnings and errors must reach stdout or they are invisible in the
+            # platform logs and every 500 becomes undiagnosable.
+            prod_handler = logging.StreamHandler(sys.stdout)
+            prod_handler.setFormatter(
+                logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+            )
+            prod_handler.setLevel(logging.WARNING)
+            self.logger.addHandler(prod_handler)
             return
 
         os.makedirs("./logs", exist_ok=True)
@@ -37,8 +51,8 @@ class Logger:
             self.logger.addHandler(console_handler)
 
     def log_message(self, message: str, level: int = logging.INFO):
-        if not self.is_dev:
-            return
+        # Level filtering is handled by the logger/handler levels set in __init__,
+        # so production keeps WARNING and above and drops the INFO/DEBUG chatter.
         try:
             if level == logging.INFO:
                 self.logger.info(message)
