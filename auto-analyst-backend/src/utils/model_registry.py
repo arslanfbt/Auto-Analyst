@@ -1,5 +1,8 @@
 import dspy
+import logging
 import os
+
+logger = logging.getLogger(__name__)
 
 # Model providers
 PROVIDERS = {
@@ -160,9 +163,61 @@ MODEL_OBJECTS = {
 }
 
 
+# Model IDs that used to be in MODEL_OBJECTS, mapped to their current replacement.
+# Deployments carry the old name in the MODEL_NAME env var or in a persisted session
+# model_config long after the registry drops it, so resolve instead of raising KeyError.
+LEGACY_MODEL_ALIASES = {
+    # Anthropic
+    "claude-sonnet-4-6": "claude-sonnet-5",
+    "claude-sonnet-4-5-20250929": "claude-sonnet-5",
+    "claude-sonnet-4-20250514": "claude-sonnet-5",
+    "claude-3-7-sonnet-latest": "claude-sonnet-5",
+    "claude-3-5-sonnet-latest": "claude-sonnet-5",
+    "claude-opus-4-6": "claude-opus-5",
+    "claude-opus-4-5-20251101": "claude-opus-5",
+    "claude-opus-4-20250514": "claude-opus-5",
+    "claude-opus-4-1": "claude-opus-5",
+    "claude-3-opus-latest": "claude-opus-5",
+    "claude-3-5-haiku-latest": "claude-haiku-4-5",
+
+    # OpenAI
+    "gpt-5": "gpt-5.4",
+    "gpt-5.2": "gpt-5.4",
+    "gpt-5.2-pro": "gpt-5.4-pro",
+
+    # Gemini
+    "gemini-2.5-pro-preview-03-25": "gemini-3-pro",
+}
+
+# Used when a name is neither a known model nor a known alias.
+FALLBACK_MODEL_NAME = "claude-sonnet-5"
+
+
+def resolve_model_name(model_name: str) -> str:
+    """Map a model name to a key that exists in MODEL_OBJECTS.
+
+    Returns the name unchanged when it is current, the replacement when it is a
+    retired ID, and FALLBACK_MODEL_NAME when it is unknown.
+    """
+    if model_name in MODEL_OBJECTS:
+        return model_name
+
+    resolved = LEGACY_MODEL_ALIASES.get(model_name)
+    if resolved in MODEL_OBJECTS:
+        logger.warning(
+            f"Model '{model_name}' is retired; using '{resolved}' instead."
+        )
+        return resolved
+
+    logger.warning(
+        f"Unknown model '{model_name}'; falling back to '{FALLBACK_MODEL_NAME}'."
+    )
+    return FALLBACK_MODEL_NAME
+
+
 def get_model_object(model_name: str):
-    """Get model object by name"""
-    return MODEL_OBJECTS.get(model_name, claude_sonnet_5)
+    """Get model object by name, resolving retired and unknown names"""
+    return MODEL_OBJECTS[resolve_model_name(model_name)]
 
 
 # Get max tokens from environment

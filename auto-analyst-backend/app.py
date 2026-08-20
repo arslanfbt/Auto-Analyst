@@ -107,7 +107,7 @@ from src.utils.generate_report import generate_html_report
 
 
 
-from src.utils.model_registry import MODEL_OBJECTS
+from src.utils.model_registry import MODEL_OBJECTS, get_model_object, resolve_model_name
 
 
 
@@ -292,7 +292,7 @@ styling_instructions = [str(chart_dict) for chart_dict in styling_instructions]
 
 DEFAULT_MODEL_CONFIG = {
     "provider": os.getenv("MODEL_PROVIDER", "openai"),
-    "model": os.getenv("MODEL_NAME", "gpt-5-mini"),
+    "model": resolve_model_name(os.getenv("MODEL_NAME", "gpt-5-mini")),
     "api_key": os.getenv("OPENAI_API_KEY"),
     "temperature": min(1.0, max(0.0, float(os.getenv("TEMPERATURE", "1.0")))),  # Clamp to 0..1
     "max_tokens": int(os.getenv("MAX_TOKENS", 6000)), "cache": False
@@ -305,7 +305,7 @@ DEFAULT_MODEL_CONFIG = {
 
 
 
-default_lm = MODEL_OBJECTS[DEFAULT_MODEL_CONFIG['model']]
+default_lm = get_model_object(DEFAULT_MODEL_CONFIG['model'])
 
     
 
@@ -335,7 +335,7 @@ def get_session_lm(session_state):
 
             provider = model_config.get("provider", "openai").lower()
 
-            model_name = model_config.get("model", DEFAULT_MODEL_CONFIG["model"])
+            model_name = resolve_model_name(model_config.get("model", DEFAULT_MODEL_CONFIG["model"]))
 
             # Import and apply centralized safeguards (temperature + max_tokens)
             
@@ -351,8 +351,11 @@ def get_session_lm(session_state):
             )
 
             # Apply the safeguarded parameters
-            MODEL_OBJECTS[model_name].__dict__['kwargs']['max_tokens'] = safe_params["max_tokens"]
-            MODEL_OBJECTS[model_name].__dict__['kwargs']['temperature'] = safe_params["temperature"]
+            session_lm = get_model_object(model_name)
+            session_lm.__dict__['kwargs']['max_tokens'] = safe_params["max_tokens"]
+            session_lm.__dict__['kwargs']['temperature'] = safe_params["temperature"]
+
+            return session_lm
 
 
 
@@ -360,7 +363,7 @@ def get_session_lm(session_state):
 
     # If no valid session config, use default
 
-    return MODEL_OBJECTS[model_name]
+    return default_lm
 
 
 

@@ -18,7 +18,7 @@ from pydantic import BaseModel
 from fastapi.responses import JSONResponse
 # data context is for excelsheets with multiple sheets and dataset_descrp is for single sheet or csv
 from src.agents.agents import data_context_gen, dataset_description_agent
-from src.utils.model_registry import MODEL_OBJECTS, mid_lm
+from src.utils.model_registry import MODEL_OBJECTS, get_model_object, mid_lm
 from src.utils.dataset_description_generator import generate_dataset_description
 import dspy
 import re
@@ -472,7 +472,7 @@ async def update_model_settings(
         app_state._session_manager._app_model_config = model_config
 
         # Create the LM instance to test the configuration, but don't set it globally
-        lm = MODEL_OBJECTS[str(settings.model)]
+        lm = get_model_object(str(settings.model))
         
 
         
