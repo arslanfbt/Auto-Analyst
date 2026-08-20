@@ -13,10 +13,10 @@ The Auto-Analyst credit system manages user usage and billing based on AI model 
 ```typescript
 // lib/model-registry.ts
 export const MODEL_TIERS = {
-  "tier1": { "credits": 1, "models": ["claude-3-5-haiku", "llama3-8b"] },
-  "tier2": { "credits": 3, "models": ["gpt-4o-mini", "o1-mini"] },
-  "tier3": { "credits": 5, "models": ["gpt-4o", "claude-3-5-sonnet"] },
-  "tier4": { "credits": 20, "models": ["o1-pro", "claude-3-opus"] }
+  "tier1": { "credits": 1, "models": ["claude-haiku-4-5", "gpt-oss-20B"] },
+  "tier2": { "credits": 3, "models": ["gpt-5-mini", "gpt-5-nano"] },
+  "tier3": { "credits": 5, "models": ["gpt-5.4", "claude-sonnet-5"] },
+  "tier4": { "credits": 20, "models": ["gpt-5.4-pro", "claude-opus-5"] }
 }
 ```
 

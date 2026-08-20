@@ -38,36 +38,37 @@ logger = Logger("session_routes", see_time=False, console_log=False)
 
 
 def apply_model_safeguards(model_name: str, provider: str, temperature: float, max_tokens: int) -> dict:
-    """Apply model-specific safeguards for temperature and max_tokens based on official API limits"""
+    """Apply model-specific safeguards for temperature and max_tokens based on official API limits
+
+    A safe temperature of None means the model rejects sampling parameters entirely and the
+    field must be omitted from the request rather than sent with any value.
+    """
     model_str = str(model_name).lower()
     provider_str = str(provider).lower()
     
     safe_temp = min(1.0, max(0.0, float(temperature)))
     safe_max_tokens = max_tokens
     
-    # O-series: temp MUST be 1.0
-    if ('o1' in model_str or 'o3' in model_str) and provider_str == 'openai':
-        safe_temp = 1.0
-        safe_max_tokens = min(max_tokens, 100_000)
-    # GPT-5 series
-    elif 'gpt-5' in model_str and provider_str == 'openai':
+    # GPT-5 series: temp MUST be 1.0
+    if 'gpt-5' in model_str and provider_str == 'openai':
         safe_temp = 1.0
         safe_max_tokens = min(max_tokens, 16_000)
-    # GPT-4 series
-    elif 'gpt-4' in model_str and provider_str == 'openai':
-        safe_max_tokens = min(max_tokens, 4_096)
-    # Anthropic: Sonnet 4/3.7/Opus 4 = 64K, others = 8K
+    # Claude 5 series: sampling params were removed, any temperature is a 400
+    elif provider_str == 'anthropic' and any(x in model_str for x in ['sonnet-5', 'opus-5']):
+        safe_temp = None
+        safe_max_tokens = min(max_tokens, 64_000)
+    # Anthropic: Haiku 4.5 = 64K, others = 8K
     elif provider_str == 'anthropic':
-        if any(x in model_str for x in ['sonnet-4', 'sonnet-3-7', 'opus-4']):
+        if 'haiku-4-5' in model_str:
             safe_max_tokens = min(max_tokens, 64_000)
         else:
             safe_max_tokens = min(max_tokens, 8_192)
     # Groq: 32K
     elif provider_str == 'groq':
         safe_max_tokens = min(max_tokens, 32_768)
-    # Gemini: 2.5 series = 65K, others = 8K
+    # Gemini: 3 series = 65K, others = 8K
     elif provider_str == 'gemini':
-        if '2.5' in model_str or '2-5' in model_str:
+        if 'gemini-3' in model_str:
             safe_max_tokens = min(max_tokens, 65_535)
         else:
             safe_max_tokens = min(max_tokens, 8_192)
@@ -519,7 +520,7 @@ async def get_model_settings(
     # Use values from model_config with fallbacks to defaults
     return {
         "provider": model_config.get("provider", "anthropic"),
-        "model": model_config.get("model", "claude-sonnet-4-6"),
+        "model": model_config.get("model", "claude-sonnet-5"),
         "hasCustomKey": bool(model_config.get("api_key")) or bool(os.getenv("CUSTOM_API_KEY")),
         "temperature": model_config.get("temperature", 0.7),
         "maxTokens": model_config.get("max_tokens", 6000)

@@ -67,7 +67,7 @@ UPSTASH_REDIS_REST_TOKEN=your-redis-token
 ```bash
 # Model Configuration Defaults
 DEFAULT_MODEL_PROVIDER=openai                # Default AI provider
-DEFAULT_PUBLIC_MODEL=gpt-4o-mini            # Default model
+DEFAULT_PUBLIC_MODEL=gpt-5-mini            # Default model
 DEFAULT_TEMPERATURE=1                     # Default temperature
 PUBLIC_DEFAULT_MAX_TOKENS=2500              # Default token limit
 NEXT_PUBLIC_OPENAI_API_KEY=                 # Optional: Public OpenAI key (not recommended)

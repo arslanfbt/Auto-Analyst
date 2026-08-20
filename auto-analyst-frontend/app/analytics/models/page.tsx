@@ -105,7 +105,7 @@ export default function ModelUsagePage() {
           { name: 'gpt-5-nano', avg_tokens: 1250, avg_response_time: 1.5, success_rate: 0.99 },
           { name: 'gpt-5.4', avg_tokens: 2800, avg_response_time: 3.2, success_rate: 0.98 },
           { name: 'claude-haiku-4-5', avg_tokens: 1500, avg_response_time: 1.8, success_rate: 0.97 },
-          { name: 'claude-sonnet-4-6', avg_tokens: 2900, avg_response_time: 2.7, success_rate: 0.99 },
+          { name: 'claude-sonnet-5', avg_tokens: 2900, avg_response_time: 2.7, success_rate: 0.99 },
         ]);
       }
       

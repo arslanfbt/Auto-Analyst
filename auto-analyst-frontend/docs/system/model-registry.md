@@ -227,16 +227,16 @@ Choose the appropriate tier based on model capability and cost:
 
 ```typescript
 // Low-cost, fast models → Tier 1
-"claude-3-5-haiku-latest": Tier 1 (1 credit)
-"llama3-8b-8192": Tier 1 (1 credit)
+"claude-haiku-4-5": Tier 1 (1 credit)
+"gpt-oss-20B": Tier 1 (1 credit)
 
 // Mid-range models → Tier 2-3  
-"gpt-4o-mini": Tier 2 (3 credits)
-"claude-3-5-sonnet-latest": Tier 3 (5 credits)
+"gpt-5-mini": Tier 2 (3 credits)
+"claude-sonnet-5": Tier 3 (5 credits)
 
 // Premium, expensive models → Tier 4
-"o1-pro": Tier 4 (20 credits)
-"claude-3-opus-latest": Tier 4 (20 credits)
+"gpt-5.4-pro": Tier 4 (20 credits)
+"claude-opus-5": Tier 4 (20 credits)
 ```
 
 ## Pricing Research
@@ -281,7 +281,7 @@ Test credit calculations:
 
 ```typescript
 // Test credit costs match expectations
-const testModels = ['gpt-4o', 'claude-3-5-sonnet-latest', 'o1-pro']
+const testModels = ['gpt-5.4', 'claude-sonnet-5', 'gpt-5.4-pro']
 testModels.forEach(model => {
   const cost = getModelCreditCost(model)
   console.log(`${model}: ${cost} credits`)
@@ -366,15 +366,15 @@ def validate_model(model_name: str, provider: str) -> bool:
 ```typescript
 // Frontend debugging
 console.log('All tiers:', MODEL_TIERS)
-console.log('Model tier:', getModelTier('gpt-4o'))
-console.log('Credit cost:', getModelCreditCost('gpt-4o'))
+console.log('Model tier:', getModelTier('gpt-5.4'))
+console.log('Credit cost:', getModelCreditCost('gpt-5.4'))
 ```
 
 ```python
 # Backend debugging
 print("All tiers:", MODEL_TIERS)
-print("Model tier:", get_model_tier('gpt-4o'))
-print("Credit cost:", get_credit_cost('gpt-4o'))
+print("Model tier:", get_model_tier('gpt-5.4'))
+print("Credit cost:", get_credit_cost('gpt-5.4'))
 ```
 
 ## Future Enhancements

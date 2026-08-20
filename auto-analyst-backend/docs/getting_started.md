@@ -183,7 +183,7 @@ curl -X GET "http://localhost:8000/health"
 python -c "
 from src.agents.agents import preprocessing_agent
 import dspy
-dspy.LM('anthropic/claude-sonnet-4-20250514')
+dspy.LM('anthropic/claude-sonnet-5')
 agent = dspy.ChainOfThought(preprocessing_agent)
 result = agent(goal='clean data', dataset='test data')
 print(result)

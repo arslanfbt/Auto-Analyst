@@ -69,7 +69,7 @@ Creates a new deep analysis report in the database.
   "credits_consumed": 5,
   "error_message": null,
   "model_provider": "anthropic",
-  "model_name": "claude-sonnet-4-20250514",
+  "model_name": "claude-sonnet-5",
   "total_tokens_used": 15000,
   "estimated_cost": 0.25,
   "steps_completed": ["questions", "planning", "execution", "synthesis", "conclusion"]
@@ -167,7 +167,7 @@ Retrieves a complete deep analysis report by ID.
   "credits_consumed": 5,
   "error_message": null,
   "model_provider": "anthropic",
-  "model_name": "claude-sonnet-4-20250514",
+  "model_name": "claude-sonnet-5",
   "total_tokens_used": 15000,
   "estimated_cost": 0.25,
   "steps_completed": ["questions", "planning", "execution", "synthesis", "conclusion"],

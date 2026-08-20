@@ -81,7 +81,7 @@ The Auto-Analyst backend uses a relational database schema designed for scalabil
 | `usage_id` | `INTEGER` | PRIMARY KEY | Unique usage record identifier |
 | `user_id` | `INTEGER` | FOREIGN KEY → `users.user_id`, SET NULL | User who triggered the usage |
 | `chat_id` | `INTEGER` | FOREIGN KEY → `chats.chat_id`, SET NULL | Associated chat session |
-| `model_name` | `STRING(100)` | NOT NULL | AI model used (e.g., 'gpt-4o-mini') |
+| `model_name` | `STRING(100)` | NOT NULL | AI model used (e.g., 'gpt-5-mini') |
 | `provider` | `STRING(50)` | NOT NULL | Model provider ('openai', 'anthropic', etc.) |
 | `prompt_tokens` | `INTEGER` | DEFAULT: 0 | Input tokens consumed |
 | `completion_tokens` | `INTEGER` | DEFAULT: 0 | Output tokens generated |

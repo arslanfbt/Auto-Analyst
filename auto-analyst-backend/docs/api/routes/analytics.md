@@ -41,7 +41,7 @@ Returns comprehensive dashboard data combining usage statistics, model performan
   ],
   "model_usage": [
     {
-      "model_name": "claude-3-sonnet-20241022",
+      "model_name": "claude-sonnet-5",
       "tokens": 10000,
       "cost": 10.00,
       "requests": 200
@@ -144,7 +144,7 @@ Returns model usage breakdown with performance metrics.
 {
   "model_usage": [
     {
-      "model_name": "claude-3-sonnet-20241022",
+      "model_name": "claude-sonnet-5",
       "tokens": 10000,
       "cost": 10.00,
       "requests": 200,
@@ -168,7 +168,7 @@ Returns daily model usage history with trend data.
       "date": "2023-05-01",
       "models": [
         {
-          "name": "claude-3-sonnet-20241022",
+          "name": "claude-sonnet-5",
           "tokens": 5000,
           "requests": 100
         }
@@ -186,7 +186,7 @@ Returns model performance metrics including success rates and response times.
 {
   "model_metrics": [
     {
-      "name": "claude-3-sonnet-20241022",
+      "name": "claude-sonnet-5",
       "avg_tokens": 250.5,
       "avg_response_time": 1.2,
       "success_rate": 0.95
@@ -249,7 +249,7 @@ Returns cost breakdown by model.
 {
   "model_costs": [
     {
-      "model_name": "claude-3-sonnet-20241022",
+      "model_name": "claude-sonnet-5",
       "cost": 15.50,
       "tokens": 50000,
       "requests": 500

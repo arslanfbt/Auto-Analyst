@@ -16,20 +16,14 @@ export const MODEL_COSTS = {
   openai: {
     "gpt-5-nano": { input: 0.00005, output: 0.0004 },
     "gpt-5-mini": { input: 0.00025, output: 0.002 },
-    "gpt-5": { input: 0.00125, output: 0.01 },
-    "gpt-5.2": { input: 0.00125, output: 0.01 },
-    "gpt-5.2-pro": { input: 0.002, output: 0.015 },
     "gpt-5.2-chat-latest": { input: 0.0005, output: 0.002 },
     "gpt-5.4": { input: 0.0025, output: 0.015 },
-    "gpt-5.4-pro": { input: 0.03, output: 0.18 },
-    "o3": { input: 0.002, output: 0.008 }
+    "gpt-5.4-pro": { input: 0.03, output: 0.18 }
   },
   anthropic: {
     "claude-haiku-4-5": { input: 0.001, output: 0.005 },
-    "claude-sonnet-4-5-20250929": { input: 0.003, output: 0.015 },
-    "claude-sonnet-4-6": { input: 0.003, output: 0.015 },
-    "claude-opus-4-5-20251101": { input: 0.015, output: 0.075 },
-    "claude-opus-4-6": { input: 0.005, output: 0.025 }
+    "claude-sonnet-5": { input: 0.003, output: 0.015 },
+    "claude-opus-5": { input: 0.005, output: 0.025 }
   },
   groq: {
     "deepseek-r1-distill-llama-70b": { input: 0.00075, output: 0.00099 },
@@ -37,7 +31,6 @@ export const MODEL_COSTS = {
     "gpt-oss-20B": { input: 0.00075, output: 0.00099 }
   },
   gemini: {
-    "gemini-2.5-pro-preview-03-25": { input: 0.00015, output: 0.001 },
     "gemini-3-pro": { input: 0.0002, output: 0.001 },
     "gemini-3-flash": { input: 0.0001, output: 0.0005 }
   }
@@ -66,24 +59,18 @@ export const MODEL_TIERS = {
     name: "Premium",
     credits: 5,
     models: [
-      "o3",
-      "claude-sonnet-4-5-20250929",
-      "claude-sonnet-4-6",
+      "claude-sonnet-5",
       "deepseek-r1-distill-llama-70b",
       "gpt-oss-120B",
-      "gemini-2.5-pro-preview-03-25",
-      "gemini-3-flash",
-      "gpt-5.2"
+      "gemini-3-flash"
     ]
   },
   tier4: {
     name: "Premium Plus",
     credits: 20,
     models: [
-      "gpt-5",
       "gpt-5.4",
-      "claude-opus-4-5-20251101",
-      "claude-opus-4-6",
+      "claude-opus-5",
       "gemini-3-pro"
     ]
   },
@@ -91,7 +78,6 @@ export const MODEL_TIERS = {
     name: "Ultimate",
     credits: 50,
     models: [
-      "gpt-5.2-pro",
       "gpt-5.4-pro"
     ]
   }
@@ -111,20 +97,14 @@ export const MODEL_METADATA: Record<string, { displayName: string; contextWindow
   // OpenAI
   "gpt-5-nano": { displayName: "GPT-5 Nano", contextWindow: 64000 },
   "gpt-5-mini": { displayName: "GPT-5 Mini", contextWindow: 150000 },
-  "gpt-5": { displayName: "GPT-5", contextWindow: 400000 },
-  "gpt-5.2": { displayName: "GPT-5.2", contextWindow: 400000 },
-  "gpt-5.2-pro": { displayName: "GPT-5.2 Pro", contextWindow: 400000 },
   "gpt-5.2-chat-latest": { displayName: "GPT-5.2 Chat", contextWindow: 400000 },
   "gpt-5.4": { displayName: "GPT-5.4", contextWindow: 1050000 },
   "gpt-5.4-pro": { displayName: "GPT-5.4 Pro", contextWindow: 1050000 },
-  "o3": { displayName: "o3", contextWindow: 128000 },
 
   // Anthropic
   "claude-haiku-4-5": { displayName: "Claude Haiku 4.5", contextWindow: 200000 },
-  "claude-sonnet-4-5-20250929": { displayName: "Claude Sonnet 4.5", contextWindow: 200000 },
-  "claude-sonnet-4-6": { displayName: "Claude Sonnet 4.6", contextWindow: 1000000 },
-  "claude-opus-4-5-20251101": { displayName: "Claude Opus 4.5", contextWindow: 200000 },
-  "claude-opus-4-6": { displayName: "Claude Opus 4.6", contextWindow: 1000000 },
+  "claude-sonnet-5": { displayName: "Claude Sonnet 5", contextWindow: 1000000 },
+  "claude-opus-5": { displayName: "Claude Opus 5", contextWindow: 1000000 },
 
   // GROQ
   "deepseek-r1-distill-llama-70b": { displayName: "DeepSeek R1 Distill Llama 70b", contextWindow: 32768 },
@@ -132,7 +112,6 @@ export const MODEL_METADATA: Record<string, { displayName: string; contextWindow
   "gpt-oss-20B": { displayName: "OpenAI gpt oss 20B", contextWindow: 128000 },
 
   // Gemini
-  "gemini-2.5-pro-preview-03-25": { displayName: "Gemini 2.5 Pro", contextWindow: 1000000 },
   "gemini-3-pro": { displayName: "Gemini 3 Pro", contextWindow: 1000000 },
   "gemini-3-flash": { displayName: "Gemini 3 Flash", contextWindow: 1000000 }
 };

@@ -20,7 +20,7 @@ Creates new feedback or updates existing feedback for a specific message.
 ```json
 {
     "rating": 5,                           // Required: Star rating (1-5)
-    "model_name": "gpt-4o-mini",          // Optional: Model used for the message
+    "model_name": "gpt-5-mini",          // Optional: Model used for the message
     "model_provider": "openai",           // Optional: Provider of the model
     "temperature": 0.7,                   // Optional: Temperature setting
     "max_tokens": 6000                    // Optional: Max tokens setting
@@ -34,7 +34,7 @@ Creates new feedback or updates existing feedback for a specific message.
     "message_id": 456,
     "rating": 5,
     "feedback_comment": null,
-    "model_name": "gpt-4o-mini",
+    "model_name": "gpt-5-mini",
     "model_provider": "openai",
     "temperature": 0.7,
     "max_tokens": 6000,
@@ -62,7 +62,7 @@ Retrieves feedback for a specific message.
     "message_id": 456,
     "rating": 5,
     "feedback_comment": null,
-    "model_name": "gpt-4o-mini",
+    "model_name": "gpt-5-mini",
     "model_provider": "openai",
     "temperature": 0.7,
     "max_tokens": 6000,
@@ -91,7 +91,7 @@ Retrieves all feedback for messages in a specific chat.
         "message_id": 456,
         "rating": 5,
         "feedback_comment": null,
-        "model_name": "gpt-4o-mini",
+        "model_name": "gpt-5-mini",
         "model_provider": "openai",
         "temperature": 0.7,
         "max_tokens": 6000,
@@ -115,7 +115,7 @@ Retrieves all feedback for messages in a specific chat.
 
 ### Model Context Tracking
 The system optionally tracks:
-- **Model Name:** The specific AI model used (e.g., "gpt-4o-mini")
+- **Model Name:** The specific AI model used (e.g., "gpt-5-mini")
 - **Model Provider:** The provider of the model (e.g., "openai", "anthropic")
 - **Temperature:** The creativity/randomness setting used
 - **Max Tokens:** The maximum response length setting

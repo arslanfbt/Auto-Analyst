@@ -176,7 +176,7 @@ Fetches current model settings.
 ```json
 {
   "provider": "openai",
-  "model": "gpt-4o-mini",
+  "model": "gpt-5-mini",
   "hasCustomKey": true,
   "temperature": 1.0,
   "maxTokens": 6000

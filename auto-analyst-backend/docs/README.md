@@ -83,7 +83,7 @@ DATABASE_URL=sqlite:///./chat_database.db
 # AI Model Configuration
 OPENAI_API_KEY=your-openai-api-key
 MODEL_PROVIDER=openai  # openai, anthropic, groq, gemini
-MODEL_NAME=gpt-4o-mini
+MODEL_NAME=gpt-5-mini
 TEMPERATURE=0.7
 MAX_TOKENS=6000
 
@@ -191,7 +191,7 @@ from src.agents.agents import preprocessing_agent
 import dspy
 
 # Configure DSPy
-lm = dspy.LM('openai/gpt-4o-mini', api_key='your-key')
+lm = dspy.LM('openai/gpt-5-mini', api_key='your-key')
 dspy.configure(lm=lm)
 
 # Test agent
