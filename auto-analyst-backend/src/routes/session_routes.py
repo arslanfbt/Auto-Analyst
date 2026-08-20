@@ -18,7 +18,7 @@ from pydantic import BaseModel
 from fastapi.responses import JSONResponse
 # data context is for excelsheets with multiple sheets and dataset_descrp is for single sheet or csv
 from src.agents.agents import data_context_gen, dataset_description_agent
-from src.utils.model_registry import MODEL_OBJECTS, get_model_object, mid_lm
+from src.utils.model_registry import MODEL_OBJECTS, resolve_model_name, mid_lm
 from src.utils.dataset_description_generator import generate_dataset_description
 import dspy
 import re
@@ -441,9 +441,16 @@ async def update_model_settings(
         # Get session state to update model config
         session_state = app_state.get_session_state(session_id)
 
+        # Resolve retired/unknown model IDs (clients persist the selected model in
+        # localStorage, so a name dropped from the registry can outlive a deploy).
+        # Resolve before touching any shared state: an unresolvable name must not
+        # leave the global model_config pointing at a model that cannot be loaded.
+        resolved_model = resolve_model_name(str(settings.model))
+        lm = MODEL_OBJECTS[resolved_model]
+
         # Apply model-specific safeguards (temperature + max_tokens)
         safe_params = apply_model_safeguards(
-            model_name=settings.model,
+            model_name=resolved_model,
             provider=settings.provider,
             temperature=settings.temperature,
             max_tokens=settings.max_tokens
@@ -452,7 +459,7 @@ async def update_model_settings(
         # Create the model config with safe parameters
         model_config = {
             "provider": settings.provider,
-            "model": settings.model,
+            "model": resolved_model,
             "api_key": settings.api_key,
             "temperature": safe_params["temperature"],
             "max_tokens": safe_params["max_tokens"]
@@ -470,12 +477,6 @@ async def update_model_settings(
         
         # Update SessionManager's app_model_config
         app_state._session_manager._app_model_config = model_config
-
-        # Create the LM instance to test the configuration, but don't set it globally
-        lm = get_model_object(str(settings.model))
-        
-
-        
 
         # Test the model configuration without setting it globally
         try:
