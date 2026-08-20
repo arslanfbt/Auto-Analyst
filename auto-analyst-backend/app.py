@@ -350,12 +350,13 @@ def get_session_lm(session_state):
                 max_tokens=requested_max,
             )
 
-            # Apply the safeguarded parameters
-            session_lm = get_model_object(model_name)
-            session_lm.__dict__['kwargs']['max_tokens'] = safe_params["max_tokens"]
-            session_lm.__dict__['kwargs']['temperature'] = safe_params["temperature"]
-
-            return session_lm
+            # Copy rather than mutate: MODEL_OBJECTS holds one shared LM per model,
+            # so writing the safeguarded parameters onto it would apply this
+            # session's settings to every other request using the same model.
+            return get_model_object(model_name).copy(
+                max_tokens=safe_params["max_tokens"],
+                temperature=safe_params["temperature"],
+            )
 
 
 

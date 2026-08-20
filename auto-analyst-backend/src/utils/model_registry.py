@@ -205,7 +205,7 @@ def resolve_model_name(model_name: str) -> str:
     resolved = LEGACY_MODEL_ALIASES.get(model_name)
     if resolved in MODEL_OBJECTS:
         logger.warning(
-            f"Model '{model_name}' is retired; using '{resolved}' instead."
+            f"Model '{model_name}' is no longer offered by this app; using '{resolved}' instead."
         )
         return resolved
 
@@ -320,14 +320,39 @@ MODEL_COSTS = {
 
 # Helper functions
 
+# Provider for every model in the registry, derived from MODEL_COSTS so the two
+# cannot drift apart.
+MODEL_PROVIDERS = {model: provider for provider, models in MODEL_COSTS.items() for model in models}
+
+# Checked in order; "gpt-oss" must precede "gpt" since the gpt-oss models are GROQ's.
+_PROVIDER_PREFIXES = (
+    ("claude", "anthropic"),
+    ("gpt-oss", "groq"),
+    ("deepseek", "groq"),
+    ("gpt", "openai"),
+    ("gemini", "gemini"),
+)
+
+
 def get_provider_for_model(model_name):
     """Determine the provider based on model name"""
     if not model_name:
         return "Unknown"
-        
-    model_name = model_name.lower()
-    return next((provider for provider, models in MODEL_COSTS.items() 
-                if any(model_name in model for model in models)), "Unknown")
+
+    model_name = str(model_name).lower()
+
+    provider = MODEL_PROVIDERS.get(model_name)
+    if provider:
+        return provider
+
+    # Retired and aliased IDs are absent from MODEL_COSTS, but the family prefix
+    # still identifies the provider. Callers use this to choose provider-specific
+    # request parameters, where guessing beats returning "Unknown".
+    for prefix, prefix_provider in _PROVIDER_PREFIXES:
+        if model_name.startswith(prefix):
+            return prefix_provider
+
+    return "Unknown"
 
 def get_model_tier(model_name):
     """Get the tier of a model"""

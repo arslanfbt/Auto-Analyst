@@ -18,7 +18,7 @@ from pydantic import BaseModel
 from fastapi.responses import JSONResponse
 # data context is for excelsheets with multiple sheets and dataset_descrp is for single sheet or csv
 from src.agents.agents import data_context_gen, dataset_description_agent
-from src.utils.model_registry import MODEL_OBJECTS, resolve_model_name, mid_lm
+from src.utils.model_registry import MODEL_OBJECTS, get_provider_for_model, resolve_model_name, mid_lm
 from src.utils.dataset_description_generator import generate_dataset_description
 import dspy
 import re
@@ -44,7 +44,13 @@ def apply_model_safeguards(model_name: str, provider: str, temperature: float, m
     field must be omitted from the request rather than sent with any value.
     """
     model_str = str(model_name).lower()
-    provider_str = str(provider).lower()
+
+    # Trust the model name over the caller-supplied provider. That string comes
+    # from the client, or from a MODEL_PROVIDER env var that can disagree with
+    # MODEL_NAME, and a mismatch here sends sampling parameters to a model that
+    # rejects them (Sonnet 5 / Opus 5 return a 400 for any temperature).
+    derived_provider = get_provider_for_model(model_str)
+    provider_str = derived_provider if derived_provider != "Unknown" else str(provider).lower()
     
     safe_temp = min(1.0, max(0.0, float(temperature)))
     safe_max_tokens = max_tokens
