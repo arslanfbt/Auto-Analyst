@@ -928,7 +928,7 @@ async def chat_with_all(
 
         return StreamingResponse(
 
-            _generate_streaming_responses(session_state, request.query, session_lm),
+            _stream_with_error_reporting(session_state, request.query, session_lm),
 
             media_type='text/event-stream',
 
@@ -1422,6 +1422,35 @@ def _track_model_usage(session_state: dict, enhanced_query: str, response, proce
 
 
 
+async def _stream_with_error_reporting(session_state: dict, query: str, session_lm):
+    """Stream responses, reporting failures to the client instead of hanging.
+
+    Once StreamingResponse has sent its headers the request can no longer become
+    a 500, so an exception raised inside the generator surfaces to the caller as
+    a dropped or stalled connection. Catch it, log it, and emit an error frame in
+    the same JSON shape the client already parses.
+    """
+    try:
+        async for chunk in _generate_streaming_responses(session_state, query, session_lm):
+            yield chunk
+    except asyncio.TimeoutError:
+        logger.log_message("[ERROR] Timeout in streaming chat", level=logging.ERROR)
+        yield json.dumps({
+            "agent": "error",
+            "content": "Request timed out. Please try a simpler query.",
+            "status": "error"
+        }) + "\n"
+    except Exception as e:
+        logger.log_message(f"[ERROR] Unexpected error in streaming chat: {type(e).__name__}: {e}", level=logging.ERROR)
+        import traceback
+        logger.log_message(f"[ERROR] Full traceback: {traceback.format_exc()}", level=logging.ERROR)
+        yield json.dumps({
+            "agent": "error",
+            "content": "An unexpected error occurred. Please try again later.",
+            "status": "error"
+        }) + "\n"
+
+
 async def _generate_streaming_responses(session_state: dict, query: str, session_lm):
 
     """Generate streaming responses for chat_with_all endpoint"""
@@ -1446,7 +1475,13 @@ async def _generate_streaming_responses(session_state: dict, query: str, session
 
         # Get the plan - planner is now async, so we need to await it
 
-    plan_response = await session_state["ai_system"].get_plan(enhanced_query)
+    # Bound the planner call: without this the request has no timeout at all and
+    # a stalled or retrying LLM call leaves the client waiting forever, since the
+    # streaming response has already sent its headers and cannot become a 500.
+    plan_response = await asyncio.wait_for(
+        session_state["ai_system"].get_plan(enhanced_query),
+        timeout=REQUEST_TIMEOUT_SECONDS
+    )
 
     
 

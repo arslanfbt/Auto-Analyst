@@ -52,7 +52,18 @@ def apply_model_safeguards(model_name: str, provider: str, temperature: float, m
     derived_provider = get_provider_for_model(model_str)
     provider_str = derived_provider if derived_provider != "Unknown" else str(provider).lower()
     
-    safe_temp = min(1.0, max(0.0, float(temperature)))
+    # temperature round-trips through model_config: the value returned here is
+    # stored on the session, then handed back as input on the next request. For
+    # models that reject sampling parameters that stored value is None, so None
+    # is a valid input meaning "send no temperature", not an error.
+    if temperature is None:
+        safe_temp = None
+    else:
+        try:
+            safe_temp = min(1.0, max(0.0, float(temperature)))
+        except (TypeError, ValueError):
+            safe_temp = None
+
     safe_max_tokens = max_tokens
     
     # GPT-5 series: temp MUST be 1.0
